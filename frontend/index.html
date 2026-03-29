@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CMP Simple</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <h1>☁️ Cloud Management Platform</h1>
+
+    <div class="card">
+        <h2>Déployer une Application</h2>
+
+        <label for="appName">Application :</label>
+        <select id="appName"></select>
+
+        <button onclick="deploy()" id="deployBtn">🚀 DÉPLOYER</button>
+
+        <div id="message"></div>
+    </div>
+
+    <div class="card">
+        <h2>Statut des Applications</h2>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const API = "http://localhost:8000";
+        let availableApps = {};
+
+        async function loadApps() {
+            const response = await fetch(`${API}/apps`);
+            availableApps = await response.json();
+            const select = document.getElementById("appName");
+            select.innerHTML = Object.keys(availableApps)
+                .map(app => `<option value="${encodeURIComponent(app)}">${app}</option>`)
+                .join("");
+        }
+
+        async function deploy() {
+            const select = document.getElementById("appName");
+            const app = decodeURIComponent(select.value);
+            const btn = document.getElementById("deployBtn");
+            const msg = document.getElementById("message");
+
+            btn.disabled = true;
+            btn.textContent = "⏳ Déploiement...";
+            msg.textContent = "";
+            msg.className = "";
+
+            try {
+                const response = await fetch(`${API}/deploy`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ app_name: app }),
+                });
+                const data = await response.json();
+
+                if (response.ok && data.status === "success") {
+                    msg.className = "message success";
+                    msg.textContent = "✅ " + data.message;
+                } else {
+                    msg.className = "message error";
+                    msg.textContent = "❌ " + (data.detail || data.message || "Erreur lors du déploiement.");
+                }
+            } catch (error) {
+                msg.className = "message error";
+                msg.textContent = "❌ Erreur réseau : " + error.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "🚀 DÉPLOYER";
+                await refreshStatuses();
+            }
+        }
+
+        async function refreshStatuses() {
+            const statusDiv = document.getElementById("status");
+            statusDiv.innerHTML = "";
+
+            const apps = Object.keys(availableApps);
+            if (apps.length === 0) {
+                statusDiv.innerHTML = "Aucune application configurée.";
+                return;
+            }
+
+            await Promise.all(apps.map(async app => {
+                try {
+                    const response = await fetch(`${API}/status/${encodeURIComponent(app)}`);
+                    const data = await response.json();
+                    const status = data.status || "UNKNOWN";
+                    const color = status === "UP" ? "up" : status === "DOWN" ? "down" : "unknown";
+                    statusDiv.insertAdjacentHTML("beforeend", `<div class="status ${color}">${app}: ${status}</div>`);
+                } catch (error) {
+                    statusDiv.insertAdjacentHTML("beforeend", `<div class="status unknown">${app}: ERREUR</div>`);
+                }
+            }));
+        }
+
+        async function init() {
+            await loadApps();
+            await refreshStatuses();
+            setInterval(refreshStatuses, 10000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
