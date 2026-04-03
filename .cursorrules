@@ -1,0 +1,34 @@
+# 🤖 AI RULES FOR ARCL CMP REPOSITORY
+
+## 1. Context Awareness
+Always refer to the `docs/ia/ARCL_AI_CONTEXT.md` file at the root of the project to understand the infrastructure constraints (AWS/OpenStack, IPs, SAGA pattern).
+
+## 2. Project Structure (Monorepo)
+- `/backend`: Python API.
+- `/frontend`: Web User Interface.
+
+## 3. Backend Stack & Coding Standards (Python)
+- **Tech:** Python 3.12+, FastAPI, SQLAlchemy 2.0 (SQLite), Pydantic v2.
+- **Dependency Management:** strictly use `poetry`.
+- **Formatting & Linting:** strictly use `black` + `pylint`. (See `.vscode/extensions.json` and `.vscode/settings.json` for recommended VSCode extensions and settings).
+- **Rules:**
+  - ALWAYS use Python type hints (`-> dict`, `my_var: str`).
+  - Write async functions (`async def`) for API routes.
+  - Separate concerns: `routers/` (API endpoints), `services/` (Business logic, AWS/OpenStack calls), `models/` (DB schemas).
+  - When provisioning, always implement the "Rollback" pattern if a step fails.
+
+## 4. Frontend Stack & Coding Standards
+- **Tech:** React + Next.js
+- **Styling:** Tailwind CSS.
+- **UI Components:** Use Shadcn/UI for beautiful components (Steppers, Modals, Cards).
+- **Rules:**
+  - Create small, reusable components in a `components/` folder.
+  - State management must be clean.
+  - Implement polling or WebSockets to fetch deployment status from the backend to update the Stepper UI.
+  - ALWAYS ask for double confirmation for destructive actions (Delete App).
+
+## 5. General AI Instructions
+- Write clean, DRY (Don't Repeat Yourself) code.
+- Write comments in English explaining *why* a complex operation is done, not *what* it is.
+- Do not invent dummy AWS credentials; use standard environment variables (`AWS_ACCESS_KEY_ID`, etc.).
+g
