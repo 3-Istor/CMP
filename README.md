@@ -17,14 +17,18 @@
 
 ## What is ARCL CMP?
 
-ARCL CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks — no CLI, no Terraform, no IT ticket.
+ARCL CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks — no CLI, no Terraform knowledge required, no IT ticket.
 
-Each deployment provisions **4 VMs automatically**:
+The platform uses **Terraform templates** loaded from a Git repository, allowing flexible deployment of any infrastructure configuration. Each template defines the resources to provision, and the CMP handles the entire lifecycle: deployment, tracking, and cleanup.
 
-- **2 OpenStack VMs** — stateful layer (database)
-- **2 AWS instances** — stateless layer (web/app) behind an Auto Scaling Group + Load Balancer
+**Key Features:**
 
-If the AWS step fails, the platform **automatically rolls back** the OpenStack VMs (SAGA pattern). The UI shows live progress at every step.
+- 🚀 **Template-based deployments** - Load templates from Git repository
+- 🔄 **Automatic syncing** - Templates sync every 24 hours
+- 📊 **Real-time tracking** - Monitor deployment progress live
+- 🎯 **Output capture** - Automatically display IPs, URLs, and endpoints
+- 🗑️ **Clean destruction** - One-click resource cleanup
+- 🌐 **Multi-cloud ready** - Currently OpenStack, AWS support coming soon
 
 ---
 
@@ -47,18 +51,22 @@ If the AWS step fails, the platform **automatically rolls back** the OpenStack V
 │                    FastAPI Backend                          │
 │              Python 3.12 · SQLite · Alembic                 │
 │                                                             │
-│  POST /api/deployments  →  BackgroundTask: SAGA Orchestrator│
+│  POST /api/deployments  →  BackgroundTask: Terraform        │
 │                                    │                        │
 │                         ┌──────────▼──────────┐            │
-│                         │  Step 1: OpenStack  │            │
-│                         │  2× DB VMs via SDK  │            │
+│                         │  Template Repository │            │
+│                         │  Git Clone/Sync      │            │
 │                         └──────────┬──────────┘            │
-│                                    │ success                │
+│                                    │                        │
 │                         ┌──────────▼──────────┐            │
-│                         │   Step 2: AWS        │            │
-│                         │  ASG + ALB via boto3 │            │
+│                         │  Terraform Executor  │            │
+│                         │  init → plan → apply │            │
 │                         └──────────┬──────────┘            │
-│                                    │ failure → rollback OS  │
+│                                    │                        │
+│                         ┌──────────▼──────────┐            │
+│                         │  Capture Outputs     │            │
+│                         │  IPs, URLs, etc.     │            │
+│                         └──────────────────────┘            │
 └────────────────────────────────────┼────────────────────────┘
                                      │
               ┌──────────────────────┴──────────────────────┐
@@ -66,73 +74,56 @@ If the AWS step fails, the platform **automatically rolls back** the OpenStack V
    ┌──────────▼──────────┐                    ┌────────────▼────────────┐
    │  Private OpenStack  │◄──── WireGuard ────►│     Public AWS          │
    │  192.168.1.0/24     │       VPN           │     10.1.0.0/16         │
-   │  172.16.0.0/24      │   10.0.0.0/24       │  ASG · ALB · t3.micro   │
+   │  172.16.0.0/24      │   10.0.0.0/24       │  (Future Support)       │
    └─────────────────────┘                    └─────────────────────────┘
 ```
+
+### Template Repository
+
+Templates are loaded from: https://github.com/3-Istor/ia-project-template
+
+- Automatically cloned on startup
+- Synced every 24 hours
+- Only enabled templates are shown
+- Each template includes Terraform configuration and metadata
 
 ---
 
 ## Prerequisites
 
-| Tool    | Version | Install                            |
-| ------- | ------- | ---------------------------------- |
-| Python  | 3.12+   | [python.org](https://python.org)   |
-| Poetry  | 2.0+    | `pip install poetry`               |
-| Node.js | 18+     | [nodejs.org](https://nodejs.org)   |
-| npm     | 9+      | bundled with Node                  |
-| Git     | any     | [git-scm.com](https://git-scm.com) |
+| Tool      | Version | Install                              |
+| --------- | ------- | ------------------------------------ |
+| Python    | 3.12+   | [python.org](https://python.org)     |
+| Poetry    | 2.0+    | `pip install poetry`                 |
+| Terraform | 1.0+    | [terraform.io](https://terraform.io) |
+| Node.js   | 18+     | [nodejs.org](https://nodejs.org)     |
+| npm       | 9+      | bundled with Node                    |
+| Git       | any     | [git-scm.com](https://git-scm.com)   |
 
 ---
 
 ## Quick Start
 
-### 1. Clone the repository
+### Automated Setup (Recommended)
 
 ```bash
 git clone https://github.com/3-Istor/arcl-cmp.git
 cd arcl-cmp
+./setup.sh
 ```
 
-### 2. Backend setup
+The script will:
 
-```bash
-cd backend
+- Install all dependencies
+- Set up environment files
+- Run database migrations
+- Prepare the application
 
-# Install dependencies
-poetry install
+Then follow the on-screen instructions to configure credentials and start the servers.
 
-# Copy and fill in your credentials
-cp .env.example .env
-# Edit .env with your AWS + OpenStack credentials (see Configuration section)
+### Manual Setup
 
-# Run database migrations
-poetry run alembic upgrade head
-
-# Start the API server
-poetry run uvicorn app.main:app --reload --port 8000
-```
-
-The API is now available at **http://localhost:8000**
-Interactive docs (Swagger UI): **http://localhost:8000/docs**
-
-### 3. Frontend setup
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Copy environment file
-cp .env.local.example .env.local
-
-# Start the dev server
-npm run dev
-```
-
-The UI is now available at **http://localhost:3000**
-
-> **No backend? No problem.** The frontend loads the App Catalog from a static fallback, so you can browse and test the UI without any cloud credentials configured.
+See [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) for detailed manual setup steps.
 
 ---
 
@@ -179,18 +170,21 @@ arcl-cmp/
 │   │   ├── models/
 │   │   │   └── deployment.py      # Deployment DB model + status enum
 │   │   ├── routers/
-│   │   │   ├── catalog.py         # GET /api/catalog
+│   │   │   ├── catalog.py         # GET /api/catalog + sync
 │   │   │   └── deployments.py     # CRUD /api/deployments
 │   │   ├── schemas/
 │   │   │   ├── catalog.py         # Pydantic schemas for templates
 │   │   │   └── deployment.py      # Pydantic schemas for deployments
 │   │   ├── services/
-│   │   │   ├── saga_orchestrator.py   # SAGA pattern: deploy + rollback
-│   │   │   ├── openstack_service.py   # openstacksdk: provision DB VMs
-│   │   │   ├── aws_service.py         # boto3: ASG + ALB + Launch Template
-│   │   │   └── catalog_service.py     # Static app template definitions
+│   │   │   ├── template_repository.py  # Git repo management
+│   │   │   ├── terraform_executor.py   # Terraform wrapper
+│   │   │   ├── terraform_orchestrator.py # Deployment orchestrator
+│   │   │   └── catalog_service.py      # Template loading
 │   │   └── main.py                # FastAPI app entry point
 │   ├── alembic/                   # Database migrations
+│   ├── data/                      # Runtime data (auto-created)
+│   │   ├── templates/             # Cloned Git repository
+│   │   └── terraform_states/      # Terraform state files
 │   ├── pyproject.toml
 │   └── .env.example
 │
@@ -227,16 +221,17 @@ arcl-cmp/
 
 ## API Reference
 
-| Method   | Endpoint                       | Description                       |
-| -------- | ------------------------------ | --------------------------------- |
-| `GET`    | `/health`                      | Health check                      |
-| `GET`    | `/api/catalog/`                | List all app templates            |
-| `GET`    | `/api/catalog/{id}`            | Get a specific template           |
-| `GET`    | `/api/deployments/`            | List all deployments              |
-| `POST`   | `/api/deployments/`            | Create & start a deployment (202) |
-| `GET`    | `/api/deployments/{id}`        | Get deployment status             |
-| `GET`    | `/api/deployments/{id}/health` | Get live AWS ASG health           |
-| `DELETE` | `/api/deployments/{id}`        | Delete all cloud resources (202)  |
+| Method   | Endpoint                        | Description                       |
+| -------- | ------------------------------- | --------------------------------- |
+| `GET`    | `/health`                       | Health check                      |
+| `GET`    | `/api/catalog/`                 | List all enabled templates        |
+| `GET`    | `/api/catalog/{id}`             | Get a specific template           |
+| `POST`   | `/api/catalog/sync`             | Force sync template repository    |
+| `GET`    | `/api/deployments/`             | List all deployments              |
+| `POST`   | `/api/deployments/`             | Create & start a deployment (202) |
+| `GET`    | `/api/deployments/{id}`         | Get deployment status             |
+| `GET`    | `/api/deployments/{id}/outputs` | Get Terraform outputs             |
+| `DELETE` | `/api/deployments/{id}`         | Delete all cloud resources (202)  |
 
 Full interactive docs available at `http://localhost:8000/docs` when the backend is running.
 
@@ -244,32 +239,51 @@ Full interactive docs available at `http://localhost:8000/docs` when the backend
 
 ## App Catalog
 
-| App                     | Category   | DB (OpenStack)     | Web (AWS)       |
-| ----------------------- | ---------- | ------------------ | --------------- |
-| 📝 WordPress            | CMS        | MySQL 8            | Nginx + PHP 8.1 |
-| ☁️ Nextcloud            | Storage    | PostgreSQL         | Nextcloud app   |
-| 🦊 GitLab CE            | DevOps     | PostgreSQL + Redis | GitLab web      |
-| 📊 Grafana + Prometheus | Monitoring | Prometheus         | Grafana         |
+Templates are dynamically loaded from the Git repository. Current available templates:
 
-Each template can be deployed **multiple times** with different names.
+| App              | Category | Provider  | Description                |
+| ---------------- | -------- | --------- | -------------------------- |
+| 🌐 Nginx Website | Web      | OpenStack | Static website with Nginx  |
+| 🌐 Git Website   | Web      | OpenStack | Deploy from Git repository |
+
+Each template can be deployed **multiple times** with different configurations.
+
+### Adding New Templates
+
+1. Fork https://github.com/3-Istor/ia-project-template
+2. Add your template directory with `manifest.json` and Terraform files
+3. Set `"enabled": true` in the manifest
+4. The CMP will automatically sync and load your template
+
+See [backend/TERRAFORM_MIGRATION.md](backend/TERRAFORM_MIGRATION.md) for template requirements.
 
 ---
 
-## SAGA Pattern — Design for Failure
+## Deployment Lifecycle
 
-The orchestrator (`saga_orchestrator.py`) guarantees a clean state at all times:
+The platform manages the full lifecycle of Terraform-based deployments:
 
 ```
-Step 1 — OpenStack VMs
-  ✓ success → continue
-  ✗ failure → mark FAILED (nothing to clean up)
-
-Step 2 — AWS ASG + ALB
-  ✓ success → mark RUNNING
-  ✗ failure → destroy OpenStack VMs → mark FAILED
+User Action → Template Selection → Configuration
+                    ↓
+            Terraform Initialize
+                    ↓
+              Terraform Plan
+                    ↓
+              Terraform Apply
+                    ↓
+            Capture Outputs (IPs, URLs)
+                    ↓
+              Status: RUNNING
 ```
 
-This means you will **never** have orphaned VMs consuming budget.
+On deletion:
+
+```
+User Confirms → Terraform Destroy → Status: DELETED
+```
+
+All Terraform state is managed automatically, ensuring clean deployments and deletions.
 
 ---
 
@@ -288,12 +302,14 @@ This means you will **never** have orphaned VMs consuming budget.
 
 ## Budget
 
-AWS costs are strictly controlled:
+Cloud costs are controlled through template configuration:
 
-- Instance type locked to `t3.micro` or `t4g.nano` (enforced in code)
-- ASG capped at `MaxSize=2` per deployment
-- Estimated cost per running app: **~$15–20/month**
-- Hard budget limit: **$100 total**
+- Templates define resource sizes and counts
+- OpenStack resources are managed by your private cloud
+- AWS support coming soon with budget constraints
+- Estimated cost per deployment varies by template
+
+Monitor resource usage through the dashboard's resource count display.
 
 ---
 
@@ -337,11 +353,17 @@ poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 
 ## Roadmap
 
-- [ ] Monitoring dashboard (Grafana/Prometheus integration)
-- [ ] WebSocket support for real-time deployment logs
+- [x] Terraform-based deployment system
+- [x] Git repository template loading
+- [x] Automatic output capture
+- [ ] AWS template support
+- [ ] WebSocket support for real-time Terraform logs
+- [ ] Template versioning
+- [ ] Multi-user support with RBAC
+- [ ] Cost estimation per deployment
+- [ ] Monitoring dashboard integration
 - [ ] K3s migration for CMP hosting
 - [ ] GitHub Actions CI/CD pipeline
-- [ ] Multi-user support with OpenStack project isolation
 
 ---
 

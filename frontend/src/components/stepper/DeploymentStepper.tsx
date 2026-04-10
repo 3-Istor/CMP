@@ -3,21 +3,23 @@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import type { Deployment, DeploymentStatus } from "@/types";
+import { useEffect, useRef, useState } from "react";
 
 const STEPS: { status: DeploymentStatus; label: string }[] = [
   { status: "pending", label: "Queued" },
-  { status: "deploying_openstack", label: "OpenStack DB VMs" },
-  { status: "deploying_aws", label: "AWS ASG + ALB" },
+  { status: "initializing", label: "Initializing" },
+  { status: "planning", label: "Planning" },
+  { status: "deploying", label: "Deploying" },
   { status: "running", label: "Running" },
 ];
 
 const STATUS_PROGRESS: Record<DeploymentStatus, number> = {
   pending: 5,
-  deploying_openstack: 30,
-  deploying_aws: 65,
+  initializing: 20,
+  planning: 40,
+  deploying: 70,
   running: 100,
   degraded: 100,
-  rolling_back: 50,
   failed: 100,
   deleting: 80,
   deleted: 100,
@@ -25,11 +27,11 @@ const STATUS_PROGRESS: Record<DeploymentStatus, number> = {
 
 const STATUS_COLOR: Record<DeploymentStatus, string> = {
   pending: "secondary",
-  deploying_openstack: "default",
-  deploying_aws: "default",
+  initializing: "default",
+  planning: "default",
+  deploying: "default",
   running: "default",
   degraded: "destructive",
-  rolling_back: "secondary",
   failed: "destructive",
   deleting: "secondary",
   deleted: "secondary",
@@ -42,58 +44,117 @@ interface Props {
 export function DeploymentStepper({ deployment }: Props) {
   const progress = STATUS_PROGRESS[deployment.status] ?? 0;
   const isFailed = deployment.status === "failed";
-  const isRollingBack = deployment.status === "rolling_back";
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [userInteracted, setUserInteracted] = useState(false);
+  const [lastInteractionTime, setLastInteractionTime] = useState(0);
+
+  // Auto-center on current step
+  useEffect(() => {
+    const currentStepIndex = STEPS.findIndex(
+      (step) => step.status === deployment.status,
+    );
+    if (currentStepIndex === -1) return;
+
+    // Only auto-scroll if user hasn't interacted recently (5 seconds)
+    const timeSinceInteraction = Date.now() - lastInteractionTime;
+    if (userInteracted && timeSinceInteraction < 5000) return;
+
+    // Reset user interaction flag after 5 seconds
+    if (userInteracted && timeSinceInteraction >= 5000) {
+      setUserInteracted(false);
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    // Find the current step element
+    const stepElements = container.querySelectorAll("[data-step]");
+    const currentStepElement = stepElements[currentStepIndex] as HTMLElement;
+    if (!currentStepElement) return;
+
+    // Calculate scroll position to center the current step
+    const containerWidth = container.offsetWidth;
+    const stepLeft = currentStepElement.offsetLeft;
+    const stepWidth = currentStepElement.offsetWidth;
+    const scrollPosition = stepLeft - containerWidth / 2 + stepWidth / 2;
+
+    // Smooth scroll to center
+    container.scrollTo({
+      left: scrollPosition,
+      behavior: "smooth",
+    });
+  }, [deployment.status, userInteracted, lastInteractionTime]);
+
+  // Handle user scroll/touch interaction
+  const handleUserInteraction = () => {
+    setUserInteracted(true);
+    setLastInteractionTime(Date.now());
+  };
 
   return (
     <div className="space-y-4">
-      {/* Step indicators */}
-      <div className="flex items-center gap-2">
-        {STEPS.map((step, i) => {
-          const stepProgress = STATUS_PROGRESS[step.status];
-          const currentProgress = STATUS_PROGRESS[deployment.status] ?? 0;
-          const isDone = currentProgress >= stepProgress && !isFailed;
-          const isActive = deployment.status === step.status;
+      {/* Horizontal scrolling step indicators */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleUserInteraction}
+        onTouchStart={handleUserInteraction}
+        onMouseDown={handleUserInteraction}
+        className="overflow-x-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent pb-2"
+        style={{ scrollbarWidth: "thin" }}
+      >
+        <div className="flex items-center gap-2 min-w-max px-2">
+          {STEPS.map((step, i) => {
+            const stepProgress = STATUS_PROGRESS[step.status];
+            const currentProgress = STATUS_PROGRESS[deployment.status] ?? 0;
+            const isDone = currentProgress >= stepProgress && !isFailed;
+            const isActive = deployment.status === step.status;
 
-          return (
-            <div key={step.status} className="flex items-center gap-2">
+            return (
               <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                  isFailed && isActive
-                    ? "bg-destructive text-destructive-foreground"
-                    : isDone
-                      ? "bg-primary text-primary-foreground"
-                      : isActive
-                        ? "bg-primary/70 text-primary-foreground animate-pulse"
-                        : "bg-muted text-muted-foreground"
-                }`}
+                key={step.status}
+                data-step={i}
+                className="flex items-center gap-2 flex-shrink-0"
               >
-                {isDone && !isActive ? "✓" : i + 1}
-              </div>
-              <span
-                className={`text-xs hidden sm:block ${
-                  isActive ? "font-semibold" : "text-muted-foreground"
-                }`}
-              >
-                {step.label}
-              </span>
-              {i < STEPS.length - 1 && (
                 <div
-                  className={`h-px w-6 ${isDone ? "bg-primary" : "bg-muted"}`}
-                />
-              )}
-            </div>
-          );
-        })}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all duration-300 ${
+                    isFailed && isActive
+                      ? "bg-destructive text-destructive-foreground"
+                      : isDone
+                        ? "bg-primary text-primary-foreground"
+                        : isActive
+                          ? "bg-primary/70 text-primary-foreground animate-pulse ring-2 ring-primary/30"
+                          : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {isDone && !isActive ? "✓" : i + 1}
+                </div>
+                <span
+                  className={`text-sm whitespace-nowrap transition-all duration-300 ${
+                    isActive
+                      ? "font-semibold text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {step.label}
+                </span>
+                {i < STEPS.length - 1 && (
+                  <div
+                    className={`h-px w-8 transition-all duration-300 ${
+                      isDone ? "bg-primary" : "bg-muted"
+                    }`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Progress bar */}
-      <Progress
-        value={progress}
-        className={isFailed || isRollingBack ? "opacity-50" : ""}
-      />
+      <Progress value={progress} className={isFailed ? "opacity-50" : ""} />
 
       {/* Status message */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Badge
           variant={
             STATUS_COLOR[deployment.status] as

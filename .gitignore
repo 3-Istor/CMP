@@ -11,3 +11,11 @@ dist/
 build/
 *.egg-info/
 .pytest_cache/
+
+# Terraform and template data
+backend/data/
+backend/arcl.db
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
