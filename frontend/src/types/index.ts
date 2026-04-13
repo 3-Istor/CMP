@@ -1,10 +1,10 @@
 export type DeploymentStatus =
   | "pending"
-  | "deploying_openstack"
-  | "deploying_aws"
+  | "initializing"
+  | "planning"
+  | "deploying"
   | "running"
   | "degraded"
-  | "rolling_back"
   | "failed"
   | "deleting"
   | "deleted";
@@ -13,20 +13,19 @@ export interface Deployment {
   id: number;
   name: string;
   template_id: string;
+  template_name: string | null;
+  template_icon: string | null;
+  template_category: string | null;
   status: DeploymentStatus;
   step_message: string;
-  os_vm_db1_ip: string | null;
-  os_vm_db2_ip: string | null;
-  aws_alb_dns: string | null;
-  aws_asg_name: string | null;
+  terraform_outputs: string | null; // JSON string
+  resource_count: number | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface DeploymentHealth {
-  status: "healthy" | "degraded" | "unknown" | "error" | "not_deployed";
-  healthy: number;
-  total: number;
+export interface TerraformOutputs {
+  [key: string]: string | number | boolean | null;
 }
 
 export interface CatalogField {
@@ -44,4 +43,6 @@ export interface CatalogTemplate {
   icon: string;
   category: string;
   fields: CatalogField[];
+  image_path?: string | null;
+  enabled?: boolean;
 }

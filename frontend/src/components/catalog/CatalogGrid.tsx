@@ -16,6 +16,11 @@ interface Props {
   onDeploy: (template: CatalogTemplate) => void;
 }
 
+// Get backend URL from environment or default
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ||
+  "http://localhost:8000";
+
 export function CatalogGrid({ templates, onDeploy }: Props) {
   const handleClick = (t: CatalogTemplate) => {
     console.log("Button clicked for:", t.name);
@@ -31,7 +36,15 @@ export function CatalogGrid({ templates, onDeploy }: Props) {
         >
           <CardHeader className="pb-2">
             <div className="flex items-start justify-between">
-              <span className="text-3xl">{t.icon}</span>
+              {t.image_path ? (
+                <img
+                  src={`${BACKEND_URL}${t.image_path}`}
+                  alt={`${t.name} icon`}
+                  className="w-10 h-10 object-contain"
+                />
+              ) : (
+                <span className="text-3xl">{t.icon}</span>
+              )}
               <Badge variant="outline" className="text-xs">
                 {t.category}
               </Badge>
@@ -43,8 +56,7 @@ export function CatalogGrid({ templates, onDeploy }: Props) {
           </CardHeader>
           <CardContent className="mt-auto pt-0">
             <div className="mb-3 text-xs text-muted-foreground">
-              <span className="font-medium">Provisions:</span> 2 OpenStack VMs +
-              2 AWS instances
+              <span className="font-medium">Template:</span> {t.id}
             </div>
             <Button size="sm" className="w-full" onClick={() => handleClick(t)}>
               Deploy

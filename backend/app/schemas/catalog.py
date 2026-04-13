@@ -16,3 +16,5 @@ class CatalogTemplate(BaseModel):
     icon: str  # emoji or icon name
     category: str
     fields: list[CatalogField]
+    image_path: str | None = None  # Optional custom icon image path
+    enabled: bool = True

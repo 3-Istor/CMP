@@ -1,4 +1,4 @@
-import type { CatalogTemplate, Deployment, DeploymentHealth } from "@/types";
+import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
@@ -19,6 +19,9 @@ export const getCatalog = () => request<CatalogTemplate[]>("/catalog/");
 
 export const getTemplate = (id: string) =>
   request<CatalogTemplate>(`/catalog/${id}`);
+
+export const syncCatalog = () =>
+  request<{ message: string }>("/catalog/sync", { method: "POST" });
 
 // Deployments
 export const getDeployments = () => request<Deployment[]>("/deployments/");
@@ -41,5 +44,5 @@ export const deleteDeployment = (id: number) =>
     method: "DELETE",
   });
 
-export const getDeploymentHealth = (id: number) =>
-  request<DeploymentHealth>(`/deployments/${id}/health`);
+export const getDeploymentOutputs = (id: number) =>
+  request<TerraformOutputs>(`/deployments/${id}/outputs`);
