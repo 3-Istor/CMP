@@ -104,22 +104,51 @@ Templates are loaded from: https://github.com/3-Istor/ia-project-template
 
 ## Quick Start
 
-### Automated Setup (Recommended)
+### 1. Clone & Setup
 
 ```bash
+# Clone the repository
 git clone https://github.com/3-Istor/arcl-cmp.git
 cd arcl-cmp
+
+# Run automated setup (installs dependencies, creates env files, runs migrations)
 ./setup.sh
 ```
 
-The script will:
+### 2. Configure Credentials
 
-- Install all dependencies
-- Set up environment files
-- Run database migrations
-- Prepare the application
+Edit `backend/.env` with your OpenStack credentials:
 
-Then follow the on-screen instructions to configure credentials and start the servers.
+```bash
+nano backend/.env
+```
+
+Required variables:
+
+```env
+OS_AUTH_URL=http://192.168.1.210:5000/v3
+OS_USERNAME=your_username
+OS_PASSWORD=your_password
+OS_PROJECT_NAME=your_project
+```
+
+### 3. Start Backend
+
+```bash
+cd backend
+poetry run uvicorn app.main:app --reload --port 8000
+```
+
+Backend will be available at http://localhost:8000
+
+### 4. Start Frontend (in a new terminal)
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend will be available at http://localhost:3000
 
 ### Manual Setup
 
@@ -313,6 +342,43 @@ Monitor resource usage through the dashboard's resource count display.
 
 ---
 
+## Running the Project
+
+### Development Mode
+
+Start both backend and frontend in separate terminals:
+
+```bash
+# Terminal 1 - Backend
+cd backend
+poetry run uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 - Frontend
+cd frontend
+npm run dev
+```
+
+Access the application:
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+### Production Mode
+
+```bash
+# Build frontend
+cd frontend
+npm run build
+npm start
+
+# Run backend with gunicorn
+cd backend
+poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
+
+---
+
 ## Development
 
 ### Running tests (backend)
@@ -334,19 +400,6 @@ poetry run pylint app/
 # Frontend
 cd frontend
 npm run lint
-```
-
-### Building for production
-
-```bash
-# Frontend
-cd frontend
-npm run build
-npm start
-
-# Backend (with gunicorn)
-cd backend
-poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 ```
 
 ---
