@@ -38,7 +38,7 @@ RUN chmod +x /docker-entrypoint.sh \
 
 # Ensure public directory is writable by nextjs user
 RUN chown -R nextjs:nodejs /app/public \
-    && chmod -R 755 /app/public
+    && chmod -R 775 /app/public
 
 USER nextjs
 
