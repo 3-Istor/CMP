@@ -40,7 +40,7 @@ spec:
           protocol: TCP
         env:
         - name: NEXT_PUBLIC_API_URL
-          value: "http://{{ include "arcl-cmp.fullname" . }}-backend:8000/api"
+          value: {{ .Values.frontend.apiUrl | quote }}
         livenessProbe:
           httpGet:
             path: /
