@@ -103,6 +103,7 @@ env:
 
 # Secrets (should be created separately or use external-secrets)
 secrets:
+  create: false
   openstack:
     authUrl: ""
     username: ""
