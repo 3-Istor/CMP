@@ -96,14 +96,13 @@ affinity: {}
 # Environment variables
 env:
   backend:
-    DATABASE_URL: "sqlite:///./arcl.db"
+    DATABASE_URL: "sqlite:////app/db/arcl.db"
     OS_USER_DOMAIN_NAME: "Default"
     OS_PROJECT_DOMAIN_NAME: "Default"
     AWS_DEFAULT_REGION: "eu-west-3"
 
 # Secrets (should be created separately or use external-secrets)
 secrets:
-  create: false
   openstack:
     authUrl: ""
     username: ""
@@ -112,3 +111,6 @@ secrets:
   aws:
     accessKeyId: ""
     secretAccessKey: ""
+    region: "eu-west-3"
+    s3Bucket: ""
+    s3KeyPrefix: ""

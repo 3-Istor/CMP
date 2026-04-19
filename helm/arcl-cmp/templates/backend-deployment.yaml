@@ -114,14 +114,13 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /app/data
-        - name: db
-          mountPath: /app/arcl.db
-          subPath: arcl.db
+        - name: db-storage
+          mountPath: /app/db
       volumes:
       - name: data
         persistentVolumeClaim:
           claimName: {{ include "arcl-cmp.fullname" . }}-backend-data
-      - name: db
+      - name: db-storage
         persistentVolumeClaim:
           claimName: {{ include "arcl-cmp.fullname" . }}-backend-db
       {{- with .Values.nodeSelector }}
