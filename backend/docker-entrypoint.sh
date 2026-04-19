@@ -3,12 +3,31 @@ set -e
 
 echo "🚀 Starting ARCL CMP Backend..."
 
-# Database path from DATABASE_URL environment variable
-DB_PATH="/app/arcl.db"
+# Extract database path from DATABASE_URL environment variable
+# Handle both sqlite:///./file.db and sqlite:////absolute/path/file.db formats
+DB_PATH=$(echo "${DATABASE_URL:-sqlite:///./arcl.db}" | sed 's|sqlite:///\./|/app/|' | sed 's|sqlite:///||')
+
+echo "📊 Database path: $DB_PATH"
+
+# Ensure database directory exists
+DB_DIR=$(dirname "$DB_PATH")
+if [ ! -d "$DB_DIR" ]; then
+    echo "📁 Creating database directory: $DB_DIR"
+    mkdir -p "$DB_DIR" || echo "⚠️  Could not create directory (may already exist)"
+fi
+
+# Fix permissions if running as root in K8s
+if [ "$(id -u)" = "0" ]; then
+    echo "� Runninsg as root, ensuring directory permissions..."
+    chmod -R 777 "$DB_DIR" 2>/dev/null || echo "⚠️  Could not change directory permissions"
+    if [ -f "$DB_PATH" ]; then
+        chmod 666 "$DB_PATH" 2>/dev/null || echo "⚠️  Could not change file permissions"
+    fi
+fi
 
 # List files to debug
-echo "📁 Checking /app directory contents..."
-ls -la /app/*.db 2>/dev/null || echo "No .db files found in /app"
+echo "📁 Checking database directory contents..."
+ls -la "$DB_DIR"/*.db 2>/dev/null || echo "No .db files found in $DB_DIR"
 
 # Check if database exists
 if [ -f "$DB_PATH" ]; then
@@ -25,8 +44,17 @@ if [ -f "$DB_PATH" ]; then
 
         if [ "$TABLE_COUNT" -gt 0 ]; then
             echo "⚠️  Database has $TABLE_COUNT tables but no migration tracking"
-            echo "⚠️  Deleting old database and recreating..."
-            rm -f "$DB_PATH"
+            echo "⚠️  Attempting to delete and recreate database..."
+
+            if rm -f "$DB_PATH" 2>/dev/null; then
+                echo "✅ Old database deleted"
+            else
+                echo "❌ Cannot delete database file - permission denied"
+                echo "💡 Please delete the persistent volume and restart:"
+                echo "   kubectl delete pvc <your-pvc-name>"
+                exit 1
+            fi
+
             alembic upgrade head
             echo "✅ Database recreated and initialized"
         else
