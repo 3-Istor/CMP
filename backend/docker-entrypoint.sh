@@ -4,8 +4,8 @@ set -e
 echo "🚀 Starting ARCL CMP Backend..."
 
 # Ensure database directory exists with proper permissions
-mkdir -p /app/db
-chmod 755 /app/db
+mkdir -p /app/db || true
+chmod 755 /app/db 2>/dev/null || echo "⚠️  Could not change db directory permissions (may be mounted volume)"
 
 # Check if database exists
 if [ -f "/app/db/arcl.db" ]; then

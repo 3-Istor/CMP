@@ -33,10 +33,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh \
+    && chown nextjs:nodejs /docker-entrypoint.sh
 
-# Ensure public directory is writable
-RUN chown -R nextjs:nodejs /app/public
+# Ensure public directory is writable by nextjs user
+RUN chown -R nextjs:nodejs /app/public \
+    && chmod -R 755 /app/public
 
 USER nextjs
 
