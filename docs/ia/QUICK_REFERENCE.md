@@ -185,7 +185,7 @@ poetry run alembic upgrade head
 
 ```env
 # OpenStack (required)
-OS_AUTH_URL=http://192.168.1.210:5000/v3
+OS_AUTH_URL=http://localhost:5000/v3
 OS_USERNAME=username
 OS_PASSWORD=password
 OS_PROJECT_NAME=project

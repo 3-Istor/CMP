@@ -1,0 +1,14 @@
+apiVersion: v2
+name: arcl-cmp
+description: ARCL Hybrid Cloud Management Platform Helm Chart
+type: application
+version: 1.0.0
+appVersion: "0.1.0"
+keywords:
+  - cloud
+  - terraform
+  - openstack
+  - aws
+maintainers:
+  - name: 3-Istor Team
+    url: https://github.com/3-Istor

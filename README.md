@@ -126,7 +126,7 @@ nano backend/.env
 Required variables:
 
 ```env
-OS_AUTH_URL=http://192.168.1.210:5000/v3
+OS_AUTH_URL=http://localhost:5000/v3
 OS_USERNAME=your_username
 OS_PASSWORD=your_password
 OS_PROJECT_NAME=your_project
@@ -171,7 +171,7 @@ AWS_DEFAULT_REGION=eu-west-3
 AWS_INSTANCE_TYPE=t3.micro
 
 # ── OpenStack ─────────────────────────────────────────────────
-OS_AUTH_URL=http://192.168.1.210:5000/v3
+OS_AUTH_URL=http://localhost:5000/v3
 OS_USERNAME=arcl-cmp
 OS_PASSWORD=your_openstack_password
 OS_PROJECT_NAME=3-istor-cloud
@@ -404,19 +404,70 @@ npm run lint
 
 ---
 
+## Docker & Kubernetes Deployment
+
+ARCL CMP can be deployed using Docker and Kubernetes (k3s).
+
+### Docker Compose (Local Development)
+
+```bash
+# Build and start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Kubernetes with Helm (Production)
+
+```bash
+# Quick deploy to k3s
+./scripts/deploy-k3s.sh
+
+# Or manually with Helm
+helm install arcl-cmp ./helm/arcl-cmp \
+  --namespace arcl-cmp \
+  --create-namespace \
+  --values values-secrets.yaml
+```
+
+### CI/CD with GitHub Actions
+
+Automated workflows for building and deploying:
+
+- **Build on tag**: Push `v*.*.*` tag to build and publish Docker images
+- **Helm release**: Push `helm-v*.*.*` tag to publish Helm chart
+- **Auto-test**: Runs on every push/PR
+
+```bash
+# Release Docker images
+git tag v1.0.0 && git push origin v1.0.0
+
+# Release Helm chart
+git tag helm-v1.0.0 && git push origin helm-v1.0.0
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions and [DOCKER_KUBERNETES.md](DOCKER_KUBERNETES.md) for command reference.
+
+---
+
 ## Roadmap
 
 - [x] Terraform-based deployment system
 - [x] Git repository template loading
 - [x] Automatic output capture
+- [x] Docker containerization
+- [x] Kubernetes Helm charts
+- [x] GitHub Actions CI/CD pipeline
 - [ ] AWS template support
 - [ ] WebSocket support for real-time Terraform logs
 - [ ] Template versioning
 - [ ] Multi-user support with RBAC
 - [ ] Cost estimation per deployment
 - [ ] Monitoring dashboard integration
-- [ ] K3s migration for CMP hosting
-- [ ] GitHub Actions CI/CD pipeline
 
 ---
 

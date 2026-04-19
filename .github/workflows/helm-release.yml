@@ -1,0 +1,80 @@
+name: Helm Chart Release
+
+on:
+  push:
+    tags:
+      - "helm-v*.*.*"
+
+jobs:
+  release-helm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/helm-v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Helm chart version: $VERSION"
+
+      - name: Update Chart version
+        run: |
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" helm/arcl-cmp/Chart.yaml
+          cat helm/arcl-cmp/Chart.yaml
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "latest"
+
+      - name: Package Helm chart
+        run: |
+          helm package helm/arcl-cmp -d .helm-releases
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Helm chart to OCI registry
+        run: |
+          helm push .helm-releases/arcl-cmp-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: .helm-releases/*.tgz
+          generate_release_notes: true
+          body: |
+            ## Helm Chart Release v${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            ```bash
+            # Add the Helm repository
+            helm repo add arcl-cmp oci://ghcr.io/${{ github.repository_owner }}/charts
+
+            # Install the chart
+            helm install arcl-cmp oci://ghcr.io/${{ github.repository_owner }}/charts/arcl-cmp --version ${{ steps.version.outputs.version }}
+            ```
+
+            ### Upgrade with latest images
+
+            ```bash
+            helm upgrade arcl-cmp oci://ghcr.io/${{ github.repository_owner }}/charts/arcl-cmp \
+              --version ${{ steps.version.outputs.version }} \
+              --set image.backend.tag=latest \
+              --set image.frontend.tag=latest
+            ```
+
+            ### Configuration
+
+            See [values.yaml](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/helm/arcl-cmp/values.yaml) for all configuration options.

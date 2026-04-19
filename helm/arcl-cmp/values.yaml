@@ -1,0 +1,113 @@
+replicaCount: 1
+
+image:
+  backend:
+    repository: ghcr.io/3-istor/arcl-cmp-backend
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  frontend:
+    repository: ghcr.io/3-istor/arcl-cmp-frontend
+    pullPolicy: IfNotPresent
+    tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  backend:
+    port: 8000
+  frontend:
+    port: 3000
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: arcl-cmp.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /
+          pathType: Prefix
+          service: frontend
+  tls:
+    - secretName: arcl-cmp-tls
+      hosts:
+        - arcl-cmp.example.com
+
+resources:
+  backend:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  frontend:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+persistence:
+  enabled: true
+  storageClass: "local-path"
+  backend:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Environment variables
+env:
+  backend:
+    DATABASE_URL: "sqlite:///./arcl.db"
+    OS_USER_DOMAIN_NAME: "Default"
+    OS_PROJECT_DOMAIN_NAME: "Default"
+    AWS_DEFAULT_REGION: "eu-west-3"
+
+# Secrets (should be created separately or use external-secrets)
+secrets:
+  openstack:
+    authUrl: ""
+    username: ""
+    password: ""
+    projectName: ""
+  aws:
+    accessKeyId: ""
+    secretAccessKey: ""

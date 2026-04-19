@@ -52,7 +52,7 @@ Edit `.env` with your credentials:
 
 ```env
 # ── OpenStack ─────────────────────────────────────────────────
-OS_AUTH_URL=http://192.168.1.210:5000/v3
+OS_AUTH_URL=http://localhost:5000/v3
 OS_USERNAME=your_username
 OS_PASSWORD=your_password
 OS_PROJECT_NAME=your_project

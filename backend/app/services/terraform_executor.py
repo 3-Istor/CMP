@@ -76,6 +76,20 @@ class TerraformExecutor:
         if not self.use_s3_backend:
             env["TF_DATA_DIR"] = str(self.state_dir / ".terraform")
 
+        # Pass OpenStack credentials to Terraform
+        if settings.OS_AUTH_URL:
+            env["OS_AUTH_URL"] = settings.OS_AUTH_URL
+        if settings.OS_USERNAME:
+            env["OS_USERNAME"] = settings.OS_USERNAME
+        if settings.OS_PASSWORD:
+            env["OS_PASSWORD"] = settings.OS_PASSWORD
+        if settings.OS_PROJECT_NAME:
+            env["OS_PROJECT_NAME"] = settings.OS_PROJECT_NAME
+        if settings.OS_USER_DOMAIN_NAME:
+            env["OS_USER_DOMAIN_NAME"] = settings.OS_USER_DOMAIN_NAME
+        if settings.OS_PROJECT_DOMAIN_NAME:
+            env["OS_PROJECT_DOMAIN_NAME"] = settings.OS_PROJECT_DOMAIN_NAME
+
         logger.info("Running: %s in %s", " ".join(command), self.working_dir)
 
         result = subprocess.run(
