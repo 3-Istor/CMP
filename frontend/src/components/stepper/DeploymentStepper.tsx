@@ -46,7 +46,7 @@ export function DeploymentStepper({ deployment }: Props) {
   const isFailed = deployment.status === "failed";
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [userInteracted, setUserInteracted] = useState(false);
-  const [lastInteractionTime, setLastInteractionTime] = useState(0);
+  const lastInteractionTimeRef = useRef(0);
 
   // Auto-center on current step
   useEffect(() => {
@@ -56,13 +56,8 @@ export function DeploymentStepper({ deployment }: Props) {
     if (currentStepIndex === -1) return;
 
     // Only auto-scroll if user hasn't interacted recently (5 seconds)
-    const timeSinceInteraction = Date.now() - lastInteractionTime;
+    const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
     if (userInteracted && timeSinceInteraction < 5000) return;
-
-    // Reset user interaction flag after 5 seconds
-    if (userInteracted && timeSinceInteraction >= 5000) {
-      setUserInteracted(false);
-    }
 
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -83,12 +78,25 @@ export function DeploymentStepper({ deployment }: Props) {
       left: scrollPosition,
       behavior: "smooth",
     });
-  }, [deployment.status, userInteracted, lastInteractionTime]);
+  }, [deployment.status, userInteracted]);
+
+  // Reset user interaction flag after 5 seconds
+  useEffect(() => {
+    if (!userInteracted) return;
+
+    const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
+    if (timeSinceInteraction < 5000) {
+      const timer = setTimeout(() => {
+        setUserInteracted(false);
+      }, 5000 - timeSinceInteraction);
+      return () => clearTimeout(timer);
+    }
+  }, [userInteracted]);
 
   // Handle user scroll/touch interaction
   const handleUserInteraction = () => {
     setUserInteracted(true);
-    setLastInteractionTime(Date.now());
+    lastInteractionTimeRef.current = Date.now();
   };
 
   return (

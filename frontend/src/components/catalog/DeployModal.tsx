@@ -24,7 +24,9 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   // Reset form when template changes
   useEffect(() => {
     if (template) {
+       
       setAppName("");
+       
       setFieldValues(
         Object.fromEntries(
           template.fields.map((f) => [f.name, f.default ?? ""]),
@@ -33,6 +35,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
       // Focus the name input after the panel animates in
       setTimeout(() => inputRef.current?.focus(), 150);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template?.id]);
 
   // Close on Escape key

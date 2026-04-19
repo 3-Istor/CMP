@@ -3,13 +3,14 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import type { CatalogTemplate } from "@/types";
+import Image from "next/image";
 
 interface Props {
   templates: CatalogTemplate[];
@@ -37,10 +38,12 @@ export function CatalogGrid({ templates, onDeploy }: Props) {
           <CardHeader className="pb-2">
             <div className="flex items-start justify-between">
               {t.image_path ? (
-                <img
+                <Image
                   src={`${BACKEND_URL}${t.image_path}`}
                   alt={`${t.name} icon`}
-                  className="w-10 h-10 object-contain"
+                  width={40}
+                  height={40}
+                  className="object-contain"
                 />
               ) : (
                 <span className="text-3xl">{t.icon}</span>

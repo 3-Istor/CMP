@@ -47,11 +47,15 @@ def run_deployment(deployment_id: int) -> None:
             repo = get_repository()
             template = repo.get_template_by_id(deployment.template_id)
             if not template:
-                raise ValueError(f"Template {deployment.template_id} not found")
+                raise ValueError(
+                    f"Template {deployment.template_id} not found"
+                )
 
             template_path = Path(template["_template_path"])
             if not template_path.exists():
-                raise ValueError(f"Template path does not exist: {template_path}")
+                raise ValueError(
+                    f"Template path does not exist: {template_path}"
+                )
 
             # Create Terraform executor
             executor = create_executor(template_path, deployment.name)
@@ -104,7 +108,9 @@ def run_deployment(deployment_id: int) -> None:
             )
 
         except Exception as exc:
-            logger.error("Deployment %s failed: %s", deployment_id, exc, exc_info=True)
+            logger.error(
+                "Deployment %s failed: %s", deployment_id, exc, exc_info=True
+            )
             _update(
                 db,
                 deployment,
@@ -139,7 +145,9 @@ def run_deletion(deployment_id: int) -> None:
             repo = get_repository()
             template = repo.get_template_by_id(deployment.template_id)
             if not template:
-                raise ValueError(f"Template {deployment.template_id} not found")
+                raise ValueError(
+                    f"Template {deployment.template_id} not found"
+                )
 
             template_path = Path(template["_template_path"])
             executor = create_executor(template_path, deployment.name)
@@ -151,11 +159,16 @@ def run_deletion(deployment_id: int) -> None:
             executor.destroy(app_config)
 
             _update(
-                db, deployment, DeploymentStatus.DELETED, "✅ Resources destroyed"
+                db,
+                deployment,
+                DeploymentStatus.DELETED,
+                "✅ Resources destroyed",
             )
 
         except Exception as exc:
-            logger.error("Deletion %s failed: %s", deployment_id, exc, exc_info=True)
+            logger.error(
+                "Deletion %s failed: %s", deployment_id, exc, exc_info=True
+            )
             _update(
                 db,
                 deployment,

@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 # Hardcoded budget-safe instance type — DO NOT change to larger instances
 ALLOWED_INSTANCE_TYPES = {"t3.micro", "t4g.nano"}
 INSTANCE_TYPE = settings.AWS_INSTANCE_TYPE
-assert INSTANCE_TYPE in ALLOWED_INSTANCE_TYPES, (
-    f"Instance type {INSTANCE_TYPE} exceeds budget constraints!"
-)
+assert (
+    INSTANCE_TYPE in ALLOWED_INSTANCE_TYPES
+), f"Instance type {INSTANCE_TYPE} exceeds budget constraints!"
 
 AMI_MAP = {
     "eu-west-3": "ami-0f15d55736fd476da",  # Ubuntu 22.04 LTS eu-west-3
@@ -199,9 +199,7 @@ def delete_web_layer(asg_name: str, deployment_name: str) -> None:
             )
             for l in listeners.get("Listeners", []):
                 elb.delete_listener(ListenerArn=l["ListenerArn"])
-            elb.delete_load_balancer(
-                LoadBalancerArn=alb["LoadBalancerArn"]
-            )
+            elb.delete_load_balancer(LoadBalancerArn=alb["LoadBalancerArn"])
         logger.info("Deleted ALB for %s", deployment_name)
     except Exception as exc:
         logger.error("Failed to delete ALB: %s", exc)
@@ -257,7 +255,9 @@ def _get_or_create_vpc(ec2_client) -> tuple[str, list[str]]:
     )
     # Use up to 2 subnets in different AZs for ALB
     subnet_ids = list(
-        {s["AvailabilityZone"]: s["SubnetId"] for s in subnets["Subnets"]}.values()
+        {
+            s["AvailabilityZone"]: s["SubnetId"] for s in subnets["Subnets"]
+        }.values()
     )[:2]
     return vpc_id, subnet_ids
 

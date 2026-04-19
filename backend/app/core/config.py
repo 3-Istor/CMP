@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     TF_BACKEND_AWS_REGION: str = "eu-west-3"
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
-    TF_BACKEND_S3_DYNAMODB_TABLE: str = ""  # Optional: leave empty to disable locking
+    TF_BACKEND_S3_DYNAMODB_TABLE: str = (
+        ""  # Optional: leave empty to disable locking
+    )
 
     # OpenStack — loaded from environment (required for deployments)
     OS_AUTH_URL: str = ""

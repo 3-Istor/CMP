@@ -61,9 +61,7 @@ async def create_deployment(
 
 
 @router.get("/{deployment_id}", response_model=DeploymentRead)
-async def get_deployment(
-    deployment_id: int, db: Session = Depends(get_db)
-):
+async def get_deployment(deployment_id: int, db: Session = Depends(get_db)):
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         raise HTTPException(status_code=404, detail="Deployment not found")

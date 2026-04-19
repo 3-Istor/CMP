@@ -33,8 +33,12 @@ def run_deployment(deployment_id: int, db: Session) -> None:
     app_config = json.loads(deployment.app_config or "{}")
 
     # ── Step 1: OpenStack ─────────────────────────────────────────────────
-    _update(db, deployment, DeploymentStatus.DEPLOYING_OPENSTACK,
-            "🔧 Deploying OpenStack DB VMs...")
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DEPLOYING_OPENSTACK,
+        "🔧 Deploying OpenStack DB VMs...",
+    )
     try:
         vm1, vm2 = openstack_service.provision_db_vms(
             deployment.name, deployment.template_id, app_config
@@ -47,13 +51,21 @@ def run_deployment(deployment_id: int, db: Session) -> None:
         logger.info("OpenStack VMs ready for deployment %s", deployment_id)
     except Exception as exc:
         logger.error("OpenStack step failed: %s", exc)
-        _update(db, deployment, DeploymentStatus.FAILED,
-                f"❌ OpenStack provisioning failed: {exc}")
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            f"❌ OpenStack provisioning failed: {exc}",
+        )
         return
 
     # ── Step 2: AWS ───────────────────────────────────────────────────────
-    _update(db, deployment, DeploymentStatus.DEPLOYING_AWS,
-            "☁️ Deploying AWS ASG + Load Balancer...")
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DEPLOYING_AWS,
+        "☁️ Deploying AWS ASG + Load Balancer...",
+    )
     try:
         aws_result = aws_service.provision_web_layer(
             deployment.name,
@@ -68,18 +80,30 @@ def run_deployment(deployment_id: int, db: Session) -> None:
         logger.info("AWS layer ready for deployment %s", deployment_id)
     except Exception as exc:
         logger.error("AWS step failed — triggering SAGA rollback: %s", exc)
-        _update(db, deployment, DeploymentStatus.ROLLING_BACK,
-                "⏪ AWS failed — rolling back OpenStack VMs...")
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.ROLLING_BACK,
+            "⏪ AWS failed — rolling back OpenStack VMs...",
+        )
         openstack_service.rollback_db_vms(
             deployment.os_vm_db1_id, deployment.os_vm_db2_id
         )
-        _update(db, deployment, DeploymentStatus.FAILED,
-                f"❌ AWS provisioning failed. OpenStack rolled back. Error: {exc}")
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            f"❌ AWS provisioning failed. OpenStack rolled back. Error: {exc}",
+        )
         return
 
     # ── Step 3: Done ──────────────────────────────────────────────────────
-    _update(db, deployment, DeploymentStatus.RUNNING,
-            f"✅ Running — {deployment.aws_alb_dns}")
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.RUNNING,
+        f"✅ Running — {deployment.aws_alb_dns}",
+    )
 
 
 def run_deletion(deployment_id: int, db: Session) -> None:
@@ -91,13 +115,21 @@ def run_deletion(deployment_id: int, db: Session) -> None:
     if not deployment:
         return
 
-    _update(db, deployment, DeploymentStatus.DELETING,
-            "🗑️ Deleting AWS resources...")
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DELETING,
+        "🗑️ Deleting AWS resources...",
+    )
     if deployment.aws_asg_name:
         aws_service.delete_web_layer(deployment.aws_asg_name, deployment.name)
 
-    _update(db, deployment, DeploymentStatus.DELETING,
-            "🗑️ Deleting OpenStack VMs...")
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DELETING,
+        "🗑️ Deleting OpenStack VMs...",
+    )
     openstack_service.delete_db_vms(
         deployment.os_vm_db1_id, deployment.os_vm_db2_id
     )

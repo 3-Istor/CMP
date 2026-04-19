@@ -126,7 +126,9 @@ class TerraformExecutor:
 
     def plan(self, variables: dict[str, Any]) -> str:
         """Run terraform plan and return the output."""
-        logger.info("Planning Terraform deployment for %s", self.deployment_name)
+        logger.info(
+            "Planning Terraform deployment for %s", self.deployment_name
+        )
 
         var_args = []
         for key, value in variables.items():
@@ -148,7 +150,9 @@ class TerraformExecutor:
         Returns:
             Dictionary of Terraform outputs
         """
-        logger.info("Applying Terraform deployment for %s", self.deployment_name)
+        logger.info(
+            "Applying Terraform deployment for %s", self.deployment_name
+        )
 
         var_args = []
         for key, value in variables.items():
@@ -174,9 +178,7 @@ class TerraformExecutor:
     def get_outputs(self) -> dict[str, Any]:
         """Retrieve Terraform outputs as a dictionary."""
         try:
-            result = self._run_command(
-                ["terraform", "output", "-json"]
-            )
+            result = self._run_command(["terraform", "output", "-json"])
             outputs_raw = json.loads(result.stdout)
 
             # Terraform outputs are in format: {"key": {"value": "actual_value"}}
@@ -191,7 +193,9 @@ class TerraformExecutor:
 
     def destroy(self, variables: dict[str, Any]) -> None:
         """Destroy all Terraform-managed resources."""
-        logger.info("Destroying Terraform deployment for %s", self.deployment_name)
+        logger.info(
+            "Destroying Terraform deployment for %s", self.deployment_name
+        )
 
         var_args = []
         for key, value in variables.items():
@@ -213,12 +217,14 @@ class TerraformExecutor:
     def get_state_summary(self) -> dict[str, Any]:
         """Get a summary of the current Terraform state."""
         try:
-            result = self._run_command(
-                ["terraform", "show", "-json"]
-            )
+            result = self._run_command(["terraform", "show", "-json"])
             state = json.loads(result.stdout)
 
-            resources = state.get("values", {}).get("root_module", {}).get("resources", [])
+            resources = (
+                state.get("values", {})
+                .get("root_module", {})
+                .get("resources", [])
+            )
 
             return {
                 "resource_count": len(resources),

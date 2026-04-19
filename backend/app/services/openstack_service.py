@@ -130,7 +130,7 @@ def _build_cloud_init(
 ) -> str:
     """Generate a minimal cloud-init user-data script per template."""
     scripts = {
-    "wordpress": f"""#!/bin/bash
+        "wordpress": f"""#!/bin/bash
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
