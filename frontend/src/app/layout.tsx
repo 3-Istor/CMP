@@ -21,6 +21,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <script src="/config.js" />
+      </head>
       <body
         className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
       >

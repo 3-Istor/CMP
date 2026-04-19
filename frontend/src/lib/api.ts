@@ -1,6 +1,23 @@
 import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+// Declare runtime config type
+declare global {
+  interface Window {
+    __RUNTIME_CONFIG__?: {
+      apiUrl: string;
+    };
+  }
+}
+
+// Use runtime config if available, otherwise fall back to build-time env var
+const getApiUrl = () => {
+  if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__) {
+    return window.__RUNTIME_CONFIG__.apiUrl;
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+};
+
+const BASE = getApiUrl();
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
