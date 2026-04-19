@@ -35,14 +35,14 @@ git push origin v1.0.0
 
 **Output:**
 
-- `ghcr.io/3-istor/arcl-cmp-backend:v1.0.0`
-- `ghcr.io/3-istor/arcl-cmp-backend:1.0`
-- `ghcr.io/3-istor/arcl-cmp-backend:1`
-- `ghcr.io/3-istor/arcl-cmp-backend:latest`
-- `ghcr.io/3-istor/arcl-cmp-frontend:v1.0.0`
-- `ghcr.io/3-istor/arcl-cmp-frontend:1.0`
-- `ghcr.io/3-istor/arcl-cmp-frontend:1`
-- `ghcr.io/3-istor/arcl-cmp-frontend:latest`
+- `ghcr.io/3-istor/cmp-backend:v1.0.0`
+- `ghcr.io/3-istor/cmp-backend:1.0`
+- `ghcr.io/3-istor/cmp-backend:1`
+- `ghcr.io/3-istor/cmp-backend:latest`
+- `ghcr.io/3-istor/cmp-frontend:v1.0.0`
+- `ghcr.io/3-istor/cmp-frontend:1.0`
+- `ghcr.io/3-istor/cmp-frontend:1`
+- `ghcr.io/3-istor/cmp-frontend:latest`
 
 ### 3. helm-release.yml
 

@@ -36,24 +36,24 @@ helm install arcl-cmp ./helm/arcl-cmp \
 
 The following table lists the configurable parameters and their default values.
 
-| Parameter                          | Description               | Default                             |
-| ---------------------------------- | ------------------------- | ----------------------------------- |
-| `replicaCount`                     | Number of replicas        | `1`                                 |
-| `image.backend.repository`         | Backend image repository  | `ghcr.io/3-istor/arcl-cmp-backend`  |
-| `image.backend.tag`                | Backend image tag         | `latest`                            |
-| `image.frontend.repository`        | Frontend image repository | `ghcr.io/3-istor/arcl-cmp-frontend` |
-| `image.frontend.tag`               | Frontend image tag        | `latest`                            |
-| `service.type`                     | Kubernetes service type   | `ClusterIP`                         |
-| `ingress.enabled`                  | Enable ingress            | `true`                              |
-| `ingress.className`                | Ingress class name        | `traefik`                           |
-| `ingress.hosts[0].host`            | Hostname                  | `arcl-cmp.example.com`              |
-| `persistence.enabled`              | Enable persistence        | `true`                              |
-| `persistence.storageClass`         | Storage class             | `local-path`                        |
-| `persistence.backend.size`         | Backend storage size      | `10Gi`                              |
-| `resources.backend.limits.cpu`     | Backend CPU limit         | `1000m`                             |
-| `resources.backend.limits.memory`  | Backend memory limit      | `1Gi`                               |
-| `resources.frontend.limits.cpu`    | Frontend CPU limit        | `500m`                              |
-| `resources.frontend.limits.memory` | Frontend memory limit     | `512Mi`                             |
+| Parameter                          | Description               | Default                        |
+| ---------------------------------- | ------------------------- | ------------------------------ |
+| `replicaCount`                     | Number of replicas        | `1`                            |
+| `image.backend.repository`         | Backend image repository  | `ghcr.io/3-istor/cmp-backend`  |
+| `image.backend.tag`                | Backend image tag         | `latest`                       |
+| `image.frontend.repository`        | Frontend image repository | `ghcr.io/3-istor/cmp-frontend` |
+| `image.frontend.tag`               | Frontend image tag        | `latest`                       |
+| `service.type`                     | Kubernetes service type   | `ClusterIP`                    |
+| `ingress.enabled`                  | Enable ingress            | `true`                         |
+| `ingress.className`                | Ingress class name        | `traefik`                      |
+| `ingress.hosts[0].host`            | Hostname                  | `arcl-cmp.example.com`         |
+| `persistence.enabled`              | Enable persistence        | `true`                         |
+| `persistence.storageClass`         | Storage class             | `local-path`                   |
+| `persistence.backend.size`         | Backend storage size      | `10Gi`                         |
+| `resources.backend.limits.cpu`     | Backend CPU limit         | `1000m`                        |
+| `resources.backend.limits.memory`  | Backend memory limit      | `1Gi`                          |
+| `resources.frontend.limits.cpu`    | Frontend CPU limit        | `500m`                         |
+| `resources.frontend.limits.memory` | Frontend memory limit     | `512Mi`                        |
 
 ### Secrets Configuration
 

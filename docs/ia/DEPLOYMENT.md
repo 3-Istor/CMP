@@ -56,21 +56,21 @@ git push origin helm-v1.0.0
 
 Images will be available at:
 
-- `ghcr.io/3-istor/arcl-cmp-backend:v1.0.0`
-- `ghcr.io/3-istor/arcl-cmp-frontend:v1.0.0`
+- `ghcr.io/3-istor/cmp-backend:v1.0.0`
+- `ghcr.io/3-istor/cmp-frontend:v1.0.0`
 
 #### Option B: Manual Build
 
 ```bash
 # Build backend
-docker build -t ghcr.io/3-istor/arcl-cmp-backend:latest ./backend
+docker build -t ghcr.io/3-istor/cmp-backend:latest ./backend
 
 # Build frontend
-docker build -t ghcr.io/3-istor/arcl-cmp-frontend:latest ./frontend
+docker build -t ghcr.io/3-istor/cmp-frontend:latest ./frontend
 
 # Push images
-docker push ghcr.io/3-istor/arcl-cmp-backend:latest
-docker push ghcr.io/3-istor/arcl-cmp-frontend:latest
+docker push ghcr.io/3-istor/cmp-backend:latest
+docker push ghcr.io/3-istor/cmp-frontend:latest
 ```
 
 ### 2. Create Secrets

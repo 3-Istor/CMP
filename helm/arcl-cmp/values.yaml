@@ -2,11 +2,11 @@ replicaCount: 1
 
 image:
   backend:
-    repository: ghcr.io/3-istor/arcl-cmp-backend
+    repository: ghcr.io/3-istor/cmp-backend
     pullPolicy: IfNotPresent
     tag: "latest"
   frontend:
-    repository: ghcr.io/3-istor/arcl-cmp-frontend
+    repository: ghcr.io/3-istor/cmp-frontend
     pullPolicy: IfNotPresent
     tag: "latest"
 

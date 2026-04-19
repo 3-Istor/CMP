@@ -80,7 +80,7 @@ Use pre-built images from GitHub releases.
 version: "3.8"
 services:
   backend:
-    image: ghcr.io/3-istor/arcl-cmp-backend:latest
+    image: ghcr.io/3-istor/cmp-backend:latest
     ports:
       - "8000:8000"
     environment:
@@ -90,7 +90,7 @@ services:
       - OS_PROJECT_NAME=${OS_PROJECT_NAME}
 
   frontend:
-    image: ghcr.io/3-istor/arcl-cmp-frontend:latest
+    image: ghcr.io/3-istor/cmp-frontend:latest
     ports:
       - "3000:3000"
     environment:
@@ -124,8 +124,8 @@ git push origin v1.0.0
 
 # GitHub Actions will:
 # - Build multi-arch images (amd64, arm64)
-# - Push to ghcr.io/3-istor/arcl-cmp-backend:v1.0.0
-# - Push to ghcr.io/3-istor/arcl-cmp-frontend:v1.0.0
+# - Push to ghcr.io/3-istor/cmp-backend:v1.0.0
+# - Push to ghcr.io/3-istor/cmp-frontend:v1.0.0
 # - Create GitHub release
 ```
 

@@ -83,8 +83,8 @@ helm/arcl-cmp/
    - Semantic versioning tags
    - GitHub release creation
    - Outputs:
-     - `ghcr.io/3-istor/arcl-cmp-backend:v1.0.0`
-     - `ghcr.io/3-istor/arcl-cmp-frontend:v1.0.0`
+     - `ghcr.io/3-istor/cmp-backend:v1.0.0`
+     - `ghcr.io/3-istor/cmp-frontend:v1.0.0`
 
 3. **helm-release.yml** - Helm Chart Publishing
    - Triggers: Helm tags (helm-v*.*.\*)
