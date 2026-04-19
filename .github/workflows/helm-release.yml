@@ -46,7 +46,8 @@ jobs:
 
       - name: Push Helm chart to OCI registry
         run: |
-          helm push .helm-releases/arcl-cmp-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm push .helm-releases/arcl-cmp-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/${REPO_OWNER}/charts
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -59,17 +60,14 @@ jobs:
             ### Installation
 
             ```bash
-            # Add the Helm repository
-            helm repo add arcl-cmp oci://ghcr.io/${{ github.repository_owner }}/charts
-
             # Install the chart
-            helm install arcl-cmp oci://ghcr.io/${{ github.repository_owner }}/charts/arcl-cmp --version ${{ steps.version.outputs.version }}
+            helm install arcl-cmp oci://ghcr.io/3-istor/charts/arcl-cmp --version ${{ steps.version.outputs.version }}
             ```
 
             ### Upgrade with latest images
 
             ```bash
-            helm upgrade arcl-cmp oci://ghcr.io/${{ github.repository_owner }}/charts/arcl-cmp \
+            helm upgrade arcl-cmp oci://ghcr.io/3-istor/charts/arcl-cmp \
               --version ${{ steps.version.outputs.version }} \
               --set image.backend.tag=latest \
               --set image.frontend.tag=latest

@@ -154,13 +154,13 @@ systemctl enable mysql
         "nextcloud": f"""#!/bin/bash
 apt-get update -y
 apt-get install -y postgresql
-sudo -u postgres psql -c "CREATE USER nextcloud WITH PASSWORD '{app_config.get('admin_password', 'changeme')}';"
+sudo -u postgres psql -c "CREATE USER nextcloud WITH PASSWORD '{app_config.get('admin_password', 'changeme')}';"  # pylint: disable=line-too-long
 sudo -u postgres psql -c "CREATE DATABASE nextcloud OWNER nextcloud;"
 """,
         "gitlab": f"""#!/bin/bash
 apt-get update -y
 apt-get install -y postgresql redis-server
-sudo -u postgres psql -c "CREATE USER gitlab WITH PASSWORD '{app_config.get('root_password', 'changeme')}';"
+sudo -u postgres psql -c "CREATE USER gitlab WITH PASSWORD '{app_config.get('root_password', 'changeme')}';"  # pylint: disable=line-too-long
 sudo -u postgres psql -c "CREATE DATABASE gitlabhq_production OWNER gitlab;"
 """,
         "grafana": """#!/bin/bash
