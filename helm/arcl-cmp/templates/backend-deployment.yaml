@@ -63,9 +63,15 @@ spec:
               name: {{ include "arcl-cmp.fullname" . }}-secret
               key: os-project-name
         - name: OS_USER_DOMAIN_NAME
-          value: {{ .Values.env.backend.OS_USER_DOMAIN_NAME | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: os-user-domain-name
         - name: OS_PROJECT_DOMAIN_NAME
-          value: {{ .Values.env.backend.OS_PROJECT_DOMAIN_NAME | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: os-project-domain-name
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
@@ -77,7 +83,20 @@ spec:
               name: {{ include "arcl-cmp.fullname" . }}-secret
               key: aws-secret-access-key
         - name: AWS_DEFAULT_REGION
-          value: {{ .Values.env.backend.AWS_DEFAULT_REGION | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: aws-region
+        - name: AWS_S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: aws-s3-bucket
+        - name: AWS_S3_KEY_PREFIX
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: aws-s3-key-prefix
         livenessProbe:
           httpGet:
             path: /health
