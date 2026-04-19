@@ -22,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="/config.js" />
       </head>
       <body
