@@ -19,11 +19,18 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Get API URL from environment variable at runtime
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
   return (
     <html lang="en" className="dark">
       <head>
-        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
-        <script src="/config.js" />
+        {/* Inject runtime config inline */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__RUNTIME_CONFIG__ = { apiUrl: '${apiUrl}' };`,
+          }}
+        />
       </head>
       <body
         className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
