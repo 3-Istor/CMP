@@ -138,10 +138,10 @@ apt-get update -y
 apt-get install -y mysql-server
 
 # Secure MySQL and create WordPress database
-mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{app_config.get('db_password', 'changeme')}';"
-mysql -uroot -p'{app_config.get('db_password', 'changeme')}' -e "
-  CREATE DATABASE IF NOT EXISTS wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-  CREATE USER IF NOT EXISTS 'wordpress'@'%' IDENTIFIED BY '{app_config.get('db_password', 'changeme')}';
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{app_config.get('db_password', 'changeme')}';"  # pylint: disable=line-too-long
+mysql -uroot -p'{app_config.get('db_password', 'changeme')}' -e "  # pylint: disable=line-too-long
+  CREATE DATABASE IF NOT EXISTS wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;  # pylint: disable=line-too-long
+  CREATE USER IF NOT EXISTS 'wordpress'@'%' IDENTIFIED BY '{app_config.get('db_password', 'changeme')}';  # pylint: disable=line-too-long
   GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'%';
   FLUSH PRIVILEGES;
 "

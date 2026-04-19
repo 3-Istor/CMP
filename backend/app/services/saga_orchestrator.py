@@ -36,7 +36,7 @@ def run_deployment(deployment_id: int, db: Session) -> None:
     _update(
         db,
         deployment,
-        DeploymentStatus.DEPLOYING_OPENSTACK,
+        DeploymentStatus.DEPLOYING_OPENSTACK,  # pylint: disable=no-member
         "🔧 Deploying OpenStack DB VMs...",
     )
     try:
@@ -63,7 +63,7 @@ def run_deployment(deployment_id: int, db: Session) -> None:
     _update(
         db,
         deployment,
-        DeploymentStatus.DEPLOYING_AWS,
+        DeploymentStatus.DEPLOYING_AWS,  # pylint: disable=no-member
         "☁️ Deploying AWS ASG + Load Balancer...",
     )
     try:
@@ -83,7 +83,7 @@ def run_deployment(deployment_id: int, db: Session) -> None:
         _update(
             db,
             deployment,
-            DeploymentStatus.ROLLING_BACK,
+            DeploymentStatus.ROLLING_BACK,  # pylint: disable=no-member
             "⏪ AWS failed — rolling back OpenStack VMs...",
         )
         openstack_service.rollback_db_vms(
