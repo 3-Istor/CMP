@@ -3,38 +3,40 @@ set -e
 
 echo "🚀 Starting ARCL CMP Backend..."
 
-# Ensure database directory exists with proper permissions
-mkdir -p /app/db
-chmod 755 /app/db
+# Database path from DATABASE_URL environment variable
+DB_PATH="/app/arcl.db"
+
+# List files to debug
+echo "📁 Checking /app directory contents..."
+ls -la /app/*.db 2>/dev/null || echo "No .db files found in /app"
 
 # Check if database exists
-if [ -f "/app/db/arcl.db" ]; then
-    echo "📊 Database file exists, checking if it's valid..."
+if [ -f "$DB_PATH" ]; then
+    echo "📊 Database file exists at $DB_PATH, checking if it's valid..."
 
-    # Check if database is valid by trying to open it
-    if sqlite3 /app/db/arcl.db "SELECT 1;" 2>/dev/null; then
-        echo "✅ Database is valid, running migrations..."
-        if alembic upgrade head 2>/dev/null; then
-            echo "✅ Migrations completed successfully"
-        else
-            echo "⚠️  Migration failed, attempting to stamp current state..."
-            if alembic stamp head 2>/dev/null; then
-                echo "✅ Database stamped with current migration"
-            else
-                echo "❌ Failed to stamp database, recreating..."
-                rm -f /app/db/arcl.db
-                alembic upgrade head
-                echo "✅ Database recreated and initialized"
-            fi
-        fi
-    else
-        echo "⚠️  Database file is corrupted, recreating..."
-        rm -f /app/db/arcl.db
+    # Try to check for alembic_version table
+    if sqlite3 "$DB_PATH" "SELECT version_num FROM alembic_version LIMIT 1;" 2>/dev/null; then
+        echo "✅ Database has migration tracking, running migrations..."
         alembic upgrade head
-        echo "✅ Database recreated and initialized"
+        echo "✅ Migrations completed successfully"
+    else
+        # Check if database has any tables
+        TABLE_COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='table';" 2>/dev/null || echo "0")
+
+        if [ "$TABLE_COUNT" -gt 0 ]; then
+            echo "⚠️  Database has $TABLE_COUNT tables but no migration tracking"
+            echo "⚠️  Deleting old database and recreating..."
+            rm -f "$DB_PATH"
+            alembic upgrade head
+            echo "✅ Database recreated and initialized"
+        else
+            echo "⚠️  Database file exists but is empty, initializing..."
+            alembic upgrade head
+            echo "✅ Database initialized"
+        fi
     fi
 else
-    echo "📊 Creating new database..."
+    echo "📊 No database file found, creating new database..."
     alembic upgrade head
     echo "✅ Database initialized"
 fi
