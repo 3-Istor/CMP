@@ -3,11 +3,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import type { CatalogTemplate } from "@/types";
 import Image from "next/image";
@@ -16,11 +16,6 @@ interface Props {
   templates: CatalogTemplate[];
   onDeploy: (template: CatalogTemplate) => void;
 }
-
-// Get backend URL from environment or default
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ||
-  "http://localhost:8000";
 
 export function CatalogGrid({ templates, onDeploy }: Props) {
   const handleClick = (t: CatalogTemplate) => {
@@ -39,11 +34,12 @@ export function CatalogGrid({ templates, onDeploy }: Props) {
             <div className="flex items-start justify-between">
               {t.image_path ? (
                 <Image
-                  src={`${BACKEND_URL}${t.image_path}`}
+                  src={t.image_path}
                   alt={`${t.name} icon`}
                   width={40}
                   height={40}
                   className="object-contain"
+                  unoptimized
                 />
               ) : (
                 <span className="text-3xl">{t.icon}</span>
