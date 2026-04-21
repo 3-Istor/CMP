@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { DeploymentCard } from "./DeploymentCard";
 
 export function Dashboard() {
-  const { deployments, loading, refresh } = useDeploymentsList();
+  const { deployments, loading, refresh } = useDeploymentsList(3000);
 
   const handleDelete = async (id: number) => {
     try {
