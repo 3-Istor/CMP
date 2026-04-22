@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.routers import catalog, deployments
+from app.routers import catalog, deployments, infra
 from app.services.template_repository import get_repository
 
 
@@ -58,6 +58,7 @@ app.add_middleware(
 
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
+app.include_router(infra.router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])

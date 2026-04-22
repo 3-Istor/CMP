@@ -1,25 +1,27 @@
 "use client";
 
+import { DeploymentHealthPanel } from "@/components/dashboard/DeploymentHealthPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
 import { useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
+import { Activity } from "lucide-react";
 import { useState } from "react";
 
 const ACTIVE_STATUSES = new Set([
@@ -51,6 +53,7 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmStep, setConfirmStep] = useState(1);
+  const [healthOpen, setHealthOpen] = useState(false);
 
   const handleDeleteClick = () => {
     setConfirmStep(1);
@@ -146,17 +149,28 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
         </CardContent>
 
         <CardFooter className="mt-auto pt-2">
-          <Button
-            variant="destructive"
-            size="sm"
-            className="ml-auto"
-            onClick={handleDeleteClick}
-            disabled={["deleting", "deleted", "pending"].includes(
-              deployment.status,
+          <div className="flex gap-2 ml-auto">
+            {["running", "degraded"].includes(deployment.status) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setHealthOpen(true)}
+              >
+                <Activity className="h-4 w-4 mr-1.5" />
+                Health Details
+              </Button>
             )}
-          >
-            Delete
-          </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteClick}
+              disabled={["deleting", "deleted", "pending"].includes(
+                deployment.status,
+              )}
+            >
+              Delete
+            </Button>
+          </div>
         </CardFooter>
       </Card>
 
@@ -187,6 +201,14 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Health Details Dialog */}
+      <DeploymentHealthPanel
+        deploymentId={deployment.id}
+        deploymentName={deployment.name}
+        open={healthOpen}
+        onClose={() => setHealthOpen(false)}
+      />
     </>
   );
 }

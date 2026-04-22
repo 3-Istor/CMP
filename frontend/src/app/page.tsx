@@ -3,6 +3,7 @@
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { Dashboard } from "@/components/dashboard/Dashboard";
+import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { Separator } from "@/components/ui/separator";
 import { createDeployment, getCatalog } from "@/lib/api";
 import type { CatalogTemplate } from "@/types";
@@ -79,6 +80,13 @@ export default function Home() {
             Selected: {selectedTemplate.name}
           </div>
         )}
+
+        {/* Global Infrastructure Health */}
+        <section>
+          <GlobalInfraHealth />
+        </section>
+
+        <Separator />
 
         {/* Catalog */}
         <section>

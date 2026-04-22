@@ -63,3 +63,12 @@ export const deleteDeployment = (id: number) =>
 
 export const getDeploymentOutputs = (id: number) =>
   request<TerraformOutputs>(`/deployments/${id}/outputs`);
+
+// Infrastructure Monitoring
+export const getGlobalHealth = () =>
+  request<import("@/types").GlobalHealthResponse>("/infra/health");
+
+export const getAppHealth = (deploymentId: number) =>
+  request<import("@/types").AppHealthResponse>(
+    `/infra/deployments/${deploymentId}/health`,
+  );

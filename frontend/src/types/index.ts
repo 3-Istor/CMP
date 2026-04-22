@@ -46,3 +46,52 @@ export interface CatalogTemplate {
   image_path?: string | null;
   enabled?: boolean;
 }
+
+// Infrastructure Monitoring Types
+export interface VPNStatus {
+  name: string;
+  status: string;
+  ip: string | null;
+}
+
+export interface HypervisorStatus {
+  name: string;
+  state: string;
+  status: string;
+}
+
+export interface GlobalHealthResponse {
+  openstack_vpn: VPNStatus | null;
+  aws_vpns: VPNStatus[];
+  openstack_hypervisors: HypervisorStatus[];
+}
+
+export interface VMInstance {
+  instance_id: string;
+  private_ip: string | null;
+  state: string;
+  health: string | null;
+}
+
+export interface AWSFrontendHealth {
+  asg_name: string;
+  desired_capacity: number;
+  instances: VMInstance[];
+  healthy_count: number;
+  total_count: number;
+}
+
+export interface OpenStackBackendHealth {
+  servers: VMInstance[];
+  healthy_count: number;
+  total_count: number;
+}
+
+export type AppHealthStatus = "healthy" | "degraded" | "down" | "unknown";
+
+export interface AppHealthResponse {
+  deployment_name: string;
+  status: AppHealthStatus;
+  aws_frontend: AWSFrontendHealth | null;
+  openstack_backend: OpenStackBackendHealth | null;
+}

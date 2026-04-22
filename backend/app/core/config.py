@@ -32,5 +32,14 @@ class Settings(BaseSettings):
     OS_USER_DOMAIN_NAME: str = "Default"
     OS_PROJECT_DOMAIN_NAME: str = "Default"
 
+    # AWS Credentials (for monitoring and deployments)
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_DEFAULT_REGION: str = "eu-west-3"
+
+    # Cloudflare (for dynamic DNS in Terraform templates)
+    CLOUDFLARE_API_TOKEN: str = ""
+    CLOUDFLARE_ZONE_ID: str = ""
+
 
 settings = Settings()

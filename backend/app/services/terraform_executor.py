@@ -90,7 +90,23 @@ class TerraformExecutor:
         if settings.OS_PROJECT_DOMAIN_NAME:
             env["OS_PROJECT_DOMAIN_NAME"] = settings.OS_PROJECT_DOMAIN_NAME
 
-        logger.info("Running: %s in %s", " ".join(command), self.working_dir)
+        # Pass AWS credentials to Terraform (for AWS provider)
+        if settings.AWS_ACCESS_KEY_ID:
+            env["AWS_ACCESS_KEY_ID"] = settings.AWS_ACCESS_KEY_ID
+        if settings.AWS_SECRET_ACCESS_KEY:
+            env["AWS_SECRET_ACCESS_KEY"] = settings.AWS_SECRET_ACCESS_KEY
+        if settings.AWS_DEFAULT_REGION:
+            env["AWS_DEFAULT_REGION"] = settings.AWS_DEFAULT_REGION
+
+        # Pass Cloudflare credentials to Terraform (for DNS)
+        if settings.CLOUDFLARE_API_TOKEN:
+            env["CLOUDFLARE_API_TOKEN"] = settings.CLOUDFLARE_API_TOKEN
+        if settings.CLOUDFLARE_ZONE_ID:
+            env["CLOUDFLARE_ZONE_ID"] = settings.CLOUDFLARE_ZONE_ID
+
+        # Sanitize command for logging (hide sensitive values)
+        safe_command = self._sanitize_command_for_logging(command)
+        logger.info("Running: %s in %s", " ".join(safe_command), self.working_dir)
 
         result = subprocess.run(
             command,
@@ -108,6 +124,27 @@ class TerraformExecutor:
             )
 
         return result
+
+    def _sanitize_command_for_logging(self, command: list[str]) -> list[str]:
+        """Replace sensitive values in command with [REDACTED] for logging."""
+        sanitized = []
+        for part in command:
+            # Hide any -var arguments containing sensitive keywords
+            if "=" in part and any(
+                keyword in part.lower()
+                for keyword in [
+                    "password",
+                    "token",
+                    "secret",
+                    "key",
+                    "cloudflare",
+                ]
+            ):
+                key = part.split("=")[0]
+                sanitized.append(f"{key}=[REDACTED]")
+            else:
+                sanitized.append(part)
+        return sanitized
 
     def init(self) -> None:
         """Initialize Terraform in the working directory."""
