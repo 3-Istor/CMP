@@ -44,9 +44,12 @@ function DropdownMenuTrigger({ children, asChild }: DropdownMenuTriggerProps) {
   const handleClick = () => setOpen(!open);
 
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement<any>, {
-      onClick: handleClick,
-    });
+    return React.cloneElement(
+      children as React.ReactElement<{ onClick?: () => void }>,
+      {
+        onClick: handleClick,
+      },
+    );
   }
 
   return (
@@ -147,6 +150,10 @@ function DropdownMenuLabel({
 }
 
 export {
-    DropdownMenu, DropdownMenuContent,
-    DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
 };

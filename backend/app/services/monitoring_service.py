@@ -105,7 +105,10 @@ async def get_global_health() -> GlobalHealthResponse:
         hypervisors_task = asyncio.create_task(_get_openstack_hypervisors())
 
         os_vpn, aws_vpns, hypervisors = await asyncio.gather(
-            os_vpn_task, aws_vpns_task, hypervisors_task, return_exceptions=True
+            os_vpn_task,
+            aws_vpns_task,
+            hypervisors_task,
+            return_exceptions=True,
         )
 
         # Handle exceptions gracefully
@@ -213,8 +216,12 @@ async def get_app_health(deployment_name: str) -> AppHealthResponse:
     """
     try:
         # Run checks concurrently
-        aws_task = asyncio.create_task(_get_aws_frontend_health(deployment_name))
-        os_task = asyncio.create_task(_get_openstack_backend_health(deployment_name))
+        aws_task = asyncio.create_task(
+            _get_aws_frontend_health(deployment_name)
+        )
+        os_task = asyncio.create_task(
+            _get_openstack_backend_health(deployment_name)
+        )
 
         aws_health, os_health = await asyncio.gather(
             aws_task, os_task, return_exceptions=True
@@ -222,10 +229,18 @@ async def get_app_health(deployment_name: str) -> AppHealthResponse:
 
         # Handle exceptions
         if isinstance(aws_health, Exception):
-            logger.error("Failed to get AWS health for %s: %s", deployment_name, aws_health)
+            logger.error(
+                "Failed to get AWS health for %s: %s",
+                deployment_name,
+                aws_health,
+            )
             aws_health = None
         if isinstance(os_health, Exception):
-            logger.error("Failed to get OpenStack health for %s: %s", deployment_name, os_health)
+            logger.error(
+                "Failed to get OpenStack health for %s: %s",
+                deployment_name,
+                os_health,
+            )
             os_health = None
 
         # Aggregate status
@@ -238,11 +253,15 @@ async def get_app_health(deployment_name: str) -> AppHealthResponse:
             openstack_backend=os_health,
         )
     except Exception as exc:
-        logger.error("Failed to get app health for %s: %s", deployment_name, exc)
+        logger.error(
+            "Failed to get app health for %s: %s", deployment_name, exc
+        )
         raise
 
 
-async def _get_aws_frontend_health(deployment_name: str) -> dict[str, Any] | None:
+async def _get_aws_frontend_health(
+    deployment_name: str,
+) -> dict[str, Any] | None:
     """
     Get AWS frontend health (ASG + ALB target group).
 
@@ -286,7 +305,9 @@ async def _get_aws_frontend_health(deployment_name: str) -> dict[str, Any] | Non
             tg_arn = target_groups[0]["TargetGroupArn"]
 
             # Get target health
-            health_response = elbv2_client.describe_target_health(TargetGroupArn=tg_arn)
+            health_response = elbv2_client.describe_target_health(
+                TargetGroupArn=tg_arn
+            )
             target_health = {
                 th["Target"]["Id"]: th["TargetHealth"]["State"]
                 for th in health_response.get("TargetHealthDescriptions", [])
@@ -295,7 +316,9 @@ async def _get_aws_frontend_health(deployment_name: str) -> dict[str, Any] | Non
             # Get instance details
             instances = []
             if instance_ids:
-                ec2_response = ec2_client.describe_instances(InstanceIds=instance_ids)
+                ec2_response = ec2_client.describe_instances(
+                    InstanceIds=instance_ids
+                )
                 for reservation in ec2_response.get("Reservations", []):
                     for instance in reservation.get("Instances", []):
                         instance_id = instance["InstanceId"]
@@ -303,12 +326,18 @@ async def _get_aws_frontend_health(deployment_name: str) -> dict[str, Any] | Non
                             VMInstance(
                                 instance_id=instance_id,
                                 private_ip=instance.get("PrivateIpAddress"),
-                                state=instance.get("State", {}).get("Name", "unknown"),
-                                health=target_health.get(instance_id, "unknown"),
+                                state=instance.get("State", {}).get(
+                                    "Name", "unknown"
+                                ),
+                                health=target_health.get(
+                                    instance_id, "unknown"
+                                ),
                             ).model_dump()
                         )
 
-            healthy_count = sum(1 for i in instances if i.get("health") == "healthy")
+            healthy_count = sum(
+                1 for i in instances if i.get("health") == "healthy"
+            )
 
             return {
                 "asg_name": asg_name,
@@ -325,7 +354,9 @@ async def _get_aws_frontend_health(deployment_name: str) -> dict[str, Any] | Non
     return await asyncio.to_thread(_fetch)
 
 
-async def _get_openstack_backend_health(deployment_name: str) -> dict[str, Any] | None:
+async def _get_openstack_backend_health(
+    deployment_name: str,
+) -> dict[str, Any] | None:
     """
     Get OpenStack backend health (database VMs).
 
@@ -353,14 +384,20 @@ async def _get_openstack_backend_health(deployment_name: str) -> dict[str, Any] 
                             instance_id=server.id,
                             private_ip=fixed_ip,
                             state=server.status.lower(),
-                            health="healthy" if server.status.lower() == "active" else "unhealthy",
+                            health=(
+                                "healthy"
+                                if server.status.lower() == "active"
+                                else "unhealthy"
+                            ),
                         ).model_dump()
                     )
 
             if not servers:
                 return None
 
-            healthy_count = sum(1 for s in servers if s.get("health") == "healthy")
+            healthy_count = sum(
+                1 for s in servers if s.get("health") == "healthy"
+            )
 
             return {
                 "servers": servers,
@@ -369,7 +406,9 @@ async def _get_openstack_backend_health(deployment_name: str) -> dict[str, Any] 
             }
 
         except Exception as exc:
-            logger.error("OpenStack API error for %s: %s", deployment_name, exc)
+            logger.error(
+                "OpenStack API error for %s: %s", deployment_name, exc
+            )
             return None
 
     return await asyncio.to_thread(_fetch)

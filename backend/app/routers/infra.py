@@ -39,8 +39,12 @@ async def get_global_infrastructure_health():
         ) from exc
 
 
-@router.get("/deployments/{deployment_id}/health", response_model=AppHealthResponse)
-async def get_deployment_health(deployment_id: int, db: Session = Depends(get_db)):
+@router.get(
+    "/deployments/{deployment_id}/health", response_model=AppHealthResponse
+)
+async def get_deployment_health(
+    deployment_id: int, db: Session = Depends(get_db)
+):
     """
     Get real-time health status for a specific deployment.
 

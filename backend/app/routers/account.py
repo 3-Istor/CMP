@@ -151,7 +151,9 @@ async def upload_profile_picture(
         )
 
         # Generate public URL using configured base URL
-        public_url = f"{settings.AVATARS_PUBLIC_URL_BASE.rstrip('/')}/{filename}"
+        public_url = (
+            f"{settings.AVATARS_PUBLIC_URL_BASE.rstrip('/')}/{filename}"
+        )
 
     except ClientError as e:
         raise HTTPException(

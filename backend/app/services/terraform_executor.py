@@ -106,7 +106,9 @@ class TerraformExecutor:
 
         # Sanitize command for logging (hide sensitive values)
         safe_command = self._sanitize_command_for_logging(command)
-        logger.info("Running: %s in %s", " ".join(safe_command), self.working_dir)
+        logger.info(
+            "Running: %s in %s", " ".join(safe_command), self.working_dir
+        )
 
         result = subprocess.run(
             command,
