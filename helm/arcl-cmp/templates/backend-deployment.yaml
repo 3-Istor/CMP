@@ -45,74 +45,126 @@ spec:
         ports:
         - name: http
           containerPort: 8000
-          protocol: TCP
-        env:
-        - name: DATABASE_URL
-          value: {{ .Values.env.backend.DATABASE_URL | quote }}
-        - name: OS_AUTH_URL
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: os-auth-url
-        - name: OS_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: os-username
-        - name: OS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: os-password
-        - name: OS_PROJECT_NAME
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: os-project-name
-        - name: OS_USER_DOMAIN_NAME
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: os-user-domain-name
-        - name: OS_PROJECT_DOMAIN_NAME
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: os-project-domain-name
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: aws-access-key-id
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: aws-secret-access-key
-        - name: AWS_DEFAULT_REGION
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: aws-region
-        - name: AWS_S3_BUCKET
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: aws-s3-bucket
-        - name: AWS_S3_KEY_PREFIX
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "arcl-cmp.fullname" . }}-secret
-              key: aws-s3-key-prefix
-        - name: KEYCLOAK_URL
-          value: "https://auth.3istor.com"
-        - name: KEYCLOAK_CLIENT_ID
-          value: "3-istor-openid"
-        - name: KEYCLOAK_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: envoy-cmp-auth-secret
-              key: client-secret
+                protocol: TCP
+              env:
+              - name: DATABASE_URL
+                value: {{ .Values.env.backend.DATABASE_URL | quote }}
+              - name: OS_AUTH_URL
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: os-auth-url
+              - name: OS_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: os-username
+              - name: OS_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: os-password
+              - name: OS_PROJECT_NAME
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: os-project-name
+              - name: OS_USER_DOMAIN_NAME
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: os-user-domain-name
+              - name: OS_PROJECT_DOMAIN_NAME
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: os-project-domain-name
+              - name: AWS_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-access-key-id
+              - name: AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-secret-access-key
+              - name: AWS_DEFAULT_REGION
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-region
+              - name: TF_BACKEND_S3_ENABLED
+                value: {{ .Values.env.backend.TF_BACKEND_S3_ENABLED | quote }}
+              - name: TF_BACKEND_AWS_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-access-key-id
+              - name: TF_BACKEND_AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-secret-access-key
+              - name: TF_BACKEND_AWS_REGION
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-region
+              - name: TF_BACKEND_S3_BUCKET
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-s3-bucket
+              - name: TF_BACKEND_S3_KEY_PREFIX
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: aws-s3-key-prefix
+              - name: KEYCLOAK_URL
+                value: "https://auth.3istor.com"
+              - name: KEYCLOAK_CLIENT_ID
+                value: "3-istor-openid"
+              - name: KEYCLOAK_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: envoy-cmp-auth-secret
+                    key: client-secret
+              - name: AVATARS_S3_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: avatars-s3-access-key-id
+              - name: AVATARS_S3_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: avatars-s3-secret-access-key
+              - name: AVATARS_S3_ENDPOINT
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: avatars-s3-endpoint
+              - name: AVATARS_S3_BUCKET
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: avatars-s3-bucket
+              - name: AVATARS_S3_REGION
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: avatars-s3-region
+              - name: AVATARS_PUBLIC_URL_BASE
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: avatars-s3-public-url-base
+              - name: CLOUDFLARE_API_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ include "arcl-cmp.fullname" . }}-secret
+                    key: cloudflare-api-token
         livenessProbe:
           httpGet:
             path: /health

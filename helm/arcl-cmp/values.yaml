@@ -63,6 +63,7 @@ frontend:
   # Public API URL - should match your ingress host
   # This is used by the browser to make API calls
   apiUrl: "https://arcl-cmp.example.com/api"
+  authUrl: "https://cmp.3istor.com/"
 
 resources:
   backend:
@@ -103,6 +104,7 @@ affinity: {}
 env:
   backend:
     DATABASE_URL: "sqlite:////app/db/arcl.db"
+    TF_BACKEND_S3_ENABLED: true
     OS_USER_DOMAIN_NAME: "Default"
     OS_PROJECT_DOMAIN_NAME: "Default"
     AWS_DEFAULT_REGION: "eu-west-3"

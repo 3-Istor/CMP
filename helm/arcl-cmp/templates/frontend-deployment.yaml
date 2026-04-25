@@ -41,6 +41,25 @@ spec:
         env:
         - name: NEXT_PUBLIC_API_URL
           value: {{ .Values.frontend.apiUrl | quote }}
+        - name: API_URL
+          # Internal K8s DNS to avoid external routing loops for server-side NextAuth requests
+          value: "http://{{ include "arcl-cmp.fullname" . }}-backend:8000/api"
+        - name: NEXTAUTH_URL
+          value: {{ .Values.frontend.authUrl | quote }}
+        - name: NEXTAUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: arcl-cmp-frontend-secret
+              key: nextauth-secret
+        - name: KEYCLOAK_CLIENT_ID
+          value: "3-istor-openid"
+        - name: KEYCLOAK_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: envoy-cmp-auth-secret
+              key: client-secret
+        - name: KEYCLOAK_ISSUER
+          value: "https://auth.3istor.com/realms/3istor"
         livenessProbe:
           httpGet:
             path: /
