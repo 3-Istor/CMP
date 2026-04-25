@@ -12,7 +12,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ARCL CMP — Hybrid Cloud Management",
+  title: "CMP - Hybrid Cloud Management",
   description: "Self-service hybrid cloud management platform",
 };
 

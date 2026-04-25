@@ -1,4 +1,4 @@
-# 🤖 AI RULES FOR ARCL CMP REPOSITORY
+# 🤖 AI RULES FOR CMP REPOSITORY
 
 ## 1. Context Awareness
 Always refer to the `docs/ia/ARCL_AI_CONTEXT.md` file at the root of the project to understand the infrastructure constraints (AWS/OpenStack, IPs, SAGA pattern).

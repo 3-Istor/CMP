@@ -104,6 +104,15 @@ spec:
             secretKeyRef:
               name: {{ include "arcl-cmp.fullname" . }}-secret
               key: aws-s3-key-prefix
+        - name: KEYCLOAK_URL
+          value: "https://auth.3istor.com"
+        - name: KEYCLOAK_CLIENT_ID
+          value: "3-istor-openid"
+        - name: KEYCLOAK_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: envoy-cmp-auth-secret
+              key: client-secret
         livenessProbe:
           httpGet:
             path: /health

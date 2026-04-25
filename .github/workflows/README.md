@@ -1,6 +1,6 @@
 # GitHub Actions Workflows
 
-This directory contains CI/CD workflows for ARCL CMP.
+This directory contains CI/CD workflows for CMP.
 
 ## Workflows
 

@@ -100,7 +100,7 @@ async def test_app_health(deployment_name: str):
 
 async def main():
     """Run all tests."""
-    print("\n🔍 ARCL CMP Monitoring Service Test Suite\n")
+    print("\n🔍 CMP Monitoring Service Test Suite\n")
 
     # Test global health
     global_ok = await test_global_health()

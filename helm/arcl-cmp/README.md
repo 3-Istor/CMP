@@ -1,4 +1,4 @@
-# ARCL CMP Helm Chart
+# CMP Helm Chart
 
 Helm chart for deploying ARCL Hybrid Cloud Management Platform on Kubernetes.
 

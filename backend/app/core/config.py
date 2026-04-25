@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     )
 
     # App
-    APP_NAME: str = "ARCL CMP API"
+    APP_NAME: str = "CMP API"
     DEBUG: bool = False
 
     # Database
@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_DEFAULT_REGION: str = "eu-west-3"
+
+    # User Avatars S3 Storage (self-managed S3-compatible storage)
+    AVATARS_S3_ENDPOINT: str = "https://s3.3istor.com"
+    AVATARS_S3_BUCKET: str = "user-avatars"
+    AVATARS_S3_ACCESS_KEY_ID: str = ""
+    AVATARS_S3_SECRET_ACCESS_KEY: str = ""
+    AVATARS_S3_REGION: str = "eu-west-3"
+    AVATARS_PUBLIC_URL_BASE: str = "https://avatars-s3.3istor.com"
+
+    # Keycloak (for user profile management)
+    KEYCLOAK_URL: str = "https://auth.3istor.com"
+    KEYCLOAK_CLIENT_ID: str = "3-istor-openid"
+    KEYCLOAK_CLIENT_SECRET: str = ""
 
     # Cloudflare (for dynamic DNS in Terraform templates)
     CLOUDFLARE_API_TOKEN: str = ""

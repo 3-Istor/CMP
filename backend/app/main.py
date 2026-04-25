@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.routers import catalog, deployments, infra
+from app.routers import account, catalog, deployments, infra
 from app.services.template_repository import get_repository
 
 
@@ -56,6 +56,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(account.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")

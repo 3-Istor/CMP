@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-# ARCL CMP k3s Deployment Script
+# CMP k3s Deployment Script
 
 NAMESPACE="arcl-cmp"
 RELEASE_NAME="arcl-cmp"
 CHART_PATH="./helm/arcl-cmp"
 
-echo "🚀 ARCL CMP k3s Deployment Script"
+echo "🚀 CMP k3s Deployment Script"
 echo "=================================="
 
 # Check prerequisites

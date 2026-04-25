@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "🚀 Starting ARCL CMP Frontend..."
+echo "🚀 Starting CMP Frontend..."
 echo "📝 Configuring runtime environment..."
 
 # Export the API URL as an environment variable for Next.js runtime

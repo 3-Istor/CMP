@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting ARCL CMP Backend..."
+echo "🚀 Starting CMP Backend..."
 
 # Extract database path from DATABASE_URL environment variable
 # Handle both sqlite:///./file.db and sqlite:////absolute/path/file.db formats

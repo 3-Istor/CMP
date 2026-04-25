@@ -20,10 +20,20 @@ const getApiUrl = () => {
 const BASE = getApiUrl();
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (process.env.NEXT_PUBLIC_DEV_TOKEN) {
+    headers["Authorization"] = `Bearer ${process.env.NEXT_PUBLIC_DEV_TOKEN}`;
+  }
+
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { ...headers, ...options?.headers },
+    credentials: "include",
     ...options,
   });
+
   if (!res.ok) {
     const err = await res.text();
     throw new Error(err || `HTTP ${res.status}`);
@@ -72,3 +82,25 @@ export const getAppHealth = (deploymentId: number) =>
   request<import("@/types").AppHealthResponse>(
     `/infra/deployments/${deploymentId}/health`,
   );
+
+// Account & Profile
+export const getCurrentUser = () =>
+  request<import("@/types").UserProfile>("/account/me");
+
+export const uploadProfilePicture = async (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE}/account/picture`, {
+    method: "POST",
+    body: formData,
+    credentials: "include", // Forward cookies to gateway
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || `HTTP ${res.status}`);
+  }
+
+  return res.json() as Promise<import("@/types").PictureUploadResponse>;
+};

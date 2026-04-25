@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ ARCL CMP
+# ⚡ CMP
 
 ### Hybrid Cloud Management Platform
 
@@ -15,9 +15,9 @@
 
 ---
 
-## What is ARCL CMP?
+## What is CMP?
 
-ARCL CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks — no CLI, no Terraform knowledge required, no IT ticket.
+CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks — no CLI, no Terraform knowledge required, no IT ticket.
 
 The platform uses **Terraform templates** loaded from a Git repository, allowing flexible deployment of any infrastructure configuration. Each template defines the resources to provision, and the CMP handles the entire lifecycle: deployment, tracking, and cleanup.
 
@@ -406,7 +406,7 @@ npm run lint
 
 ## Docker & Kubernetes Deployment
 
-ARCL CMP can be deployed using Docker and Kubernetes (k3s).
+CMP can be deployed using Docker and Kubernetes (k3s).
 
 ### Docker Compose (Local Development)
 
@@ -488,5 +488,5 @@ Built by the **3-Istor** student team — [github.com/3-Istor](https://github.co
 ---
 
 <div align="center">
-<sub>ARCL CMP · MIT License · Made with ☕ by 3-Istor</sub>
+<sub>CMP · MIT License · Made with ☕ by 3-Istor</sub>
 </div>

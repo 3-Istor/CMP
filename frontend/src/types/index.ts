@@ -95,3 +95,19 @@ export interface AppHealthResponse {
   aws_frontend: AWSFrontendHealth | null;
   openstack_backend: OpenStackBackendHealth | null;
 }
+
+// Account & Profile Types
+export interface UserProfile {
+  sub: string;
+  email: string;
+  given_name: string | null;
+  family_name: string | null;
+  name: string | null;
+  picture: string | null;
+  roles: string[];
+}
+
+export interface PictureUploadResponse {
+  message: string;
+  picture_url: string;
+}

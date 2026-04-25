@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-# ARCL CMP Docker Image Build Script
+# CMP Docker Image Build Script
 
 REGISTRY="${REGISTRY:-ghcr.io/3-istor}"
 VERSION="${VERSION:-latest}"
 BACKEND_IMAGE="$REGISTRY/arcl-cmp-backend"
 FRONTEND_IMAGE="$REGISTRY/arcl-cmp-frontend"
 
-echo "🐳 ARCL CMP Docker Image Build Script"
+echo "🐳 CMP Docker Image Build Script"
 echo "======================================"
 echo "Registry: $REGISTRY"
 echo "Version: $VERSION"
