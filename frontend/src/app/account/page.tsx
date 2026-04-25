@@ -1,6 +1,8 @@
 "use client";
 
 import { ArrowLeft, Camera, Loader2, Upload } from "lucide-react";
+import { useSession } from "next-auth/react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -41,6 +43,7 @@ export default function AccountPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const { update } = useSession();
 
   const fetchUser = async () => {
     try {
@@ -95,6 +98,12 @@ export default function AccountPage() {
       setUser((prev) =>
         prev ? { ...prev, picture: response.picture_url } : null,
       );
+
+      // Refresh NextAuth session to update avatar in UserNav
+      await update();
+
+      // Also fetch fresh user data to ensure consistency
+      await fetchUser();
     } catch (error) {
       toast.error(
         `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -200,14 +209,14 @@ export default function AccountPage() {
                     {user.name || `${user.given_name} ${user.family_name}`}
                   </h3>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
-                  {user.roles.length > 0 && (
+                  {user.groups.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {user.roles.map((role) => (
+                      {user.groups.map((group) => (
                         <span
-                          key={role}
+                          key={group}
                           className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
                         >
-                          {role}
+                          {group}
                         </span>
                       ))}
                     </div>
@@ -235,18 +244,18 @@ export default function AccountPage() {
                     {user.family_name || "—"}
                   </p>
                 </div>
-                <div className="space-y-1 md:col-span-2">
+                <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">
                     Email Address
                   </Label>
                   <p className="text-sm font-medium">{user.email}</p>
                 </div>
-                <div className="space-y-1 md:col-span-2">
+                <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">
                     User ID
                   </Label>
-                  <p className="text-sm font-mono text-muted-foreground">
-                    {user.sub}
+                  <p className="text-sm font-mono text-muted-foreground break-all">
+                    {user.sub || "—"}
                   </p>
                 </div>
               </div>
@@ -277,11 +286,14 @@ export default function AccountPage() {
 
                 {previewUrl ? (
                   <div className="flex flex-col items-center gap-4">
-                    <img
-                      src={previewUrl}
-                      alt="Preview"
-                      className="h-32 w-32 rounded-full object-cover ring-2 ring-border"
-                    />
+                    <div className="relative h-32 w-32 rounded-full overflow-hidden ring-2 ring-border">
+                      <Image
+                        src={previewUrl}
+                        alt="Preview"
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
                     <p className="text-sm text-muted-foreground">
                       {selectedFile?.name}
                     </p>

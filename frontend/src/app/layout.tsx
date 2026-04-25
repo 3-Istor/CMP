@@ -1,3 +1,4 @@
+import { SessionProvider } from "@/components/providers/SessionProvider";
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -37,8 +38,10 @@ export default function RootLayout({
       <body
         className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster richColors position="bottom-right" />
+        <SessionProvider>
+          {children}
+          <Toaster richColors position="bottom-right" />
+        </SessionProvider>
       </body>
     </html>
   );

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -32,10 +33,11 @@ function Avatar({ className, src, alt, fallback, ...props }: AvatarProps) {
       {...props}
     >
       {src && !imageError ? (
-        <img
+        <Image
           src={src}
           alt={alt || "Avatar"}
-          className="aspect-square h-full w-full object-cover"
+          fill
+          className="object-cover"
           onError={() => setImageError(true)}
         />
       ) : (

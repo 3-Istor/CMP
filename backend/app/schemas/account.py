@@ -10,7 +10,7 @@ class UserProfile(BaseModel):
     family_name: str | None = None
     name: str | None = None
     picture: str | None = None
-    roles: list[str] = []
+    groups: list[str] = []
 
 
 class PictureUploadResponse(BaseModel):

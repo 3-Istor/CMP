@@ -10,30 +10,37 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getCurrentUser } from "@/lib/api";
-import type { UserProfile } from "@/types";
 import { LogOut, User } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 
 export function UserNav() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: session, status } = useSession();
   const router = useRouter();
 
-  useEffect(() => {
-    getCurrentUser()
-      .then(setUser)
-      .catch((err) => {
-        console.error("Failed to load user:", err);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const user = session?.user;
+  const loading = status === "loading";
 
-  const handleLogout = () => {
-    // In production, redirect to Keycloak logout
-    // In dev mode, just reload
-    window.location.href = "/";
+  const handleLogout = async () => {
+    try {
+      // Call federated logout endpoint
+      const response = await fetch("/api/auth/federated-logout", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Redirect browser to Keycloak logout URL (clears SSO cookie)
+        window.location.href = data.logoutUrl;
+      } else {
+        console.error("Logout failed");
+        // Fallback: just redirect to home
+        window.location.href = "/";
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      window.location.href = "/";
+    }
   };
 
   if (loading) {
@@ -44,14 +51,17 @@ export function UserNav() {
     return null;
   }
 
+  const displayName =
+    user.name || `${user.given_name || ""} ${user.family_name || ""}`.trim();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="relative h-8 w-8 rounded-full ring-2 ring-border hover:ring-primary transition-all">
           <Avatar
-            src={user.picture}
-            alt={user.name || user.email}
-            fallback={user.name || user.email}
+            src={user.image}
+            alt={displayName || user.email || "User"}
+            fallback={displayName || user.email || "U"}
             className="h-8 w-8"
           />
         </button>
@@ -59,9 +69,7 @@ export function UserNav() {
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">
-              {user.name || `${user.given_name} ${user.family_name}`}
-            </p>
+            <p className="text-sm font-medium leading-none">{displayName}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>

@@ -45,11 +45,13 @@ The platform uses **Terraform templates** loaded from a Git repository, allowing
 │                        User Browser                         │
 │              Next.js 15 + Tailwind + Shadcn/UI              │
 │         (polls /api/deployments/:id every 3s for status)    │
+│                    NextAuth v5 (Keycloak OIDC)              │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP
+                           │ HTTP + JWT Bearer Token
 ┌──────────────────────────▼──────────────────────────────────┐
 │                    FastAPI Backend                          │
 │              Python 3.12 · SQLite · Alembic                 │
+│                    JWT Validation (Keycloak)                │
 │                                                             │
 │  POST /api/deployments  →  BackgroundTask: Terraform        │
 │                                    │                        │
@@ -132,7 +134,34 @@ OS_PASSWORD=your_password
 OS_PROJECT_NAME=your_project
 ```
 
-### 3. Start Backend
+### 3. Configure Authentication (Optional)
+
+CMP supports two authentication modes:
+
+**Development Mode (Skip Auth)** - Recommended for local development:
+
+```bash
+cd frontend
+echo "NEXT_PUBLIC_SKIP_AUTH=true" > .env.local
+```
+
+**Production Mode (Keycloak)** - For production deployment:
+
+```bash
+cd frontend
+cat > .env.local << EOF
+NEXT_PUBLIC_SKIP_AUTH=false
+NEXTAUTH_URL=https://cmp.3istor.com
+NEXTAUTH_SECRET=$(openssl rand -base64 32)
+KEYCLOAK_CLIENT_ID=3-istor-openid
+KEYCLOAK_CLIENT_SECRET=your-secret
+KEYCLOAK_ISSUER=https://auth.3istor.com/realms/3istor
+EOF
+```
+
+See [README_AUTH.md](README_AUTH.md) for complete authentication documentation.
+
+### 4. Start Backend
 
 ```bash
 cd backend
@@ -141,7 +170,7 @@ poetry run uvicorn app.main:app --reload --port 8000
 
 Backend will be available at http://localhost:8000
 
-### 4. Start Frontend (in a new terminal)
+### 5. Start Frontend (in a new terminal)
 
 ```bash
 cd frontend

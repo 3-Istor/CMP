@@ -52,27 +52,6 @@ export function DeploymentHealthPanel({
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "healthy":
-        return "bg-green-500";
-      case "degraded":
-        return "bg-yellow-500";
-      case "down":
-        return "bg-red-500";
-      default:
-        return "bg-gray-400";
-    }
-  };
-
-  const getHealthBadgeVariant = (
-    health: string | null,
-  ): "default" | "secondary" | "destructive" => {
-    if (health === "healthy") return "default";
-    if (health === "unhealthy") return "destructive";
-    return "secondary";
-  };
-
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">

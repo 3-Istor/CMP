@@ -104,7 +104,7 @@ export interface UserProfile {
   family_name: string | null;
   name: string | null;
   picture: string | null;
-  roles: string[];
+  groups: string[];
 }
 
 export interface PictureUploadResponse {

@@ -68,11 +68,7 @@ export default function Home() {
             Hybrid Cloud Management Platform
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="h-2 w-2 rounded-full bg-green-500 inline-block" />
-            Terraform-based Deployments
-          </div>
+        <div className="ml-auto">
           <UserNav />
         </div>
       </header>

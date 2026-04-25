@@ -1,4 +1,5 @@
 import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
+import { getSession } from "next-auth/react";
 
 // Declare runtime config type
 declare global {
@@ -24,8 +25,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     "Content-Type": "application/json",
   };
 
-  if (process.env.NEXT_PUBLIC_DEV_TOKEN) {
-    headers["Authorization"] = `Bearer ${process.env.NEXT_PUBLIC_DEV_TOKEN}`;
+  // Inject JWT token from NextAuth session
+  if (typeof window !== "undefined") {
+    const session = await getSession();
+    if (session?.accessToken) {
+      headers["Authorization"] = `Bearer ${session.accessToken}`;
+    }
   }
 
   const res = await fetch(`${BASE}${path}`, {
@@ -91,10 +96,19 @@ export const uploadProfilePicture = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);
 
+  // Get session to include JWT token
+  const session = await getSession();
+  const headers: Record<string, string> = {};
+
+  if (session?.accessToken) {
+    headers["Authorization"] = `Bearer ${session.accessToken}`;
+  }
+
   const res = await fetch(`${BASE}/account/picture`, {
     method: "POST",
     body: formData,
-    credentials: "include", // Forward cookies to gateway
+    headers,
+    credentials: "include",
   });
 
   if (!res.ok) {
