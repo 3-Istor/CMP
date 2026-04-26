@@ -79,6 +79,11 @@ spec:
             secretKeyRef:
               name: {{ include "arcl-cmp.fullname" . }}-secret
               key: os-project-domain-name
+        - name: OS_ENDPOINT_TYPE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: os-endpoint-type
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:

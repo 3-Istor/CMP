@@ -1,5 +1,5 @@
 """
-SAGA Orchestrator — implements the "Design for Failure" pattern.
+SAGA Orchestrator - implements the "Design for Failure" pattern.
 
 Flow:
   1. Deploy OpenStack VMs (DB layer)        → on failure: cleanup OS VMs, mark FAILED
@@ -79,12 +79,12 @@ def run_deployment(deployment_id: int, db: Session) -> None:
         db.commit()
         logger.info("AWS layer ready for deployment %s", deployment_id)
     except Exception as exc:
-        logger.error("AWS step failed — triggering SAGA rollback: %s", exc)
+        logger.error("AWS step failed - triggering SAGA rollback: %s", exc)
         _update(
             db,
             deployment,
             DeploymentStatus.ROLLING_BACK,  # pylint: disable=no-member
-            "⏪ AWS failed — rolling back OpenStack VMs...",
+            "⏪ AWS failed - rolling back OpenStack VMs...",
         )
         openstack_service.rollback_db_vms(
             deployment.os_vm_db1_id, deployment.os_vm_db2_id
@@ -102,7 +102,7 @@ def run_deployment(deployment_id: int, db: Session) -> None:
         db,
         deployment,
         DeploymentStatus.RUNNING,
-        f"✅ Running — {deployment.aws_alb_dns}",
+        f"✅ Running - {deployment.aws_alb_dns}",
     )
 
 

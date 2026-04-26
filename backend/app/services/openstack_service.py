@@ -11,7 +11,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# VM flavor for DB nodes — adjust to your OpenStack flavors
+# VM flavor for DB nodes - adjust to your OpenStack flavors
 OS_FLAVOR = "m1.small"
 OS_IMAGE = "Ubuntu-22.04"
 OS_NETWORK = "3-istor-internal"
@@ -85,7 +85,7 @@ def provision_db_vms(
 def rollback_db_vms(vm1_id: str | None, vm2_id: str | None) -> None:
     """
     SAGA rollback: destroy OpenStack VMs when AWS deployment fails.
-    Called by the orchestrator — must not raise.
+    Called by the orchestrator - must not raise.
     """
     conn = _get_connection()
     for vm_id in [vm1_id, vm2_id]:
@@ -97,7 +97,7 @@ def rollback_db_vms(vm1_id: str | None, vm2_id: str | None) -> None:
                 )
                 logger.info("Rolled back OpenStack VM: %s", vm_id)
             except Exception as exc:
-                # Log but don't raise — rollback must be best-effort
+                # Log but don't raise - rollback must be best-effort
                 logger.error(
                     "Failed to rollback OpenStack VM %s: %s", vm_id, exc
                 )

@@ -108,6 +108,7 @@ env:
     OS_USER_DOMAIN_NAME: "Default"
     OS_PROJECT_DOMAIN_NAME: "Default"
     AWS_DEFAULT_REGION: "eu-west-3"
+    OS_ENDPOINT_TYPE: "internalURL"
 
 # Secrets (should be created separately or use external-secrets)
 secrets:

@@ -24,9 +24,8 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   // Reset form when template changes
   useEffect(() => {
     if (template) {
-       
       setAppName("");
-       
+
       setFieldValues(
         Object.fromEntries(
           template.fields.map((f) => [f.name, f.default ?? ""]),
@@ -50,9 +49,26 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const setField = (name: string, value: string | number) =>
     setFieldValues((prev) => ({ ...prev, [name]: value }));
 
+  // Check if all required fields are filled
+  const isFormValid = () => {
+    if (!appName.trim()) return false;
+    if (!template) return false;
+
+    // Check all required fields
+    for (const field of template.fields) {
+      if (field.required) {
+        const value = fieldValues[field.name];
+        if (value === null || value === undefined || value === "") {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!appName.trim() || !template) return;
+    if (!isFormValid()) return;
     onConfirm(appName.trim(), fieldValues);
   };
 
@@ -148,16 +164,27 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                           className="text-sm font-medium"
                         >
                           {field.label}
+                          {field.required && (
+                            <span className="text-destructive ml-1">*</span>
+                          )}
                         </Label>
                         {field.type === "select" && field.options ? (
                           <select
                             id={field.name}
                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                            defaultValue={String(field.default ?? "")}
+                            value={String(
+                              fieldValues[field.name] ?? field.default ?? "",
+                            )}
                             onChange={(e) =>
                               setField(field.name, e.target.value)
                             }
+                            required={field.required}
                           >
+                            {field.required && (
+                              <option value="" disabled>
+                                Select an option...
+                              </option>
+                            )}
                             {field.options.map((opt) => (
                               <option key={opt} value={opt}>
                                 {opt}
@@ -179,6 +206,10 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                                   : e.target.value,
                               )
                             }
+                            required={field.required}
+                            placeholder={
+                              field.required ? "Required" : "Optional"
+                            }
                           />
                         )}
                       </div>
@@ -193,11 +224,11 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                    2× OpenStack VMs — stateful DB layer
+                    2× OpenStack VMs - stateful DB layer
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                    2× AWS t3.micro — stateless web layer (ASG + ALB)
+                    2× AWS t3.micro - stateless web layer (ASG + ALB)
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
@@ -216,7 +247,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading || !appName.trim()}>
+                <Button type="submit" disabled={loading || !isFormValid()}>
                   {loading ? (
                     <span className="flex items-center gap-2">
                       <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />

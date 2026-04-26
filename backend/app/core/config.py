@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,13 +26,16 @@ class Settings(BaseSettings):
         ""  # Optional: leave empty to disable locking
     )
 
-    # OpenStack — loaded from environment (required for deployments)
+    # OpenStack - loaded from environment (required for deployments)
     OS_AUTH_URL: str = ""
     OS_USERNAME: str = ""
     OS_PASSWORD: str = ""
     OS_PROJECT_NAME: str = "3-istor-cloud"
     OS_USER_DOMAIN_NAME: str = "Default"
     OS_PROJECT_DOMAIN_NAME: str = "Default"
+    OS_ENDPOINT_TYPE: str = "internalURL"  # Use internal endpoints for better performance
+    OS_IDENTITY_API_VERSION: str = "3"
+    OS_REGION_NAME: str = "RegionOne"
 
     # AWS Credentials (for monitoring and deployments)
     AWS_ACCESS_KEY_ID: str = ""
@@ -56,3 +61,12 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Ensure OpenStack environment variables are set in os.environ
+# openstacksdk reads directly from os.environ, not from Pydantic settings
+if settings.OS_ENDPOINT_TYPE:
+    os.environ["OS_ENDPOINT_TYPE"] = settings.OS_ENDPOINT_TYPE
+if settings.OS_IDENTITY_API_VERSION:
+    os.environ["OS_IDENTITY_API_VERSION"] = settings.OS_IDENTITY_API_VERSION
+if settings.OS_REGION_NAME:
+    os.environ["OS_REGION_NAME"] = settings.OS_REGION_NAME

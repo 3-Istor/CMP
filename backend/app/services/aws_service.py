@@ -14,7 +14,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Hardcoded budget-safe instance type — DO NOT change to larger instances
+# Hardcoded budget-safe instance type - DO NOT change to larger instances
 ALLOWED_INSTANCE_TYPES = {"t3.micro", "t4g.nano"}
 INSTANCE_TYPE = settings.AWS_INSTANCE_TYPE
 assert (

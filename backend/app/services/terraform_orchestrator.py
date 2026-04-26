@@ -43,6 +43,9 @@ def run_deployment(deployment_id: int) -> None:
             # Parse user configuration
             app_config = json.loads(deployment.app_config or "{}")
 
+            # CRITICAL: Inject app_name from deployment name
+            # This ensures Terraform resources are named correctly
+            app_config["app_name"] = deployment.name
             # Get template from repository
             repo = get_repository()
             template = repo.get_template_by_id(deployment.template_id)
@@ -104,7 +107,7 @@ def run_deployment(deployment_id: int) -> None:
                 db,
                 deployment,
                 DeploymentStatus.RUNNING,
-                f"✅ Running — {output_msg}",
+                f"✅ Running - {output_msg}",
             )
 
         except Exception as exc:
@@ -155,6 +158,8 @@ def run_deletion(deployment_id: int) -> None:
             # Parse original config for destroy
             app_config = json.loads(deployment.app_config or "{}")
 
+            # CRITICAL: Inject app_name for destroy to match apply
+            app_config["app_name"] = deployment.name
             # Destroy resources
             executor.destroy(app_config)
 

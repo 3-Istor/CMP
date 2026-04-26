@@ -5,21 +5,21 @@ import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { useDeploymentPolling } from "@/lib/hooks";
+import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import { Activity } from "lucide-react";
 import { useState } from "react";
@@ -32,24 +32,26 @@ const ACTIVE_STATUSES = new Set([
   "deleting",
 ]);
 
-const HEALTH_COLORS: Record<string, string> = {
-  healthy: "bg-green-500",
-  degraded: "bg-yellow-500",
-  unknown: "bg-gray-400",
-  error: "bg-red-500",
-  not_deployed: "bg-gray-300",
-};
-
 interface Props {
   deployment: Deployment;
   onDelete: (id: number) => void;
 }
 
-export function DeploymentCard({ deployment: initial, onDelete }: Props) {
-  const isActive = ACTIVE_STATUSES.has(initial.status);
+export function DeploymentCard({ deployment, onDelete }: Props) {
+  const isActive = ACTIVE_STATUSES.has(deployment.status);
   // Poll only while the deployment is in a transient state
-  const polled = useDeploymentPolling(isActive ? initial.id : null);
-  const deployment = polled ?? initial;
+  const polled = useDeploymentPolling(isActive ? deployment.id : null);
+  // Use polled data if available (during active deployment), otherwise use parent data
+  const currentDeployment = polled ?? deployment;
+
+  // Fetch real health status for running/degraded deployments
+  const shouldFetchHealth = ["running", "degraded"].includes(
+    currentDeployment.status,
+  );
+  const { health } = useAppHealth(
+    shouldFetchHealth ? currentDeployment.id : null,
+    10000, // Poll every 10 seconds
+  );
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmStep, setConfirmStep] = useState(1);
@@ -65,26 +67,67 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
       setConfirmStep(2);
     } else {
       setConfirmOpen(false);
-      onDelete(deployment.id);
+      onDelete(currentDeployment.id);
     }
   };
 
-  const healthDot =
-    HEALTH_COLORS[
-      deployment.status === "running"
-        ? "healthy"
-        : deployment.status === "degraded"
-          ? "degraded"
-          : deployment.status === "failed"
-            ? "error"
-            : "unknown"
-    ];
+  // Get health badge info based on REAL health check
+  const getHealthBadge = () => {
+    // For running/degraded deployments, use actual health check
+    if (["running", "degraded"].includes(currentDeployment.status)) {
+      if (!health) {
+        return { label: "Checking...", variant: "outline" as const };
+      }
+
+      if (health.status === "healthy") {
+        return { label: "Healthy", variant: "default" as const };
+      }
+      if (health.status === "degraded") {
+        return { label: "Degraded", variant: "secondary" as const };
+      }
+      if (health.status === "down") {
+        return { label: "Down", variant: "destructive" as const };
+      }
+      return { label: "Unknown", variant: "outline" as const };
+    }
+
+    // For failed deployments
+    if (currentDeployment.status === "failed") {
+      return { label: "Failed", variant: "destructive" as const };
+    }
+
+    return null;
+  };
+
+  // Get progress badge info
+  const getProgressBadge = () => {
+    if (currentDeployment.status === "pending") {
+      return { label: "Queued", variant: "outline" as const };
+    }
+    if (
+      ["initializing", "planning", "deploying"].includes(
+        currentDeployment.status,
+      )
+    ) {
+      return { label: "Deploying", variant: "default" as const };
+    }
+    if (currentDeployment.status === "deleting") {
+      return { label: "Deleting", variant: "destructive" as const };
+    }
+    if (currentDeployment.status === "deleted") {
+      return { label: "Deleted", variant: "outline" as const };
+    }
+    return null;
+  };
+
+  const healthBadge = getHealthBadge();
+  const progressBadge = getProgressBadge();
 
   // Parse Terraform outputs
-  const outputs = deployment.terraform_outputs
+  const outputs = currentDeployment.terraform_outputs
     ? (() => {
         try {
-          return JSON.parse(deployment.terraform_outputs);
+          return JSON.parse(currentDeployment.terraform_outputs);
         } catch {
           return {};
         }
@@ -95,27 +138,41 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
     <>
       <Card className="flex flex-col">
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <span
-                className={`inline-block h-2.5 w-2.5 rounded-full ${healthDot}`}
-                title={deployment.status}
-              />
-              {deployment.template_icon && (
-                <span className="text-lg">{deployment.template_icon}</span>
+              {currentDeployment.template_icon && (
+                <span className="text-lg">
+                  {currentDeployment.template_icon}
+                </span>
               )}
-              {deployment.name}
+              {currentDeployment.name}
             </CardTitle>
-            <Badge variant="outline" className="text-xs capitalize">
-              {deployment.template_name || deployment.template_id}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {healthBadge && (
+                <Badge
+                  variant={healthBadge.variant}
+                  className={`text-xs ${healthBadge.label === "Degraded" ? "bg-orange-500 text-white hover:bg-orange-600" : ""}`}
+                >
+                  {healthBadge.label}
+                </Badge>
+              )}
+              {progressBadge && (
+                <Badge variant={progressBadge.variant} className="text-xs">
+                  {progressBadge.label}
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-xs capitalize">
+                {currentDeployment.template_name ||
+                  currentDeployment.template_id}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-3 text-sm">
-          <DeploymentStepper deployment={deployment} />
+          <DeploymentStepper deployment={currentDeployment} />
 
-          {deployment.status === "running" &&
+          {currentDeployment.status === "running" &&
             Object.keys(outputs).length > 0 && (
               <div className="rounded-md bg-muted p-3 space-y-1 text-xs font-mono">
                 <div className="font-semibold text-muted-foreground mb-2">
@@ -138,19 +195,19 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
                     )}
                   </div>
                 ))}
-                {deployment.resource_count !== null && (
+                {/* {currentDeployment.resource_count !== null && (
                   <div className="mt-2 pt-2 border-t border-border">
                     <span className="text-muted-foreground">Resources: </span>
-                    {deployment.resource_count}
+                    {currentDeployment.resource_count}
                   </div>
-                )}
+                )} */}
               </div>
             )}
         </CardContent>
 
         <CardFooter className="mt-auto pt-2">
           <div className="flex gap-2 ml-auto">
-            {["running", "degraded"].includes(deployment.status) && (
+            {["running", "degraded"].includes(currentDeployment.status) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -165,7 +222,7 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
               size="sm"
               onClick={handleDeleteClick}
               disabled={["deleting", "deleted", "pending"].includes(
-                deployment.status,
+                currentDeployment.status,
               )}
             >
               Delete
@@ -185,8 +242,8 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
             </DialogTitle>
             <DialogDescription>
               {confirmStep === 1
-                ? `This will destroy all cloud resources for "${deployment.name}" using Terraform. This cannot be undone.`
-                : `All resources (${deployment.resource_count || "unknown"} resources) for "${deployment.name}" will be permanently destroyed. Click confirm to proceed.`}
+                ? `This will destroy all cloud resources for "${currentDeployment.name}" using Terraform. This cannot be undone.`
+                : `All resources (${currentDeployment.resource_count || "unknown"} resources) for "${currentDeployment.name}" will be permanently destroyed. Click confirm to proceed.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -196,7 +253,7 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
             <Button variant="destructive" onClick={handleConfirm}>
               {confirmStep === 1
                 ? "Yes, delete"
-                : "Confirm — destroy everything"}
+                : "Confirm - destroy everything"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -204,8 +261,8 @@ export function DeploymentCard({ deployment: initial, onDelete }: Props) {
 
       {/* Health Details Dialog */}
       <DeploymentHealthPanel
-        deploymentId={deployment.id}
-        deploymentName={deployment.name}
+        deploymentId={currentDeployment.id}
+        deploymentName={currentDeployment.name}
         open={healthOpen}
         onClose={() => setHealthOpen(false)}
       />

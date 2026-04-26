@@ -38,6 +38,7 @@ class HypervisorStatus(BaseModel):
     name: str
     state: str
     status: str
+    ip: str | None
 
 
 class GlobalHealthResponse(BaseModel):
@@ -63,13 +64,29 @@ class AppHealthResponse(BaseModel):
 # ── OpenStack Connection ───────────────────────────────────────────────────
 
 
-def _get_openstack_connection() -> openstack.connection.Connection:
-    """Create OpenStack connection from settings."""
+def _get_openstack_connection(project_override: str | None = None) -> openstack.connection.Connection:
+    """
+    Create OpenStack connection from settings.
+
+    Args:
+        project_override: Optional project name to use instead of settings.OS_PROJECT_NAME.
+                         Useful for operations requiring different project scope (e.g., admin).
+    """
+    if not settings.OS_AUTH_URL or not settings.OS_USERNAME or not settings.OS_PASSWORD:
+        raise ValueError(
+            "OpenStack credentials not configured. Please set OS_AUTH_URL, "
+            "OS_USERNAME, and OS_PASSWORD in your .env file."
+        )
+
+    # Use override project if provided, otherwise use default from settings
+    project_name = project_override if project_override is not None else settings.OS_PROJECT_NAME
+
+    # Disable service discovery to avoid hanging
     return openstack.connect(
         auth_url=settings.OS_AUTH_URL,
         username=settings.OS_USERNAME,
         password=settings.OS_PASSWORD,
-        project_name=settings.OS_PROJECT_NAME,
+        project_name=project_name,
         user_domain_name=settings.OS_USER_DOMAIN_NAME,
         project_domain_name=settings.OS_PROJECT_DOMAIN_NAME,
     )
@@ -98,18 +115,32 @@ async def get_global_health() -> GlobalHealthResponse:
     - AWS VPN instances
     - OpenStack hypervisors
     """
+    logger.info("Starting global health check...")
     try:
-        # Run all checks concurrently
+        # Run all checks concurrently with timeout
         os_vpn_task = asyncio.create_task(_get_openstack_vpn_status())
         aws_vpns_task = asyncio.create_task(_get_aws_vpn_status())
         hypervisors_task = asyncio.create_task(_get_openstack_hypervisors())
 
-        os_vpn, aws_vpns, hypervisors = await asyncio.gather(
-            os_vpn_task,
-            aws_vpns_task,
-            hypervisors_task,
-            return_exceptions=True,
-        )
+        # Add timeout to prevent hanging (30 seconds total)
+        try:
+            os_vpn, aws_vpns, hypervisors = await asyncio.wait_for(
+                asyncio.gather(
+                    os_vpn_task,
+                    aws_vpns_task,
+                    hypervisors_task,
+                    return_exceptions=True,
+                ),
+                timeout=30.0
+            )
+        except asyncio.TimeoutError:
+            logger.error("Global health check timed out after 30 seconds")
+            # Return empty results on timeout
+            return GlobalHealthResponse(
+                openstack_vpn=None,
+                aws_vpns=[],
+                openstack_hypervisors=[],
+            )
 
         # Handle exceptions gracefully
         if isinstance(os_vpn, Exception):
@@ -122,83 +153,136 @@ async def get_global_health() -> GlobalHealthResponse:
             logger.error("Failed to get hypervisor status: %s", hypervisors)
             hypervisors = []
 
+        logger.info("Global health check completed successfully")
         return GlobalHealthResponse(
             openstack_vpn=os_vpn,
             aws_vpns=aws_vpns,
             openstack_hypervisors=hypervisors,
         )
     except Exception as exc:
-        logger.error("Failed to get global health: %s", exc)
+        logger.error("Failed to get global health: %s", exc, exc_info=True)
         raise
 
 
 async def _get_openstack_vpn_status() -> VPNStatus | None:
-    """Get status of the OpenStack VPN gateway (server named 'vpn-gateway')."""
+    """
+    Get status of the OpenStack VPN gateway (server named 'vpn-gateway').
+
+    Searches across all projects to ensure the VM is found regardless of current scope.
+    """
 
     def _fetch():
-        conn = _get_openstack_connection()
-        server = conn.compute.find_server("vpn-gateway")
-        if not server:
+        logger.info("Fetching OpenStack VPN status...")
+        try:
+            conn = _get_openstack_connection()
+            logger.info("Searching for vpn-gateway server across all projects...")
+
+            # List all servers across all projects and find vpn-gateway
+            # This is more reliable than find_server() which can hang
+            for server in conn.compute.servers(all_projects=True):
+                if server.name == "vpn-gateway":
+                    # Extract fixed IP
+                    fixed_ip = None
+                    for network_addresses in server.addresses.values():
+                        for addr in network_addresses:
+                            if addr.get("OS-EXT-IPS:type") == "fixed":
+                                fixed_ip = addr["addr"]
+                                break
+
+                    logger.info("Found VPN gateway: %s (IP: %s)", server.name, fixed_ip)
+                    return VPNStatus(
+                        name=server.name, status=server.status.lower(), ip=fixed_ip
+                    )
+
+            logger.warning("VPN gateway server not found")
+            return None
+        except Exception as exc:
+            logger.error("Error fetching OpenStack VPN: %s", exc, exc_info=True)
             return None
 
-        # Extract fixed IP
-        fixed_ip = None
-        for network_addresses in server.addresses.values():
-            for addr in network_addresses:
-                if addr.get("OS-EXT-IPS:type") == "fixed":
-                    fixed_ip = addr["addr"]
-                    break
-
-        return VPNStatus(
-            name=server.name, status=server.status.lower(), ip=fixed_ip
-        )
-
-    return await asyncio.to_thread(_fetch)
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10.0)
+    except asyncio.TimeoutError:
+        logger.error("OpenStack VPN status check timed out after 10 seconds")
+        return None
 
 
 async def _get_aws_vpn_status() -> list[VPNStatus]:
     """Get status of AWS VPN instances (tagged with Role=vpn)."""
 
     def _fetch():
-        ec2 = _get_boto3_client("ec2")
-        response = ec2.describe_instances(
-            Filters=[{"Name": "tag:Role", "Values": ["vpn"]}]
-        )
+        logger.info("Fetching AWS VPN status...")
+        try:
+            ec2 = _get_boto3_client("ec2")
+            response = ec2.describe_instances(
+                Filters=[{"Name": "tag:Role", "Values": ["vpn"]}]
+            )
 
-        vpns = []
-        for reservation in response.get("Reservations", []):
-            for instance in reservation.get("Instances", []):
-                vpns.append(
-                    VPNStatus(
-                        name=instance.get("InstanceId", "unknown"),
-                        status=instance.get("State", {})
-                        .get("Name", "unknown")
-                        .lower(),
-                        ip=instance.get("PrivateIpAddress"),
+            vpns = []
+            for reservation in response.get("Reservations", []):
+                for instance in reservation.get("Instances", []):
+                    vpns.append(
+                        VPNStatus(
+                            name=instance.get("InstanceId", "unknown"),
+                            status=instance.get("State", {})
+                            .get("Name", "unknown")
+                            .lower(),
+                            ip=instance.get("PrivateIpAddress"),
+                        )
                     )
-                )
-        return vpns
+            logger.info("Found %d AWS VPN instances", len(vpns))
+            return vpns
+        except Exception as exc:
+            logger.error("Error fetching AWS VPN: %s", exc, exc_info=True)
+            return []
 
-    return await asyncio.to_thread(_fetch)
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10.0)
+    except asyncio.TimeoutError:
+        logger.error("AWS VPN status check timed out after 10 seconds")
+        return []
 
 
 async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
-    """Get status of OpenStack hypervisors (physical compute nodes)."""
+    """
+    Get status of OpenStack hypervisors (physical compute nodes).
+
+    Uses admin project scope to bypass RBAC restrictions on hypervisor listing.
+    """
 
     def _fetch():
-        conn = _get_openstack_connection()
-        hypervisors = []
-        for hypervisor in conn.compute.hypervisors():
-            hypervisors.append(
-                HypervisorStatus(
-                    name=hypervisor.name,
-                    state=hypervisor.state.lower(),
-                    status=hypervisor.status.lower(),
-                )
-            )
-        return hypervisors
+        logger.info("Fetching OpenStack hypervisors...")
+        try:
+            # Connect with admin project to bypass RBAC restrictions
+            conn = _get_openstack_connection(project_override="admin")
+            hypervisors = []
+            for hypervisor in conn.compute.hypervisors(details=True):
+                # Extract host IP address (management IP)
+                host_ip = getattr(hypervisor, 'host_ip', None)
 
-    return await asyncio.to_thread(_fetch)
+                hypervisors.append(
+                    HypervisorStatus(
+                        name=hypervisor.name,
+                        state=hypervisor.state.lower() if hypervisor.state else "unknown",
+                        status=hypervisor.status.lower() if hypervisor.status else "unknown",
+                        ip=host_ip,
+                    )
+                )
+            logger.info("Found %d OpenStack hypervisors", len(hypervisors))
+            return hypervisors
+        except Exception as exc:
+            error_msg = str(exc)
+            if "403" in error_msg or "Forbidden" in error_msg or "Policy doesn't allow" in error_msg:
+                logger.warning("OpenStack hypervisors access forbidden (403) - user lacks permissions")
+            else:
+                logger.error("Error fetching OpenStack hypervisors: %s", exc, exc_info=True)
+            return []
+
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10.0)
+    except asyncio.TimeoutError:
+        logger.error("OpenStack hypervisors check timed out after 10 seconds")
+        return []
 
 
 # ── Application-Specific Health ────────────────────────────────────────────
@@ -266,12 +350,14 @@ async def _get_aws_frontend_health(
     Get AWS frontend health (ASG + ALB target group).
 
     Returns:
-        Dict with ASG info, target health, and instance details
+        Dict with ASG info, target health, and instance details.
+        Status is degraded if healthy_count < desired_capacity.
     """
 
     def _fetch():
         try:
-            asg_name = f"arcl-{deployment_name}-asg"
+            # Updated naming convention after Terraform migration
+            asg_name = f"{deployment_name}-asg"
             tg_name = f"{deployment_name}-tg"
 
             asg_client = _get_boto3_client("autoscaling")
@@ -284,6 +370,7 @@ async def _get_aws_frontend_health(
             )
             asgs = asg_response.get("AutoScalingGroups", [])
             if not asgs:
+                logger.warning("ASG not found: %s", asg_name)
                 return None
 
             asg = asgs[0]
@@ -294,6 +381,7 @@ async def _get_aws_frontend_health(
             tg_response = elbv2_client.describe_target_groups(Names=[tg_name])
             target_groups = tg_response.get("TargetGroups", [])
             if not target_groups:
+                logger.warning("Target group not found: %s", tg_name)
                 return {
                     "asg_name": asg_name,
                     "desired_capacity": desired_capacity,
@@ -339,6 +427,14 @@ async def _get_aws_frontend_health(
                 1 for i in instances if i.get("health") == "healthy"
             )
 
+            logger.info(
+                "AWS health for %s: %d/%d healthy (desired: %d)",
+                deployment_name,
+                healthy_count,
+                len(instances),
+                desired_capacity,
+            )
+
             return {
                 "asg_name": asg_name,
                 "desired_capacity": desired_capacity,
@@ -358,9 +454,11 @@ async def _get_openstack_backend_health(
     deployment_name: str,
 ) -> dict[str, Any] | None:
     """
-    Get OpenStack backend health (database VMs).
+    Get OpenStack backend health for all VMs in this deployment.
 
-    Looks for servers matching pattern: {deployment_name}-db-*
+    Searches for ALL servers matching pattern: {deployment_name}-*
+    This includes DB nodes, web nodes, K3s nodes, tiebreakers, etc.
+    Searches across all projects to ensure VMs are found regardless of current scope.
     """
 
     def _fetch():
@@ -368,9 +466,9 @@ async def _get_openstack_backend_health(
             conn = _get_openstack_connection()
             servers = []
 
-            # Search for servers with naming convention
-            for server in conn.compute.servers():
-                if server.name.startswith(f"{deployment_name}-db-"):
+            # Search for ALL servers belonging to this deployment across all projects
+            for server in conn.compute.servers(all_projects=True):
+                if server.name.startswith(f"{deployment_name}-"):
                     # Extract fixed IP
                     fixed_ip = None
                     for network_addresses in server.addresses.values():
@@ -379,24 +477,31 @@ async def _get_openstack_backend_health(
                                 fixed_ip = addr["addr"]
                                 break
 
+                    # A VM is only healthy if status is "ACTIVE"
+                    is_healthy = server.status.lower() == "active"
+
                     servers.append(
                         VMInstance(
                             instance_id=server.id,
                             private_ip=fixed_ip,
                             state=server.status.lower(),
-                            health=(
-                                "healthy"
-                                if server.status.lower() == "active"
-                                else "unhealthy"
-                            ),
+                            health="healthy" if is_healthy else "unhealthy",
                         ).model_dump()
                     )
 
             if not servers:
+                logger.warning("No OpenStack VMs found for deployment: %s", deployment_name)
                 return None
 
             healthy_count = sum(
                 1 for s in servers if s.get("health") == "healthy"
+            )
+
+            logger.info(
+                "OpenStack health for %s: %d/%d healthy VMs",
+                deployment_name,
+                healthy_count,
+                len(servers),
             )
 
             return {
@@ -421,31 +526,72 @@ def _aggregate_health_status(
     Aggregate health status from AWS and OpenStack components.
 
     Returns:
-        "healthy" - All components healthy
-        "degraded" - Some components unhealthy or provisioning
-        "down" - No healthy components
-        "unknown" - Unable to determine status
+        "healthy" - All components healthy and match desired capacity
+        "degraded" - Some components unhealthy, missing, or provisioning
+        "down" - No healthy components found
+        "unknown" - Unable to determine status (no data from either cloud)
     """
+    # If we have no data from either cloud, status is unknown
     if aws_health is None and os_health is None:
+        logger.warning("No health data from AWS or OpenStack - deployment may not exist")
         return "unknown"
 
     total_healthy = 0
     total_count = 0
+    total_desired = 0
 
+    # AWS health metrics
     if aws_health:
-        total_healthy += aws_health.get("healthy_count", 0)
-        total_count += aws_health.get("total_count", 0)
+        aws_healthy = aws_health.get("healthy_count", 0)
+        aws_total = aws_health.get("total_count", 0)
+        aws_desired = aws_health.get("desired_capacity", 0)
 
+        total_healthy += aws_healthy
+        total_count += aws_total
+        total_desired += aws_desired
+
+        # Check if AWS is degraded (instances missing or unhealthy)
+        if aws_desired > aws_total:
+            # ASG hasn't spawned all desired instances yet
+            logger.debug(
+                "AWS degraded: desired=%d, actual=%d", aws_desired, aws_total
+            )
+        if aws_healthy < aws_total:
+            # Some instances are unhealthy
+            logger.debug(
+                "AWS degraded: healthy=%d, total=%d", aws_healthy, aws_total
+            )
+
+    # OpenStack health metrics
     if os_health:
-        total_healthy += os_health.get("healthy_count", 0)
-        total_count += os_health.get("total_count", 0)
+        os_healthy = os_health.get("healthy_count", 0)
+        os_total = os_health.get("total_count", 0)
 
+        total_healthy += os_healthy
+        total_count += os_total
+
+        if os_healthy < os_total:
+            logger.debug(
+                "OpenStack degraded: healthy=%d, total=%d", os_healthy, os_total
+            )
+
+    # No resources found in either cloud - deployment might not exist or failed
     if total_count == 0:
-        return "down"
+        logger.warning("No resources found in AWS or OpenStack - deployment may have failed or been deleted")
+        return "unknown"
 
-    if total_healthy == total_count:
-        return "healthy"
-    elif total_healthy > 0:
+    # Check for degraded state
+    # 1. If AWS desired capacity doesn't match actual count
+    if aws_health and aws_health.get("desired_capacity", 0) > aws_health.get("total_count", 0):
         return "degraded"
-    else:
-        return "down"
+
+    # 2. If any unhealthy instances exist
+    if total_healthy < total_count:
+        return "degraded"
+
+    # All instances are healthy and match desired state
+    if total_healthy == total_count and total_count > 0:
+        return "healthy"
+
+    # Fallback (shouldn't reach here, but safety net)
+    return "degraded"

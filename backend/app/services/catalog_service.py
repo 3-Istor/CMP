@@ -28,6 +28,7 @@ def get_all_templates() -> list[CatalogTemplate]:
                     type=var.get("type", "text"),
                     default=var.get("default"),
                     options=var.get("options"),
+                    required=var.get("required", False),
                 )
             )
 

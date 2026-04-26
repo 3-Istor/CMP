@@ -34,6 +34,7 @@ export interface CatalogField {
   type: "text" | "number" | "select";
   default: string | number | null;
   options: string[] | null;
+  required?: boolean;
 }
 
 export interface CatalogTemplate {
@@ -58,6 +59,7 @@ export interface HypervisorStatus {
   name: string;
   state: string;
   status: string;
+  ip: string | null;
 }
 
 export interface GlobalHealthResponse {

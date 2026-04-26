@@ -178,7 +178,7 @@ async def upload_profile_picture(
     print(f"DEBUG: Token payload keys: {token_payload.keys()}")
     print(f"DEBUG: Token payload: {token_payload}")
 
-    # Validate MIME type — only real image types accepted
+    # Validate MIME type - only real image types accepted
     allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     max_size_bytes = 5 * 1024 * 1024  # 5 MB
 

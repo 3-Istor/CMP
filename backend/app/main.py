@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Hybrid Cloud Management Platform — Terraform-based deployments",
+    description="Hybrid Cloud Management Platform - Terraform-based deployments",
     version="0.2.0",
     lifespan=lifespan,
 )

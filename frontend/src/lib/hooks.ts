@@ -49,7 +49,7 @@ export function useDeploymentsList(intervalMs = 5000) {
       const data = await getDeployments();
       setDeployments(data);
     } catch {
-      // Backend offline — silently keep existing state
+      // Backend offline - silently keep existing state
     } finally {
       setLoading(false);
     }

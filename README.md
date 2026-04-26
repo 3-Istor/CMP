@@ -17,7 +17,7 @@
 
 ## What is CMP?
 
-CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks — no CLI, no Terraform knowledge required, no IT ticket.
+CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks - no CLI, no Terraform knowledge required, no IT ticket.
 
 The platform uses **Terraform templates** loaded from a Git repository, allowing flexible deployment of any infrastructure configuration. Each template defines the resources to provision, and the CMP handles the entire lifecycle: deployment, tracking, and cleanup.
 
@@ -187,7 +187,7 @@ See [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) for detailed manual setup ste
 
 ## Configuration
 
-### Backend — `backend/.env`
+### Backend - `backend/.env`
 
 ```env
 # ── AWS ──────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ OS_USER_DOMAIN_NAME=Default
 OS_PROJECT_DOMAIN_NAME=Default
 ```
 
-### Frontend — `frontend/.env.local`
+### Frontend - `frontend/.env.local`
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000/api
@@ -512,7 +512,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions and [DOCKER_KUBERNE
 
 ## Team
 
-Built by the **3-Istor** student team — [github.com/3-Istor](https://github.com/3-Istor)
+Built by the **3-Istor** student team - [github.com/3-Istor](https://github.com/3-Istor)
 
 ---
 

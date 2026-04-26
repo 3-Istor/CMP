@@ -7,6 +7,7 @@ class CatalogField(BaseModel):
     type: str  # "text" | "number" | "select"
     default: str | int | None = None
     options: list[str] | None = None  # for "select" type
+    required: bool = False  # whether the field is required
 
 
 class CatalogTemplate(BaseModel):

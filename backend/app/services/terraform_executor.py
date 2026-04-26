@@ -98,10 +98,15 @@ class TerraformExecutor:
         if settings.AWS_DEFAULT_REGION:
             env["AWS_DEFAULT_REGION"] = settings.AWS_DEFAULT_REGION
 
-        # Pass Cloudflare credentials to Terraform (for DNS)
+        # Pass Cloudflare credentials to Terraform
+        # Need BOTH:
+        # 1. TF_VAR_* for Terraform input variables (if template declares them)
+        # 2. CLOUDFLARE_* for the Cloudflare provider authentication
         if settings.CLOUDFLARE_API_TOKEN:
+            env["TF_VAR_cloudflare_api_token"] = settings.CLOUDFLARE_API_TOKEN
             env["CLOUDFLARE_API_TOKEN"] = settings.CLOUDFLARE_API_TOKEN
         if settings.CLOUDFLARE_ZONE_ID:
+            env["TF_VAR_cloudflare_zone_id"] = settings.CLOUDFLARE_ZONE_ID
             env["CLOUDFLARE_ZONE_ID"] = settings.CLOUDFLARE_ZONE_ID
 
         # Sanitize command for logging (hide sensitive values)
@@ -171,11 +176,9 @@ class TerraformExecutor:
 
         var_args = []
         for key, value in variables.items():
-            # Handle different types appropriately
-            if isinstance(value, (int, float)):
-                var_args.extend(["-var", f"{key}={value}"])
-            else:
-                var_args.extend(["-var", f'{key}="{value}"'])
+            # Terraform -var flag doesn't need quotes around values
+            # The subprocess handles shell escaping automatically
+            var_args.extend(["-var", f"{key}={value}"])
 
         result = self._run_command(
             ["terraform", "plan", "-no-color", *var_args]
@@ -195,10 +198,9 @@ class TerraformExecutor:
 
         var_args = []
         for key, value in variables.items():
-            if isinstance(value, (int, float)):
-                var_args.extend(["-var", f"{key}={value}"])
-            else:
-                var_args.extend(["-var", f'{key}="{value}"'])
+            # Terraform -var flag doesn't need quotes around values
+            # The subprocess handles shell escaping automatically
+            var_args.extend(["-var", f"{key}={value}"])
 
         # Apply with auto-approve
         self._run_command(
@@ -238,10 +240,9 @@ class TerraformExecutor:
 
         var_args = []
         for key, value in variables.items():
-            if isinstance(value, (int, float)):
-                var_args.extend(["-var", f"{key}={value}"])
-            else:
-                var_args.extend(["-var", f'{key}="{value}"'])
+            # Terraform -var flag doesn't need quotes around values
+            # The subprocess handles shell escaping automatically
+            var_args.extend(["-var", f"{key}={value}"])
 
         self._run_command(
             [

@@ -10,11 +10,11 @@ import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -233,7 +233,7 @@ export default function AccountPage() {
                     First Name
                   </Label>
                   <p className="text-sm font-medium">
-                    {user.given_name || "—"}
+                    {user.given_name || "-"}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -241,7 +241,7 @@ export default function AccountPage() {
                     Last Name
                   </Label>
                   <p className="text-sm font-medium">
-                    {user.family_name || "—"}
+                    {user.family_name || "-"}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -255,7 +255,7 @@ export default function AccountPage() {
                     User ID
                   </Label>
                   <p className="text-sm font-mono text-muted-foreground break-all">
-                    {user.sub || "—"}
+                    {user.sub || "-"}
                   </p>
                 </div>
               </div>
