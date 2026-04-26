@@ -170,6 +170,11 @@ spec:
             secretKeyRef:
               name: {{ include "arcl-cmp.fullname" . }}-secret
               key: cloudflare-api-token
+        - name: CLOUDFLARE_ZONE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: cloudflare-zone-id
         livenessProbe:
           httpGet:
             path: /health
