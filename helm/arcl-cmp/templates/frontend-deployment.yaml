@@ -46,7 +46,14 @@ spec:
           value: "http://{{ include "arcl-cmp.fullname" . }}-backend:8000/api"
         - name: NEXTAUTH_URL
           value: {{ .Values.frontend.authUrl | quote }}
+        - name: AUTH_TRUST_HOST
+          value: "true"
         - name: NEXTAUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: arcl-cmp-frontend-secret
+              key: nextauth-secret
+        - name: AUTH_SECRET
           valueFrom:
             secretKeyRef:
               name: arcl-cmp-frontend-secret
