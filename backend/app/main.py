@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -8,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import account, catalog, deployments, infra
+from app.services import health_poller
 from app.services.template_repository import get_repository
 
 
@@ -29,9 +31,17 @@ async def lifespan(app: FastAPI):
             name="templates",
         )
 
+    # Start background health poller
+    health_poller_task = asyncio.create_task(health_poller.health_poller_loop())
+
     yield
 
-    # Shutdown: cleanup if needed
+    # Shutdown: cancel background tasks
+    health_poller_task.cancel()
+    try:
+        await health_poller_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(

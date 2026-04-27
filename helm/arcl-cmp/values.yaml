@@ -124,3 +124,5 @@ secrets:
     region: "eu-west-3"
     s3Bucket: ""
     s3KeyPrefix: ""
+  discord:
+    webhookUrl: "" # Optional: Discord webhook for health alerts

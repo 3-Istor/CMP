@@ -126,6 +126,11 @@ spec:
             secretKeyRef:
               name: {{ include "arcl-cmp.fullname" . }}-secret
               key: aws-s3-key-prefix
+        - name: DISCORD_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "arcl-cmp.fullname" . }}-secret
+              key: discord-webhook-url
         - name: KEYCLOAK_URL
           value: "https://auth.3istor.com"
         - name: KEYCLOAK_CLIENT_ID

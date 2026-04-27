@@ -56,7 +56,7 @@ export function DeploymentStepper({ deployment }: Props) {
   const [userInteracted, setUserInteracted] = useState(false);
   const lastInteractionTimeRef = useRef(0);
 
-  // Auto-center on current step
+  // Auto-scroll to show current step with context
   useEffect(() => {
     const currentStepIndex = STEPS.findIndex(
       (step) => step.status === deployment.status,
@@ -75,18 +75,20 @@ export function DeploymentStepper({ deployment }: Props) {
     const currentStepElement = stepElements[currentStepIndex] as HTMLElement;
     if (!currentStepElement) return;
 
-    // Calculate scroll position to center the current step
+    // Calculate scroll position to show current step with 1 previous step visible
     const containerWidth = container.offsetWidth;
     const stepLeft = currentStepElement.offsetLeft;
     const stepWidth = currentStepElement.offsetWidth;
-    const scrollPosition = stepLeft - containerWidth / 2 + stepWidth / 2;
 
-    // Smooth scroll to center
+    // Position current step at ~40% from left (not centered) to show previous steps
+    const scrollPosition = stepLeft - containerWidth * 0.4 + stepWidth / 2;
+
+    // Smooth scroll with bounds checking
     container.scrollTo({
-      left: scrollPosition,
+      left: Math.max(0, scrollPosition),
       behavior: "smooth",
     });
-  }, [deployment.status, userInteracted]);
+  }, [deployment.status, userInteracted, STEPS]);
 
   // Reset user interaction flag after 5 seconds
   useEffect(() => {

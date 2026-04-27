@@ -21,6 +21,7 @@ pyjwt = "^2.8.0"
 requests = "^2.31.0"
 python-multipart = "^0.0.26"
 psycopg2-binary = "^2.9.12"
+httpx = "^0.28.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.4.0"

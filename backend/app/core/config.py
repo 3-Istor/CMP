@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     CLOUDFLARE_API_TOKEN: str = ""
     CLOUDFLARE_ZONE_ID: str = ""
 
+    # Discord Alerting (optional - for health monitoring alerts)
+    DISCORD_WEBHOOK_URL: str = ""
+
 
 settings = Settings()
 
