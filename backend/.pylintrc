@@ -1,0 +1,35 @@
+[MASTER]
+# Use multiple processes to speed up Pylint
+jobs=1
+
+[MESSAGES CONTROL]
+# Disable specific warnings that are too strict for this project
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-few-public-methods,
+    broad-exception-caught,
+    import-outside-toplevel,
+    unused-argument,
+    redefined-outer-name,
+    protected-access,
+    duplicate-code,
+    global-statement,
+    unused-import
+
+[FORMAT]
+# Maximum number of characters on a single line
+max-line-length=100
+
+[DESIGN]
+# Maximum number of locals for function / method body
+max-locals=25
+
+[BASIC]
+# Good variable names which should always be accepted
+good-names=i,j,k,ex,Run,_,id,db,app
+
+[SIMILARITIES]
+# Minimum lines number of a similarity
+min-similarity-lines=10

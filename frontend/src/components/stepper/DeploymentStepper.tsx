@@ -5,12 +5,17 @@ import { Progress } from "@/components/ui/progress";
 import type { Deployment, DeploymentStatus } from "@/types";
 import { useEffect, useRef, useState } from "react";
 
-const STEPS: { status: DeploymentStatus; label: string }[] = [
+const CREATION_STEPS: { status: DeploymentStatus; label: string }[] = [
   { status: "pending", label: "Queued" },
   { status: "initializing", label: "Initializing" },
   { status: "planning", label: "Planning" },
   { status: "deploying", label: "Deploying" },
   { status: "running", label: "Running" },
+];
+
+const DELETION_STEPS: { status: DeploymentStatus; label: string }[] = [
+  { status: "deleting", label: "Destroying" },
+  { status: "deleted", label: "Deleted" },
 ];
 
 const STATUS_PROGRESS: Record<DeploymentStatus, number> = {
@@ -21,7 +26,7 @@ const STATUS_PROGRESS: Record<DeploymentStatus, number> = {
   running: 100,
   degraded: 100,
   failed: 100,
-  deleting: 80,
+  deleting: 50,
   deleted: 100,
 };
 
@@ -44,11 +49,14 @@ interface Props {
 export function DeploymentStepper({ deployment }: Props) {
   const progress = STATUS_PROGRESS[deployment.status] ?? 0;
   const isFailed = deployment.status === "failed";
+  const isDeleting =
+    deployment.status === "deleting" || deployment.status === "deleted";
+  const STEPS = isDeleting ? DELETION_STEPS : CREATION_STEPS;
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [userInteracted, setUserInteracted] = useState(false);
-  const [lastInteractionTime, setLastInteractionTime] = useState(0);
+  const lastInteractionTimeRef = useRef(0);
 
-  // Auto-center on current step
+  // Auto-scroll to show current step with context
   useEffect(() => {
     const currentStepIndex = STEPS.findIndex(
       (step) => step.status === deployment.status,
@@ -56,13 +64,8 @@ export function DeploymentStepper({ deployment }: Props) {
     if (currentStepIndex === -1) return;
 
     // Only auto-scroll if user hasn't interacted recently (5 seconds)
-    const timeSinceInteraction = Date.now() - lastInteractionTime;
+    const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
     if (userInteracted && timeSinceInteraction < 5000) return;
-
-    // Reset user interaction flag after 5 seconds
-    if (userInteracted && timeSinceInteraction >= 5000) {
-      setUserInteracted(false);
-    }
 
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -72,23 +75,38 @@ export function DeploymentStepper({ deployment }: Props) {
     const currentStepElement = stepElements[currentStepIndex] as HTMLElement;
     if (!currentStepElement) return;
 
-    // Calculate scroll position to center the current step
+    // Calculate scroll position to show current step with 1 previous step visible
     const containerWidth = container.offsetWidth;
     const stepLeft = currentStepElement.offsetLeft;
     const stepWidth = currentStepElement.offsetWidth;
-    const scrollPosition = stepLeft - containerWidth / 2 + stepWidth / 2;
 
-    // Smooth scroll to center
+    // Position current step at ~40% from left (not centered) to show previous steps
+    const scrollPosition = stepLeft - containerWidth * 0.4 + stepWidth / 2;
+
+    // Smooth scroll with bounds checking
     container.scrollTo({
-      left: scrollPosition,
+      left: Math.max(0, scrollPosition),
       behavior: "smooth",
     });
-  }, [deployment.status, userInteracted, lastInteractionTime]);
+  }, [deployment.status, userInteracted, STEPS]);
+
+  // Reset user interaction flag after 5 seconds
+  useEffect(() => {
+    if (!userInteracted) return;
+
+    const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
+    if (timeSinceInteraction < 5000) {
+      const timer = setTimeout(() => {
+        setUserInteracted(false);
+      }, 5000 - timeSinceInteraction);
+      return () => clearTimeout(timer);
+    }
+  }, [userInteracted]);
 
   // Handle user scroll/touch interaction
   const handleUserInteraction = () => {
     setUserInteracted(true);
-    setLastInteractionTime(Date.now());
+    lastInteractionTimeRef.current = Date.now();
   };
 
   return (
@@ -113,7 +131,7 @@ export function DeploymentStepper({ deployment }: Props) {
               <div
                 key={step.status}
                 data-step={i}
-                className="flex items-center gap-2 flex-shrink-0"
+                className="flex items-center gap-2 shrink-0"
               >
                 <div
                   className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all duration-300 ${
@@ -126,7 +144,7 @@ export function DeploymentStepper({ deployment }: Props) {
                           : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {isDone && !isActive ? "✓" : i + 1}
+                  {isDone && !isActive ? "✓" : isDeleting ? "🗑️" : i + 1}
                 </div>
                 <span
                   className={`text-sm whitespace-nowrap transition-all duration-300 ${

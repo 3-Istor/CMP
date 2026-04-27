@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ ARCL CMP
+# ⚡ CMP
 
 ### Hybrid Cloud Management Platform
 
@@ -15,9 +15,9 @@
 
 ---
 
-## What is ARCL CMP?
+## What is CMP?
 
-ARCL CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks — no CLI, no Terraform knowledge required, no IT ticket.
+CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks - no CLI, no Terraform knowledge required, no IT ticket.
 
 The platform uses **Terraform templates** loaded from a Git repository, allowing flexible deployment of any infrastructure configuration. Each template defines the resources to provision, and the CMP handles the entire lifecycle: deployment, tracking, and cleanup.
 
@@ -45,11 +45,13 @@ The platform uses **Terraform templates** loaded from a Git repository, allowing
 │                        User Browser                         │
 │              Next.js 15 + Tailwind + Shadcn/UI              │
 │         (polls /api/deployments/:id every 3s for status)    │
+│                    NextAuth v5 (Keycloak OIDC)              │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP
+                           │ HTTP + JWT Bearer Token
 ┌──────────────────────────▼──────────────────────────────────┐
 │                    FastAPI Backend                          │
 │              Python 3.12 · SQLite · Alembic                 │
+│                    JWT Validation (Keycloak)                │
 │                                                             │
 │  POST /api/deployments  →  BackgroundTask: Terraform        │
 │                                    │                        │
@@ -104,22 +106,78 @@ Templates are loaded from: https://github.com/3-Istor/ia-project-template
 
 ## Quick Start
 
-### Automated Setup (Recommended)
+### 1. Clone & Setup
 
 ```bash
+# Clone the repository
 git clone https://github.com/3-Istor/arcl-cmp.git
 cd arcl-cmp
+
+# Run automated setup (installs dependencies, creates env files, runs migrations)
 ./setup.sh
 ```
 
-The script will:
+### 2. Configure Credentials
 
-- Install all dependencies
-- Set up environment files
-- Run database migrations
-- Prepare the application
+Edit `backend/.env` with your OpenStack credentials:
 
-Then follow the on-screen instructions to configure credentials and start the servers.
+```bash
+nano backend/.env
+```
+
+Required variables:
+
+```env
+OS_AUTH_URL=http://localhost:5000/v3
+OS_USERNAME=your_username
+OS_PASSWORD=your_password
+OS_PROJECT_NAME=your_project
+```
+
+### 3. Configure Authentication (Optional)
+
+CMP supports two authentication modes:
+
+**Development Mode (Skip Auth)** - Recommended for local development:
+
+```bash
+cd frontend
+echo "NEXT_PUBLIC_SKIP_AUTH=true" > .env.local
+```
+
+**Production Mode (Keycloak)** - For production deployment:
+
+```bash
+cd frontend
+cat > .env.local << EOF
+NEXT_PUBLIC_SKIP_AUTH=false
+NEXTAUTH_URL=https://cmp.3istor.com
+NEXTAUTH_SECRET=$(openssl rand -base64 32)
+KEYCLOAK_CLIENT_ID=3-istor-openid
+KEYCLOAK_CLIENT_SECRET=your-secret
+KEYCLOAK_ISSUER=https://auth.3istor.com/realms/3istor
+EOF
+```
+
+See [README_AUTH.md](README_AUTH.md) for complete authentication documentation.
+
+### 4. Start Backend
+
+```bash
+cd backend
+poetry run uvicorn app.main:app --reload --port 8000
+```
+
+Backend will be available at http://localhost:8000
+
+### 5. Start Frontend (in a new terminal)
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend will be available at http://localhost:3000
 
 ### Manual Setup
 
@@ -129,7 +187,7 @@ See [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) for detailed manual setup ste
 
 ## Configuration
 
-### Backend — `backend/.env`
+### Backend - `backend/.env`
 
 ```env
 # ── AWS ──────────────────────────────────────────────────────
@@ -142,7 +200,7 @@ AWS_DEFAULT_REGION=eu-west-3
 AWS_INSTANCE_TYPE=t3.micro
 
 # ── OpenStack ─────────────────────────────────────────────────
-OS_AUTH_URL=http://192.168.1.210:5000/v3
+OS_AUTH_URL=http://localhost:5000/v3
 OS_USERNAME=arcl-cmp
 OS_PASSWORD=your_openstack_password
 OS_PROJECT_NAME=3-istor-cloud
@@ -150,7 +208,7 @@ OS_USER_DOMAIN_NAME=Default
 OS_PROJECT_DOMAIN_NAME=Default
 ```
 
-### Frontend — `frontend/.env.local`
+### Frontend - `frontend/.env.local`
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000/api
@@ -313,6 +371,43 @@ Monitor resource usage through the dashboard's resource count display.
 
 ---
 
+## Running the Project
+
+### Development Mode
+
+Start both backend and frontend in separate terminals:
+
+```bash
+# Terminal 1 - Backend
+cd backend
+poetry run uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 - Frontend
+cd frontend
+npm run dev
+```
+
+Access the application:
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+### Production Mode
+
+```bash
+# Build frontend
+cd frontend
+npm run build
+npm start
+
+# Run backend with gunicorn
+cd backend
+poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
+
+---
+
 ## Development
 
 ### Running tests (backend)
@@ -336,18 +431,55 @@ cd frontend
 npm run lint
 ```
 
-### Building for production
+---
+
+## Docker & Kubernetes Deployment
+
+CMP can be deployed using Docker and Kubernetes (k3s).
+
+### Docker Compose (Local Development)
 
 ```bash
-# Frontend
-cd frontend
-npm run build
-npm start
+# Build and start services
+docker-compose up -d
 
-# Backend (with gunicorn)
-cd backend
-poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
 ```
+
+### Kubernetes with Helm (Production)
+
+```bash
+# Quick deploy to k3s
+./scripts/deploy-k3s.sh
+
+# Or manually with Helm
+helm install arcl-cmp ./helm/arcl-cmp \
+  --namespace arcl-cmp \
+  --create-namespace \
+  --values values-secrets.yaml
+```
+
+### CI/CD with GitHub Actions
+
+Automated workflows for building and deploying:
+
+- **Build on tag**: Push `v*.*.*` tag to build and publish Docker images
+- **Helm release**: Push `helm-v*.*.*` tag to publish Helm chart
+- **Auto-test**: Runs on every push/PR
+
+```bash
+# Release Docker images
+git tag v1.0.0 && git push origin v1.0.0
+
+# Release Helm chart
+git tag helm-v1.0.0 && git push origin helm-v1.0.0
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions and [DOCKER_KUBERNETES.md](DOCKER_KUBERNETES.md) for command reference.
 
 ---
 
@@ -356,14 +488,15 @@ poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 - [x] Terraform-based deployment system
 - [x] Git repository template loading
 - [x] Automatic output capture
+- [x] Docker containerization
+- [x] Kubernetes Helm charts
+- [x] GitHub Actions CI/CD pipeline
 - [ ] AWS template support
 - [ ] WebSocket support for real-time Terraform logs
 - [ ] Template versioning
 - [ ] Multi-user support with RBAC
 - [ ] Cost estimation per deployment
 - [ ] Monitoring dashboard integration
-- [ ] K3s migration for CMP hosting
-- [ ] GitHub Actions CI/CD pipeline
 
 ---
 
@@ -379,10 +512,10 @@ poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 
 ## Team
 
-Built by the **3-Istor** student team — [github.com/3-Istor](https://github.com/3-Istor)
+Built by the **3-Istor** student team - [github.com/3-Istor](https://github.com/3-Istor)
 
 ---
 
 <div align="center">
-<sub>ARCL CMP · MIT License · Made with ☕ by 3-Istor</sub>
+<sub>CMP · MIT License · Made with ☕ by 3-Istor</sub>
 </div>

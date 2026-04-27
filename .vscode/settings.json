@@ -62,5 +62,6 @@
   "isort.args": ["--profile", "black"],
   "python-envs.defaultEnvManager": "ms-python.python:poetry",
   "python-envs.defaultPackageManager": "ms-python.python:poetry",
-  "python-envs.pythonProjects": []
+  "python-envs.pythonProjects": [],
+  "kiroAgent.configureMCP": "Disabled"
 }

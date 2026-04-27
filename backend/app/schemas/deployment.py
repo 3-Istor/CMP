@@ -35,6 +35,7 @@ class DeploymentRead(BaseModel):
             return {}
         try:
             import json
+
             return json.loads(self.terraform_outputs)
         except Exception:
             return {}

@@ -3,9 +3,10 @@
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { Dashboard } from "@/components/dashboard/Dashboard";
+import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
+import { UserNav } from "@/components/layout/UserNav";
 import { Separator } from "@/components/ui/separator";
 import { createDeployment, getCatalog } from "@/lib/api";
-import { useDeploymentsList } from "@/lib/hooks";
 import type { CatalogTemplate } from "@/types";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -16,7 +17,7 @@ export default function Home() {
   const [selectedTemplate, setSelectedTemplate] =
     useState<CatalogTemplate | null>(null);
   const [deploying, setDeploying] = useState(false);
-  const { refresh } = useDeploymentsList(-1); // Dashboard handles its own polling
+  const [dashboardKey, setDashboardKey] = useState(0);
 
   // Debug logging
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function Home() {
       });
       toast.success(`Deployment of "${name}" started`);
       setSelectedTemplate(null);
-      refresh();
+      setDashboardKey((prev) => prev + 1);
     } catch (err) {
       toast.error(`Deploy failed: ${err}`);
     } finally {
@@ -62,14 +63,13 @@ export default function Home() {
       <header className="border-b px-6 py-4 flex items-center gap-3">
         <span className="text-2xl">⚡</span>
         <div>
-          <h1 className="text-lg font-bold leading-none">ARCL CMP</h1>
+          <h1 className="text-lg font-bold leading-none">CMP</h1>
           <p className="text-xs text-muted-foreground">
             Hybrid Cloud Management Platform
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="h-2 w-2 rounded-full bg-green-500 inline-block" />
-          Terraform-based Deployments
+        <div className="ml-auto">
+          <UserNav />
         </div>
       </header>
 
@@ -80,6 +80,13 @@ export default function Home() {
             Selected: {selectedTemplate.name}
           </div>
         )}
+
+        {/* Global Infrastructure Health */}
+        <section>
+          <GlobalInfraHealth />
+        </section>
+
+        <Separator />
 
         {/* Catalog */}
         <section>
@@ -112,7 +119,7 @@ export default function Home() {
         {/* Dashboard */}
         <section>
           <h2 className="text-xl font-semibold mb-4">My Deployments</h2>
-          <Dashboard />
+          <Dashboard key={dashboardKey} />
         </section>
       </main>
 

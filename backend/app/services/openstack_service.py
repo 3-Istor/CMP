@@ -11,7 +11,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# VM flavor for DB nodes — adjust to your OpenStack flavors
+# VM flavor for DB nodes - adjust to your OpenStack flavors
 OS_FLAVOR = "m1.small"
 OS_IMAGE = "Ubuntu-22.04"
 OS_NETWORK = "3-istor-internal"
@@ -85,7 +85,7 @@ def provision_db_vms(
 def rollback_db_vms(vm1_id: str | None, vm2_id: str | None) -> None:
     """
     SAGA rollback: destroy OpenStack VMs when AWS deployment fails.
-    Called by the orchestrator — must not raise.
+    Called by the orchestrator - must not raise.
     """
     conn = _get_connection()
     for vm_id in [vm1_id, vm2_id]:
@@ -97,7 +97,7 @@ def rollback_db_vms(vm1_id: str | None, vm2_id: str | None) -> None:
                 )
                 logger.info("Rolled back OpenStack VM: %s", vm_id)
             except Exception as exc:
-                # Log but don't raise — rollback must be best-effort
+                # Log but don't raise - rollback must be best-effort
                 logger.error(
                     "Failed to rollback OpenStack VM %s: %s", vm_id, exc
                 )
@@ -130,7 +130,7 @@ def _build_cloud_init(
 ) -> str:
     """Generate a minimal cloud-init user-data script per template."""
     scripts = {
-    "wordpress": f"""#!/bin/bash
+        "wordpress": f"""#!/bin/bash
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
@@ -138,10 +138,10 @@ apt-get update -y
 apt-get install -y mysql-server
 
 # Secure MySQL and create WordPress database
-mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{app_config.get('db_password', 'changeme')}';"
-mysql -uroot -p'{app_config.get('db_password', 'changeme')}' -e "
-  CREATE DATABASE IF NOT EXISTS wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-  CREATE USER IF NOT EXISTS 'wordpress'@'%' IDENTIFIED BY '{app_config.get('db_password', 'changeme')}';
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{app_config.get('db_password', 'changeme')}';"  # pylint: disable=line-too-long
+mysql -uroot -p'{app_config.get('db_password', 'changeme')}' -e "  # pylint: disable=line-too-long
+  CREATE DATABASE IF NOT EXISTS wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;  # pylint: disable=line-too-long
+  CREATE USER IF NOT EXISTS 'wordpress'@'%' IDENTIFIED BY '{app_config.get('db_password', 'changeme')}';  # pylint: disable=line-too-long
   GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'%';
   FLUSH PRIVILEGES;
 "
@@ -154,13 +154,13 @@ systemctl enable mysql
         "nextcloud": f"""#!/bin/bash
 apt-get update -y
 apt-get install -y postgresql
-sudo -u postgres psql -c "CREATE USER nextcloud WITH PASSWORD '{app_config.get('admin_password', 'changeme')}';"
+sudo -u postgres psql -c "CREATE USER nextcloud WITH PASSWORD '{app_config.get('admin_password', 'changeme')}';"  # pylint: disable=line-too-long
 sudo -u postgres psql -c "CREATE DATABASE nextcloud OWNER nextcloud;"
 """,
         "gitlab": f"""#!/bin/bash
 apt-get update -y
 apt-get install -y postgresql redis-server
-sudo -u postgres psql -c "CREATE USER gitlab WITH PASSWORD '{app_config.get('root_password', 'changeme')}';"
+sudo -u postgres psql -c "CREATE USER gitlab WITH PASSWORD '{app_config.get('root_password', 'changeme')}';"  # pylint: disable=line-too-long
 sudo -u postgres psql -c "CREATE DATABASE gitlabhq_production OWNER gitlab;"
 """,
         "grafana": """#!/bin/bash

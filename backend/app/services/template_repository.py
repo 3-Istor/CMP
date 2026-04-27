@@ -87,9 +87,7 @@ class TemplateRepository:
 
                 # Only include enabled templates
                 if not manifest.get("enabled", False):
-                    logger.debug(
-                        "Skipping %s: not enabled", template_dir.name
-                    )
+                    logger.debug("Skipping %s: not enabled", template_dir.name)
                     continue
 
                 # Add template path for Terraform execution

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -7,7 +8,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.routers import catalog, deployments
+from app.routers import account, catalog, deployments, infra
+from app.services import health_poller
 from app.services.template_repository import get_repository
 
 
@@ -29,14 +31,22 @@ async def lifespan(app: FastAPI):
             name="templates",
         )
 
+    # Start background health poller
+    health_poller_task = asyncio.create_task(health_poller.health_poller_loop())
+
     yield
 
-    # Shutdown: cleanup if needed
+    # Shutdown: cancel background tasks
+    health_poller_task.cancel()
+    try:
+        await health_poller_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Hybrid Cloud Management Platform — Terraform-based deployments",
+    description="Hybrid Cloud Management Platform - Terraform-based deployments",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -45,17 +55,21 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:3001",  # Alternative port
+        "http://localhost:3001",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
+        "https://cmp.3istor.com",
     ],
+    allow_origin_regex="https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(account.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
+app.include_router(infra.router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])

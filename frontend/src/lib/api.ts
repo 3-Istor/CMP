@@ -1,12 +1,44 @@
 import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
+import { getSession } from "next-auth/react";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+// Declare runtime config type
+declare global {
+  interface Window {
+    __RUNTIME_CONFIG__?: {
+      apiUrl: string;
+    };
+  }
+}
+
+// Use runtime config if available, otherwise fall back to build-time env var
+const getApiUrl = () => {
+  if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__) {
+    return window.__RUNTIME_CONFIG__.apiUrl;
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+};
+
+const BASE = getApiUrl();
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Inject JWT token from NextAuth session
+  if (typeof window !== "undefined") {
+    const session = await getSession();
+    if (session?.accessToken) {
+      headers["Authorization"] = `Bearer ${session.accessToken}`;
+    }
+  }
+
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { ...headers, ...options?.headers },
+    credentials: "include",
     ...options,
   });
+
   if (!res.ok) {
     const err = await res.text();
     throw new Error(err || `HTTP ${res.status}`);
@@ -46,3 +78,43 @@ export const deleteDeployment = (id: number) =>
 
 export const getDeploymentOutputs = (id: number) =>
   request<TerraformOutputs>(`/deployments/${id}/outputs`);
+
+// Infrastructure Monitoring
+export const getGlobalHealth = () =>
+  request<import("@/types").GlobalHealthResponse>("/infra/health");
+
+export const getAppHealth = (deploymentId: number) =>
+  request<import("@/types").AppHealthResponse>(
+    `/infra/deployments/${deploymentId}/health`,
+  );
+
+// Account & Profile
+export const getCurrentUser = () =>
+  request<import("@/types").UserProfile>("/account/me");
+
+export const uploadProfilePicture = async (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  // Get session to include JWT token
+  const session = await getSession();
+  const headers: Record<string, string> = {};
+
+  if (session?.accessToken) {
+    headers["Authorization"] = `Bearer ${session.accessToken}`;
+  }
+
+  const res = await fetch(`${BASE}/account/picture`, {
+    method: "POST",
+    body: formData,
+    headers,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || `HTTP ${res.status}`);
+  }
+
+  return res.json() as Promise<import("@/types").PictureUploadResponse>;
+};

@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# ARCL CMP Setup Script
+# CMP Setup Script
 # This script automates the initial setup of the Cloud Management Platform
 
 set -e
 
 echo "=========================================="
-echo "ARCL CMP - Automated Setup"
+echo "CMP - Automated Setup"
 echo "=========================================="
 echo ""
 

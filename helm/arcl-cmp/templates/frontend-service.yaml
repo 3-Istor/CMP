@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "arcl-cmp.fullname" . }}-frontend
+  labels:
+    {{- include "arcl-cmp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.frontend.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "arcl-cmp.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend

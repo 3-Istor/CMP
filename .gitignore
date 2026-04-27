@@ -19,3 +19,9 @@ backend/arcl.db
 *.tfstate.backup
 .terraform/
 .terraform.lock.hcl
+
+# Kubernetes secrets
+values-secrets.yaml
+
+# Helm releases
+.helm-releases/

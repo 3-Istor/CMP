@@ -13,6 +13,7 @@ export function useDeploymentPolling(
 ): Deployment | null {
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const terminalReachedRef = useRef<number | null>(null);
 
   const stop = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -25,7 +26,19 @@ export function useDeploymentPolling(
       try {
         const d = await getDeployment(id);
         setDeployment(d);
-        if (TERMINAL_STATUSES.has(d.status)) stop();
+
+        // When reaching terminal status, continue polling for 5 more cycles
+        // to ensure UI updates with final state (outputs, health, etc.)
+        if (TERMINAL_STATUSES.has(d.status)) {
+          if (terminalReachedRef.current === null) {
+            terminalReachedRef.current = 5;
+          } else {
+            terminalReachedRef.current--;
+            if (terminalReachedRef.current <= 0) {
+              stop();
+            }
+          }
+        }
       } catch {
         stop();
       }
@@ -33,7 +46,10 @@ export function useDeploymentPolling(
 
     poll();
     timerRef.current = setInterval(poll, intervalMs);
-    return stop;
+    return () => {
+      stop();
+      terminalReachedRef.current = null;
+    };
   }, [id, intervalMs, stop]);
 
   return deployment;
@@ -49,7 +65,7 @@ export function useDeploymentsList(intervalMs = 5000) {
       const data = await getDeployments();
       setDeployments(data);
     } catch {
-      // Backend offline — silently keep existing state
+      // Backend offline - silently keep existing state
     } finally {
       setLoading(false);
     }
@@ -64,4 +80,71 @@ export function useDeploymentsList(intervalMs = 5000) {
   }, [refresh, intervalMs]);
 
   return { deployments, loading, refresh };
+}
+
+/** Poll global infrastructure health at a fixed interval. */
+export function useGlobalHealth(intervalMs = 15000) {
+  const [health, setHealth] = useState<
+    import("@/types").GlobalHealthResponse | null
+  >(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const { getGlobalHealth } = await import("./api");
+      const data = await getGlobalHealth();
+      setHealth(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch health");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    if (intervalMs <= 0) return;
+    const timer = setInterval(refresh, intervalMs);
+    return () => clearInterval(timer);
+  }, [refresh, intervalMs]);
+
+  return { health, loading, error, refresh };
+}
+
+/** Poll application-specific health at a fixed interval. */
+export function useAppHealth(deploymentId: number | null, intervalMs = 5000) {
+  const [health, setHealth] = useState<
+    import("@/types").AppHealthResponse | null
+  >(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!deploymentId) return;
+    try {
+      const { getAppHealth } = await import("./api");
+      const data = await getAppHealth(deploymentId);
+      setHealth(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch health");
+    } finally {
+      setLoading(false);
+    }
+  }, [deploymentId]);
+
+  useEffect(() => {
+    if (!deploymentId) {
+      setLoading(false);
+      return;
+    }
+    refresh();
+    if (intervalMs <= 0) return;
+    const timer = setInterval(refresh, intervalMs);
+    return () => clearInterval(timer);
+  }, [refresh, intervalMs, deploymentId]);
+
+  return { health, loading, error, refresh };
 }
