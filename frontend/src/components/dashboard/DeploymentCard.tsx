@@ -5,19 +5,19 @@ import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
@@ -56,6 +56,8 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmStep, setConfirmStep] = useState(1);
   const [healthOpen, setHealthOpen] = useState(false);
+
+  const isKubernetes = currentDeployment.provider_type === "kubernetes";
 
   const handleDeleteClick = () => {
     setConfirmStep(1);
@@ -172,7 +174,82 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
         <CardContent className="space-y-3 text-sm">
           <DeploymentStepper deployment={currentDeployment} />
 
-          {currentDeployment.status === "running" &&
+          {/* Kubernetes Quick Actions */}
+          {isKubernetes &&
+            currentDeployment.status === "running" &&
+            currentDeployment.github_repo_url && (
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Quick Actions
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    asChild
+                  >
+                    <a
+                      href={currentDeployment.github_repo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Github className="h-4 w-4 mr-2" />
+                      Open GitHub Repository
+                      <ExternalLink className="h-3 w-3 ml-auto" />
+                    </a>
+                  </Button>
+                  {currentDeployment.argocd_app_name && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      asChild
+                    >
+                      <a
+                        href={`https://argocd.3istor.com/applications/${currentDeployment.argocd_app_name}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <FileCode className="h-4 w-4 mr-2" />
+                        View in ArgoCD
+                        <ExternalLink className="h-3 w-3 ml-auto" />
+                      </a>
+                    </Button>
+                  )}
+                  {currentDeployment.project_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      asChild
+                    >
+                      <a
+                        href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${currentDeployment.project_id}/${currentDeployment.name}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Shield className="h-4 w-4 mr-2" />
+                        Manage Secrets
+                        <ExternalLink className="h-3 w-3 ml-auto" />
+                      </a>
+                    </Button>
+                  )}
+                </div>
+                {currentDeployment.k8s_namespace && (
+                  <div className="rounded-md bg-muted p-2 text-xs">
+                    <span className="text-muted-foreground">Namespace: </span>
+                    <span className="font-mono">
+                      {currentDeployment.k8s_namespace}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+          {/* Legacy Outputs */}
+          {!isKubernetes &&
+            currentDeployment.status === "running" &&
             Object.keys(outputs).length > 0 && (
               <div className="rounded-md bg-muted p-3 space-y-1 text-xs font-mono">
                 <div className="font-semibold text-muted-foreground mb-2">
@@ -195,12 +272,6 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                     )}
                   </div>
                 ))}
-                {/* {currentDeployment.resource_count !== null && (
-                  <div className="mt-2 pt-2 border-t border-border">
-                    <span className="text-muted-foreground">Resources: </span>
-                    {currentDeployment.resource_count}
-                  </div>
-                )} */}
               </div>
             )}
         </CardContent>

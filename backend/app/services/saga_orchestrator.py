@@ -1,21 +1,25 @@
 """
 SAGA Orchestrator - implements the "Design for Failure" pattern.
 
-Flow:
-  1. Deploy OpenStack VMs (DB layer)        → on failure: cleanup OS VMs, mark FAILED
-  2. Deploy AWS ASG + ALB (web layer)       → on failure: rollback OS VMs, mark FAILED
-  3. Mark deployment RUNNING
+Supports two deployment strategies:
+  A. LEGACY_HYBRID: OpenStack VMs + AWS ASG (original SAGA pattern)
+  B. KUBERNETES: GitHub + Terraform + ArgoCD (GitOps pattern)
 
 This runs as a FastAPI BackgroundTask so the API never blocks.
 """
 
 import json
 import logging
+import os
+import subprocess
+import tempfile
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.models.deployment import Deployment, DeploymentStatus
-from app.services import aws_service, openstack_service
+from app.core.config import settings
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.services import aws_service, github_service, openstack_service
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +27,284 @@ logger = logging.getLogger(__name__)
 def run_deployment(deployment_id: int, db: Session) -> None:
     """
     Entry point called by the background task.
-    Fetches the deployment record and runs the full SAGA.
+    Routes to the appropriate deployment strategy based on provider_type.
     """
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         logger.error("Deployment %s not found", deployment_id)
         return
 
+    # Route based on provider type
+    if deployment.provider_type == ProviderType.KUBERNETES:
+        _run_kubernetes_deployment(deployment, db)
+    else:
+        _run_legacy_hybrid_deployment(deployment, db)
+
+
+def _run_kubernetes_deployment(deployment: Deployment, db: Session) -> None:
+    """
+    Kubernetes GitOps deployment flow using Terraform Day-0 bootstrapping.
+
+    Steps:
+      1. Fetch GitHub Installation Token from Keycloak user profile
+      2. Execute Terraform with dynamic S3 state key
+      3. Terraform creates: GitHub Repo, K8s Namespace, Vault Secrets, ArgoCD App
+      4. ArgoCD takes over (Day-1 deployment)
+    """
     app_config = json.loads(deployment.app_config or "{}")
+
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DEPLOYING,
+        "🔐 Authenticating with GitHub App..."
+    )
+
+    try:
+        # Get GitHub installation ID from app_config (should be fetched from Keycloak)
+        github_installation_id = app_config.get("github_installation_id")
+        if not github_installation_id:
+            raise ValueError("GitHub installation ID not found in app config")
+
+        # Exchange for installation token
+        import asyncio
+        installation_token = asyncio.run(
+            github_service.get_installation_token(github_installation_id)
+        )
+
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.DEPLOYING,
+            "🛠️ Bootstrapping infrastructure with Terraform..."
+        )
+
+        # Execute Terraform with dynamic state
+        tf_outputs = _execute_terraform_kubernetes(
+            deployment=deployment,
+            app_config=app_config,
+            github_token=installation_token
+        )
+
+        # Store outputs in deployment record
+        deployment.github_repo_url = tf_outputs.get("github_repo_url")
+        deployment.argocd_app_name = tf_outputs.get("argocd_app_name")
+        deployment.k8s_namespace = tf_outputs.get("k8s_namespace")
+        deployment.terraform_outputs = json.dumps(tf_outputs)
+        db.commit()
+
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.RUNNING,
+            f"✅ Running - ArgoCD syncing from {deployment.github_repo_url}"
+        )
+
+    except Exception as exc:
+        logger.error("Kubernetes deployment failed: %s", exc, exc_info=True)
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            f"❌ Deployment failed: {str(exc)[:200]}"
+        )
+
+
+def _execute_terraform_kubernetes(
+    deployment: Deployment,
+    app_config: dict,
+    github_token: str
+) -> dict:
+    """
+    Execute the github_bootstrap Terraform module with dynamic S3 state.
+
+    Returns:
+        dict: Terraform outputs (github_repo_url, argocd_app_name, k8s_namespace)
+    """
+    module_path = Path(__file__).parent.parent / "terraform" / "github_bootstrap"
+
+    if not module_path.exists():
+        raise FileNotFoundError(f"Terraform module not found: {module_path}")
+
+    # Create temporary working directory
+    with tempfile.TemporaryDirectory() as tmpdir:
+        work_dir = Path(tmpdir)
+
+        # Generate tfvars file
+        tfvars_content = f"""
+project_name            = "{app_config.get('project_name', 'default')}"
+app_name                = "{deployment.name}"
+replica_count           = {app_config.get('replica_count', 2)}
+sso_protected           = {str(app_config.get('sso_protected', False)).lower()}
+github_installation_id  = "{app_config.get('github_installation_id')}"
+github_app_private_key  = <<-EOT
+{settings.GITHUB_APP_PRIVATE_KEY}
+EOT
+"""
+
+        tfvars_file = work_dir / "terraform.tfvars"
+        tfvars_file.write_text(tfvars_content)
+
+        # Dynamic S3 state key
+        project_name = app_config.get('project_name', 'default')
+        state_key = f"cmp/projects/{project_name}/{deployment.name}.tfstate"
+        deployment.terraform_state_path = state_key
+
+        # Initialize Terraform with dynamic backend
+        logger.info("Initializing Terraform with state key: %s", state_key)
+
+        init_cmd = [
+            "terraform", "init",
+            "-backend-config=bucket=3-istor-tf-infra-aws",
+            f"-backend-config=key={state_key}",
+            "-backend-config=region=eu-west-3",
+            "-backend-config=encrypt=true",
+            "-backend-config=dynamodb_table=terraform-state-lock",
+            "-reconfigure"
+        ]
+
+        _run_terraform_command(init_cmd, module_path, work_dir)
+
+        # Apply Terraform
+        logger.info("Applying Terraform configuration...")
+        apply_cmd = [
+            "terraform", "apply",
+            "-auto-approve",
+            f"-var-file={tfvars_file}"
+        ]
+
+        _run_terraform_command(apply_cmd, module_path, work_dir)
+
+        # Extract outputs
+        output_cmd = ["terraform", "output", "-json"]
+        result = _run_terraform_command(output_cmd, module_path, work_dir, capture=True)
+
+        outputs_raw = json.loads(result.stdout)
+        outputs = {k: v["value"] for k, v in outputs_raw.items()}
+
+        logger.info("Terraform outputs: %s", outputs)
+        return outputs
+
+
+def _run_terraform_command(
+    cmd: list[str],
+    module_path: Path,
+    work_dir: Path,
+    capture: bool = False
+) -> subprocess.CompletedProcess:
+    """
+    Execute a Terraform command with proper environment and error handling.
+    """
+    env = os.environ.copy()
+    env["TF_IN_AUTOMATION"] = "1"
+    env["TF_INPUT"] = "0"
+
+    # Add AWS credentials for S3 backend
+    if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
+        env["AWS_ACCESS_KEY_ID"] = settings.TF_BACKEND_AWS_ACCESS_KEY_ID
+        env["AWS_SECRET_ACCESS_KEY"] = settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=module_path,
+            env=env,
+            check=True,
+            capture_output=capture,
+            text=True
+        )
+        return result
+    except subprocess.CalledProcessError as exc:
+        logger.error("Terraform command failed: %s", exc.stderr if capture else exc)
+        raise RuntimeError(f"Terraform failed: {exc.stderr if capture else str(exc)}") from exc
+
+
+def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
+    """
+    Legacy SAGA pattern: OpenStack VMs + AWS ASG.
+    Preserved for backward compatibility.
+    """
+    app_config = json.loads(deployment.app_config or "{}")
+
+    # ── Step 1: OpenStack ─────────────────────────────────────────────────
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DEPLOYING,
+        "🔧 Deploying OpenStack DB VMs...",
+    )
+    try:
+        # Note: Legacy deployments stored IDs directly in deployment object
+        # This is now stored in terraform_outputs for consistency
+        vm_result = openstack_service.provision_db_vms(
+            deployment.name, deployment.template_id, app_config
+        )
+        outputs = {"openstack_vms": vm_result}
+        deployment.terraform_outputs = json.dumps(outputs)
+        db.commit()
+        logger.info("OpenStack VMs ready for deployment %s", deployment.id)
+    except Exception as exc:
+        logger.error("OpenStack step failed: %s", exc)
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            f"❌ OpenStack provisioning failed: {exc}",
+        )
+        return
+
+    # ── Step 2: AWS ───────────────────────────────────────────────────────
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DEPLOYING,
+        "☁️ Deploying AWS ASG + Load Balancer...",
+    )
+    try:
+        vm_data = json.loads(deployment.terraform_outputs).get("openstack_vms", {})
+        aws_result = aws_service.provision_web_layer(
+            deployment.name,
+            deployment.template_id,
+            app_config,
+            vm_data.get("vm1", {}).get("ip"),
+            vm_data.get("vm2", {}).get("ip"),
+        )
+        outputs = json.loads(deployment.terraform_outputs)
+        outputs["aws"] = aws_result
+        deployment.terraform_outputs = json.dumps(outputs)
+        db.commit()
+        logger.info("AWS layer ready for deployment %s", deployment.id)
+    except Exception as exc:
+        logger.error("AWS step failed - triggering SAGA rollback: %s", exc)
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            "⏪ AWS failed - rolling back OpenStack VMs...",
+        )
+        # Rollback OpenStack
+        vm_data = json.loads(deployment.terraform_outputs).get("openstack_vms", {})
+        openstack_service.rollback_db_vms(
+            vm_data.get("vm1", {}).get("id"),
+            vm_data.get("vm2", {}).get("id")
+        )
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            f"❌ AWS provisioning failed. OpenStack rolled back. Error: {exc}",
+        )
+        return
+
+    # ── Step 3: Done ──────────────────────────────────────────────────────
+    outputs = json.loads(deployment.terraform_outputs)
+    alb_dns = outputs.get("aws", {}).get("alb_dns", "N/A")
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.RUNNING,
+        f"✅ Running - {alb_dns}",
+    )
 
     # ── Step 1: OpenStack ─────────────────────────────────────────────────
     _update(
@@ -108,31 +382,107 @@ def run_deployment(deployment_id: int, db: Session) -> None:
 
 def run_deletion(deployment_id: int, db: Session) -> None:
     """
-    Delete all cloud resources for a deployment (OpenStack + AWS).
-    Called as a background task after double-confirmation.
+    Delete all cloud resources for a deployment.
+    Routes to the appropriate deletion strategy based on provider_type.
     """
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         return
 
+    if deployment.provider_type == ProviderType.KUBERNETES:
+        _run_kubernetes_deletion(deployment, db)
+    else:
+        _run_legacy_hybrid_deletion(deployment, db)
+
+
+def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
+    """
+    Delete Kubernetes deployment using Terraform destroy.
+    """
+    _update(
+        db,
+        deployment,
+        DeploymentStatus.DELETING,
+        "🗑️ Destroying Kubernetes resources via Terraform...",
+    )
+
+    try:
+        module_path = Path(__file__).parent.parent / "terraform" / "github_bootstrap"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_dir = Path(tmpdir)
+
+            # Initialize with the same state key
+            init_cmd = [
+                "terraform", "init",
+                "-backend-config=bucket=3-istor-tf-infra-aws",
+                f"-backend-config=key={deployment.terraform_state_path}",
+                "-backend-config=region=eu-west-3",
+                "-backend-config=encrypt=true",
+                "-reconfigure"
+            ]
+
+            _run_terraform_command(init_cmd, module_path, work_dir)
+
+            # Destroy
+            destroy_cmd = ["terraform", "destroy", "-auto-approve"]
+            _run_terraform_command(destroy_cmd, module_path, work_dir)
+
+            logger.info("Kubernetes resources destroyed for deployment %s", deployment.id)
+
+    except Exception as exc:
+        logger.error("Kubernetes deletion failed: %s", exc)
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            f"❌ Deletion failed: {exc}",
+        )
+        return
+
+    _update(db, deployment, DeploymentStatus.DELETED, "✅ Deleted")
+
+
+def _run_legacy_hybrid_deletion(deployment: Deployment, db: Session) -> None:
+    """
+    Delete legacy hybrid deployment (OpenStack + AWS).
+    """
     _update(
         db,
         deployment,
         DeploymentStatus.DELETING,
         "🗑️ Deleting AWS resources...",
     )
-    if deployment.aws_asg_name:
-        aws_service.delete_web_layer(deployment.aws_asg_name, deployment.name)
 
-    _update(
-        db,
-        deployment,
-        DeploymentStatus.DELETING,
-        "🗑️ Deleting OpenStack VMs...",
-    )
-    openstack_service.delete_db_vms(
-        deployment.os_vm_db1_id, deployment.os_vm_db2_id
-    )
+    try:
+        outputs = json.loads(deployment.terraform_outputs or "{}")
+        aws_data = outputs.get("aws", {})
+
+        if aws_data.get("asg_name"):
+            aws_service.delete_web_layer(aws_data["asg_name"], deployment.name)
+
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.DELETING,
+            "🗑️ Deleting OpenStack VMs...",
+        )
+
+        vm_data = outputs.get("openstack_vms", {})
+        openstack_service.delete_db_vms(
+            vm_data.get("vm1", {}).get("id"),
+            vm_data.get("vm2", {}).get("id")
+        )
+
+    except Exception as exc:
+        logger.error("Legacy deletion failed: %s", exc)
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.FAILED,
+            f"❌ Deletion failed: {exc}",
+        )
+        return
 
     _update(db, deployment, DeploymentStatus.DELETED, "✅ Deleted")
 

@@ -1,0 +1,3 @@
+[submodule ".kiro/steering/docs"]
+	path = .kiro/steering/docs
+	url = https://github.com/3-Istor/cnp-docs.git

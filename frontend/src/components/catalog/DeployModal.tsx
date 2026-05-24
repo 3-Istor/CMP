@@ -1,10 +1,15 @@
 "use client";
 
+import { AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getGitHubStatus } from "@/lib/api";
 import type { CatalogTemplate } from "@/types";
-import { useEffect, useRef, useState } from "react";
 
 interface Props {
   template: CatalogTemplate | null;
@@ -18,8 +23,22 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const [fieldValues, setFieldValues] = useState<
     Record<string, string | number>
   >({});
+  const [hasGitHub, setHasGitHub] = useState(false);
+  const [checkingGitHub, setCheckingGitHub] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const isOpen = !!template;
+  const isKubernetes = template?.category === "paas";
+
+  // Check GitHub status when opening a Kubernetes template
+  useEffect(() => {
+    if (template && isKubernetes) {
+      setCheckingGitHub(true);
+      getGitHubStatus()
+        .then((data) => setHasGitHub(!!data.github_installation_id))
+        .catch(() => setHasGitHub(false))
+        .finally(() => setCheckingGitHub(false));
+    }
+  }, [template, isKubernetes]);
 
   // Reset form when template changes
   useEffect(() => {
@@ -69,8 +88,11 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid()) return;
+    if (isKubernetes && !hasGitHub) return; // Prevent submit if GitHub not linked
     onConfirm(appName.trim(), fieldValues);
   };
+
+  const canDeploy = isFormValid() && (!isKubernetes || hasGitHub);
 
   return (
     <>
@@ -217,23 +239,64 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                   </div>
                 )}
 
+                {/* GitHub Account Warning for Kubernetes */}
+                {isKubernetes && !checkingGitHub && !hasGitHub && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>GitHub Account Required</AlertTitle>
+                    <AlertDescription>
+                      To deploy Kubernetes applications, you need to link your
+                      GitHub account first.{" "}
+                      <Link
+                        href="/account"
+                        className="underline font-medium hover:no-underline"
+                      >
+                        Go to Account Settings
+                      </Link>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {/* Info box */}
                 <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-1.5 text-xs text-muted-foreground">
                   <div className="font-medium text-foreground">
                     What will be provisioned
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                    2× OpenStack VMs - stateful DB layer
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                    2× AWS t3.micro - stateless web layer (ASG + ALB)
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
-                    Auto-rollback if AWS step fails
-                  </div>
+                  {isKubernetes ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                        Private GitHub repository with template code
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                        Kubernetes namespace with RBAC
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                        ArgoCD Application for GitOps
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
+                        Vault secrets path
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                        2× OpenStack VMs - stateful DB layer
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                        2× AWS t3.micro - stateless web layer (ASG + ALB)
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
+                        Auto-rollback if AWS step fails
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -247,7 +310,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading || !isFormValid()}>
+                <Button type="submit" disabled={loading || !canDeploy}>
                   {loading ? (
                     <span className="flex items-center gap-2">
                       <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />

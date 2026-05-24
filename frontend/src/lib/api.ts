@@ -92,6 +92,9 @@ export const getAppHealth = (deploymentId: number) =>
 export const getCurrentUser = () =>
   request<import("@/types").UserProfile>("/account/me");
 
+export const getGitHubStatus = () =>
+  request<import("@/types").GitHubStatus>("/user/github-status");
+
 export const uploadProfilePicture = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);

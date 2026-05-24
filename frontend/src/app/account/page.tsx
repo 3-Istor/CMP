@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { GitHubLinkButton } from "@/components/account/GitHubLinkButton";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -361,6 +362,9 @@ export default function AccountPage() {
               </p>
             </CardContent>
           </Card>
+
+          {/* GitHub Integration Card */}
+          <GitHubLinkButton />
         </div>
       </main>
     </div>

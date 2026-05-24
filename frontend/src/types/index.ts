@@ -9,6 +9,8 @@ export type DeploymentStatus =
   | "deleting"
   | "deleted";
 
+export type ProviderType = "legacy_hybrid" | "kubernetes";
+
 export interface Deployment {
   id: number;
   name: string;
@@ -22,6 +24,13 @@ export interface Deployment {
   resource_count: number | null;
   created_at: string;
   updated_at: string;
+
+  // Phase 3: Multi-Provider Support
+  provider_type: ProviderType;
+  project_id: string | null;
+  github_repo_url: string | null;
+  argocd_app_name: string | null;
+  k8s_namespace: string | null;
 }
 
 export interface TerraformOutputs {
@@ -107,6 +116,11 @@ export interface UserProfile {
   name: string | null;
   picture: string | null;
   groups: string[];
+  github_installation_id?: string | null; // Phase 3: GitHub App integration
+}
+
+export interface GitHubStatus {
+  github_installation_id: string | null;
 }
 
 export interface PictureUploadResponse {

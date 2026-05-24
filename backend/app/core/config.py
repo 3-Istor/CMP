@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_DEFAULT_REGION: str = "eu-west-3"
+    AWS_INSTANCE_TYPE: str = "t3.micro"  # Budget-safe instance type
 
     # User Avatars S3 Storage (self-managed S3-compatible storage)
     AVATARS_S3_ENDPOINT: str = "https://s3.3istor.com"
@@ -61,6 +62,9 @@ class Settings(BaseSettings):
 
     # Discord Alerting (optional - for health monitoring alerts)
     DISCORD_WEBHOOK_URL: str = ""
+
+    # GitHub App Integration (for Kubernetes GitOps provisioning)
+    GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
 
 
 settings = Settings()

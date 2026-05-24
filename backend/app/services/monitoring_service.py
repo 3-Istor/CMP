@@ -194,7 +194,14 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
                         name=server.name, status=server.status.lower(), ip=fixed_ip
                     )
 
-            logger.warning("VPN gateway server not found")
+        except openstack.exceptions.HttpException as e:
+            if "ServiceUnavailable" in str(e) or "500" in str(e):
+                logger.warning(
+                    "OpenStack Neutron service unavailable, VPN status unknown: %s",
+                    str(e)[:200]
+                )
+                return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
+            raise            logger.warning("VPN gateway server not found")
             return None
         except Exception as exc:
             logger.error("Error fetching OpenStack VPN: %s", exc, exc_info=True)
@@ -270,12 +277,22 @@ async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
                 )
             logger.info("Found %d OpenStack hypervisors", len(hypervisors))
             return hypervisors
-        except Exception as exc:
+        except openstack.exceptions.HttpException as exc:
             error_msg = str(exc)
-            if "403" in error_msg or "Forbidden" in error_msg or "Policy doesn't allow" in error_msg:
+            if "ServiceUnavailable" in error_msg or "500" in error_msg:
+                logger.warning(
+                    "OpenStack Neutron service unavailable, hypervisor status unknown: %s",
+                    error_msg[:200]
+                )
+                return []
+            elif "403" in error_msg or "Forbidden" in error_msg or "Policy doesn't allow" in error_msg:
                 logger.warning("OpenStack hypervisors access forbidden (403) - user lacks permissions")
+                return []
             else:
                 logger.error("Error fetching OpenStack hypervisors: %s", exc, exc_info=True)
+                return []
+        except Exception as exc:
+            logger.error("Error fetching OpenStack hypervisors: %s", exc, exc_info=True)
             return []
 
     try:

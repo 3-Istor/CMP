@@ -19,6 +19,12 @@ class DeploymentStatus(str, enum.Enum):
     DELETED = "deleted"
 
 
+class ProviderType(str, enum.Enum):
+    """Discriminator for multi-provider deployments."""
+    LEGACY_HYBRID = "legacy_hybrid"  # OpenStack + AWS
+    KUBERNETES = "kubernetes"  # K3s + ArgoCD + GitOps
+
+
 class Deployment(Base):
     __tablename__ = "deployments"
 
@@ -32,7 +38,22 @@ class Deployment(Base):
         String(255), default="Initializing..."
     )
 
-    # Terraform outputs (JSON)
+    # ── Provider Discriminator ────────────────────────────────────────────
+    provider_type: Mapped[ProviderType] = mapped_column(
+        Enum(ProviderType), default=ProviderType.LEGACY_HYBRID, nullable=False
+    )
+
+    # ── Multi-Tenancy Fields (Kubernetes) ─────────────────────────────────
+    project_id: Mapped[str | None] = mapped_column(
+        String(100)
+    )  # Keycloak Project Group
+
+    # ── Kubernetes GitOps Fields ──────────────────────────────────────────
+    github_repo_url: Mapped[str | None] = mapped_column(String(255))
+    argocd_app_name: Mapped[str | None] = mapped_column(String(100))
+    k8s_namespace: Mapped[str | None] = mapped_column(String(100))
+
+    # ── Terraform State & Outputs ─────────────────────────────────────────
     # Stores all outputs from Terraform (IPs, URLs, resource IDs, etc.)
     terraform_outputs: Mapped[str | None] = mapped_column(
         Text
@@ -42,7 +63,7 @@ class Deployment(Base):
     terraform_state_path: Mapped[str | None] = mapped_column(String(255))
     resource_count: Mapped[int | None] = mapped_column(Integer, default=0)
 
-    # Metadata
+    # ── Metadata ──────────────────────────────────────────────────────────
     app_config: Mapped[str | None] = mapped_column(
         Text
     )  # JSON of user-provided config

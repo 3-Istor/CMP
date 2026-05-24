@@ -6,6 +6,7 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { UserNav } from "@/components/layout/UserNav";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, getCatalog } from "@/lib/api";
 import type { CatalogTemplate } from "@/types";
 import { useEffect, useState } from "react";
@@ -34,6 +35,12 @@ export default function Home() {
       })
       .finally(() => setLoadingCatalog(false));
   }, []);
+
+  // Separate templates by category
+  // PaaS: explicitly marked as "paas"
+  // IaaS: everything else (legacy templates, or explicitly marked as "iaas")
+  const paasTemplates = templates.filter((t) => t.category === "paas");
+  const iaasTemplates = templates.filter((t) => t.category !== "paas");
 
   const handleDeploy = async (
     name: string,
@@ -110,7 +117,51 @@ export default function Home() {
               </p>
             </div>
           ) : (
-            <CatalogGrid templates={templates} onDeploy={setSelectedTemplate} />
+            <Tabs defaultValue="paas" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="paas" className="gap-2">
+                  <span>🚀</span>
+                  <span>Kubernetes & GitOps</span>
+                </TabsTrigger>
+                <TabsTrigger value="iaas" className="gap-2">
+                  <span>🖥️</span>
+                  <span>IaaS & VMs</span>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="paas" className="mt-0">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Deploy containerized applications with GitOps (GitHub +
+                  ArgoCD)
+                </p>
+                {paasTemplates.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No Kubernetes templates available</p>
+                  </div>
+                ) : (
+                  <CatalogGrid
+                    templates={paasTemplates}
+                    onDeploy={setSelectedTemplate}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent value="iaas" className="mt-0">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Deploy VMs on OpenStack and AWS Auto Scaling Groups
+                </p>
+                {iaasTemplates.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No IaaS templates available</p>
+                  </div>
+                ) : (
+                  <CatalogGrid
+                    templates={iaasTemplates}
+                    onDeploy={setSelectedTemplate}
+                  />
+                )}
+              </TabsContent>
+            </Tabs>
           )}
         </section>
 
