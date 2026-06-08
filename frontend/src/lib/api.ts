@@ -92,8 +92,39 @@ export const getAppHealth = (deploymentId: number) =>
 export const getCurrentUser = () =>
   request<import("@/types").UserProfile>("/account/me");
 
-export const getGitHubStatus = () =>
-  request<import("@/types").GitHubStatus>("/user/github-status");
+export const getGitHubStatus = async (): Promise<import("@/types").GitHubStatus> => {
+  const profile = await request<import("@/types").UserProfile>("/account/me");
+  return { github_installation_id: profile.github_installation_id ?? null };
+};
+
+// Projects (Phase 4)
+export const getProjects = () =>
+  request<import("@/types").Project[]>("/projects/");
+
+export const createProject = (project_name: string) =>
+  request<import("@/types").ProjectCreateResponse>("/projects/", {
+    method: "POST",
+    body: JSON.stringify({ project_name }),
+  });
+
+export const getProjectApps = (project_name: string) =>
+  request<import("@/types").Deployment[]>(`/projects/${project_name}/apps`);
+
+// Day-2 GitOps Config (Phase 4)
+export const getDeploymentConfig = (id: number) =>
+  request<import("@/types").DeploymentConfig>(`/deployments/${id}/config`);
+
+export const updateDeploymentConfig = (
+  id: number,
+  payload: Record<string, unknown> & { _sha: string },
+) =>
+  request<import("@/types").DeploymentConfigUpdateResponse>(
+    `/deployments/${id}/config`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 
 export const uploadProfilePicture = async (file: File) => {
   const formData = new FormData();

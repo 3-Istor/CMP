@@ -51,10 +51,17 @@ class Settings(BaseSettings):
     AVATARS_S3_REGION: str = "eu-west-3"
     AVATARS_PUBLIC_URL_BASE: str = "https://avatars-s3.3istor.com"
 
-    # Keycloak (for user profile management)
+    # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
     KEYCLOAK_CLIENT_ID: str = "3-istor-openid"
     KEYCLOAK_CLIENT_SECRET: str = ""
+    # Admin credentials used by Terraform k3s-project-bootstrap module
+    KEYCLOAK_ADMIN_USERNAME: str = ""
+    KEYCLOAK_ADMIN_PASSWORD: str = ""
+
+    # Vault (for secret management in Terraform modules)
+    VAULT_URL: str = ""
+    VAULT_TOKEN: str = ""
 
     # Cloudflare (for dynamic DNS in Terraform templates)
     CLOUDFLARE_API_TOKEN: str = ""

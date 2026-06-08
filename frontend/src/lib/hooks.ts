@@ -148,3 +148,60 @@ export function useAppHealth(deploymentId: number | null, intervalMs = 5000) {
 
   return { health, loading, error, refresh };
 }
+
+/** Fetch the list of projects the current user belongs to (no polling). */
+export function useProjects() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getProjects();
+      setProjects(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch projects");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { projects, loading, error, refresh };
+}
+
+/** Fetch applications belonging to a specific project. */
+export function useProjectApps(projectName: string | null) {
+  const [apps, setApps] = useState<Deployment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!projectName) return;
+    setLoading(true);
+    try {
+      const data = await getProjectApps(projectName);
+      setApps(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch apps");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectName]);
+
+  useEffect(() => {
+    if (!projectName) {
+      setLoading(false);
+      return;
+    }
+    refresh();
+  }, [refresh, projectName]);
+
+  return { apps, loading, error, refresh };
+}

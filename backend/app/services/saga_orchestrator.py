@@ -116,73 +116,78 @@ def _execute_terraform_kubernetes(
     github_token: str
 ) -> dict:
     """
-    Execute the github_bootstrap Terraform module with dynamic S3 state.
+    Execute the ``k3s-gitops-app`` Terraform module with dynamic S3 state.
+
+    This module creates the full Day-0 stack for a containerised application:
+      - GitHub repository (bootstrapped from template)
+      - Kubernetes namespace
+      - Vault secrets
+      - Cloudflare Tunnel (optional)
+      - ArgoCD Application CRD
+
+    All credentials are injected as ``TF_VAR_*`` environment variables so
+    they never appear in tfvars files or Terraform state.
 
     Returns:
-        dict: Terraform outputs (github_repo_url, argocd_app_name, k8s_namespace)
+        dict: Terraform outputs (github_repo_url, argocd_app_name, k8s_namespace, …)
     """
-    module_path = Path(__file__).parent.parent / "terraform" / "github_bootstrap"
+    module_path = Path(__file__).parent.parent / "terraform" / "k3s-gitops-app"
 
     if not module_path.exists():
-        raise FileNotFoundError(f"Terraform module not found: {module_path}")
+        raise FileNotFoundError(
+            f"Terraform module not found: {module_path}. "
+            "Please ensure the k3s-gitops-app module is present."
+        )
 
-    # Create temporary working directory
+    project_name = app_config.get("project_name", "default")
+    state_key = f"cmp/projects/{project_name}/{deployment.name}.tfstate"
+    deployment.terraform_state_path = state_key
+
     with tempfile.TemporaryDirectory() as tmpdir:
         work_dir = Path(tmpdir)
 
-        # Generate tfvars file
-        tfvars_content = f"""
-project_name            = "{app_config.get('project_name', 'default')}"
-app_name                = "{deployment.name}"
-replica_count           = {app_config.get('replica_count', 2)}
-sso_protected           = {str(app_config.get('sso_protected', False)).lower()}
-github_installation_id  = "{app_config.get('github_installation_id')}"
-github_app_private_key  = <<-EOT
-{settings.GITHUB_APP_PRIVATE_KEY}
-EOT
-"""
+        logger.info(
+            "Initialising Terraform (module: k3s-gitops-app, state: %s)", state_key
+        )
 
-        tfvars_file = work_dir / "terraform.tfvars"
-        tfvars_file.write_text(tfvars_content)
-
-        # Dynamic S3 state key
-        project_name = app_config.get('project_name', 'default')
-        state_key = f"cmp/projects/{project_name}/{deployment.name}.tfstate"
-        deployment.terraform_state_path = state_key
-
-        # Initialize Terraform with dynamic backend
-        logger.info("Initializing Terraform with state key: %s", state_key)
-
+        # ── terraform init ────────────────────────────────────────────
         init_cmd = [
             "terraform", "init",
-            "-backend-config=bucket=3-istor-tf-infra-aws",
+            f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
             f"-backend-config=key={state_key}",
-            "-backend-config=region=eu-west-3",
+            f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
             "-backend-config=encrypt=true",
-            "-backend-config=dynamodb_table=terraform-state-lock",
-            "-reconfigure"
+            *(
+                [f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"]
+                if settings.TF_BACKEND_S3_DYNAMODB_TABLE
+                else []
+            ),
+            "-reconfigure",
         ]
+        _run_terraform_command(init_cmd, module_path, work_dir, github_token=github_token)
 
-        _run_terraform_command(init_cmd, module_path, work_dir)
-
-        # Apply Terraform
-        logger.info("Applying Terraform configuration...")
+        # ── terraform apply ───────────────────────────────────────────
+        logger.info("Applying k3s-gitops-app Terraform module…")
         apply_cmd = [
             "terraform", "apply",
             "-auto-approve",
-            f"-var-file={tfvars_file}"
+            # Non-sensitive variables passed as -var flags
+            f"-var=project_name={project_name}",
+            f"-var=app_name={deployment.name}",
+            f"-var=replica_count={app_config.get('replica_count', 2)}",
+            f"-var=sso_protected={str(app_config.get('sso_protected', False)).lower()}",
         ]
+        _run_terraform_command(apply_cmd, module_path, work_dir, github_token=github_token)
 
-        _run_terraform_command(apply_cmd, module_path, work_dir)
-
-        # Extract outputs
+        # ── terraform output ──────────────────────────────────────────
         output_cmd = ["terraform", "output", "-json"]
-        result = _run_terraform_command(output_cmd, module_path, work_dir, capture=True)
+        result = _run_terraform_command(
+            output_cmd, module_path, work_dir, github_token=github_token, capture=True
+        )
 
         outputs_raw = json.loads(result.stdout)
         outputs = {k: v["value"] for k, v in outputs_raw.items()}
-
-        logger.info("Terraform outputs: %s", outputs)
+        logger.info("Terraform outputs: %s", list(outputs.keys()))
         return outputs
 
 
@@ -190,19 +195,60 @@ def _run_terraform_command(
     cmd: list[str],
     module_path: Path,
     work_dir: Path,
+    github_token: str = "",
     capture: bool = False
 ) -> subprocess.CompletedProcess:
     """
-    Execute a Terraform command with proper environment and error handling.
+    Execute a Terraform command with all required credentials injected as
+    environment variables.
+
+    Sensitive values are passed via ``TF_VAR_*`` env vars (never as -var flags
+    on the command line) so they don't appear in shell history or logs.
+
+    Args:
+        cmd:          Terraform command list.
+        module_path:  Directory of the Terraform module.
+        work_dir:     Temporary working directory (used for TF_DATA_DIR).
+        github_token: Short-lived GitHub installation access token.
+        capture:      Whether to capture stdout/stderr for parsing.
     """
     env = os.environ.copy()
     env["TF_IN_AUTOMATION"] = "1"
     env["TF_INPUT"] = "0"
+    env["TF_DATA_DIR"] = str(work_dir / ".terraform")
 
-    # Add AWS credentials for S3 backend
+    # ── S3 backend credentials ────────────────────────────────────────────
     if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
         env["AWS_ACCESS_KEY_ID"] = settings.TF_BACKEND_AWS_ACCESS_KEY_ID
         env["AWS_SECRET_ACCESS_KEY"] = settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
+        env["AWS_DEFAULT_REGION"] = settings.TF_BACKEND_AWS_REGION
+
+    # ── GitHub (short-lived installation token, generated per operation) ──
+    if github_token:
+        env["TF_VAR_github_token"] = github_token
+
+    # ── Vault ─────────────────────────────────────────────────────────────
+    if settings.VAULT_URL:
+        env["TF_VAR_vault_url"] = settings.VAULT_URL
+        env["VAULT_ADDR"] = settings.VAULT_URL
+    if settings.VAULT_TOKEN:
+        env["TF_VAR_vault_token"] = settings.VAULT_TOKEN
+        env["VAULT_TOKEN"] = settings.VAULT_TOKEN
+
+    # ── Keycloak ──────────────────────────────────────────────────────────
+    if settings.KEYCLOAK_URL:
+        env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
+    if settings.KEYCLOAK_ADMIN_USERNAME:
+        env["TF_VAR_keycloak_admin_username"] = settings.KEYCLOAK_ADMIN_USERNAME
+    if settings.KEYCLOAK_ADMIN_PASSWORD:
+        env["TF_VAR_keycloak_admin_password"] = settings.KEYCLOAK_ADMIN_PASSWORD
+
+    # ── Cloudflare ────────────────────────────────────────────────────────
+    if settings.CLOUDFLARE_API_TOKEN:
+        env["TF_VAR_cloudflare_api_token"] = settings.CLOUDFLARE_API_TOKEN
+        env["CLOUDFLARE_API_TOKEN"] = settings.CLOUDFLARE_API_TOKEN
+    if settings.CLOUDFLARE_ZONE_ID:
+        env["TF_VAR_cloudflare_zone_id"] = settings.CLOUDFLARE_ZONE_ID
 
     try:
         result = subprocess.run(
@@ -211,12 +257,13 @@ def _run_terraform_command(
             env=env,
             check=True,
             capture_output=capture,
-            text=True
+            text=True,
         )
         return result
     except subprocess.CalledProcessError as exc:
-        logger.error("Terraform command failed: %s", exc.stderr if capture else exc)
-        raise RuntimeError(f"Terraform failed: {exc.stderr if capture else str(exc)}") from exc
+        stderr = exc.stderr if capture else str(exc)
+        logger.error("Terraform command failed: %s", stderr)
+        raise RuntimeError(f"Terraform failed: {stderr[:500]}") from exc
 
 
 def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
@@ -397,7 +444,8 @@ def run_deletion(deployment_id: int, db: Session) -> None:
 
 def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
     """
-    Delete Kubernetes deployment using Terraform destroy.
+    Delete Kubernetes deployment using Terraform destroy against the
+    ``k3s-gitops-app`` module.
     """
     _update(
         db,
@@ -407,28 +455,38 @@ def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
     )
 
     try:
-        module_path = Path(__file__).parent.parent / "terraform" / "github_bootstrap"
+        module_path = Path(__file__).parent.parent / "terraform" / "k3s-gitops-app"
+
+        if not module_path.exists():
+            raise FileNotFoundError(
+                f"Terraform module not found: {module_path}"
+            )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             work_dir = Path(tmpdir)
 
-            # Initialize with the same state key
+            # Re-initialise with the same state key used during creation
             init_cmd = [
                 "terraform", "init",
-                "-backend-config=bucket=3-istor-tf-infra-aws",
+                f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
                 f"-backend-config=key={deployment.terraform_state_path}",
-                "-backend-config=region=eu-west-3",
+                f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
                 "-backend-config=encrypt=true",
-                "-reconfigure"
+                *(
+                    [f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"]
+                    if settings.TF_BACKEND_S3_DYNAMODB_TABLE
+                    else []
+                ),
+                "-reconfigure",
             ]
-
             _run_terraform_command(init_cmd, module_path, work_dir)
 
-            # Destroy
             destroy_cmd = ["terraform", "destroy", "-auto-approve"]
             _run_terraform_command(destroy_cmd, module_path, work_dir)
 
-            logger.info("Kubernetes resources destroyed for deployment %s", deployment.id)
+            logger.info(
+                "Kubernetes resources destroyed for deployment %s", deployment.id
+            )
 
     except Exception as exc:
         logger.error("Kubernetes deletion failed: %s", exc)

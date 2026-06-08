@@ -65,6 +65,7 @@ async def get_user_profile(
 
     # Get picture from token as fallback
     picture = token_payload.get("picture")
+    github_installation_id = None
 
     # Try to fetch fresh picture from Keycloak Admin API
     # Use preferred_username which is the actual username in Keycloak
@@ -114,15 +115,13 @@ async def get_user_profile(
 
                     if user_response.ok:
                         user_data = user_response.json()
+                        attributes = user_data.get("attributes", {})
                         print(
-                            f"DEBUG /me: User data attributes: {user_data.get('attributes', {})}"
+                            f"DEBUG /me: User data attributes: {attributes}"
                         )
                         # Extract picture from attributes
-                        if (
-                            "attributes" in user_data
-                            and "picture" in user_data["attributes"]
-                        ):
-                            picture_list = user_data["attributes"]["picture"]
+                        if "picture" in attributes:
+                            picture_list = attributes["picture"]
                             if picture_list and len(picture_list) > 0:
                                 picture = picture_list[0]
                                 print(
@@ -132,6 +131,11 @@ async def get_user_profile(
                             print(
                                 f"DEBUG /me: No picture attribute found in user data"
                             )
+                        # Extract GitHub installation ID from attributes
+                        if "github_installation_id" in attributes:
+                            id_list = attributes["github_installation_id"]
+                            if id_list:
+                                github_installation_id = id_list[0]
                     else:
                         print(
                             f"DEBUG /me: Failed to get user details: {user_response.status_code}"
@@ -165,6 +169,7 @@ async def get_user_profile(
         name=token_payload.get("name"),
         picture=picture,
         groups=groups,
+        github_installation_id=github_installation_id,
     )
 
 

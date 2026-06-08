@@ -11,6 +11,7 @@ class UserProfile(BaseModel):
     name: str | None = None
     picture: str | None = None
     groups: list[str] = []
+    github_installation_id: str | None = None
 
 
 class PictureUploadResponse(BaseModel):

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.routers import account, catalog, deployments, infra
+from app.routers import account, catalog, deployments, infra, projects
 from app.services import health_poller
 from app.services.template_repository import get_repository
 
@@ -70,6 +70,7 @@ app.include_router(account.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
+app.include_router(projects.router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])

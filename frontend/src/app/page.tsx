@@ -3,30 +3,40 @@
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { Dashboard } from "@/components/dashboard/Dashboard";
-import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { UserNav } from "@/components/layout/UserNav";
+import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
+import { ProjectCard } from "@/components/projects/ProjectCard";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, getCatalog } from "@/lib/api";
+import { useProjects } from "@/lib/hooks";
 import type { CatalogTemplate } from "@/types";
+import { FolderPlus } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function Home() {
+  const { data: session } = useSession();
   const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [selectedTemplate, setSelectedTemplate] =
     useState<CatalogTemplate | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [dashboardKey, setDashboardKey] = useState(0);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
-  // Debug logging
-  useEffect(() => {
-    console.log("selectedTemplate changed:", selectedTemplate?.name || "null");
-  }, [selectedTemplate]);
+  const { projects, loading: loadingProjects, refresh: refreshProjects } = useProjects();
+
+  const userName =
+    session?.user?.name ||
+    `${session?.user?.given_name ?? ""} ${session?.user?.family_name ?? ""}`.trim() ||
+    session?.user?.email ||
+    "Developer";
 
   useEffect(() => {
-    // Load catalog from backend
     getCatalog()
       .then(setTemplates)
       .catch((err) => {
@@ -36,9 +46,6 @@ export default function Home() {
       .finally(() => setLoadingCatalog(false));
   }, []);
 
-  // Separate templates by category
-  // PaaS: explicitly marked as "paas"
-  // IaaS: everything else (legacy templates, or explicitly marked as "iaas")
   const paasTemplates = templates.filter((t) => t.category === "paas");
   const iaasTemplates = templates.filter((t) => t.category !== "paas");
 
@@ -66,54 +73,99 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
+      {/* ── Header ── */}
       <header className="border-b px-6 py-4 flex items-center gap-3">
         <span className="text-2xl">⚡</span>
         <div>
           <h1 className="text-lg font-bold leading-none">CMP</h1>
           <p className="text-xs text-muted-foreground">
-            Hybrid Cloud Management Platform
+            Cloud Native Platform
           </p>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          {session?.user && (
+            <span className="hidden sm:block text-sm text-muted-foreground">
+              Welcome,{" "}
+              <span className="font-medium text-foreground">{userName}</span>
+            </span>
+          )}
           <UserNav />
         </div>
       </header>
 
       <main className="px-6 py-8 space-y-10 max-w-7xl mx-auto">
-        {/* Debug indicator */}
-        {selectedTemplate && (
-          <div className="fixed top-20 right-4 z-100 bg-yellow-400 text-black px-4 py-2 rounded-lg shadow-lg font-mono text-sm">
-            Selected: {selectedTemplate.name}
-          </div>
-        )}
 
-        {/* Global Infrastructure Health */}
+        {/* ── Projects Section ── */}
         <section>
-          <GlobalInfraHealth />
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold">My Projects</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Each project is an isolated team boundary with its own
+                Keycloak groups, Vault policies, and ArgoCD AppProject.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setCreateProjectOpen(true)}
+            >
+              <FolderPlus className="mr-2 h-4 w-4" />
+              New Project
+            </Button>
+          </div>
+
+          {loadingProjects ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-36 rounded-xl" />
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-muted-foreground">
+              <span className="text-4xl mb-3">🗂️</span>
+              <p className="font-medium">No projects yet</p>
+              <p className="text-sm mt-1">
+                Create your first project to start deploying applications.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => setCreateProjectOpen(true)}
+              >
+                <FolderPlus className="mr-2 h-4 w-4" />
+                Create Project
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {projects.map((p) => (
+                <ProjectCard key={p.name} project={p} />
+              ))}
+            </div>
+          )}
         </section>
 
         <Separator />
 
-        {/* Catalog */}
+        {/* ── App Catalog ── */}
         <section>
           <h2 className="text-xl font-semibold mb-1">App Catalog</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Deploy infrastructure from Git repository templates using Terraform.
+            Deploy infrastructure from Git repository templates.
           </p>
           {loadingCatalog ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
               <span className="ml-3 text-muted-foreground">
-                Loading templates...
+                Loading templates…
               </span>
             </div>
           ) : templates.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-lg mb-2">No templates found in repository</p>
               <p className="text-sm">
-                Check that the backend is running and templates are enabled in
-                the Git repository.
+                Check that the backend is running and templates are enabled.
               </p>
             </div>
           ) : (
@@ -131,8 +183,7 @@ export default function Home() {
 
               <TabsContent value="paas" className="mt-0">
                 <p className="text-sm text-muted-foreground mb-4">
-                  Deploy containerized applications with GitOps (GitHub +
-                  ArgoCD)
+                  Containerised applications with GitOps (GitHub + ArgoCD)
                 </p>
                 {paasTemplates.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
@@ -148,7 +199,7 @@ export default function Home() {
 
               <TabsContent value="iaas" className="mt-0">
                 <p className="text-sm text-muted-foreground mb-4">
-                  Deploy VMs on OpenStack and AWS Auto Scaling Groups
+                  VMs on OpenStack and AWS Auto Scaling Groups
                 </p>
                 {iaasTemplates.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
@@ -167,12 +218,19 @@ export default function Home() {
 
         <Separator />
 
-        {/* Dashboard */}
+        {/* ── All Recent Deployments ── */}
         <section>
-          <h2 className="text-xl font-semibold mb-4">My Deployments</h2>
+          <h2 className="text-xl font-semibold mb-4">All My Deployments</h2>
           <Dashboard key={dashboardKey} />
         </section>
       </main>
+
+      {/* ── Modals ── */}
+      <CreateProjectModal
+        open={createProjectOpen}
+        onClose={() => setCreateProjectOpen(false)}
+        onCreated={refreshProjects}
+      />
 
       <DeployModal
         template={selectedTemplate}
