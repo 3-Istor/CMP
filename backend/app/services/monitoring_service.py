@@ -89,6 +89,8 @@ def _get_openstack_connection(project_override: str | None = None) -> openstack.
         project_name=project_name,
         user_domain_name=settings.OS_USER_DOMAIN_NAME,
         project_domain_name=settings.OS_PROJECT_DOMAIN_NAME,
+        api_timeout=3,
+        connect_retries=0,
     )
 
 
@@ -201,7 +203,7 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
                     str(e)[:200]
                 )
                 return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
-            raise            logger.warning("VPN gateway server not found")
+            logger.warning("VPN gateway server not found")
             return None
         except Exception as exc:
             logger.error("Error fetching OpenStack VPN: %s", exc, exc_info=True)

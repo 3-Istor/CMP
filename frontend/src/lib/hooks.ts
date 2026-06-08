@@ -1,8 +1,8 @@
 "use client";
 
-import type { Deployment } from "@/types";
+import type { Deployment, Project } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getDeployment, getDeployments } from "./api";
+import { getDeployment, getDeployments, getProjects, getProjectApps } from "./api";
 
 const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
 

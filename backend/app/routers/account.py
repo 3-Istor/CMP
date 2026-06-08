@@ -35,7 +35,7 @@ async def get_current_user(
     try:
         # Decode without verification (Envoy already validated it)
         payload = jwt.decode(
-            token, options={"verify_signature": False, "verify_aud": False}
+            token, options={"verify_signature": False, "verify_aud": False, "verify_exp": False}
         )
         return payload
     except jwt.DecodeError as e:

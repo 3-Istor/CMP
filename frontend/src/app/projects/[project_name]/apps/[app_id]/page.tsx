@@ -5,7 +5,7 @@ import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
     Card,
     CardContent,
@@ -27,13 +27,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { deleteDeployment, getDeployment } from "@/lib/api";
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
+import { Github } from "@/components/icons/Github";
 import {
     Activity,
     ArrowLeft,
     CheckCircle2,
     ExternalLink,
     FileCode,
-    Github,
     Loader2,
     RefreshCw,
     Shield,
@@ -299,45 +299,42 @@ export default function AppControlCenterPage() {
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     {current.github_repo_url && (
-                                        <Button variant="outline" size="sm" className="justify-start" asChild>
-                                            <a
-                                                href={current.github_repo_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                <Github className="mr-2 h-4 w-4" />
-                                                Open GitHub Repository
-                                                <ExternalLink className="ml-auto h-3 w-3" />
-                                            </a>
-                                        </Button>
+                                        <a
+                                            href={current.github_repo_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                                        >
+                                            <Github className="mr-2 h-4 w-4" />
+                                            Open GitHub Repository
+                                            <ExternalLink className="ml-auto h-3 w-3" />
+                                        </a>
                                     )}
 
                                     {current.argocd_app_name && (
-                                        <Button variant="outline" size="sm" className="justify-start" asChild>
-                                            <a
-                                                href={`https://argocd.3istor.com/applications/${current.argocd_app_name}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                <FileCode className="mr-2 h-4 w-4" />
-                                                View in ArgoCD
-                                                <ExternalLink className="ml-auto h-3 w-3" />
-                                            </a>
-                                        </Button>
+                                        <a
+                                            href={`https://argocd.3istor.com/applications/${current.argocd_app_name}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                                        >
+                                            <FileCode className="mr-2 h-4 w-4" />
+                                            View in ArgoCD
+                                            <ExternalLink className="ml-auto h-3 w-3" />
+                                        </a>
                                     )}
 
                                     {current.project_id && current.name && (
-                                        <Button variant="outline" size="sm" className="justify-start" asChild>
-                                            <a
-                                                href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                <Shield className="mr-2 h-4 w-4" />
-                                                Manage Secrets in Vault
-                                                <ExternalLink className="ml-auto h-3 w-3" />
-                                            </a>
-                                        </Button>
+                                        <a
+                                            href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                                        >
+                                            <Shield className="mr-2 h-4 w-4" />
+                                            Manage Secrets in Vault
+                                            <ExternalLink className="ml-auto h-3 w-3" />
+                                        </a>
                                     )}
                                 </CardContent>
                             </Card>

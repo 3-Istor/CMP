@@ -3,6 +3,7 @@
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { Dashboard } from "@/components/dashboard/Dashboard";
+import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { UserNav } from "@/components/layout/UserNav";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectCard } from "@/components/projects/ProjectCard";
@@ -94,6 +95,7 @@ export default function Home() {
       </header>
 
       <main className="px-6 py-8 space-y-10 max-w-7xl mx-auto">
+        <GlobalInfraHealth />
 
         {/* ── Projects Section ── */}
         <section>
