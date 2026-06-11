@@ -206,3 +206,8 @@ export const uploadProfilePicture = async (file: File) => {
 
   return res.json() as Promise<import("@/types").PictureUploadResponse>;
 };
+
+export const deleteProject = (project_name: string) =>
+  request<void>(`/projects/${project_name}`, {
+    method: "DELETE",
+  });

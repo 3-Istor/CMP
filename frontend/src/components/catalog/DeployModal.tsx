@@ -173,28 +173,6 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                   </p>
                 </div>
 
-                {/* Project Name for Kubernetes */}
-                {isKubernetes && (
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="project-name"
-                      className="text-sm font-medium"
-                    >
-                      Project Name <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="project-name"
-                      placeholder="my-project"
-                      value={String(fieldValues.project_name || "")}
-                      onChange={(e) => setField("project_name", e.target.value)}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Used for namespace isolation and RBAC
-                    </p>
-                  </div>
-                )}
-
                 {/* Template-specific fields */}
                 {template.fields.length > 0 && (
                   <div className="space-y-4">

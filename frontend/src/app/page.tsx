@@ -10,7 +10,6 @@ import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, getCatalog } from "@/lib/api";
 import { useProjects } from "@/lib/hooks";
 import type { CatalogTemplate } from "@/types";
@@ -189,10 +188,20 @@ export default function Home() {
 
         {/* ── App Catalog ── */}
         <section>
-          <h2 className="text-xl font-semibold mb-1">App Catalog</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Deploy infrastructure from Git repository templates.
-          </p>
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold mb-1">
+              Infrastructure Catalog (IaaS)
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Deploy raw VMs on OpenStack and AWS Auto Scaling Groups.
+              <br />
+              <span className="font-medium text-primary mt-1 inline-block">
+                💡 To deploy modern Kubernetes applications, please open a
+                Project above.
+              </span>
+            </p>
+          </div>
+
           {loadingCatalog ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -200,58 +209,15 @@ export default function Home() {
                 Loading templates…
               </span>
             </div>
-          ) : templates.length === 0 ? (
+          ) : iaasTemplates.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg mb-2">No templates found in repository</p>
-              <p className="text-sm">
-                Check that the backend is running and templates are enabled.
-              </p>
+              <p className="text-lg mb-2">No IaaS templates available</p>
             </div>
           ) : (
-            <Tabs defaultValue="paas" className="w-full">
-              <TabsList className="mb-4">
-                <TabsTrigger value="paas" className="gap-2">
-                  <span>🚀</span>
-                  <span>Kubernetes & GitOps</span>
-                </TabsTrigger>
-                <TabsTrigger value="iaas" className="gap-2">
-                  <span>🖥️</span>
-                  <span>IaaS & VMs</span>
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="paas" className="mt-0">
-                <p className="text-sm text-muted-foreground mb-4">
-                  Containerised applications with GitOps (GitHub + ArgoCD)
-                </p>
-                {paasTemplates.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <p>No Kubernetes templates available</p>
-                  </div>
-                ) : (
-                  <CatalogGrid
-                    templates={paasTemplates}
-                    onDeploy={setSelectedTemplate}
-                  />
-                )}
-              </TabsContent>
-
-              <TabsContent value="iaas" className="mt-0">
-                <p className="text-sm text-muted-foreground mb-4">
-                  VMs on OpenStack and AWS Auto Scaling Groups
-                </p>
-                {iaasTemplates.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <p>No IaaS templates available</p>
-                  </div>
-                ) : (
-                  <CatalogGrid
-                    templates={iaasTemplates}
-                    onDeploy={setSelectedTemplate}
-                  />
-                )}
-              </TabsContent>
-            </Tabs>
+            <CatalogGrid
+              templates={iaasTemplates}
+              onDeploy={setSelectedTemplate}
+            />
           )}
         </section>
 
@@ -273,6 +239,7 @@ export default function Home() {
 
       <DeployModal
         template={selectedTemplate}
+        projects={projects}
         onClose={() => setSelectedTemplate(null)}
         onConfirm={handleDeploy}
         loading={deploying}

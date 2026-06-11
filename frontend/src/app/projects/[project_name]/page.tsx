@@ -8,27 +8,27 @@ import { MembersPanel } from "@/components/projects/MembersPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createDeployment, getCatalog } from "@/lib/api";
+import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
 import { useProjectApps } from "@/lib/hooks";
 import type { CatalogTemplate } from "@/types";
 import {
-    ArrowLeft,
-    FolderKanban,
-    LayoutGrid,
-    Loader2,
-    Plus,
-    RefreshCw,
-    Trash2,
-    Users,
+  ArrowLeft,
+  FolderKanban,
+  LayoutGrid,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Users,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -161,15 +161,7 @@ export default function ProjectPage() {
 
     setDeleting(true);
     try {
-      const response = await fetch(`/api/projects/${projectName}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || "Failed to delete project");
-      }
+      await deleteProject(projectName);
 
       toast.success(`Project "${projectName}" deleted successfully`);
       router.push("/");
