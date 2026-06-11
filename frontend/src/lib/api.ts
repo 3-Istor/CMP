@@ -64,6 +64,7 @@ export const getDeployment = (id: number) =>
 export const createDeployment = (payload: {
   name: string;
   template_id: string;
+  project_id?: string | null;
   app_config: Record<string, unknown>;
 }) =>
   request<Deployment>("/deployments/", {
@@ -92,9 +93,23 @@ export const getAppHealth = (deploymentId: number) =>
 export const getCurrentUser = () =>
   request<import("@/types").UserProfile>("/account/me");
 
-export const getGitHubStatus = async (): Promise<import("@/types").GitHubStatus> => {
+export const getGitHubStatus = async (): Promise<
+  import("@/types").GitHubStatus
+> => {
   const profile = await request<import("@/types").UserProfile>("/account/me");
   return { github_installation_id: profile.github_installation_id ?? null };
+};
+
+export const saveGitHubInstallationId = async (
+  installation_id: string,
+): Promise<import("@/types").GitHubInstallationResponse> => {
+  return request<import("@/types").GitHubInstallationResponse>(
+    "/account/github-installation",
+    {
+      method: "POST",
+      body: JSON.stringify({ installation_id }),
+    },
+  );
 };
 
 // Projects (Phase 4)
@@ -109,6 +124,45 @@ export const createProject = (project_name: string) =>
 
 export const getProjectApps = (project_name: string) =>
   request<import("@/types").Deployment[]>(`/projects/${project_name}/apps`);
+
+// Project Members (Phase 4)
+export const getProjectMembers = (project_name: string) =>
+  request<import("@/types").ProjectMembersResponse>(
+    `/projects/${project_name}/members`,
+  );
+
+export const addProjectMember = (
+  project_name: string,
+  username: string,
+  role: "admin" | "member" = "member",
+) =>
+  request<import("@/types").AddMemberResponse>(
+    `/projects/${project_name}/members`,
+    {
+      method: "POST",
+      body: JSON.stringify({ username, role }),
+    },
+  );
+
+export const removeProjectMember = async (
+  project_name: string,
+  username: string,
+) => {
+  const session = await getSession();
+  const res = await fetch(
+    `${BASE}/projects/${project_name}/members/${username}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${session?.accessToken}`,
+      },
+      credentials: "include",
+    },
+  );
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return Promise.resolve();
+};
 
 // Day-2 GitOps Config (Phase 4)
 export const getDeploymentConfig = (id: number) =>

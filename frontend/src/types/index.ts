@@ -46,6 +46,26 @@ export interface ProjectCreateResponse {
   status: string;
 }
 
+export interface ProjectMember {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: "admin" | "member";
+}
+
+export interface ProjectMembersResponse {
+  project_name: string;
+  members: ProjectMember[];
+}
+
+export interface AddMemberResponse {
+  message: string;
+  project_name: string;
+  username: string;
+  role: string;
+}
+
 // ── Day-2 GitOps Config (Phase 4) ─────────────────────────────────────────────
 
 export interface DeploymentConfig {
@@ -156,6 +176,11 @@ export interface UserProfile {
 
 export interface GitHubStatus {
   github_installation_id: string | null;
+}
+
+export interface GitHubInstallationResponse {
+  message: string;
+  installation_id: string;
 }
 
 export interface PictureUploadResponse {

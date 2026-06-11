@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services import aws_service, github_service, openstack_service
+from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ def _execute_terraform_kubernetes(
     github_token: str
 ) -> dict:
     """
-    Execute the ``k3s-gitops-app`` Terraform module with dynamic S3 state.
+    Execute the ``github_bootstrap`` Terraform module with dynamic S3 state.
 
     This module creates the full Day-0 stack for a containerised application:
       - GitHub repository (bootstrapped from template)
@@ -131,12 +132,22 @@ def _execute_terraform_kubernetes(
     Returns:
         dict: Terraform outputs (github_repo_url, argocd_app_name, k8s_namespace, …)
     """
-    module_path = Path(__file__).parent.parent / "terraform" / "k3s-gitops-app"
+    # Get the template path dynamically from the cloned repository
+    repo = get_repository()
+    template = repo.get_template_by_id(deployment.template_id)
+
+    if not template:
+        raise ValueError(
+            f"Template '{deployment.template_id}' not found in repository. "
+            "Please ensure the template exists and is enabled."
+        )
+
+    module_path = Path(template["_template_path"])
 
     if not module_path.exists():
         raise FileNotFoundError(
             f"Terraform module not found: {module_path}. "
-            "Please ensure the k3s-gitops-app module is present."
+            "Please ensure the template repository is properly cloned."
         )
 
     project_name = app_config.get("project_name", "default")
@@ -167,7 +178,7 @@ def _execute_terraform_kubernetes(
         _run_terraform_command(init_cmd, module_path, work_dir, github_token=github_token)
 
         # ── terraform apply ───────────────────────────────────────────
-        logger.info("Applying k3s-gitops-app Terraform module…")
+        logger.info("Applying github_bootstrap Terraform module…")
         apply_cmd = [
             "terraform", "apply",
             "-auto-approve",
@@ -176,6 +187,10 @@ def _execute_terraform_kubernetes(
             f"-var=app_name={deployment.name}",
             f"-var=replica_count={app_config.get('replica_count', 2)}",
             f"-var=sso_protected={str(app_config.get('sso_protected', False)).lower()}",
+            f"-var=github_installation_id={app_config.get('github_installation_id', '')}",
+            f"-var=github_owner={app_config.get('github_owner', '3-Istor')}",
+            f"-var=template_repo_name={app_config.get('template_repo_name', 'template-html-css')}",
+            f"-var=app_type={app_config.get('app_type', 'static')}",
         ]
         _run_terraform_command(apply_cmd, module_path, work_dir, github_token=github_token)
 
@@ -227,6 +242,14 @@ def _run_terraform_command(
     if github_token:
         env["TF_VAR_github_token"] = github_token
 
+    # ── GitHub App (for repository creation and management) ───────────────
+    if settings.GITHUB_APP_PRIVATE_KEY:
+        env["TF_VAR_github_app_private_key"] = settings.GITHUB_APP_PRIVATE_KEY
+
+    # ── GitHub Registry Token (PAT for pulling private images from GHCR) ──
+    if settings.GITHUB_REGISTRY_TOKEN:
+        env["TF_VAR_github_registry_token"] = settings.GITHUB_REGISTRY_TOKEN
+
     # ── Vault ─────────────────────────────────────────────────────────────
     if settings.VAULT_URL:
         env["TF_VAR_vault_url"] = settings.VAULT_URL
@@ -249,6 +272,8 @@ def _run_terraform_command(
         env["CLOUDFLARE_API_TOKEN"] = settings.CLOUDFLARE_API_TOKEN
     if settings.CLOUDFLARE_ZONE_ID:
         env["TF_VAR_cloudflare_zone_id"] = settings.CLOUDFLARE_ZONE_ID
+    if settings.CLOUDFLARE_ACCOUNT_ID:
+        env["TF_VAR_cloudflare_account_id"] = settings.CLOUDFLARE_ACCOUNT_ID
 
     try:
         result = subprocess.run(
@@ -455,7 +480,16 @@ def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
     )
 
     try:
-        module_path = Path(__file__).parent.parent / "terraform" / "k3s-gitops-app"
+        # Get the template path dynamically from the cloned repository
+        repo = get_repository()
+        template = repo.get_template_by_id(deployment.template_id)
+
+        if not template:
+            raise ValueError(
+                f"Template '{deployment.template_id}' not found in repository"
+            )
+
+        module_path = Path(template["_template_path"])
 
         if not module_path.exists():
             raise FileNotFoundError(

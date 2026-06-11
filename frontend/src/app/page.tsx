@@ -29,7 +29,11 @@ export default function Home() {
   const [dashboardKey, setDashboardKey] = useState(0);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
-  const { projects, loading: loadingProjects, refresh: refreshProjects } = useProjects();
+  const {
+    projects,
+    loading: loadingProjects,
+    refresh: refreshProjects,
+  } = useProjects();
 
   const userName =
     session?.user?.name ||
@@ -57,10 +61,48 @@ export default function Home() {
     if (!selectedTemplate) return;
     setDeploying(true);
     try {
+      // Get user's GitHub installation ID for Kubernetes deployments
+      let githubInstallationId: string | null = null;
+      let projectName = "default";
+
+      if (selectedTemplate.category === "paas") {
+        // Fetch GitHub status
+        try {
+          const githubStatus = await import("@/lib/api").then((m) =>
+            m.getGitHubStatus(),
+          );
+          githubInstallationId = githubStatus.github_installation_id;
+
+          if (!githubInstallationId) {
+            toast.error("Please link your GitHub account first");
+            setDeploying(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to get GitHub status:", error);
+          toast.error("Failed to verify GitHub link");
+          setDeploying(false);
+          return;
+        }
+
+        // Get project name from config or use default
+        projectName = String(config.project_name || "default");
+      }
+
+      // Build complete app_config
+      const appConfig: Record<string, unknown> = { ...config };
+
+      // Add required fields for Kubernetes deployments
+      if (selectedTemplate.category === "paas" && githubInstallationId) {
+        appConfig.github_installation_id = githubInstallationId;
+        appConfig.project_name = projectName;
+      }
+
       await createDeployment({
         name,
         template_id: selectedTemplate.id,
-        app_config: config,
+        project_id: selectedTemplate.category === "paas" ? projectName : null,
+        app_config: appConfig,
       });
       toast.success(`Deployment of "${name}" started`);
       setSelectedTemplate(null);
@@ -79,9 +121,7 @@ export default function Home() {
         <span className="text-2xl">⚡</span>
         <div>
           <h1 className="text-lg font-bold leading-none">CMP</h1>
-          <p className="text-xs text-muted-foreground">
-            Cloud Native Platform
-          </p>
+          <p className="text-xs text-muted-foreground">Cloud Native Platform</p>
         </div>
         <div className="ml-auto flex items-center gap-3">
           {session?.user && (
@@ -103,14 +143,11 @@ export default function Home() {
             <div>
               <h2 className="text-xl font-semibold">My Projects</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Each project is an isolated team boundary with its own
-                Keycloak groups, Vault policies, and ArgoCD AppProject.
+                Each project is an isolated team boundary with its own Keycloak
+                groups, Vault policies, and ArgoCD AppProject.
               </p>
             </div>
-            <Button
-              size="sm"
-              onClick={() => setCreateProjectOpen(true)}
-            >
+            <Button size="sm" onClick={() => setCreateProjectOpen(true)}>
               <FolderPlus className="mr-2 h-4 w-4" />
               New Project
             </Button>

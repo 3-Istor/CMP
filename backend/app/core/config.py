@@ -66,12 +66,17 @@ class Settings(BaseSettings):
     # Cloudflare (for dynamic DNS in Terraform templates)
     CLOUDFLARE_API_TOKEN: str = ""
     CLOUDFLARE_ZONE_ID: str = ""
+    CLOUDFLARE_ACCOUNT_ID: str = ""
 
     # Discord Alerting (optional - for health monitoring alerts)
     DISCORD_WEBHOOK_URL: str = ""
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
+
+    # GitHub Registry (GHCR) Token for pulling private container images
+    # Personal Access Token (PAT) with read:packages scope
+    GITHUB_REGISTRY_TOKEN: str = ""
 
 
 settings = Settings()

@@ -2,7 +2,12 @@
 
 import type { Deployment, Project } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getDeployment, getDeployments, getProjects, getProjectApps } from "./api";
+import {
+  getDeployment,
+  getDeployments,
+  getProjectApps,
+  getProjects,
+} from "./api";
 
 const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
 
@@ -204,4 +209,36 @@ export function useProjectApps(projectName: string | null) {
   }, [refresh, projectName]);
 
   return { apps, loading, error, refresh };
+}
+
+/** Fetch members of a specific project. */
+export function useProjectMembers(projectName: string | null) {
+  const [members, setMembers] = useState<import("@/types").ProjectMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!projectName) return;
+    setLoading(true);
+    try {
+      const { getProjectMembers } = await import("./api");
+      const data = await getProjectMembers(projectName);
+      setMembers(data.members);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch members");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectName]);
+
+  useEffect(() => {
+    if (!projectName) {
+      setLoading(false);
+      return;
+    }
+    refresh();
+  }, [refresh, projectName]);
+
+  return { members, loading, error, refresh };
 }

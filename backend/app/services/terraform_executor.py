@@ -22,9 +22,15 @@ logger = logging.getLogger(__name__)
 class TerraformExecutor:
     """Executes Terraform commands and manages state."""
 
-    def __init__(self, working_dir: Path, deployment_name: str):
+    def __init__(
+        self,
+        working_dir: Path,
+        deployment_name: str,
+        s3_key_path: str | None = None,
+    ):
         self.working_dir = working_dir
         self.deployment_name = deployment_name
+        self.s3_key_path = s3_key_path  # Custom S3 key path (e.g., "cnp/projects/my-project/my-app")
         self.state_dir = Path("./data/terraform_states") / deployment_name
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.use_s3_backend = settings.TF_BACKEND_S3_ENABLED
@@ -35,13 +41,22 @@ class TerraformExecutor:
             # Use local backend
             return []
 
+        # Determine S3 key path
+        if self.s3_key_path:
+            # Use custom path (e.g., "cnp/projects/my-project/my-app")
+            s3_key = f"{self.s3_key_path}/terraform.tfstate"
+        else:
+            # Use default prefix + deployment name (legacy behavior)
+            s3_key = (
+                settings.TF_BACKEND_S3_KEY_PREFIX
+                + self.deployment_name
+                + "/terraform.tfstate"
+            )
+
         # S3 backend configuration
         backend_config = [
             "-backend-config=bucket=" + settings.TF_BACKEND_S3_BUCKET,
-            "-backend-config=key="
-            + settings.TF_BACKEND_S3_KEY_PREFIX
-            + self.deployment_name
-            + "/terraform.tfstate",
+            "-backend-config=key=" + s3_key,
             "-backend-config=region=" + settings.TF_BACKEND_AWS_REGION,
             "-backend-config=encrypt=true",
         ]
@@ -68,9 +83,16 @@ class TerraformExecutor:
         return backend_config
 
     def _run_command(
-        self, command: list[str], capture_output: bool = True
+        self, command: list[str], capture_output: bool = True, stream_output: bool = False
     ) -> subprocess.CompletedProcess:
-        """Run a Terraform command in the working directory."""
+        """
+        Run a Terraform command in the working directory.
+
+        Args:
+            command: Command to run
+            capture_output: Capture stdout/stderr for return
+            stream_output: Log output in real-time (useful for long operations)
+        """
         env = os.environ.copy()
 
         # Set local state directory if not using S3 backend
@@ -109,6 +131,29 @@ class TerraformExecutor:
         if settings.CLOUDFLARE_ZONE_ID:
             env["TF_VAR_cloudflare_zone_id"] = settings.CLOUDFLARE_ZONE_ID
             env["CLOUDFLARE_ZONE_ID"] = settings.CLOUDFLARE_ZONE_ID
+        if settings.CLOUDFLARE_ACCOUNT_ID:
+            env["TF_VAR_cloudflare_account_id"] = settings.CLOUDFLARE_ACCOUNT_ID
+            env["CLOUDFLARE_ACCOUNT_ID"] = settings.CLOUDFLARE_ACCOUNT_ID
+
+        # Pass Keycloak credentials to Terraform (for k3s-gitops-app template)
+        if settings.KEYCLOAK_ADMIN_USERNAME:
+            env["TF_VAR_keycloak_admin_username"] = settings.KEYCLOAK_ADMIN_USERNAME
+        if settings.KEYCLOAK_ADMIN_PASSWORD:
+            env["TF_VAR_keycloak_admin_password"] = settings.KEYCLOAK_ADMIN_PASSWORD
+        if settings.KEYCLOAK_URL:
+            env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
+
+        # Pass Vault credentials to Terraform (for k3s-gitops-app template)
+        if settings.VAULT_URL:
+            env["TF_VAR_vault_url"] = settings.VAULT_URL
+        if settings.VAULT_TOKEN:
+            env["TF_VAR_vault_token"] = settings.VAULT_TOKEN
+
+        # Pass GitHub Registry credentials to Terraform (for image pull secrets)
+        if settings.GITHUB_REGISTRY_TOKEN:
+            env["TF_VAR_github_registry_token"] = settings.GITHUB_REGISTRY_TOKEN
+        # GitHub registry username (hardcoded as it's always the same org)
+        env["TF_VAR_github_registry_username"] = "3-Istor"
 
         # Sanitize command for logging (hide sensitive values)
         safe_command = self._sanitize_command_for_logging(command)
@@ -116,6 +161,81 @@ class TerraformExecutor:
             "Running: %s in %s", " ".join(safe_command), self.working_dir
         )
 
+        # If streaming is requested, log output in real-time
+        if stream_output:
+            logger.info("📺 Streaming Terraform output in real-time...")
+            import time
+
+            # Force unbuffered output with PYTHONUNBUFFERED and TF_IN_AUTOMATION
+            env["PYTHONUNBUFFERED"] = "1"
+            env["TF_IN_AUTOMATION"] = "1"  # Makes Terraform output more machine-friendly
+
+            process = subprocess.Popen(
+                command,
+                cwd=self.working_dir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=0,  # Unbuffered
+            )
+
+            stdout_lines = []
+            start_time = time.time()
+
+            logger.info("⏱️  Waiting for Terraform output...")
+
+            # Read with timeout detection
+            import select
+            while True:
+                # Check if process is still running
+                if process.poll() is not None:
+                    # Process finished, read remaining output
+                    remaining = process.stdout.read()
+                    if remaining:
+                        for line in remaining.splitlines():
+                            if line.strip():
+                                logger.info(f"[TF] {line}")
+                                stdout_lines.append(line)
+                    break
+
+                # Use select to check if data is available (with timeout)
+                readable, _, _ = select.select([process.stdout], [], [], 1.0)
+
+                if readable:
+                    line = process.stdout.readline()
+                    if line:
+                        line = line.rstrip()
+                        if line:
+                            logger.info(f"[TF] {line}")
+                            stdout_lines.append(line)
+                else:
+                    # No output for 1 second, log that we're still waiting
+                    elapsed = time.time() - start_time
+                    if int(elapsed) % 10 == 0 and int(elapsed) > 0:  # Every 10 seconds
+                        logger.info(f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)")
+
+            stdout_output = "\n".join(stdout_lines)
+            elapsed_time = time.time() - start_time
+            logger.info(f"⏱️  Terraform command completed in {elapsed_time:.1f}s")
+
+            if process.returncode != 0:
+                logger.error(f"❌ Command failed with exit code {process.returncode}")
+                logger.error(f"Last 500 chars of output: {stdout_output[-500:]}")
+                raise RuntimeError(
+                    f"Terraform command failed with exit code {process.returncode}"
+                )
+
+            # Create a fake CompletedProcess for compatibility
+            class FakeResult:
+                def __init__(self, returncode, stdout):
+                    self.returncode = returncode
+                    self.stdout = stdout
+                    self.stderr = ""
+
+            return FakeResult(process.returncode, stdout_output)
+
+        # Normal execution (no streaming)
         result = subprocess.run(
             command,
             cwd=self.working_dir,
@@ -180,6 +300,14 @@ class TerraformExecutor:
         override_content = f'''# Auto-generated by CMP - DO NOT EDIT
 # This file overrides provider configuration to use actual endpoints
 
+terraform {{
+  required_providers {{
+    openstack = {{
+      source = "terraform-provider-openstack/openstack"
+    }}
+  }}
+}}
+
 provider "openstack" {{
   user_name           = "{settings.OS_USERNAME}"
   password            = "{settings.OS_PASSWORD}"
@@ -214,14 +342,30 @@ provider "openstack" {{
         """Initialize Terraform in the working directory."""
         logger.info("Initializing Terraform for %s", self.deployment_name)
 
+        # Delete stale lock file to prevent provider version conflicts
+        lock_file = self.working_dir / ".terraform.lock.hcl"
+        if lock_file.exists():
+            logger.info("Removing stale lock file: %s", lock_file)
+            lock_file.unlink()
+
         # Create provider override file before init
         self._create_provider_override()
 
-        command = ["terraform", "init", "-no-color", "-reconfigure"]
+        command = ["terraform", "init", "-no-color", "-reconfigure", "-upgrade", "-input=false"]
         backend_config = self._get_backend_config()
 
         if backend_config:
-            logger.info("Using S3 backend: %s", settings.TF_BACKEND_S3_BUCKET)
+            # Determine S3 key for logging
+            if self.s3_key_path:
+                s3_key = f"{self.s3_key_path}/terraform.tfstate"
+            else:
+                s3_key = (
+                    settings.TF_BACKEND_S3_KEY_PREFIX
+                    + self.deployment_name
+                    + "/terraform.tfstate"
+                )
+
+            logger.info("📦 Using S3 backend: s3://%s/%s", settings.TF_BACKEND_S3_BUCKET, s3_key)
             command.extend(backend_config)
         else:
             logger.info("Using local backend")
@@ -241,7 +385,7 @@ provider "openstack" {{
             var_args.extend(["-var", f"{key}={value}"])
 
         result = self._run_command(
-            ["terraform", "plan", "-no-color", *var_args]
+            ["terraform", "plan", "-no-color", "-input=false", *var_args]
         )
         return result.stdout
 
@@ -262,16 +406,20 @@ provider "openstack" {{
             # The subprocess handles shell escaping automatically
             var_args.extend(["-var", f"{key}={value}"])
 
-        # Apply with auto-approve
+        # Apply with auto-approve and stream output
+        logger.info("🚀 Starting terraform apply (streaming output)...")
         self._run_command(
             [
                 "terraform",
                 "apply",
                 "-auto-approve",
                 "-no-color",
+                "-input=false",
                 *var_args,
-            ]
+            ],
+            stream_output=True,  # Enable real-time logging
         )
+        logger.info("✅ Terraform apply completed successfully")
 
         # Get outputs
         return self.get_outputs()
@@ -304,15 +452,19 @@ provider "openstack" {{
             # The subprocess handles shell escaping automatically
             var_args.extend(["-var", f"{key}={value}"])
 
+        logger.info("🗑️  Starting terraform destroy (streaming output)...")
         self._run_command(
             [
                 "terraform",
                 "destroy",
                 "-auto-approve",
                 "-no-color",
+                "-input=false",
                 *var_args,
-            ]
+            ],
+            stream_output=True,  # Enable real-time logging
         )
+        logger.info("✅ Terraform destroy completed successfully")
 
     def get_state_summary(self) -> dict[str, Any]:
         """Get a summary of the current Terraform state."""
@@ -343,7 +495,17 @@ provider "openstack" {{
 
 
 def create_executor(
-    template_path: Path, deployment_name: str
+    template_path: Path,
+    deployment_name: str,
+    s3_key_path: str | None = None,
 ) -> TerraformExecutor:
-    """Factory function to create a TerraformExecutor."""
-    return TerraformExecutor(template_path, deployment_name)
+    """
+    Factory function to create a TerraformExecutor.
+
+    Args:
+        template_path: Path to the Terraform template directory
+        deployment_name: Name of the deployment (used for local state dir)
+        s3_key_path: Optional custom S3 key path (e.g., "cnp/projects/my-project/my-app")
+                     If not provided, uses default prefix + deployment_name
+    """
+    return TerraformExecutor(template_path, deployment_name, s3_key_path)
