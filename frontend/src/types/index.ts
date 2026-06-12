@@ -187,3 +187,10 @@ export interface PictureUploadResponse {
   message: string;
   picture_url: string;
 }
+
+export interface KeycloakUserResult {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+}

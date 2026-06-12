@@ -125,6 +125,11 @@ export const createProject = (project_name: string) =>
 export const getProjectApps = (project_name: string) =>
   request<import("@/types").Deployment[]>(`/projects/${project_name}/apps`);
 
+export const searchKeycloakUsers = (q: string) =>
+  request<import("@/types").KeycloakUserResult[]>(
+    `/projects/users/search?q=${encodeURIComponent(q)}`,
+  );
+
 // Project Members (Phase 4)
 export const getProjectMembers = (project_name: string) =>
   request<import("@/types").ProjectMembersResponse>(

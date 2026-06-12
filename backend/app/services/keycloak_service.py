@@ -8,10 +8,17 @@ Provides utilities for:
 
 Group naming convention: project-<project_name>-admins | project-<project_name>-members
 Example: project-sandbox-admins, project-sandbox-members
+
+Performance notes:
+- Admin token is cached for 55 seconds (tokens live 60s by default)
+- Group IDs are cached for 5 minutes (groups rarely change)
+- Member lists are fetched in parallel (admins + members simultaneously)
 """
 
 import logging
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Annotated
 
 import jwt
@@ -29,6 +36,15 @@ security = HTTPBearer(auto_error=True)
 _PROJECT_GROUP_RE = re.compile(
     r"^/?project-(?P<name>[a-z0-9-]+)-(admins|members)$"
 )
+
+# ── Simple in-process caches ──────────────────────────────────────────────────
+
+# Admin token cache: (token, expires_at)
+_admin_token_cache: tuple[str, float] | None = None
+
+# Group ID cache: {group_name: (group_dict, expires_at)}
+_group_cache: dict[str, tuple[dict, float]] = {}
+_GROUP_CACHE_TTL = 300  # 5 minutes
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +107,18 @@ def has_project_access(token_payload: dict, project_name: str) -> bool:
 
 
 def _get_admin_token() -> str:
-    """Obtain a Keycloak admin token via client-credentials grant."""
+    """
+    Obtain a Keycloak admin token via client-credentials grant.
+    Cached for 55 seconds to avoid a round-trip on every request.
+    """
+    global _admin_token_cache
+
+    now = time.monotonic()
+    if _admin_token_cache is not None:
+        token, expires_at = _admin_token_cache
+        if now < expires_at:
+            return token
+
     url = f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
     response = requests.post(
         url,
@@ -103,7 +130,11 @@ def _get_admin_token() -> str:
         timeout=10,
     )
     response.raise_for_status()
-    return response.json()["access_token"]
+    token = response.json()["access_token"]
+    # Cache for 55 s (tokens typically live 60 s)
+    _admin_token_cache = (token, now + 55)
+    logger.debug("🔑 Fetched fresh Keycloak admin token (cached 55s)")
+    return token
 
 
 def _find_user_by_username(username: str, admin_token: str) -> dict | None:
@@ -132,14 +163,15 @@ def _find_user_by_username(username: str, admin_token: str) -> dict | None:
 def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     """
     Search for a Keycloak group by exact name.
-
-    Args:
-        group_name: Full group name (e.g. ``"project-sandbox-admins"``).
-        admin_token: Admin API bearer token.
-
-    Returns:
-        Group dict if found, None otherwise.
+    Results cached for 5 minutes — group IDs rarely change.
     """
+    now = time.monotonic()
+    cached = _group_cache.get(group_name)
+    if cached is not None:
+        group, expires_at = cached
+        if now < expires_at:
+            return group
+
     url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/groups"
     response = requests.get(
         url,
@@ -150,7 +182,9 @@ def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     response.raise_for_status()
     groups = response.json()
     # Keycloak search returns partial matches — filter exact
-    return next((g for g in groups if g.get("name") == group_name), None)
+    group = next((g for g in groups if g.get("name") == group_name), None)
+    _group_cache[group_name] = (group, now + _GROUP_CACHE_TTL)
+    return group
 
 
 def _check_user_in_group_realtime(
@@ -353,33 +387,24 @@ def list_project_members(project_name: str) -> list[dict]:
     """
     List all members of a project (both admins and members).
 
-    Args:
-        project_name: Project identifier.
+    Optimised: the two group lookups and their member fetches run in parallel.
 
     Returns:
-        List of dicts:
-        ``[{"username": "alice", "email": "...", "role": "admin"}, ...]``
-
-    Raises:
-        requests.RequestException: On Keycloak API errors.
+        Sorted list of member dicts with role resolved (admin wins over member).
     """
     admin_token = _get_admin_token()
-    members: dict[str, dict] = {}  # username -> {username, email, role}
 
-    for suffix, role in (("admins", "admin"), ("members", "member")):
+    def _fetch_group_members(suffix: str, role: str) -> list[dict]:
+        """Fetch members of one group, returning [] if the group doesn't exist."""
         group_name = f"project-{project_name}-{suffix}"
         group = _find_group_by_name(group_name, admin_token)
-
         if not group:
             logger.debug("Group '%s' not found — skipping", group_name)
-            continue
+            return []
 
-        group_id = group["id"]
-
-        # Fetch group members
         url = (
             f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
-            f"/groups/{group_id}/members"
+            f"/groups/{group['id']}/members"
         )
         response = requests.get(
             url,
@@ -387,22 +412,35 @@ def list_project_members(project_name: str) -> list[dict]:
             timeout=10,
         )
         response.raise_for_status()
-        users = response.json()
+        return [
+            {
+                "username": u.get("username", ""),
+                "email": u.get("email", ""),
+                "first_name": u.get("firstName", ""),
+                "last_name": u.get("lastName", ""),
+                "role": role,
+            }
+            for u in response.json()
+            if u.get("username")
+        ]
 
-        for user in users:
-            username = user.get("username", "")
-            if not username:
-                continue
-
-            # Admin role wins over member role
-            if username not in members or role == "admin":
-                members[username] = {
-                    "username": username,
-                    "email": user.get("email", ""),
-                    "first_name": user.get("firstName", ""),
-                    "last_name": user.get("lastName", ""),
-                    "role": role,
-                }
+    # ── Fetch admins and members in parallel ─────────────────────────────
+    members: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {
+            pool.submit(_fetch_group_members, "admins", "admin"): "admin",
+            pool.submit(_fetch_group_members, "members", "member"): "member",
+        }
+        for future in as_completed(futures):
+            role = futures[future]
+            try:
+                for user in future.result():
+                    username = user["username"]
+                    # Admin role wins over member role for the same user
+                    if username not in members or role == "admin":
+                        members[username] = user
+            except Exception as exc:
+                logger.warning("Failed to fetch %s group: %s", role, exc)
 
     return sorted(members.values(), key=lambda x: x["username"])
 

@@ -3,10 +3,10 @@
 import type { Deployment, Project } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getDeployment,
-  getDeployments,
-  getProjectApps,
-  getProjects,
+    getDeployment,
+    getDeployments,
+    getProjectApps,
+    getProjects,
 } from "./api";
 
 const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
@@ -159,13 +159,16 @@ export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const initialLoadDone = useRef(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    // Only show full skeleton on first load; subsequent refreshes update silently
+    if (!initialLoadDone.current) setLoading(true);
     try {
       const data = await getProjects();
       setProjects(data);
       setError(null);
+      initialLoadDone.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch projects");
     } finally {
@@ -185,14 +188,16 @@ export function useProjectApps(projectName: string | null) {
   const [apps, setApps] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const initialLoadDone = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!projectName) return;
-    setLoading(true);
+    if (!initialLoadDone.current) setLoading(true);
     try {
       const data = await getProjectApps(projectName);
       setApps(data);
       setError(null);
+      initialLoadDone.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch apps");
     } finally {
@@ -205,6 +210,7 @@ export function useProjectApps(projectName: string | null) {
       setLoading(false);
       return;
     }
+    initialLoadDone.current = false; // reset on projectName change
     refresh();
   }, [refresh, projectName]);
 
@@ -216,15 +222,17 @@ export function useProjectMembers(projectName: string | null) {
   const [members, setMembers] = useState<import("@/types").ProjectMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const initialLoadDone = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!projectName) return;
-    setLoading(true);
+    if (!initialLoadDone.current) setLoading(true);
     try {
       const { getProjectMembers } = await import("./api");
       const data = await getProjectMembers(projectName);
       setMembers(data.members);
       setError(null);
+      initialLoadDone.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch members");
     } finally {
@@ -237,6 +245,7 @@ export function useProjectMembers(projectName: string | null) {
       setLoading(false);
       return;
     }
+    initialLoadDone.current = false;
     refresh();
   }, [refresh, projectName]);
 

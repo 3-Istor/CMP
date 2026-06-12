@@ -11,6 +11,8 @@ dist/
 build/
 *.egg-info/
 .pytest_cache/
+backend/logs/*
+.vscode/*
 
 # Terraform and template data
 backend/data/

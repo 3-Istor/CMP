@@ -119,7 +119,7 @@ export default function Home() {
       <header className="border-b px-6 py-4 flex items-center gap-3">
         <span className="text-2xl">⚡</span>
         <div>
-          <h1 className="text-lg font-bold leading-none">CMP</h1>
+          <h1 className="text-lg font-bold leading-none">CNP</h1>
           <p className="text-xs text-muted-foreground">Cloud Native Platform</p>
         </div>
         <div className="ml-auto flex items-center gap-3">

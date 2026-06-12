@@ -99,18 +99,16 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
       {/* Backdrop */}
       <div
         onClick={() => !loading && onClose()}
-        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${
-          isOpen
+        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${isOpen
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none"
-        }`}
+          }`}
       />
 
       {/* Side panel */}
       <div
-        className={`fixed right-0 top-0 z-50 h-full w-full max-w-md bg-card border-l border-border shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
-          isOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`fixed right-0 top-0 z-50 h-full w-full max-w-md bg-card border-l border-border shadow-2xl flex flex-col transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
+          }`}
       >
         {template && (
           <>
@@ -165,12 +163,18 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                     id="app-name"
                     placeholder={`my-${template.id}`}
                     value={appName}
+                    maxLength={45}
                     onChange={(e) => setAppName(e.target.value)}
                     required
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Used to identify this deployment. Must be unique.
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Used to identify this deployment. Must be unique.
+                    </p>
+                    <p className={`text-xs tabular-nums ${appName.length > 40 ? "text-destructive" : "text-muted-foreground"}`}>
+                      {appName.length}/45
+                    </p>
+                  </div>
                 </div>
 
                 {/* Template-specific fields */}

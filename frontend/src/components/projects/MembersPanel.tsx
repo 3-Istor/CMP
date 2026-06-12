@@ -4,18 +4,28 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { addProjectMember, removeProjectMember } from "@/lib/api";
+import {
+  addProjectMember,
+  removeProjectMember,
+  searchKeycloakUsers,
+} from "@/lib/api";
 import { useProjectMembers } from "@/lib/hooks";
-import type { ProjectMember } from "@/types";
-import { Loader2, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
-import { useState } from "react";
+import type { KeycloakUserResult, ProjectMember } from "@/types";
+import {
+  Loader2,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface Props {
@@ -25,21 +35,77 @@ interface Props {
 export function MembersPanel({ projectName }: Props) {
   const { members, loading, error, refresh } = useProjectMembers(projectName);
 
-  const [username, setUsername] = useState("");
+  const [query, setQuery] = useState("");
   const [role, setRole] = useState<"admin" | "member">("member");
+  const [results, setResults] = useState<KeycloakUserResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState<KeycloakUserResult | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Debounced Keycloak search
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    setSelected(null);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (value.trim().length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const data = await searchKeycloakUsers(value.trim());
+        setResults(data);
+        setShowDropdown(data.length > 0);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleSelect = (user: KeycloakUserResult) => {
+    setSelected(user);
+    setQuery(
+      user.first_name && user.last_name
+        ? `${user.first_name} ${user.last_name} (${user.username})`
+        : user.username,
+    );
+    setShowDropdown(false);
+    setResults([]);
+  };
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = username.trim();
-    if (!trimmed) return;
+    const username = selected?.username ?? query.trim();
+    if (!username) return;
 
     setAdding(true);
     try {
-      await addProjectMember(projectName, trimmed, role);
-      toast.success(`Added ${trimmed} as ${role}`);
-      setUsername("");
+      await addProjectMember(projectName, username, role);
+      toast.success(`Added ${username} as ${role}`);
+      setQuery("");
+      setSelected(null);
       setRole("member");
       refresh();
     } catch (err) {
@@ -66,25 +132,72 @@ export function MembersPanel({ projectName }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* ── Add Member ── */}
       <div>
         <h3 className="text-sm font-medium mb-1">Add Member</h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Members will be added to the appropriate Keycloak group:
-          <span className="font-mono ml-1">
+          Search users from Keycloak. They will be added to{" "}
+          <span className="font-mono">
             project-{projectName}-{role === "admin" ? "admins" : "members"}
           </span>
         </p>
+
         <form onSubmit={handleAddMember} className="flex gap-2">
-          <div className="flex-1">
-            <Input
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={adding}
-              required
-            />
+          {/* Search input with autocomplete */}
+          <div ref={searchRef} className="relative flex-1">
+            <div className="relative">
+              <Input
+                placeholder="Search by username or email…"
+                value={query}
+                onChange={(e) => handleQueryChange(e.target.value)}
+                onFocus={() => results.length > 0 && setShowDropdown(true)}
+                disabled={adding}
+                autoComplete="off"
+              />
+              {searching && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+
+            {/* Dropdown results */}
+            {showDropdown && results.length > 0 && (
+              <div className="absolute z-50 top-full mt-1 w-full rounded-md border bg-popover shadow-md overflow-hidden">
+                {results.map((user) => (
+                  <button
+                    key={user.username}
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-accent transition-colors"
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // prevent blur before click
+                      handleSelect(user);
+                    }}
+                  >
+                    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-semibold text-primary">
+                        {(user.first_name?.[0] || user.username[0]).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {user.first_name && user.last_name
+                          ? `${user.first_name} ${user.last_name}`
+                          : user.username}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user.email || user.username}
+                      </p>
+                    </div>
+                    <span className="ml-auto text-xs font-mono text-muted-foreground shrink-0">
+                      {user.username}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="w-36">
+
+          {/* Role selector */}
+          <div className="w-36 shrink-0">
             <Select
               value={role}
               onValueChange={(v) => setRole(v as "admin" | "member")}
@@ -99,7 +212,13 @@ export function MembersPanel({ projectName }: Props) {
               </SelectContent>
             </Select>
           </div>
-          <Button type="submit" disabled={adding || !username.trim()}>
+
+          {/* Submit */}
+          <Button
+            type="submit"
+            disabled={adding || !query.trim()}
+            title="Add member"
+          >
             {adding ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -109,8 +228,17 @@ export function MembersPanel({ projectName }: Props) {
         </form>
       </div>
 
+      {/* ── Member list ── */}
       <div>
-        <h3 className="text-sm font-medium mb-3">Current Members</h3>
+        <h3 className="text-sm font-medium mb-3">
+          Current Members{" "}
+          {!loading && members.length > 0 && (
+            <span className="text-muted-foreground font-normal">
+              ({members.length})
+            </span>
+          )}
+        </h3>
+
         {loading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (
@@ -152,6 +280,8 @@ export function MembersPanel({ projectName }: Props) {
     </div>
   );
 }
+
+// ── Member row ────────────────────────────────────────────────────────────────
 
 interface MemberRowProps {
   member: ProjectMember;
@@ -200,6 +330,7 @@ function MemberRow({ member, removing, onRemove }: MemberRowProps) {
         onClick={onRemove}
         disabled={removing}
         className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+        title={`Remove ${member.username}`}
       >
         {removing ? (
           <Loader2 className="h-4 w-4 animate-spin" />

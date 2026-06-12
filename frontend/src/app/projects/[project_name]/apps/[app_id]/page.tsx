@@ -1,6 +1,7 @@
 "use client";
 
 import { DeploymentHealthPanel } from "@/components/dashboard/DeploymentHealthPanel";
+import { Github } from "@/components/icons/Github";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
@@ -27,7 +28,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { deleteDeployment, getDeployment } from "@/lib/api";
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
-import { Github } from "@/components/icons/Github";
 import {
     Activity,
     ArrowLeft,
@@ -133,7 +133,10 @@ export default function AppControlCenterPage() {
             await deleteDeployment(appId);
             toast.success(`Deletion of "${current.name}" started`);
             setDeleteOpen(false);
-            router.push(`/projects/${projectName}`);
+            // Update local state to reflect deleting status — no page reload
+            setDeployment((prev) =>
+                prev ? { ...prev, status: "deleting", step_message: "🗑️ Destroying resources…" } : prev,
+            );
         } catch (err) {
             toast.error(`Delete failed: ${err}`);
         } finally {

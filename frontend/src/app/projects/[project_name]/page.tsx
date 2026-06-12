@@ -266,6 +266,20 @@ export default function ProjectPage() {
                   <Plus className="mr-2 h-4 w-4" />
                   Deploy App
                 </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowDeleteDialog(true)}
+                  disabled={apps.length > 0}
+                  title={
+                    apps.length > 0
+                      ? `Delete all ${apps.length} app(s) first`
+                      : "Delete this project"
+                  }
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Project
+                </Button>
               </div>
             </div>
 
@@ -349,41 +363,6 @@ export default function ProjectPage() {
           {/* ── Members tab ── */}
           <TabsContent value="members" className="mt-6 space-y-6">
             <MembersPanel projectName={projectName} />
-
-            {/* ── Delete Project Section ── */}
-            <div className="rounded-xl border border-destructive/50 bg-destructive/5 p-6 space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-destructive/10 p-2">
-                  <Trash2 className="h-5 w-5 text-destructive" />
-                </div>
-                <div className="flex-1 space-y-1">
-                  <h3 className="font-semibold text-destructive">
-                    Danger Zone
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Delete this project permanently. This action cannot be
-                    undone.
-                  </p>
-                  {apps.length > 0 && (
-                    <p className="text-sm text-destructive font-medium mt-2">
-                      ⚠️ You must delete all {apps.length} application
-                      {apps.length !== 1 ? "s" : ""} before deleting this
-                      project.
-                    </p>
-                  )}
-                </div>
-              </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setShowDeleteDialog(true)}
-                disabled={apps.length > 0}
-                className="w-full sm:w-auto"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Project
-              </Button>
-            </div>
           </TabsContent>
         </Tabs>
       </main>

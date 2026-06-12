@@ -53,6 +53,63 @@ _project_creators: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
+# GET /api/projects/users/search  — Keycloak user search for member autocomplete
+# ---------------------------------------------------------------------------
+
+
+@router.get("/users/search")
+async def search_keycloak_users(
+    q: str,
+    token_payload: Annotated[dict, Depends(get_current_user)],
+) -> list[dict]:
+    """
+    Search Keycloak users by username or email (prefix search).
+
+    Used by the Members panel autocomplete to find users to add to a project.
+    Returns at most 10 results.
+
+    Query params:
+        q: Search string (minimum 2 chars).
+
+    Returns:
+        List of ``{"username": str, "email": str, "first_name": str, "last_name": str}``
+    """
+    if len(q.strip()) < 2:
+        return []
+
+    try:
+        from app.services.keycloak_service import _get_admin_token
+
+        admin_token = _get_admin_token()
+        url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
+
+        # Keycloak search matches username, email, firstName, lastName
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {admin_token}"},
+            params={"search": q.strip(), "max": 10},
+            timeout=10,
+        )
+        response.raise_for_status()
+        users = response.json()
+
+        return [
+            {
+                "username": u.get("username", ""),
+                "email": u.get("email", ""),
+                "first_name": u.get("firstName", ""),
+                "last_name": u.get("lastName", ""),
+            }
+            for u in users
+            if u.get("username")
+        ]
+
+    except Exception as exc:
+        logger.warning("User search failed: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Helper function to get user_id from token
 # ---------------------------------------------------------------------------
 
@@ -397,31 +454,34 @@ async def add_project_member(
     Add a user to a project Keycloak group.
 
     Access control: requires admin role in the project.
-
-    Request body:
-        - ``username`` (required): Keycloak username to add.
-        - ``role`` (optional): Either ``"admin"`` or ``"member"`` (default: ``"member"``).
-
-    Returns:
-        dict: Confirmation message.
-
-    Raises:
-        400: Invalid role or user/group not found.
-        403: Caller is not a project admin.
-        502: Keycloak API error.
+    Optimised: admin check and user lookup run in parallel.
     """
     user_id = get_user_id_from_token(token_payload)
 
     try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         from app.services.keycloak_service import (
             _check_user_in_group_realtime,
             _find_group_by_name,
+            _find_user_by_username,
             _get_admin_token,
         )
 
         admin_token = _get_admin_token()
-        admin_group_name = f"project-{project_name}-admins"
-        admin_group = _find_group_by_name(admin_group_name, admin_token)
+
+        # ── Run admin-group lookup AND user lookup in parallel ────────────
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            admin_group_future = pool.submit(
+                _find_group_by_name,
+                f"project-{project_name}-admins",
+                admin_token,
+            )
+            user_future = pool.submit(
+                _find_user_by_username, username, admin_token
+            )
+            admin_group = admin_group_future.result()
+            target_user = user_future.result()
 
         if not admin_group or not _check_user_in_group_realtime(
             user_id, admin_group["id"], admin_token
@@ -431,7 +491,37 @@ async def add_project_member(
                 detail=f"Access denied: admin role required for project '{project_name}'.",
             )
 
-        add_user_to_project(username, project_name, role)
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"User '{username}' not found in Keycloak.",
+            )
+
+        # Find target group and add user in parallel
+        group_suffix = "admins" if role == "admin" else "members"
+        target_group = _find_group_by_name(
+            f"project-{project_name}-{group_suffix}", admin_token
+        )
+
+        if not target_group:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Group 'project-{project_name}-{group_suffix}' not found. "
+                    "Ensure the project has been bootstrapped."
+                ),
+            )
+
+        # Add user to group
+        import requests as _requests
+        resp = _requests.put(
+            f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
+            f"/users/{target_user['id']}/groups/{target_group['id']}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+
         return {
             "message": f"User '{username}' added to project '{project_name}' with role '{role}'.",
             "project_name": project_name,
@@ -442,14 +532,9 @@ async def add_project_member(
     except HTTPException:
         raise
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
-        logger.error(
-            "Failed to add user '%s' to project '%s': %s", username, project_name, exc
-        )
+        logger.error("Failed to add user '%s' to project '%s': %s", username, project_name, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to add user to project: {exc}",
