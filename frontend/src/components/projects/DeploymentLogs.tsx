@@ -24,7 +24,7 @@ interface DeploymentLogsProps {
 export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLogsProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   
@@ -33,52 +33,85 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
   const eventSourceRef = useRef<EventSource | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
+  // Keep the latest status in a ref so the stream handlers always read the
+  // current value without re-subscribing (which would reset the logs).
+  const statusRef = useRef(deploymentStatus);
+  useEffect(() => {
+    statusRef.current = deploymentStatus;
+  }, [deploymentStatus]);
+
   // Initialize event source for log streaming
   useEffect(() => {
-    // Close existing connection if any
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
     setLogs([]);
     setIsConnected(false);
 
     const apiUrl = getApiUrl();
     // Support relative backend URLs if API URL is relative
-    const streamUrl = apiUrl.startsWith("http") 
+    const streamUrl = apiUrl.startsWith("http")
       ? `${apiUrl}/deployments/${deploymentId}/logs/stream`
       : `${window.location.origin}${apiUrl}/deployments/${deploymentId}/logs/stream`;
 
-    console.log("Connecting to log stream:", streamUrl);
-    
-    const eventSource = new EventSource(streamUrl);
-    eventSourceRef.current = eventSource;
+    const ACTIVE_STATUSES = new Set([
+      "pending",
+      "initializing",
+      "planning",
+      "deploying",
+      "deleting",
+    ]);
 
-    eventSource.onopen = () => {
-      setIsConnected(true);
-      setLogs(prev => [...prev, "--- Log stream connected ---"]);
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const connect = () => {
+      const eventSource = new EventSource(streamUrl);
+      eventSourceRef.current = eventSource;
+
+      // The backend replays the whole log file from the start on every
+      // connection. Track the line index within THIS connection so identical
+      // re-sent lines never change state — only genuinely new (or changed)
+      // lines update the view, avoiding pointless re-renders and scroll jumps.
+      let lineIndex = 0;
+
+      eventSource.onopen = () => {
+        setIsConnected(true);
+        lineIndex = 0;
+      };
+
+      eventSource.onmessage = (event) => {
+        if (!event.data) return;
+        const idx = lineIndex++;
+        const data = event.data;
+        setLogs((prev) => {
+          if (idx < prev.length) {
+            // Already displayed — keep the same array reference if unchanged
+            if (prev[idx] === data) return prev;
+            const next = prev.slice();
+            next[idx] = data;
+            return next;
+          }
+          return [...prev, data];
+        });
+      };
+
+      eventSource.onerror = () => {
+        setIsConnected(false);
+        eventSource.close();
+        // Only keep streaming while the deployment is still progressing.
+        // Terminal states have a final log file, so we stop here instead of
+        // letting EventSource reconnect every ~3s and re-stream the same logs.
+        if (ACTIVE_STATUSES.has(statusRef.current)) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      };
     };
 
-    eventSource.onmessage = (event) => {
-      if (event.data) {
-        setLogs((prev) => [...prev, event.data]);
-      }
-    };
-
-    eventSource.onerror = (err) => {
-      console.warn("Log stream error or closed by server:", err);
-      setIsConnected(false);
-      // Don't log error message if it's just normal closure on completion
-      if (eventSource.readyState === EventSource.CLOSED) {
-        setLogs(prev => [...prev, "--- Log stream disconnected (Deployment finished) ---"]);
-      } else {
-        setLogs(prev => [...prev, "--- Reconnecting to log stream... ---"]);
-      }
-    };
+    connect();
 
     return () => {
-      eventSource.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
     };
   }, [deploymentId]);
 

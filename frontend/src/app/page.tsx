@@ -1,7 +1,5 @@
 "use client";
 
-import { CatalogGrid } from "@/components/catalog/CatalogGrid";
-import { DeployModal } from "@/components/catalog/DeployModal";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { UserNav } from "@/components/layout/UserNav";
@@ -10,22 +8,14 @@ import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createDeployment, getCatalog } from "@/lib/api";
 import { useProjects } from "@/lib/hooks";
-import type { CatalogTemplate } from "@/types";
 import { FolderPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useState } from "react";
 
 export default function Home() {
   const { data: session } = useSession();
-  const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
-  const [loadingCatalog, setLoadingCatalog] = useState(true);
-  const [selectedTemplate, setSelectedTemplate] =
-    useState<CatalogTemplate | null>(null);
-  const [deploying, setDeploying] = useState(false);
-  const [dashboardKey, setDashboardKey] = useState(0);
+  const [dashboardKey] = useState(0);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   const {
@@ -39,79 +29,6 @@ export default function Home() {
     `${session?.user?.given_name ?? ""} ${session?.user?.family_name ?? ""}`.trim() ||
     session?.user?.email ||
     "Developer";
-
-  useEffect(() => {
-    getCatalog()
-      .then(setTemplates)
-      .catch((err) => {
-        console.error("Failed to load catalog:", err);
-        toast.error("Failed to load templates from repository");
-      })
-      .finally(() => setLoadingCatalog(false));
-  }, []);
-
-  const paasTemplates = templates.filter((t) => t.category === "paas");
-  const iaasTemplates = templates.filter((t) => t.category !== "paas");
-
-  const handleDeploy = async (
-    name: string,
-    config: Record<string, string | number>,
-  ) => {
-    if (!selectedTemplate) return;
-    setDeploying(true);
-    try {
-      // Get user's GitHub installation ID for Kubernetes deployments
-      let githubInstallationId: string | null = null;
-      let projectName = "default";
-
-      if (selectedTemplate.category === "paas") {
-        // Fetch GitHub status
-        try {
-          const githubStatus = await import("@/lib/api").then((m) =>
-            m.getGitHubStatus(),
-          );
-          githubInstallationId = githubStatus.github_installation_id;
-
-          if (!githubInstallationId) {
-            toast.error("Please link your GitHub account first");
-            setDeploying(false);
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to get GitHub status:", error);
-          toast.error("Failed to verify GitHub link");
-          setDeploying(false);
-          return;
-        }
-
-        // Get project name from config or use default
-        projectName = String(config.project_name || "default");
-      }
-
-      // Build complete app_config
-      const appConfig: Record<string, unknown> = { ...config };
-
-      // Add required fields for Kubernetes deployments
-      if (selectedTemplate.category === "paas" && githubInstallationId) {
-        appConfig.github_installation_id = githubInstallationId;
-        appConfig.project_name = projectName;
-      }
-
-      await createDeployment({
-        name,
-        template_id: selectedTemplate.id,
-        project_id: selectedTemplate.category === "paas" ? projectName : null,
-        app_config: appConfig,
-      });
-      toast.success(`Deployment of "${name}" started`);
-      setSelectedTemplate(null);
-      setDashboardKey((prev) => prev + 1);
-    } catch (err) {
-      toast.error(`Deploy failed: ${err}`);
-    } finally {
-      setDeploying(false);
-    }
-  };
 
   return (
     <div className="min-h-screen">
@@ -186,43 +103,6 @@ export default function Home() {
 
         <Separator />
 
-        {/* ── App Catalog ── */}
-        <section>
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold mb-1">
-              Infrastructure Catalog (IaaS)
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Deploy raw VMs on OpenStack and AWS Auto Scaling Groups.
-              <br />
-              <span className="font-medium text-primary mt-1 inline-block">
-                💡 To deploy modern Kubernetes applications, please open a
-                Project above.
-              </span>
-            </p>
-          </div>
-
-          {loadingCatalog ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-              <span className="ml-3 text-muted-foreground">
-                Loading templates…
-              </span>
-            </div>
-          ) : iaasTemplates.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg mb-2">No IaaS templates available</p>
-            </div>
-          ) : (
-            <CatalogGrid
-              templates={iaasTemplates}
-              onDeploy={setSelectedTemplate}
-            />
-          )}
-        </section>
-
-        <Separator />
-
         {/* ── All Recent Deployments ── */}
         <section>
           <h2 className="text-xl font-semibold mb-4">All My Deployments</h2>
@@ -235,14 +115,6 @@ export default function Home() {
         open={createProjectOpen}
         onClose={() => setCreateProjectOpen(false)}
         onCreated={refreshProjects}
-      />
-
-      <DeployModal
-        template={selectedTemplate}
-        projects={projects}
-        onClose={() => setSelectedTemplate(null)}
-        onConfirm={handleDeploy}
-        loading={deploying}
       />
     </div>
   );
