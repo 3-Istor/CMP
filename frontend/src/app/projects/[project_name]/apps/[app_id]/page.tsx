@@ -1,11 +1,11 @@
 "use client";
 
-import { DeploymentHealthPanel } from "@/components/dashboard/DeploymentHealthPanel";
 import { Github } from "@/components/icons/Github";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
+import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -27,10 +27,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { deleteDeployment, getDeployment } from "@/lib/api";
-import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
+import { useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import {
-    Activity,
     ArrowLeft,
     CheckCircle2,
     ExternalLink,
@@ -62,6 +61,27 @@ const STATUS_VARIANT: Record<
     deleted: "secondary",
 };
 
+// Color indicator for the app status (green / orange / red, amber while in progress)
+const STATUS_COLOR: Record<Deployment["status"], string> = {
+    running: "bg-green-500",
+    degraded: "bg-orange-500",
+    failed: "bg-red-500",
+    pending: "bg-amber-400",
+    initializing: "bg-amber-400",
+    planning: "bg-amber-400",
+    deploying: "bg-amber-400",
+    deleting: "bg-amber-400",
+    deleted: "bg-muted-foreground",
+};
+
+const IN_PROGRESS_STATUSES = [
+    "pending",
+    "initializing",
+    "planning",
+    "deploying",
+    "deleting",
+];
+
 function StatusDot({ status }: { status: Deployment["status"] }) {
     if (status === "running")
         return <CheckCircle2 className="h-5 w-5 text-green-500" />;
@@ -86,7 +106,6 @@ export default function AppControlCenterPage() {
 
     const [deployment, setDeployment] = useState<Deployment | null>(null);
     const [loading, setLoading] = useState(true);
-    const [healthOpen, setHealthOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteConfirmName, setDeleteConfirmName] = useState("");
     const [deleting, setDeleting] = useState(false);
@@ -119,13 +138,9 @@ export default function AppControlCenterPage() {
         fetchDeployment();
     }, [fetchDeployment]);
 
-    // Health check for running/degraded apps
+    // Show the inline health panel only for running/degraded apps
     const shouldFetchHealth =
         current?.status === "running" || current?.status === "degraded";
-    const { health } = useAppHealth(
-        shouldFetchHealth ? appId : null,
-        10_000,
-    );
 
     const handleDelete = async () => {
         if (!current || deleteConfirmName !== current.name) return;
@@ -152,7 +167,7 @@ export default function AppControlCenterPage() {
                 <header className="border-b px-6 py-4 flex items-center gap-3">
                     <span className="text-2xl">⚡</span>
                     <div>
-                        <h1 className="text-lg font-bold leading-none">CMP</h1>
+                        <h1 className="text-lg font-bold leading-none">CNP</h1>
                         <p className="text-xs text-muted-foreground">Cloud Native Platform</p>
                     </div>
                     <div className="ml-auto">
@@ -211,7 +226,14 @@ export default function AppControlCenterPage() {
                             <span className="text-4xl">{current.template_icon}</span>
                         )}
                         <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2.5">
+                                <span
+                                    title={current.status}
+                                    className={`h-4 w-4 rounded-full shrink-0 ${STATUS_COLOR[current.status]} ${IN_PROGRESS_STATUSES.includes(current.status) ? "animate-pulse" : ""}`}
+                                />
+                                <span className="text-sm font-semibold capitalize text-muted-foreground">
+                                    {current.status}
+                                </span>
                                 <h2 className="text-2xl font-bold">{current.name}</h2>
                                 <StatusDot status={current.status} />
                             </div>
@@ -245,16 +267,6 @@ export default function AppControlCenterPage() {
 
                     {/* Header quick actions */}
                     <div className="flex items-center gap-2 flex-wrap">
-                        {shouldFetchHealth && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setHealthOpen(true)}
-                            >
-                                <Activity className="mr-2 h-4 w-4" />
-                                Health
-                            </Button>
-                        )}
                         <Button
                             variant="outline"
                             size="sm"
@@ -347,39 +359,9 @@ export default function AppControlCenterPage() {
                             </Card>
                         )}
 
-                        {/* Health summary (visible when health data is available) */}
-                        {health && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                        <Activity className="h-4 w-4 text-muted-foreground" />
-                                        Health Summary
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            {health.status === "healthy" ? (
-                                                <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                            ) : health.status === "degraded" ? (
-                                                <Activity className="h-5 w-5 text-yellow-500" />
-                                            ) : (
-                                                <XCircle className="h-5 w-5 text-destructive" />
-                                            )}
-                                            <span className="text-sm font-medium capitalize">
-                                                {health.status}
-                                            </span>
-                                        </div>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setHealthOpen(true)}
-                                        >
-                                            View Details
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                        {/* Health summary (inline, collapsible like the logs) */}
+                        {shouldFetchHealth && (
+                            <DeploymentHealth deploymentId={appId} />
                         )}
                     </div>
 
@@ -443,14 +425,6 @@ export default function AppControlCenterPage() {
                     </div>
                 </div>
             </main>
-
-            {/* ── Health details dialog ── */}
-            <DeploymentHealthPanel
-                deploymentId={appId}
-                deploymentName={current.name}
-                open={healthOpen}
-                onClose={() => setHealthOpen(false)}
-            />
 
             {/* ── Delete confirmation dialog ── */}
             <Dialog
