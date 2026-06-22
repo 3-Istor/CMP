@@ -27,6 +27,7 @@ class TerraformExecutor:
         working_dir: Path,
         deployment_name: str,
         s3_key_path: str | None = None,
+        log_file: Path | None = None,
     ):
         self.working_dir = working_dir
         self.deployment_name = deployment_name
@@ -34,6 +35,18 @@ class TerraformExecutor:
         self.state_dir = Path("./data/terraform_states") / deployment_name
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.use_s3_backend = settings.TF_BACKEND_S3_ENABLED
+        self.log_file = log_file
+
+    def _log_message(self, message: str, level: int = logging.INFO) -> None:
+        """Log message to standard logger and dynamic log file if configured."""
+        logger.log(level, message)
+        if self.log_file:
+            try:
+                self.log_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.log_file, "a", encoding="utf-8") as f:
+                    f.write(f"{message}\n")
+            except Exception as e:
+                logger.error("Failed to write to log file %s: %s", self.log_file, e)
 
     def _get_backend_config(self) -> list[str]:
         """Generate backend configuration for Terraform init."""
@@ -157,13 +170,13 @@ class TerraformExecutor:
 
         # Sanitize command for logging (hide sensitive values)
         safe_command = self._sanitize_command_for_logging(command)
-        logger.info(
-            "Running: %s in %s", " ".join(safe_command), self.working_dir
+        self._log_message(
+            f"Running: {' '.join(safe_command)} in {self.working_dir}"
         )
 
         # If streaming is requested, log output in real-time
         if stream_output:
-            logger.info("📺 Streaming Terraform output in real-time...")
+            self._log_message("📺 Streaming Terraform output in real-time...")
             import time
 
             # Force unbuffered output with PYTHONUNBUFFERED and TF_IN_AUTOMATION
@@ -183,7 +196,7 @@ class TerraformExecutor:
             stdout_lines = []
             start_time = time.time()
 
-            logger.info("⏱️  Waiting for Terraform output...")
+            self._log_message("⏱️  Waiting for Terraform output...")
 
             # Read with timeout detection
             import select
@@ -195,7 +208,7 @@ class TerraformExecutor:
                     if remaining:
                         for line in remaining.splitlines():
                             if line.strip():
-                                logger.info(f"[TF] {line}")
+                                self._log_message(f"[TF] {line}")
                                 stdout_lines.append(line)
                     break
 
@@ -207,21 +220,21 @@ class TerraformExecutor:
                     if line:
                         line = line.rstrip()
                         if line:
-                            logger.info(f"[TF] {line}")
+                            self._log_message(f"[TF] {line}")
                             stdout_lines.append(line)
                 else:
                     # No output for 1 second, log that we're still waiting
                     elapsed = time.time() - start_time
                     if int(elapsed) % 10 == 0 and int(elapsed) > 0:  # Every 10 seconds
-                        logger.info(f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)")
+                        self._log_message(f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)")
 
             stdout_output = "\n".join(stdout_lines)
             elapsed_time = time.time() - start_time
-            logger.info(f"⏱️  Terraform command completed in {elapsed_time:.1f}s")
+            self._log_message(f"⏱️  Terraform command completed in {elapsed_time:.1f}s")
 
             if process.returncode != 0:
-                logger.error(f"❌ Command failed with exit code {process.returncode}")
-                logger.error(f"Last 500 chars of output: {stdout_output[-500:]}")
+                self._log_message(f"❌ Command failed with exit code {process.returncode}", logging.ERROR)
+                self._log_message(f"Last 500 chars of output: {stdout_output[-500:]}", logging.ERROR)
                 raise RuntimeError(
                     f"Terraform command failed with exit code {process.returncode}"
                 )
@@ -246,7 +259,7 @@ class TerraformExecutor:
         )
 
         if result.returncode != 0:
-            logger.error("Command failed: %s", result.stderr)
+            self._log_message(f"Command failed: {result.stderr}", logging.ERROR)
             raise RuntimeError(
                 f"Terraform command failed: {result.stderr or result.stdout}"
             )
@@ -498,6 +511,7 @@ def create_executor(
     template_path: Path,
     deployment_name: str,
     s3_key_path: str | None = None,
+    log_file: Path | None = None,
 ) -> TerraformExecutor:
     """
     Factory function to create a TerraformExecutor.
@@ -507,5 +521,6 @@ def create_executor(
         deployment_name: Name of the deployment (used for local state dir)
         s3_key_path: Optional custom S3 key path (e.g., "cnp/projects/my-project/my-app")
                      If not provided, uses default prefix + deployment_name
+        log_file: Optional path to log file to write all output to.
     """
-    return TerraformExecutor(template_path, deployment_name, s3_key_path)
+    return TerraformExecutor(template_path, deployment_name, s3_key_path, log_file)

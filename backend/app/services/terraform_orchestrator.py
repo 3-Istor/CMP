@@ -138,7 +138,8 @@ def run_deployment(deployment_id: int) -> None:
                 s3_key_path = f"cnp/projects/{deployment.project_id}/{deployment.name}"
                 logger.info(f"📁 Using structured S3 path: {s3_key_path}")
 
-            executor = create_executor(template_path, deployment.name, s3_key_path)
+            log_file = Path("logs/deployments") / f"{deployment.id}.log"
+            executor = create_executor(template_path, deployment.name, s3_key_path, log_file=log_file)
             logger.info(f"✅ Terraform executor created (working_dir={executor.working_dir})")
 
             # Step 1: Initialize
@@ -279,7 +280,8 @@ def run_deletion(deployment_id: int) -> None:
                 s3_key_path = f"cnp/projects/{deployment.project_id}/{deployment.name}"
                 logger.info(f"📁 Using structured S3 path: {s3_key_path}")
 
-            executor = create_executor(template_path, deployment.name, s3_key_path)
+            log_file = Path("logs/deployments") / f"{deployment.id}.log"
+            executor = create_executor(template_path, deployment.name, s3_key_path, log_file=log_file)
             logger.info(f"✅ Terraform executor created (working_dir={executor.working_dir})")
 
             # Parse original config for destroy
@@ -407,6 +409,15 @@ def _update(
     deployment.step_message = message
     db.commit()
     logger.info("[%s] %s", status.value, message)
+
+    # Write to deployment-specific log file for real-time log streaming
+    log_file = Path("logs/deployments") / f"{deployment.id}.log"
+    try:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n--- [{status.value.upper()}] {message} ---\n")
+    except Exception as e:
+        logger.error("Failed to write to log file %s: %s", log_file, e)
 
 
 def _format_outputs_message(outputs: dict) -> str:

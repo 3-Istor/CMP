@@ -11,7 +11,7 @@ declare global {
 }
 
 // Use runtime config if available, otherwise fall back to build-time env var
-const getApiUrl = () => {
+export const getApiUrl = () => {
   if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__) {
     return window.__RUNTIME_CONFIG__.apiUrl;
   }

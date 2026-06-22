@@ -5,6 +5,7 @@ import { Github } from "@/components/icons/Github";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
+import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -293,6 +294,9 @@ export default function AppControlCenterPage() {
                                 <DeploymentStepper deployment={current} />
                             </CardContent>
                         </Card>
+
+                        {/* Live deployment log streaming */}
+                        <DeploymentLogs deploymentId={appId} deploymentStatus={current.status} />
 
                         {/* Quick Actions (Kubernetes only) */}
                         {isKubernetes && (

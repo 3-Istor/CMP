@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getGitHubStatus } from "@/lib/api";
-import type { CatalogTemplate } from "@/types";
+import type { CatalogTemplate, Project } from "@/types";
 
 interface Props {
   template: CatalogTemplate | null;
+  projects?: Project[];
   onClose: () => void;
   onConfirm: (name: string, config: Record<string, string | number>) => void;
   loading?: boolean;

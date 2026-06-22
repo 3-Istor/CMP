@@ -1,8 +1,11 @@
+import asyncio
 import json
 from io import StringIO
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
 
@@ -102,6 +105,56 @@ async def get_deployment_outputs(
         return json.loads(deployment.terraform_outputs)
     except Exception:
         return {}
+
+
+@router.get("/{deployment_id}/logs/stream")
+async def stream_deployment_logs(
+    deployment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Stream Terraform execution logs for a deployment in real-time.
+    """
+    deployment = db.get(Deployment, deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+
+    log_file = Path("logs/deployments") / f"{deployment_id}.log"
+
+    async def log_generator():
+        # Ensure log directory and file exists
+        if not log_file.exists():
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            log_file.touch()
+
+        # Open and read log file incrementally
+        with open(log_file, "r", encoding="utf-8") as f:
+            while True:
+                line = f.readline()
+                if line:
+                    yield f"data: {line.rstrip()}\n\n"
+                else:
+                    # Check if the deployment has reached a terminal state
+                    # We create a new DB session since the original DB session might be closed/expired
+                    from app.core.database import SessionLocal
+                    with SessionLocal() as check_db:
+                        dep = check_db.get(Deployment, deployment_id)
+                        if not dep or dep.status not in (
+                            DeploymentStatus.PENDING,
+                            DeploymentStatus.INITIALIZING,
+                            DeploymentStatus.PLANNING,
+                            DeploymentStatus.DEPLOYING,
+                            DeploymentStatus.DELETING,
+                        ):
+                            # Read any remaining output lines that were written since last read
+                            line = f.readline()
+                            while line:
+                                yield f"data: {line.rstrip()}\n\n"
+                                line = f.readline()
+                            break
+                    await asyncio.sleep(0.5)
+
+    return StreamingResponse(log_generator(), media_type="text/event-stream")
 
 
 @router.delete("/{deployment_id}", status_code=202)
