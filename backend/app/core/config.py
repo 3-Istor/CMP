@@ -73,6 +73,9 @@ class Settings(BaseSettings):
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
+    # Installation ID of the GitHub App on the 3-Istor org — used to mint
+    # installation tokens for org-level Terraform operations (e.g. project bootstrap)
+    GITHUB_INSTALLATION_ID: str = ""
 
     # GitHub Registry (GHCR) Token for pulling private container images
     # Personal Access Token (PAT) with read:packages scope

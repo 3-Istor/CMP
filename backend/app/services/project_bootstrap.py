@@ -12,9 +12,11 @@ The Terraform module is expected to be located in the cloned templates repositor
 
 Terraform variables injected:
   project_name, keycloak_url, keycloak_admin_username,
-  keycloak_admin_password, vault_url, vault_token
+  keycloak_admin_password, vault_url, vault_token,
+  github_token, discord_webhook_url
 """
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -22,6 +24,7 @@ import tempfile
 from pathlib import Path
 
 from app.core.config import settings
+from app.services.github_service import GitHubAppError, get_installation_token
 from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
@@ -70,6 +73,22 @@ def run_project_bootstrap(project_name: str) -> None:
         )
         return
 
+    # GitHub installation token for the "github" provider (writes to the
+    # cnp-projects repository) — minted once and reused for init + apply
+    try:
+        github_token = (
+            asyncio.run(get_installation_token(settings.GITHUB_INSTALLATION_ID))
+            if settings.GITHUB_INSTALLATION_ID
+            else ""
+        )
+    except GitHubAppError as exc:
+        logger.error(
+            "Project bootstrap failed for '%s': could not obtain GitHub installation token: %s",
+            project_name,
+            exc,
+        )
+        return
+
     # S3 state key — isolated per project
     state_key = f"cmp/projects/{project_name}/bootstrap.tfstate"
 
@@ -95,6 +114,7 @@ def run_project_bootstrap(project_name: str) -> None:
                 ],
                 cwd=module_path,
                 work_dir=work_dir,
+                github_token=github_token,
             )
 
             # ── Step 2: terraform apply ────────────────────────────────
@@ -107,6 +127,7 @@ def run_project_bootstrap(project_name: str) -> None:
                 ],
                 cwd=module_path,
                 work_dir=work_dir,
+                github_token=github_token,
             )
 
             logger.info(
@@ -124,15 +145,16 @@ def run_project_bootstrap(project_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _run(cmd: list[str], cwd: Path, work_dir: Path) -> None:
+def _run(cmd: list[str], cwd: Path, work_dir: Path, github_token: str = "") -> None:
     """
     Execute a Terraform command, forwarding all necessary credentials as
     environment variables.
 
     Args:
-        cmd:      Full Terraform command list.
-        cwd:      Directory containing the Terraform module files.
-        work_dir: Temporary working directory (used for TF_DATA_DIR).
+        cmd:          Full Terraform command list.
+        cwd:          Directory containing the Terraform module files.
+        work_dir:     Temporary working directory (used for TF_DATA_DIR).
+        github_token: Installation token for the "github" provider.
 
     Raises:
         RuntimeError: If the command exits non-zero.
@@ -172,6 +194,14 @@ def _run(cmd: list[str], cwd: Path, work_dir: Path) -> None:
         env["TF_VAR_cloudflare_zone_id"] = settings.CLOUDFLARE_ZONE_ID
     if settings.CLOUDFLARE_ACCOUNT_ID:
         env["TF_VAR_cloudflare_account_id"] = settings.CLOUDFLARE_ACCOUNT_ID
+
+    # ── GitHub (write access to the cnp-projects repository) ───────────────
+    if github_token:
+        env["TF_VAR_github_token"] = github_token
+
+    # ── Discord (alerting webhook, stored into the project's Vault namespace) ──
+    if settings.DISCORD_WEBHOOK_URL:
+        env["TF_VAR_discord_webhook_url"] = settings.DISCORD_WEBHOOK_URL
 
     try:
         result = subprocess.run(

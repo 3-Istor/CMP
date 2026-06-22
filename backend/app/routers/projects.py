@@ -221,6 +221,8 @@ async def create_project(
     Required settings (from .env):
     - KEYCLOAK_URL, KEYCLOAK_ADMIN_USERNAME, KEYCLOAK_ADMIN_PASSWORD
     - VAULT_URL, VAULT_TOKEN
+    - GITHUB_INSTALLATION_ID, GITHUB_APP_PRIVATE_KEY
+    - DISCORD_WEBHOOK_URL
     """
     # Validate required settings are present before accepting the request
     missing = []
@@ -234,6 +236,12 @@ async def create_project(
         missing.append("VAULT_URL")
     if not settings.VAULT_TOKEN:
         missing.append("VAULT_TOKEN")
+    if not settings.GITHUB_INSTALLATION_ID:
+        missing.append("GITHUB_INSTALLATION_ID")
+    if not settings.GITHUB_APP_PRIVATE_KEY:
+        missing.append("GITHUB_APP_PRIVATE_KEY")
+    if not settings.DISCORD_WEBHOOK_URL:
+        missing.append("DISCORD_WEBHOOK_URL")
 
     if missing:
         raise HTTPException(
