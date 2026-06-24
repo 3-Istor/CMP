@@ -9,7 +9,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import type { Project } from "@/types";
-import { FolderKanban, ShieldCheck, Users } from "lucide-react";
+import { Crown, FolderKanban, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 
 interface Props {
@@ -17,6 +17,9 @@ interface Props {
 }
 
 export function ProjectCard({ project }: Props) {
+    const isOwner = project.role === "owner";
+    const isAdmin = project.role === "admin" || isOwner;
+
     return (
         <Link href={`/projects/${project.name}`} className="group block">
             <Card className="h-full transition-shadow group-hover:shadow-md group-hover:border-primary/30">
@@ -26,10 +29,12 @@ export function ProjectCard({ project }: Props) {
                             <FolderKanban className="h-5 w-5 text-primary" />
                         </div>
                         <Badge
-                            variant={project.role === "admin" ? "default" : "secondary"}
-                            className="shrink-0"
+                            variant={isAdmin ? "default" : "secondary"}
+                            className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
                         >
-                            {project.role === "admin" ? (
+                            {isOwner ? (
+                                <Crown className="mr-1 h-3 w-3" />
+                            ) : project.role === "admin" ? (
                                 <ShieldCheck className="mr-1 h-3 w-3" />
                             ) : (
                                 <Users className="mr-1 h-3 w-3" />
@@ -41,12 +46,12 @@ export function ProjectCard({ project }: Props) {
                         {project.name}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                        Kubernetes project · {project.role === "admin" ? "Full access" : "Read & deploy"}
+                        Kubernetes project · {isOwner ? "Owner" : isAdmin ? "Full access" : "Read & deploy"}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
                     <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
-                        project-{project.name}-{project.role === "admin" ? "admins" : "members"}
+                        project-{project.name}-{isAdmin ? "admins" : "members"}
                     </div>
                 </CardContent>
             </Card>

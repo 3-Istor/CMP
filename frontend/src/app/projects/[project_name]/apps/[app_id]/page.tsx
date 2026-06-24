@@ -165,11 +165,6 @@ export default function AppControlCenterPage() {
         return (
             <div className="min-h-screen">
                 <header className="border-b px-6 py-4 flex items-center gap-3">
-                    <span className="text-2xl">⚡</span>
-                    <div>
-                        <h1 className="text-lg font-bold leading-none">CNP</h1>
-                        <p className="text-xs text-muted-foreground">Cloud Native Platform</p>
-                    </div>
                     <div className="ml-auto">
                         <UserNav />
                     </div>
@@ -196,11 +191,6 @@ export default function AppControlCenterPage() {
         <div className="min-h-screen">
             {/* ── Header ── */}
             <header className="border-b px-6 py-4 flex items-center gap-3">
-                <span className="text-2xl">⚡</span>
-                <div>
-                    <h1 className="text-lg font-bold leading-none">CMP</h1>
-                    <p className="text-xs text-muted-foreground">Cloud Native Platform</p>
-                </div>
                 <div className="ml-auto">
                     <UserNav />
                 </div>
@@ -267,6 +257,18 @@ export default function AppControlCenterPage() {
 
                     {/* Header quick actions */}
                     <div className="flex items-center gap-2 flex-wrap">
+                        {current.github_repo_url && (
+                            <a
+                                href={current.github_repo_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={buttonVariants({ variant: "outline", size: "sm" })}
+                            >
+                                <Github className="mr-2 h-4 w-4" />
+                                Git Repo
+                                <ExternalLink className="ml-2 h-3 w-3" />
+                            </a>
+                        )}
                         <Button
                             variant="outline"
                             size="sm"
@@ -422,6 +424,36 @@ export default function AppControlCenterPage() {
                                 </CardContent>
                             </Card>
                         )}
+
+                        {/* GitHub Repository (just below Terraform Outputs) */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Github className="h-4 w-4" />
+                                    GitHub Repository
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {current.github_repo_url ? (
+                                    <a
+                                        href={current.github_repo_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-primary underline break-all inline-flex items-center gap-1.5"
+                                    >
+                                        {current.github_repo_url.replace(
+                                            "https://github.com/",
+                                            "",
+                                        )}
+                                        <ExternalLink className="h-3 w-3 shrink-0" />
+                                    </a>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                        No GitHub repository linked for this deployment.
+                                    </p>
+                                )}
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
             </main>
@@ -439,7 +471,7 @@ export default function AppControlCenterPage() {
                         </DialogTitle>
                         <DialogDescription>
                             This will destroy all cloud resources for{" "}
-                            <span className="font-semibold">"{current.name}"</span> via
+                            <span className="font-semibold">&quot;{current.name}&quot;</span> via
                             Terraform. This action cannot be undone.
                         </DialogDescription>
                     </DialogHeader>

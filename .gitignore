@@ -17,6 +17,8 @@ backend/logs/*
 # Terraform and template data
 backend/data/
 backend/arcl.db
+*.db-shm
+*.db-wal
 *.tfstate
 *.tfstate.backup
 .terraform/

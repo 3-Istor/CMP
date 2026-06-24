@@ -101,6 +101,10 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ready")
 
+    # Backfill github_repo_url for GitOps apps created before it was persisted
+    from app.services.terraform_orchestrator import backfill_gitops_repo_urls
+    backfill_gitops_repo_urls()
+
     # Mount static files after repository is cloned
     if os.path.exists("data/templates/templates"):
         logger.info("Mounting static files...")

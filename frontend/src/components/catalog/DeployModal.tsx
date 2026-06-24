@@ -19,6 +19,18 @@ interface Props {
   loading?: boolean;
 }
 
+/**
+ * Validates an app name against the backend / GitHub repository rule:
+ * only alphanumeric characters, underscores or hyphens, and 100 chars or less.
+ */
+function validateAppName(name: string): string | null {
+  if (!name) return null; // empty handled by the required/disabled state
+  if (name.length > 45) return "Name must be 45 characters or less.";
+  if (!/^[a-zA-Z0-9_-]+$/.test(name))
+    return "Only letters, numbers, underscores (_) and hyphens (-) are allowed — no spaces or other characters.";
+  return null;
+}
+
 export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const [appName, setAppName] = useState("");
   const [fieldValues, setFieldValues] = useState<
@@ -69,9 +81,12 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const setField = (name: string, value: string | number) =>
     setFieldValues((prev) => ({ ...prev, [name]: value }));
 
+  const nameError = validateAppName(appName.trim());
+
   // Check if all required fields are filled
   const isFormValid = () => {
     if (!appName.trim()) return false;
+    if (nameError) return false;
     if (!template) return false;
 
     // Check all required fields
@@ -166,13 +181,21 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                     value={appName}
                     maxLength={45}
                     onChange={(e) => setAppName(e.target.value)}
+                    aria-invalid={!!nameError}
+                    className={
+                      nameError ? "border-destructive focus-visible:ring-destructive" : ""
+                    }
                     required
                   />
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">
-                      Used to identify this deployment. Must be unique.
-                    </p>
-                    <p className={`text-xs tabular-nums ${appName.length > 40 ? "text-destructive" : "text-muted-foreground"}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    {nameError ? (
+                      <p className="text-xs text-destructive">{nameError}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Letters, numbers, underscores or hyphens. Must be unique.
+                      </p>
+                    )}
+                    <p className={`text-xs tabular-nums shrink-0 ${appName.length > 40 ? "text-destructive" : "text-muted-foreground"}`}>
                       {appName.length}/45
                     </p>
                   </div>

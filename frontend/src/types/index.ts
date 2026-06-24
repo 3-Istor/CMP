@@ -35,9 +35,11 @@ export interface Deployment {
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────
 
+export type ProjectRole = "owner" | "admin" | "member";
+
 export interface Project {
   name: string;
-  role: "admin" | "member";
+  role: ProjectRole;
 }
 
 export interface ProjectCreateResponse {
@@ -51,7 +53,7 @@ export interface ProjectMember {
   email: string;
   first_name: string;
   last_name: string;
-  role: "admin" | "member";
+  role: ProjectRole;
 }
 
 export interface ProjectMembersResponse {

@@ -23,6 +23,10 @@ export function UserNav() {
 
   const handleLogout = async () => {
     try {
+      // Drop the cached access token so nothing reuses it after sign-out
+      const { clearTokenCache } = await import("@/lib/api");
+      clearTokenCache();
+
       // Call federated logout endpoint
       const response = await fetch("/api/auth/federated-logout", {
         method: "POST",

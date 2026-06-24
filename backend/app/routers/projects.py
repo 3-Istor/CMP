@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus
+from app.models.project import ProjectOwner
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     ProjectCreate,
@@ -174,6 +175,7 @@ def get_user_id_from_token(token_payload: dict) -> str:
 @router.get("/", response_model=list[ProjectRead])
 async def list_projects(
     token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> list[ProjectRead]:
     """
     Return the list of projects the authenticated user belongs to.
@@ -183,6 +185,8 @@ async def list_projects(
 
     The JWT is used only for authentication; group data is fetched fresh
     from the Keycloak Admin API to avoid stale JWT claims.
+
+    Projects the user owns (created) are returned with role ``"owner"``.
     """
     username = token_payload.get("preferred_username", "")
     logger.info(f"🔍 Fetching projects for username='{username}'")
@@ -193,6 +197,18 @@ async def list_projects(
     projects = fetch_user_projects_from_keycloak(user_id)
 
     logger.info(f"📋 Found {len(projects)} projects for user: {[p['name'] for p in projects]}")
+
+    # Promote owned projects to role "owner"
+    if username:
+        owned = {
+            o.project_name
+            for o in db.query(ProjectOwner)
+            .filter(ProjectOwner.owner_username == username)
+            .all()
+        }
+        for p in projects:
+            if p["name"] in owned:
+                p["role"] = "owner"
 
     return [ProjectRead(**p) for p in projects]
 
@@ -256,6 +272,23 @@ async def create_project(
     # Store creator temporarily (will be removed once added to Keycloak group)
     _project_creators[payload.project_name] = user_id
     logger.info(f"🔐 Stored creator user_id='{user_id}' for project '{payload.project_name}'")
+
+    # Persist the project owner (creator) — immutable, can never be removed.
+    if not db.query(ProjectOwner).filter(
+        ProjectOwner.project_name == payload.project_name
+    ).first():
+        db.add(
+            ProjectOwner(
+                project_name=payload.project_name,
+                owner_username=username,
+            )
+        )
+        db.commit()
+        logger.info(
+            "👑 Recorded '%s' as owner of project '%s'",
+            username,
+            payload.project_name,
+        )
 
     # Trigger bootstrap
     background_tasks.add_task(
@@ -399,6 +432,7 @@ async def list_project_apps(
 async def get_project_members(
     project_name: str,
     token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     List all members of a project (both admins and members).
@@ -439,6 +473,19 @@ async def get_project_members(
             )
 
         members = list_project_members(project_name)
+
+        # Mark the owner (creator) — they always rank above admin and cannot
+        # be removed from the project.
+        owner = (
+            db.query(ProjectOwner)
+            .filter(ProjectOwner.project_name == project_name)
+            .first()
+        )
+        if owner:
+            for member in members:
+                if member["username"] == owner.owner_username:
+                    member["role"] = "owner"
+
         return {"project_name": project_name, "members": members}
 
     except HTTPException:
@@ -554,6 +601,7 @@ async def remove_project_member(
     project_name: str,
     username: str,
     token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> None:
     """
     Remove a user from a project (both admin and member groups).
@@ -561,11 +609,23 @@ async def remove_project_member(
     Access control: requires admin role in the project.
 
     Raises:
-        400: User not found.
+        400: User not found, or target is the project owner.
         403: Caller is not a project admin.
         502: Keycloak API error.
     """
     user_id = get_user_id_from_token(token_payload)
+
+    # The owner (creator) can never be removed from their project.
+    owner = (
+        db.query(ProjectOwner)
+        .filter(ProjectOwner.project_name == project_name)
+        .first()
+    )
+    if owner and owner.owner_username == username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{username}' is the project owner and cannot be removed.",
+        )
 
     try:
         from app.services.keycloak_service import (
@@ -690,6 +750,12 @@ async def delete_project(
                 )
                 response.raise_for_status()
                 logger.info(f"✅ Deleted Keycloak group: {group_name}")
+
+        # Remove persisted ownership record
+        db.query(ProjectOwner).filter(
+            ProjectOwner.project_name == project_name
+        ).delete()
+        db.commit()
 
         # TODO: Delete Vault policies (requires Vault API)
         # TODO: Delete ArgoCD AppProject (requires K8s API)

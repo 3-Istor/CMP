@@ -60,8 +60,23 @@ export function useDeploymentPolling(
   return deployment;
 }
 
-/** Poll the full deployments list at a fixed interval. */
-export function useDeploymentsList(intervalMs = 5000) {
+const ACTIVE_DEPLOYMENT_STATUSES = new Set([
+  "pending",
+  "initializing",
+  "planning",
+  "deploying",
+  "deleting",
+]);
+
+/**
+ * Poll the full deployments list, adapting the cadence to activity: fast while
+ * a deployment is in progress, slow (or paused) when everything is idle.
+ *
+ * @param activeMs interval used while at least one deployment is transitioning
+ * @param idleMs   interval used when all deployments are in a terminal state
+ *                 (defaults to `activeMs` for backwards compatibility)
+ */
+export function useDeploymentsList(activeMs = 5000, idleMs = activeMs) {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -75,6 +90,11 @@ export function useDeploymentsList(intervalMs = 5000) {
       setLoading(false);
     }
   }, []);
+
+  const hasActive = deployments.some((d) =>
+    ACTIVE_DEPLOYMENT_STATUSES.has(d.status),
+  );
+  const intervalMs = hasActive ? activeMs : idleMs;
 
   useEffect(() => {
     refresh();

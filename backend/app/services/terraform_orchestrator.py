@@ -191,6 +191,22 @@ def run_deployment(deployment_id: int) -> None:
             deployment.terraform_outputs = json.dumps(outputs)
             deployment.terraform_state_path = str(executor.state_dir)
 
+            # Persist GitOps metadata into dedicated columns so the UI can link
+            # to the repo / ArgoCD / namespace. Prefer the Terraform output when
+            # present; the k3s-gitops-app template doesn't expose a
+            # github_repo_url output, so reconstruct it from the deterministic
+            # naming (repo name = app name, created under the GitHub org).
+            repo_url = outputs.get("github_repo_url")
+            if not repo_url and deployment.template_id == "k3s-gitops-app":
+                owner = app_config.get("github_owner", "3-Istor")
+                repo_url = f"https://github.com/{owner}/{deployment.name}"
+            if repo_url:
+                deployment.github_repo_url = repo_url
+            if outputs.get("argocd_app_name"):
+                deployment.argocd_app_name = outputs["argocd_app_name"]
+            if outputs.get("k8s_namespace"):
+                deployment.k8s_namespace = outputs["k8s_namespace"]
+
             state_summary = executor.get_state_summary()
             deployment.resource_count = state_summary.get("resource_count", 0)
             logger.info(f"Resources created: {deployment.resource_count}")
@@ -229,6 +245,42 @@ def run_deployment(deployment_id: int) -> None:
             )
     finally:
         logger.debug("Closing database session")
+        db.close()
+
+
+def backfill_gitops_repo_urls() -> None:
+    """
+    Fill in ``github_repo_url`` for existing k3s-gitops-app deployments that
+    predate repo-URL persistence. Idempotent: only touches rows where the column
+    is empty. Safe to run on every startup.
+    """
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(Deployment)
+            .filter(
+                Deployment.template_id == "k3s-gitops-app",
+                (Deployment.github_repo_url.is_(None))
+                | (Deployment.github_repo_url == ""),
+            )
+            .all()
+        )
+        updated = 0
+        for d in rows:
+            owner = "3-Istor"
+            try:
+                cfg = json.loads(d.app_config or "{}")
+                owner = cfg.get("github_owner", owner)
+            except Exception:  # noqa: BLE001 — best-effort config parse
+                pass
+            d.github_repo_url = f"https://github.com/{owner}/{d.name}"
+            updated += 1
+        if updated:
+            db.commit()
+            logger.info("Backfilled github_repo_url for %d deployment(s)", updated)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("github_repo_url backfill skipped: %s", exc)
+    finally:
         db.close()
 
 

@@ -4,6 +4,7 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { UserNav } from "@/components/layout/UserNav";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
+import { PendingProjectCard } from "@/components/projects/PendingProjectCard";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -11,18 +12,45 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
 import { FolderPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export default function Home() {
   const { data: session } = useSession();
   const [dashboardKey] = useState(0);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  // Projects that were just created and are still being bootstrapped — shown
+  // optimistically with a loading bar until they appear in the real list.
+  const [pendingProjects, setPendingProjects] = useState<string[]>([]);
 
   const {
     projects,
     loading: loadingProjects,
     refresh: refreshProjects,
   } = useProjects();
+
+  const handleProjectCreated = useCallback(
+    (projectName: string) => {
+      setPendingProjects((prev) =>
+        prev.includes(projectName) ? prev : [...prev, projectName],
+      );
+      refreshProjects();
+    },
+    [refreshProjects],
+  );
+
+  // Only render placeholders that aren't already in the real list. Once a
+  // pending project appears in `projects`, it drops out of this derived list
+  // which both hides its placeholder and stops the polling effect below.
+  const visiblePending = pendingProjects.filter(
+    (name) => !projects.some((p) => p.name === name),
+  );
+
+  // Poll the project list while any creation is still in flight.
+  useEffect(() => {
+    if (visiblePending.length === 0) return;
+    const interval = setInterval(refreshProjects, 3000);
+    return () => clearInterval(interval);
+  }, [visiblePending.length, refreshProjects]);
 
   const userName =
     session?.user?.name ||
@@ -34,11 +62,6 @@ export default function Home() {
     <div className="min-h-screen">
       {/* ── Header ── */}
       <header className="border-b px-6 py-4 flex items-center gap-3">
-        <span className="text-2xl">⚡</span>
-        <div>
-          <h1 className="text-lg font-bold leading-none">CNP</h1>
-          <p className="text-xs text-muted-foreground">Cloud Native Platform</p>
-        </div>
         <div className="ml-auto flex items-center gap-3">
           {session?.user && (
             <span className="hidden sm:block text-sm text-muted-foreground">
@@ -75,7 +98,7 @@ export default function Home() {
                 <Skeleton key={i} className="h-36 rounded-xl" />
               ))}
             </div>
-          ) : projects.length === 0 ? (
+          ) : projects.length === 0 && visiblePending.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-muted-foreground">
               <span className="text-4xl mb-3">🗂️</span>
               <p className="font-medium">No projects yet</p>
@@ -94,6 +117,9 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {visiblePending.map((name) => (
+                <PendingProjectCard key={`pending-${name}`} name={name} />
+              ))}
               {projects.map((p) => (
                 <ProjectCard key={p.name} project={p} />
               ))}
@@ -114,7 +140,7 @@ export default function Home() {
       <CreateProjectModal
         open={createProjectOpen}
         onClose={() => setCreateProjectOpen(false)}
-        onCreated={refreshProjects}
+        onCreated={handleProjectCreated}
       />
     </div>
   );

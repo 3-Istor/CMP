@@ -178,11 +178,6 @@ export default function ProjectPage() {
     <div className="min-h-screen">
       {/* ── Header ── */}
       <header className="border-b px-6 py-4 flex items-center gap-3">
-        <span className="text-2xl">⚡</span>
-        <div>
-          <h1 className="text-lg font-bold leading-none">CNP</h1>
-          <p className="text-xs text-muted-foreground">Cloud Native Platform</p>
-        </div>
         <div className="ml-auto">
           <UserNav />
         </div>
@@ -378,7 +373,7 @@ export default function ProjectPage() {
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Project "{projectName}"?</DialogTitle>
+            <DialogTitle>Delete Project &quot;{projectName}&quot;?</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>This will permanently delete:</p>

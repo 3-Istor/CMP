@@ -20,17 +20,55 @@ export const getApiUrl = () => {
 
 const BASE = getApiUrl();
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+// ── Access-token cache ────────────────────────────────────────────────────────
+// `getSession()` performs a network round-trip to `/api/auth/session` on every
+// call. With polling hooks (deployments refresh every 3s, plus the sidebar),
+// that doubles the number of requests and gates every data fetch behind a
+// session fetch. Cache the token briefly so repeated calls reuse it.
+let _tokenCache: { token: string | null; at: number } | null = null;
+let _tokenInflight: Promise<string | null> | null = null;
+const TOKEN_TTL_MS = 30_000;
+
+async function getAccessToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const now = Date.now();
+  if (_tokenCache && now - _tokenCache.at < TOKEN_TTL_MS) {
+    return _tokenCache.token;
+  }
+  // De-duplicate the session fetch: on first paint many hooks call this at
+  // once — collapse them into a single getSession() round-trip.
+  if (_tokenInflight) return _tokenInflight;
+
+  _tokenInflight = (async () => {
+    try {
+      const session = await getSession();
+      _tokenCache = { token: session?.accessToken ?? null, at: Date.now() };
+      return _tokenCache.token;
+    } catch {
+      // Transient session-endpoint failure (common during dev startup):
+      // fall back to the last known token rather than breaking the request.
+      return _tokenCache?.token ?? null;
+    } finally {
+      _tokenInflight = null;
+    }
+  })();
+  return _tokenInflight;
+}
+
+/** Drop the cached token (e.g. on logout) so the next call refetches it. */
+export function clearTokenCache() {
+  _tokenCache = null;
+}
+
+async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  // Inject JWT token from NextAuth session
-  if (typeof window !== "undefined") {
-    const session = await getSession();
-    if (session?.accessToken) {
-      headers["Authorization"] = `Bearer ${session.accessToken}`;
-    }
+  // Inject JWT token from NextAuth session (cached, see getAccessToken)
+  const token = await getAccessToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(`${BASE}${path}`, {
@@ -43,7 +81,40 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const err = await res.text();
     throw new Error(err || `HTTP ${res.status}`);
   }
-  return res.json() as Promise<T>;
+
+  // 204 No Content (e.g. DELETE endpoints) and empty bodies have no JSON to
+  // parse — return undefined instead of throwing on res.json().
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+// Collapses concurrent identical GETs into a single network call (e.g. the
+// sidebar and the page both load projects/deployments on mount).
+const _inflight = new Map<string, Promise<unknown>>();
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (method !== "GET" || options?.body) {
+    return doRequest<T>(path, options);
+  }
+
+  const existing = _inflight.get(path);
+  if (existing) return existing as Promise<T>;
+
+  const promise = doRequest<T>(path, options);
+  _inflight.set(path, promise);
+  // Clean up on settle. Use then(handler, handler) — NOT .finally() — so this
+  // bookkeeping branch handles rejection itself instead of leaving a floating
+  // rejected promise (which surfaces as an unhandledRejection). The original
+  // `promise` is returned to the caller, which handles its own errors.
+  const cleanup = () => {
+    _inflight.delete(path);
+  };
+  promise.then(cleanup, cleanup);
+  return promise;
 }
 
 // Catalog
@@ -153,13 +224,13 @@ export const removeProjectMember = async (
   project_name: string,
   username: string,
 ) => {
-  const session = await getSession();
+  const token = await getAccessToken();
   const res = await fetch(
     `${BASE}/projects/${project_name}/members/${username}`,
     {
       method: "DELETE",
       headers: {
-        Authorization: `Bearer ${session?.accessToken}`,
+        Authorization: `Bearer ${token}`,
       },
       credentials: "include",
     },
@@ -190,11 +261,11 @@ export const uploadProfilePicture = async (file: File) => {
   formData.append("file", file);
 
   // Get session to include JWT token
-  const session = await getSession();
+  const token = await getAccessToken();
   const headers: Record<string, string> = {};
 
-  if (session?.accessToken) {
-    headers["Authorization"] = `Bearer ${session.accessToken}`;
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(`${BASE}/account/picture`, {

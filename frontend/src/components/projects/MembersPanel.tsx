@@ -19,6 +19,7 @@ import {
 import { useProjectMembers } from "@/lib/hooks";
 import type { KeycloakUserResult, ProjectMember } from "@/types";
 import {
+  Crown,
   Loader2,
   ShieldCheck,
   Trash2,
@@ -290,6 +291,8 @@ interface MemberRowProps {
 }
 
 function MemberRow({ member, removing, onRemove }: MemberRowProps) {
+  const isOwner = member.role === "owner";
+
   return (
     <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -308,10 +311,18 @@ function MemberRow({ member, removing, onRemove }: MemberRowProps) {
                 : member.username}
             </p>
             <Badge
-              variant={member.role === "admin" ? "default" : "secondary"}
-              className="shrink-0"
+              variant={
+                isOwner
+                  ? "default"
+                  : member.role === "admin"
+                    ? "default"
+                    : "secondary"
+              }
+              className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
             >
-              {member.role === "admin" ? (
+              {isOwner ? (
+                <Crown className="mr-1 h-3 w-3" />
+              ) : member.role === "admin" ? (
                 <ShieldCheck className="mr-1 h-3 w-3" />
               ) : (
                 <Users className="mr-1 h-3 w-3" />
@@ -324,20 +335,29 @@ function MemberRow({ member, removing, onRemove }: MemberRowProps) {
           </p>
         </div>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onRemove}
-        disabled={removing}
-        className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-        title={`Remove ${member.username}`}
-      >
-        {removing ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Trash2 className="h-4 w-4" />
-        )}
-      </Button>
+      {isOwner ? (
+        <span
+          className="text-xs text-muted-foreground shrink-0 px-2"
+          title="The project owner cannot be removed"
+        >
+          Owner
+        </span>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          disabled={removing}
+          className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+          title={`Remove ${member.username}`}
+        >
+          {removing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </Button>
+      )}
     </div>
   );
 }

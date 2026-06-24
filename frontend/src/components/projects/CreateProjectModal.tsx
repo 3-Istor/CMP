@@ -19,7 +19,7 @@ import { toast } from "sonner";
 interface Props {
     open: boolean;
     onClose: () => void;
-    onCreated: () => void;
+    onCreated: (projectName: string) => void;
 }
 
 /** Validates a project name: lowercase, kebab-case, 2–45 chars */
@@ -63,7 +63,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                 `Project "${trimmed}" is being bootstrapped. Keycloak groups and ArgoCD AppProject will be ready shortly.`,
                 { duration: 6000 },
             );
-            onCreated();
+            onCreated(trimmed);
             onClose();
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
