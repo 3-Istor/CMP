@@ -16,10 +16,19 @@ from typing import Any
 import boto3
 import openstack
 from botocore.exceptions import BotoCoreError, ClientError
+from keystoneauth1 import exceptions as ksa_exceptions
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Exceptions that just mean "OpenStack isn't reachable right now" — VPN down or
+# the Keystone endpoint offline. These are expected operational states, not code
+# errors, so we log them concisely (no stack trace) and report status unknown.
+OPENSTACK_UNREACHABLE = (
+    ksa_exceptions.ConnectionError,
+    ksa_exceptions.DiscoveryFailure,
+)
 
 
 # ── Pydantic Models for Response Schemas ──────────────────────────────────
@@ -205,6 +214,11 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
                 return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
             logger.warning("VPN gateway server not found")
             return None
+        except OPENSTACK_UNREACHABLE as exc:
+            logger.warning(
+                "OpenStack unreachable, VPN status unknown: %s", str(exc)[:200]
+            )
+            return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
         except Exception as exc:
             logger.error("Error fetching OpenStack VPN: %s", exc, exc_info=True)
             return None
@@ -293,6 +307,12 @@ async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
             else:
                 logger.error("Error fetching OpenStack hypervisors: %s", exc, exc_info=True)
                 return []
+        except OPENSTACK_UNREACHABLE as exc:
+            logger.warning(
+                "OpenStack unreachable, hypervisor status unknown: %s",
+                str(exc)[:200],
+            )
+            return []
         except Exception as exc:
             logger.error("Error fetching OpenStack hypervisors: %s", exc, exc_info=True)
             return []

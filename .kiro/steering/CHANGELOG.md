@@ -4,6 +4,43 @@ This document tracks major changes and releases of the Cloud Native Platform.
 
 ---
 
+## [Unreleased] - 2026-06-26
+
+### Added
+
+#### Frontend
+
+- **Public landing page (`/welcome`):** Marketing homepage for unauthenticated
+  visitors (hero, services, benefits, CTA) built with the new shared brand
+  `Logo` component (`src/components/brand/Logo.tsx`).
+- **Persistent sidebar polling:** `AppSidebar` now polls the project list (15s)
+  so it stays in sync with projects created or deleted elsewhere.
+- **Persistent pending projects:** Just-created projects are tracked in
+  `localStorage` (`src/lib/pendingProjects.ts`), so their optimistic
+  "bootstrapping" card with time-based progress survives a page reload.
+
+### Changed
+
+#### Frontend
+
+- **Branding:** Renamed from "CMP — Hybrid Cloud Management" to
+  **"CNP — Cloud Native Platform"** in the app metadata.
+- **Auth routing (`middleware.ts`):** Unauthenticated users are now redirected
+  to `/welcome` (carrying their `callbackUrl`) instead of `/auth/signin`;
+  authenticated users on `/welcome` are sent to the app. The sidebar is hidden
+  on `/welcome`.
+- **`useProjects(intervalMs)`:** Now accepts an optional polling interval
+  (defaults to a single fetch on mount).
+
+#### Backend
+
+- **Resilient monitoring:** `monitoring_service.py` treats OpenStack
+  connectivity failures (VPN down / Keystone offline) as an expected
+  operational state — logged concisely as a warning and reported as `unknown`
+  status instead of raising a full stack trace.
+
+---
+
 ## [Phase 3] - 2026-05-24
 
 ### ✅ Kubernetes Provider Support - COMPLETE

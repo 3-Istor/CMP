@@ -98,24 +98,7 @@ def run_project_bootstrap(project_name: str) -> None:
 
             # ── Step 1: terraform init ─────────────────────────────────
             logger.info("[%s] Initialising Terraform…", project_name)
-            _run(
-                [
-                    "terraform", "init",
-                    "-backend-config=bucket=" + settings.TF_BACKEND_S3_BUCKET,
-                    f"-backend-config=key={state_key}",
-                    "-backend-config=region=" + settings.TF_BACKEND_AWS_REGION,
-                    "-backend-config=encrypt=true",
-                    *(
-                        ["-backend-config=dynamodb_table=" + settings.TF_BACKEND_S3_DYNAMODB_TABLE]
-                        if settings.TF_BACKEND_S3_DYNAMODB_TABLE
-                        else []
-                    ),
-                    "-reconfigure",
-                ],
-                cwd=module_path,
-                work_dir=work_dir,
-                github_token=github_token,
-            )
+            _terraform_init(module_path, work_dir, github_token, state_key)
 
             # ── Step 2: terraform apply ────────────────────────────────
             logger.info("[%s] Applying Terraform configuration…", project_name)
@@ -140,9 +123,120 @@ def run_project_bootstrap(project_name: str) -> None:
         )
 
 
+def run_project_teardown(project_name: str) -> None:
+    """
+    Entry point for the BackgroundTask triggered on project deletion.
+
+    Runs ``terraform init`` + ``terraform destroy`` for the
+    ``k3s-project-bootstrap`` module, reusing the project's per-project S3 state
+    key. This destroys everything the bootstrap created — Vault policy, ArgoCD
+    AppProject and any GitHub resources. Keycloak groups are already removed
+    synchronously by the delete endpoint; if they no longer exist, Terraform's
+    refresh simply drops them from state and the destroy proceeds.
+
+    Args:
+        project_name: Lowercase kebab-case project identifier.
+    """
+    logger.info("Starting project teardown for '%s'", project_name)
+
+    try:
+        module_path = _get_module_path()
+    except FileNotFoundError as exc:
+        logger.error(
+            "Terraform module not found — project teardown aborted "
+            "(Vault/GitHub/ArgoCD resources may need manual cleanup): %s",
+            exc,
+        )
+        return
+
+    # GitHub installation token for the "github" provider — required so the
+    # provider can authenticate while destroying GitHub resources.
+    try:
+        github_token = (
+            asyncio.run(get_installation_token(settings.GITHUB_INSTALLATION_ID))
+            if settings.GITHUB_INSTALLATION_ID
+            else ""
+        )
+    except GitHubAppError as exc:
+        logger.error(
+            "Project teardown failed for '%s': could not obtain GitHub installation token: %s",
+            project_name,
+            exc,
+        )
+        return
+
+    # Same S3 state key used by the bootstrap — destroy operates on that state.
+    state_key = f"cmp/projects/{project_name}/bootstrap.tfstate"
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_dir = Path(tmpdir)
+
+            # ── Step 1: terraform init ─────────────────────────────────
+            logger.info("[%s] Initialising Terraform…", project_name)
+            _terraform_init(module_path, work_dir, github_token, state_key)
+
+            # ── Step 2: terraform destroy ──────────────────────────────
+            logger.info("[%s] Destroying Terraform configuration…", project_name)
+            _run(
+                [
+                    "terraform", "destroy",
+                    "-auto-approve",
+                    f"-var=project_name={project_name}",
+                ],
+                cwd=module_path,
+                work_dir=work_dir,
+                github_token=github_token,
+            )
+
+            logger.info(
+                "Project teardown completed successfully for '%s'", project_name
+            )
+
+    except RuntimeError as exc:
+        logger.error(
+            "Project teardown failed for '%s' "
+            "(Vault/GitHub/ArgoCD resources may need manual cleanup): %s",
+            project_name,
+            exc,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _terraform_init(
+    module_path: Path,
+    work_dir: Path,
+    github_token: str,
+    state_key: str,
+) -> None:
+    """
+    Run ``terraform init`` against the project's per-project S3 state.
+
+    Shared by bootstrap (apply) and teardown (destroy) so both operate on the
+    exact same backend configuration and state key.
+    """
+    _run(
+        [
+            "terraform", "init",
+            "-backend-config=bucket=" + settings.TF_BACKEND_S3_BUCKET,
+            f"-backend-config=key={state_key}",
+            "-backend-config=region=" + settings.TF_BACKEND_AWS_REGION,
+            "-backend-config=encrypt=true",
+            *(
+                ["-backend-config=dynamodb_table=" + settings.TF_BACKEND_S3_DYNAMODB_TABLE]
+                if settings.TF_BACKEND_S3_DYNAMODB_TABLE
+                else []
+            ),
+            "-reconfigure",
+        ],
+        cwd=module_path,
+        work_dir=work_dir,
+        github_token=github_token,
+    )
 
 
 def _run(cmd: list[str], cwd: Path, work_dir: Path, github_token: str = "") -> None:

@@ -14,8 +14,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CMP - Hybrid Cloud Management",
-  description: "Self-service hybrid cloud management platform",
+  title: "CNP - Cloud Native Platform",
+  description: "Self-service cloud native platform",
 };
 
 export default function RootLayout({

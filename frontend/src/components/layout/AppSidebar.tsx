@@ -1,5 +1,6 @@
 "use client";
 
+import { Logo } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDeploymentsList, useProjects } from "@/lib/hooks";
@@ -51,7 +52,8 @@ export function AppSidebar() {
   const { data: session } = useSession();
   const [collapsed, toggle] = useCollapsed();
 
-  const { projects, loading: loadingProjects } = useProjects();
+  // Poll so the list reflects projects created/deleted elsewhere (15s active).
+  const { projects, loading: loadingProjects } = useProjects(15000);
   // The sidebar list rarely needs fresh data: 15s while active, 30s when idle.
   const { deployments, loading: loadingApps } = useDeploymentsList(15000, 30000);
 
@@ -83,7 +85,7 @@ export function AppSidebar() {
           )}
           title="Home"
         >
-          <span className="text-xl shrink-0">⚡</span>
+          <Logo className="h-7 w-7 shrink-0" />
           {!collapsed && (
             <span className="font-bold leading-none truncate">CNP</span>
           )}

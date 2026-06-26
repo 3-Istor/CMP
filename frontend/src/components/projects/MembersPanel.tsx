@@ -205,7 +205,9 @@ export function MembersPanel({ projectName }: Props) {
               disabled={adding}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue>
+                  {(v) => (v === "admin" ? "Admin" : "Member")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="member">Member</SelectItem>

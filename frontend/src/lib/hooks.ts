@@ -174,8 +174,14 @@ export function useAppHealth(deploymentId: number | null, intervalMs = 5000) {
   return { health, loading, error, refresh };
 }
 
-/** Fetch the list of projects the current user belongs to (no polling). */
-export function useProjects() {
+/**
+ * Fetch the list of projects the current user belongs to.
+ *
+ * @param intervalMs when > 0, re-fetch on this cadence so the list stays in
+ *   sync with creations/deletions made elsewhere (e.g. the persistent sidebar).
+ *   Defaults to 0 (fetch once on mount).
+ */
+export function useProjects(intervalMs = 0) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -198,7 +204,10 @@ export function useProjects() {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    if (intervalMs <= 0) return;
+    const timer = setInterval(refresh, intervalMs);
+    return () => clearInterval(timer);
+  }, [refresh, intervalMs]);
 
   return { projects, loading, error, refresh };
 }

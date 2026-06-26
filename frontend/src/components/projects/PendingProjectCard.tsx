@@ -8,6 +8,21 @@ import { useEffect, useState } from "react";
 
 interface Props {
   name: string;
+  /** Epoch ms when creation started; used to resume progress after a reload. */
+  createdAt: number;
+}
+
+// Asymptotic curve toward 90%: starts at 8% and eases up over the bootstrap.
+// Derived purely from elapsed time so it resumes correctly across a reload
+// instead of restarting at zero.
+const START = 8;
+const CEILING = 90;
+const TAU_MS = 14000;
+
+function progressFor(createdAt: number): number {
+  const elapsed = Math.max(0, Date.now() - createdAt);
+  const value = CEILING - (CEILING - START) * Math.exp(-elapsed / TAU_MS);
+  return Math.min(CEILING, Math.round(value));
 }
 
 /**
@@ -18,17 +33,17 @@ interface Props {
  * list with an animated progress bar, so the user gets feedback during the
  * ~30s bootstrap instead of an empty screen.
  */
-export function PendingProjectCard({ name }: Props) {
+export function PendingProjectCard({ name, createdAt }: Props) {
   // Fake progress that climbs toward ~90% and stops; it completes once the
   // real project shows up in the list and this card is unmounted.
-  const [progress, setProgress] = useState(8);
+  const [progress, setProgress] = useState(() => progressFor(createdAt));
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setProgress((p) => (p >= 90 ? 90 : p + Math.max(1, Math.round((90 - p) / 12))));
-    }, 1200);
+      setProgress(progressFor(createdAt));
+    }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [createdAt]);
 
   return (
     <Card className="h-full border-primary/30">

@@ -42,7 +42,10 @@ from app.services.keycloak_service import (
     remove_user_from_project,
     verify_project_access,
 )
-from app.services.project_bootstrap import run_project_bootstrap
+from app.services.project_bootstrap import (
+    run_project_bootstrap,
+    run_project_teardown,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -673,14 +676,20 @@ async def remove_project_member(
 # ---------------------------------------------------------------------------
 
 
-@router.delete("/{project_name}", status_code=204)
+@router.delete("/{project_name}", status_code=202)
 async def delete_project(
     project_name: str,
+    background_tasks: BackgroundTasks,
     token_payload: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ) -> None:
     """
-    Delete a project (Keycloak groups, Vault policies).
+    Delete a project and tear down its Day-0 infrastructure.
+
+    Keycloak groups and the ownership record are removed synchronously so the
+    project disappears from listings immediately; the remaining infrastructure
+    (Vault policy, ArgoCD AppProject, GitHub resources and the per-project
+    Terraform state) is destroyed in the background via ``terraform destroy``.
 
     Requirements:
     - User must be project admin
@@ -757,10 +766,21 @@ async def delete_project(
         ).delete()
         db.commit()
 
-        # TODO: Delete Vault policies (requires Vault API)
-        # TODO: Delete ArgoCD AppProject (requires K8s API)
+        # Tear down the remaining Day-0 infrastructure — Vault policy, ArgoCD
+        # AppProject, GitHub resources and the per-project Terraform state — via
+        # `terraform destroy`. Runs in the background because it shells out to
+        # Terraform and can take a while; the Keycloak groups above are removed
+        # synchronously so the project vanishes from listings right away.
+        background_tasks.add_task(
+            run_project_teardown,
+            project_name=project_name,
+        )
 
-        logger.info(f"✅ Project '{project_name}' deleted successfully")
+        logger.info(
+            "✅ Project '%s': Keycloak groups & ownership removed, "
+            "infrastructure teardown scheduled",
+            project_name,
+        )
 
     except HTTPException:
         raise

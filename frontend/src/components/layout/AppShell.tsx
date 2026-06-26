@@ -15,7 +15,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
 
   const hideSidebar =
-    pathname?.startsWith("/auth") || status !== "authenticated";
+    pathname?.startsWith("/auth") ||
+    pathname?.startsWith("/welcome") ||
+    status !== "authenticated";
 
   if (hideSidebar) {
     return <>{children}</>;

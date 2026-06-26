@@ -10,6 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
+import {
+  addPendingProject,
+  prunePendingProjects,
+  usePendingProjects,
+} from "@/lib/pendingProjects";
 import { FolderPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
@@ -20,7 +25,8 @@ export default function Home() {
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   // Projects that were just created and are still being bootstrapped — shown
   // optimistically with a loading bar until they appear in the real list.
-  const [pendingProjects, setPendingProjects] = useState<string[]>([]);
+  // Backed by localStorage so the card persists across reloads.
+  const pendingProjects = usePendingProjects();
 
   const {
     projects,
@@ -30,19 +36,22 @@ export default function Home() {
 
   const handleProjectCreated = useCallback(
     (projectName: string) => {
-      setPendingProjects((prev) =>
-        prev.includes(projectName) ? prev : [...prev, projectName],
-      );
+      addPendingProject(projectName);
       refreshProjects();
     },
     [refreshProjects],
   );
 
+  // Drop pending entries once they've landed in the real list.
+  useEffect(() => {
+    prunePendingProjects(projects);
+  }, [projects]);
+
   // Only render placeholders that aren't already in the real list. Once a
   // pending project appears in `projects`, it drops out of this derived list
   // which both hides its placeholder and stops the polling effect below.
   const visiblePending = pendingProjects.filter(
-    (name) => !projects.some((p) => p.name === name),
+    (p) => !projects.some((real) => real.name === p.name),
   );
 
   // Poll the project list while any creation is still in flight.
@@ -117,8 +126,12 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visiblePending.map((name) => (
-                <PendingProjectCard key={`pending-${name}`} name={name} />
+              {visiblePending.map((p) => (
+                <PendingProjectCard
+                  key={`pending-${p.name}`}
+                  name={p.name}
+                  createdAt={p.ts}
+                />
               ))}
               {projects.map((p) => (
                 <ProjectCard key={p.name} project={p} />

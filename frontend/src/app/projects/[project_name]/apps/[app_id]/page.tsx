@@ -257,18 +257,6 @@ export default function AppControlCenterPage() {
 
                     {/* Header quick actions */}
                     <div className="flex items-center gap-2 flex-wrap">
-                        {current.github_repo_url && (
-                            <a
-                                href={current.github_repo_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={buttonVariants({ variant: "outline", size: "sm" })}
-                            >
-                                <Github className="mr-2 h-4 w-4" />
-                                Git Repo
-                                <ExternalLink className="ml-2 h-3 w-3" />
-                            </a>
-                        )}
                         <Button
                             variant="outline"
                             size="sm"
