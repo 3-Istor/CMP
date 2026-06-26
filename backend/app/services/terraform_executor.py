@@ -108,9 +108,14 @@ class TerraformExecutor:
         """
         env = os.environ.copy()
 
-        # Set local state directory if not using S3 backend
-        if not self.use_s3_backend:
-            env["TF_DATA_DIR"] = str(self.state_dir / ".terraform")
+        # Always isolate .terraform per deployment to prevent concurrent conflicts
+        # when multiple deployments/destroys run in parallel on the same template dir.
+        env["TF_DATA_DIR"] = str(self.state_dir / ".terraform")
+
+        # Shared plugin cache so providers are downloaded once and reused across deployments.
+        plugin_cache = Path("data/terraform_plugin_cache")
+        plugin_cache.mkdir(parents=True, exist_ok=True)
+        env["TF_PLUGIN_CACHE_DIR"] = str(plugin_cache.resolve())
 
         # Pass OpenStack credentials to Terraform
         if settings.OS_AUTH_URL:
