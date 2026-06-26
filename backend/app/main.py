@@ -7,6 +7,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
+from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
@@ -85,6 +87,75 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# OPENAPI OAUTH2 CONFIGURATION (Keycloak OIDC)
+# ══════════════════════════════════════════════════════════════════════════
+
+# Define Keycloak OAuth2 Flow for Swagger UI
+oauth2_scheme = OAuth2AuthorizationCodeBearer(
+    authorizationUrl="https://auth.3istor.com/realms/3istor/protocol/openid-connect/auth",
+    tokenUrl="https://auth.3istor.com/realms/3istor/protocol/openid-connect/token",
+    scopes={
+        "openid": "Required for authentication",
+        "profile": "Access user profile metadata",
+        "groups": "Project boundary mappings"
+    }
+)
+
+
+def custom_openapi():
+    """Generate custom OpenAPI schema with Keycloak OAuth2 security."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title="Cloud Native Platform API",
+        version="1.0.0",
+        description=(
+            "Core API for provisioning and managing GitOps applications.\n\n"
+            "**Authentication**: This API uses Keycloak OIDC for authentication. "
+            "Click 'Authorize' below to log in with your 3-Istor credentials."
+        ),
+        routes=app.routes,
+    )
+
+    # Inject OIDC Security Scheme
+    if "components" not in openapi_schema:
+        openapi_schema["components"] = {}
+
+    openapi_schema["components"]["securitySchemes"] = {
+        "KeycloakOAuth2": {
+            "type": "oauth2",
+            "flows": {
+                "authorizationCode": {
+                    "authorizationUrl": "https://auth.3istor.com/realms/3istor/protocol/openid-connect/auth",
+                    "tokenUrl": "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token",
+                    "scopes": {
+                        "openid": "Required for authentication",
+                        "profile": "Access user profile metadata",
+                        "groups": "Project boundary mappings"
+                    }
+                }
+            },
+            "description": "Keycloak OIDC authentication for CNP Portal"
+        }
+    }
+
+    # Enforce global security on all non-public endpoints (except /health)
+    for path_name, path_obj in openapi_schema["paths"].items():
+        # Skip health check endpoint
+        if path_name == "/health":
+            continue
+
+        for method_obj in path_obj.values():
+            if isinstance(method_obj, dict) and "security" not in method_obj:
+                method_obj["security"] = [{"KeycloakOAuth2": ["openid", "profile", "groups"]}]
+
+    app.openapi_schema = openapi_schema
+    logger.info("✅ Custom OpenAPI schema with Keycloak OAuth2 configured")
+    return app.openapi_schema
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
@@ -140,6 +211,9 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+
+# Apply custom OpenAPI schema with OAuth2
+app.openapi = custom_openapi
 
 app.add_middleware(
     CORSMiddleware,

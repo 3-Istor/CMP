@@ -23,6 +23,8 @@ python-multipart = "^0.0.26"
 psycopg2-binary = "^2.9.12"
 httpx = "^0.28.1"
 ruamel-yaml = "^0.18.0"
+mcp = "^1.0.0"
+cryptography = "^43.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.4.0"
