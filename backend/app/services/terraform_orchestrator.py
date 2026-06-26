@@ -10,7 +10,10 @@ Manages the full lifecycle of Terraform-based deployments:
 
 import json
 import logging
+import time
 from pathlib import Path
+
+import httpx
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
@@ -213,11 +216,20 @@ def run_deployment(deployment_id: int) -> None:
 
             db.commit()
 
-            # Step 5: Success
+            # Step 5: Wait for app URL to become accessible
             logger.info("─" * 80)
-            logger.info("STEP 5: Finalization")
+            logger.info("STEP 5: Waiting for app to be accessible")
             logger.info("─" * 80)
-            # Build a friendly message with key outputs
+            app_url = outputs.get("app_url")
+            if app_url:
+                url_ready = _wait_for_url_ready(db, deployment, app_url)
+                if not url_ready:
+                    logger.warning(f"⚠️ {app_url} not accessible within timeout — ArgoCD may still be syncing")
+
+            # Step 6: Success
+            logger.info("─" * 80)
+            logger.info("STEP 6: Finalization")
+            logger.info("─" * 80)
             output_msg = _format_outputs_message(outputs)
             _update(
                 db,
@@ -472,6 +484,46 @@ def _update(
         logger.error("Failed to write to log file %s: %s", log_file, e)
 
 
+def _wait_for_url_ready(
+    db,
+    deployment: Deployment,
+    url: str,
+    timeout_seconds: int = 300,
+    poll_interval: int = 10,
+) -> bool:
+    """
+    Poll url until a non-error HTTP response is received or timeout is reached.
+    Keeps the deployment in DEPLOYING state and updates step_message each cycle
+    so the frontend shows live progress.
+    Returns True if the URL became accessible within the timeout.
+    """
+    logger.info(f"⏳ Polling {url} for HTTP 200 (timeout={timeout_seconds}s, interval={poll_interval}s)")
+    start = time.monotonic()
+    deadline = start + timeout_seconds
+
+    while time.monotonic() < deadline:
+        elapsed = int(time.monotonic() - start)
+        _update(
+            db,
+            deployment,
+            DeploymentStatus.DEPLOYING,
+            f"⏳ Waiting for app to become accessible... ({elapsed}s / {timeout_seconds}s)",
+        )
+        try:
+            resp = httpx.get(url, timeout=10, follow_redirects=True)
+            if resp.status_code < 400:
+                logger.info(f"✅ {url} responded with HTTP {resp.status_code} after {elapsed}s")
+                return True
+            logger.debug(f"HTTP {resp.status_code} from {url} — retrying in {poll_interval}s")
+        except Exception as exc:
+            logger.debug(f"Connection attempt failed ({elapsed}s): {exc}")
+
+        time.sleep(poll_interval)
+
+    logger.warning(f"⚠️ {url} did not respond within {timeout_seconds}s")
+    return False
+
+
 def _format_outputs_message(outputs: dict) -> str:
     """
     Format Terraform outputs into a friendly message.
@@ -482,6 +534,7 @@ def _format_outputs_message(outputs: dict) -> str:
 
     # Priority keys to display
     priority_keys = [
+        "app_url",
         "loadbalancer_ip",
         "lb_ip",
         "public_ip",
