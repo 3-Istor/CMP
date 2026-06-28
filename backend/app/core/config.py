@@ -79,6 +79,7 @@ class Settings(BaseSettings):
 
     # GitHub Registry (GHCR) Token for pulling private container images
     # Personal Access Token (PAT) with read:packages scope
+    GITHUB_REGISTRY_USERNAME: str = ""
     GITHUB_REGISTRY_TOKEN: str = ""
 
 

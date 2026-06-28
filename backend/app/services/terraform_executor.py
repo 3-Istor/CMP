@@ -171,7 +171,7 @@ class TerraformExecutor:
         if settings.GITHUB_REGISTRY_TOKEN:
             env["TF_VAR_github_registry_token"] = settings.GITHUB_REGISTRY_TOKEN
         # GitHub registry username (hardcoded as it's always the same org)
-        env["TF_VAR_github_registry_username"] = "3-Istor"
+        env["TF_VAR_github_registry_username"] = settings.GITHUB_REGISTRY_USERNAME
 
         # Sanitize command for logging (hide sensitive values)
         safe_command = self._sanitize_command_for_logging(command)
@@ -204,34 +204,40 @@ class TerraformExecutor:
             self._log_message("⏱️  Waiting for Terraform output...")
 
             # Read with timeout detection
-            import select
-            while True:
-                # Check if process is still running
-                if process.poll() is not None:
-                    # Process finished, read remaining output
-                    remaining = process.stdout.read()
-                    if remaining:
-                        for line in remaining.splitlines():
-                            if line.strip():
+            import selectors
+            sel = selectors.DefaultSelector()
+            sel.register(process.stdout, selectors.EVENT_READ)
+
+            try:
+                while True:
+                    # Check if process is still running
+                    if process.poll() is not None:
+                        # Process finished, read remaining output
+                        remaining = process.stdout.read()
+                        if remaining:
+                            for line in remaining.splitlines():
+                                if line.strip():
+                                    self._log_message(f"[TF] {line}")
+                                    stdout_lines.append(line)
+                        break
+
+                    # Use selectors to check if data is available (with timeout)
+                    events = sel.select(timeout=1.0)
+
+                    if events:
+                        line = process.stdout.readline()
+                        if line:
+                            line = line.rstrip()
+                            if line:
                                 self._log_message(f"[TF] {line}")
                                 stdout_lines.append(line)
-                    break
-
-                # Use select to check if data is available (with timeout)
-                readable, _, _ = select.select([process.stdout], [], [], 1.0)
-
-                if readable:
-                    line = process.stdout.readline()
-                    if line:
-                        line = line.rstrip()
-                        if line:
-                            self._log_message(f"[TF] {line}")
-                            stdout_lines.append(line)
-                else:
-                    # No output for 1 second, log that we're still waiting
-                    elapsed = time.time() - start_time
-                    if int(elapsed) % 10 == 0 and int(elapsed) > 0:  # Every 10 seconds
-                        self._log_message(f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)")
+                    else:
+                        # No output for 1 second, log that we're still waiting
+                        elapsed = time.time() - start_time
+                        if int(elapsed) % 10 == 0 and int(elapsed) > 0:  # Every 10 seconds
+                            self._log_message(f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)")
+            finally:
+                sel.close()
 
             stdout_output = "\n".join(stdout_lines)
             elapsed_time = time.time() - start_time

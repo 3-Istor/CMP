@@ -742,45 +742,19 @@ async def delete_project(
                 detail=f"Cannot delete project '{project_name}': it has {app_count} active application(s). Delete all applications first.",
             )
 
-        # Delete Keycloak groups
-        logger.info(f"🗑️  Deleting project '{project_name}'...")
+        logger.info(f"🗑️  Scheduling teardown for project '{project_name}'...")
 
-        for suffix in ("admins", "members"):
-            group_name = f"project-{project_name}-{suffix}"
-            group = _find_group_by_name(group_name, admin_token)
-
-            if group:
-                group_id = group["id"]
-                delete_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/groups/{group_id}"
-                response = requests.delete(
-                    delete_url,
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                    timeout=10,
-                )
-                response.raise_for_status()
-                logger.info(f"✅ Deleted Keycloak group: {group_name}")
-
-        # Remove persisted ownership record
         db.query(ProjectOwner).filter(
             ProjectOwner.project_name == project_name
         ).delete()
         db.commit()
 
-        # Tear down the remaining Day-0 infrastructure — Vault policy, ArgoCD
-        # AppProject, GitHub resources and the per-project Terraform state — via
-        # `terraform destroy`. Runs in the background because it shells out to
-        # Terraform and can take a while; the Keycloak groups above are removed
-        # synchronously so the project vanishes from listings right away.
         background_tasks.add_task(
             run_project_teardown,
             project_name=project_name,
         )
 
-        logger.info(
-            "✅ Project '%s': Keycloak groups & ownership removed, "
-            "infrastructure teardown scheduled",
-            project_name,
-        )
+        logger.info("✅ Project '%s' teardown scheduled", project_name)
 
     except HTTPException:
         raise

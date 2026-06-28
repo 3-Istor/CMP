@@ -21,6 +21,9 @@ from app.core.config import settings
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services import aws_service, github_service, openstack_service
 from app.services.template_repository import get_repository
+from app.services.github_service import (
+    get_installation_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -499,6 +502,26 @@ def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             work_dir = Path(tmpdir)
 
+            # Parse config and resolve GitHub token with fallback
+            app_config = json.loads(deployment.app_config or "{}")
+            github_installation_id = app_config.get("github_installation_id")
+            github_token = ""
+
+            if github_installation_id:
+                try:
+                    import asyncio
+                    github_token = asyncio.run(get_installation_token(int(github_installation_id)))
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to generate GitHub token: {e}")
+
+            if not github_token and getattr(settings, "GITHUB_INSTALLATION_ID", None):
+                try:
+                    import asyncio
+                    github_token = asyncio.run(get_installation_token(int(settings.GITHUB_INSTALLATION_ID)))
+                    logger.info("✅ Used global GITHUB_INSTALLATION_ID fallback token")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to generate global fallback GitHub token: {e}")
+
             # Re-initialise with the same state key used during creation
             init_cmd = [
                 "terraform", "init",
@@ -513,10 +536,10 @@ def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
                 ),
                 "-reconfigure",
             ]
-            _run_terraform_command(init_cmd, module_path, work_dir)
+            _run_terraform_command(init_cmd, module_path, work_dir, github_token=github_token)
 
             destroy_cmd = ["terraform", "destroy", "-auto-approve"]
-            _run_terraform_command(destroy_cmd, module_path, work_dir)
+            _run_terraform_command(destroy_cmd, module_path, work_dir, github_token=github_token)
 
             logger.info(
                 "Kubernetes resources destroyed for deployment %s", deployment.id
