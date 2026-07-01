@@ -416,7 +416,7 @@ def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
         deployment.os_vm_db2_id = vm2["id"]
         deployment.os_vm_db2_ip = vm2["ip"]
         db.commit()
-        logger.info("OpenStack VMs ready for deployment %s", deployment_id)
+        logger.info("OpenStack VMs ready for deployment %s", deployment.id)
     except Exception as exc:
         logger.error("OpenStack step failed: %s", exc)
         _update(
@@ -445,7 +445,7 @@ def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
         deployment.aws_asg_name = aws_result["asg_name"]
         deployment.aws_alb_dns = aws_result["alb_dns"]
         db.commit()
-        logger.info("AWS layer ready for deployment %s", deployment_id)
+        logger.info("AWS layer ready for deployment %s", deployment.id)
     except Exception as exc:
         logger.error("AWS step failed - triggering SAGA rollback: %s", exc)
         _update(

@@ -6,23 +6,23 @@ import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
-import { ExternalLink, FileCode, Shield } from "lucide-react";
+import { Activity, ExternalLink, FileCode, Shield } from "lucide-react";
 import { useState } from "react";
 
 const ACTIVE_STATUSES = new Set([
@@ -46,7 +46,7 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
   const currentDeployment = polled ?? deployment;
 
   // Fetch real health status for running/degraded deployments
-  const shouldFetchHealth = [ "running", "degraded" ].includes(
+  const shouldFetchHealth = ["running", "degraded"].includes(
     currentDeployment.status,
   );
   const { health } = useAppHealth(
@@ -54,9 +54,9 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
     10000, // Poll every 10 seconds
   );
 
-  const [ confirmOpen, setConfirmOpen ] = useState(false);
-  const [ confirmStep, setConfirmStep ] = useState(1);
-  const [ healthOpen, setHealthOpen ] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmStep, setConfirmStep] = useState(1);
+  const [healthOpen, setHealthOpen] = useState(false);
 
   const isKubernetes = currentDeployment.provider_type === "kubernetes";
 
@@ -77,7 +77,7 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
   // Get health badge info based on REAL health check
   const getHealthBadge = () => {
     // For running/degraded deployments, use actual health check
-    if ([ "running", "degraded" ].includes(currentDeployment.status)) {
+    if (["running", "degraded"].includes(currentDeployment.status)) {
       if (!health) {
         return { label: "Checking...", variant: "outline" as const };
       }
@@ -108,7 +108,7 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
       return { label: "Queued", variant: "outline" as const };
     }
     if (
-      [ "initializing", "planning", "deploying" ].includes(
+      ["initializing", "planning", "deploying"].includes(
         currentDeployment.status,
       )
     ) {
@@ -129,12 +129,12 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
   // Parse Terraform outputs
   const outputs = currentDeployment.terraform_outputs
     ? (() => {
-      try {
-        return JSON.parse(currentDeployment.terraform_outputs);
-      } catch {
-        return {};
-      }
-    })()
+        try {
+          return JSON.parse(currentDeployment.terraform_outputs);
+        } catch {
+          return {};
+        }
+      })()
     : {};
 
   return (
@@ -188,7 +188,11 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                     href={currentDeployment.github_repo_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                      className: "justify-start",
+                    })}
                   >
                     <Github className="h-4 w-4 mr-2" />
                     Open GitHub Repository
@@ -199,7 +203,11 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                       href={`https://argocd.3istor.com/applications/${currentDeployment.argocd_app_name}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "justify-start",
+                      })}
                     >
                       <FileCode className="h-4 w-4 mr-2" />
                       View in ArgoCD
@@ -211,7 +219,11 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                       href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${currentDeployment.project_id}/${currentDeployment.name}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "justify-start",
+                      })}
                     >
                       <Shield className="h-4 w-4 mr-2" />
                       Manage Secrets
@@ -238,7 +250,7 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                 <div className="font-semibold text-muted-foreground mb-2">
                   Outputs:
                 </div>
-                {Object.entries(outputs).map(([ key, value ]) => (
+                {Object.entries(outputs).map(([key, value]) => (
                   <div key={key}>
                     <span className="text-muted-foreground">{key}: </span>
                     {typeof value === "string" && value.startsWith("http") ? (
@@ -261,7 +273,7 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
 
         <CardFooter className="mt-auto pt-2">
           <div className="flex gap-2 ml-auto">
-            {[ "running", "degraded" ].includes(currentDeployment.status) && (
+            {["running", "degraded"].includes(currentDeployment.status) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -275,7 +287,7 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
               variant="destructive"
               size="sm"
               onClick={handleDeleteClick}
-              disabled={[ "deleting", "deleted", "pending" ].includes(
+              disabled={["deleting", "deleted", "pending"].includes(
                 currentDeployment.status,
               )}
             >
@@ -296,8 +308,8 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
             </DialogTitle>
             <DialogDescription>
               {confirmStep === 1
-                ? `This will destroy all cloud resources for "${currentDeployment.name}" using Terraform. This cannot be undone.`
-                : `All resources (${currentDeployment.resource_count || "unknown"} resources) for "${currentDeployment.name}" will be permanently destroyed. Click confirm to proceed.`}
+                ? `This will destroy all cloud resources for &ldquo;${currentDeployment.name}&rdquo; using Terraform. This cannot be undone.`
+                : `All resources (${currentDeployment.resource_count || "unknown"} resources) for &ldquo;${currentDeployment.name}&rdquo; will be permanently destroyed. Click confirm to proceed.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

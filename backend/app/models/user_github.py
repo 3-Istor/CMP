@@ -30,10 +30,10 @@ class UserGitHubInstallation(Base):
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime, server_default=func.now()  # pylint: disable=not-callable
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=func.now(),  # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
     )

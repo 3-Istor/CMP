@@ -7,11 +7,11 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ export function GitHubLinkButton() {
 
   useEffect(() => {
     handleCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCallback = async () => {
@@ -199,7 +200,8 @@ export function GitHubLinkButton() {
               )}
             </Button>
             <p className="text-xs text-muted-foreground">
-              You'll be redirected to GitHub to authorize the CNP Portal app.
+              You&apos;ll be redirected to GitHub to authorize the CNP Portal
+              app.
             </p>
 
             <div className="relative">
