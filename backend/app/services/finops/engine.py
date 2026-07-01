@@ -15,7 +15,6 @@ from datetime import date, datetime, timedelta
 
 from app.services.finops import pricing, usage
 
-
 # ── Quota / application model ─────────────────────────────────────────────────
 
 

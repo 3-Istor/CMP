@@ -31,9 +31,9 @@ from app.models.project import ProjectOwner
 from app.schemas.finops import (
     ActionResponse,
     AppCostRow,
+    Breakdown,
     BudgetRead,
     BudgetWrite,
-    Breakdown,
     CostAlertRead,
     CostSeriesPoint,
     CostSummary,
