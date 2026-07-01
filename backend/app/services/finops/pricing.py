@@ -18,10 +18,10 @@ from __future__ import annotations
 # ── Ratio temps ↔ coût : éditer ICI pour ajuster toute la simulation ──────────
 # Prix horaires simulés, indexés (grossièrement) sur une infra réelle, en EUR.
 COST_RATE: dict[str, float] = {
-    "cpu": 0.0300,      # EUR par vCPU-heure (allouée)
-    "ram": 0.0040,      # EUR par Go de RAM-heure (allouée)
+    "cpu": 0.0300,  # EUR par vCPU-heure (allouée)
+    "ram": 0.0040,  # EUR par Go de RAM-heure (allouée)
     "storage": 0.00020,  # EUR par Go de stockage-heure
-    "network": 0.0100,   # EUR par Go de trafic réseau-heure (baseline)
+    "network": 0.0100,  # EUR par Go de trafic réseau-heure (baseline)
 }
 
 # Multiplicateur global temps → coût. 1.0 = temps réel. Augmenter pour une démo
@@ -36,8 +36,8 @@ RESERVATION_FLOOR: float = 0.5
 # Ordre canonique + couleurs (alignées sur la charte UI du frontend).
 RESOURCES: tuple[str, ...] = ("cpu", "ram", "storage", "network")
 RESOURCE_COLORS: dict[str, str] = {
-    "cpu": "#3B82F6",      # bleu
-    "ram": "#10B981",      # vert
+    "cpu": "#3B82F6",  # bleu
+    "ram": "#10B981",  # vert
     "storage": "#F59E0B",  # ambre
     "network": "#8B5CF6",  # violet
 }
@@ -48,8 +48,12 @@ CURRENCY = "EUR"
 CURRENCY_SYMBOL = "€"
 
 
-def resource_hours_cost(resource: str, allocated: float, hours: float,
-                        usage_multiplier: float = 1.0) -> float:
+def resource_hours_cost(
+    resource: str,
+    allocated: float,
+    hours: float,
+    usage_multiplier: float = 1.0,
+) -> float:
     """
     Cost in EUR of holding ``allocated`` units of ``resource`` for ``hours``.
 

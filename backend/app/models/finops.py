@@ -24,15 +24,17 @@ class ProjectBudget(Base):
     project_name: Mapped[str] = mapped_column(
         String(100), nullable=False, unique=True, index=True
     )
-    monthly_amount_eur: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    threshold_warn: Mapped[int] = mapped_column(Integer, default=70)      # %
+    monthly_amount_eur: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    threshold_warn: Mapped[int] = mapped_column(Integer, default=70)  # %
     threshold_critical: Mapped[int] = mapped_column(Integer, default=90)  # %
     currency: Mapped[str] = mapped_column(String(8), default="EUR")
     updated_by: Mapped[str | None] = mapped_column(String(255))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),  # pylint: disable=not-callable
-        onupdate=func.now(),        # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
     )
 
 
@@ -42,10 +44,16 @@ class CostAlert(Base):
     __tablename__ = "cost_alerts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    project_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(
+        String(100), nullable=False, index=True
+    )
     app_id: Mapped[int | None] = mapped_column(Integer)
-    level: Mapped[str] = mapped_column(String(16), default="info")   # info|warning|critical
-    kind: Mapped[str] = mapped_column(String(16), default="budget")  # budget|spike
+    level: Mapped[str] = mapped_column(
+        String(16), default="info"
+    )  # info|warning|critical
+    kind: Mapped[str] = mapped_column(
+        String(16), default="budget"
+    )  # budget|spike
     message: Mapped[str] = mapped_column(String(500), default="")
     value_pct: Mapped[float | None] = mapped_column(Float)
     triggered_at: Mapped[datetime] = mapped_column(
@@ -64,16 +72,22 @@ class RecommendationState(Base):
     __tablename__ = "recommendation_states"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    rec_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
-    project_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    rec_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    project_name: Mapped[str] = mapped_column(
+        String(100), nullable=False, index=True
+    )
     app_id: Mapped[int] = mapped_column(Integer, nullable=False)
     rec_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|applied|ignored|notified
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending"
+    )  # pending|applied|ignored|notified
     updated_by: Mapped[str | None] = mapped_column(String(255))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),  # pylint: disable=not-callable
-        onupdate=func.now(),        # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
     )
 
 
@@ -91,5 +105,5 @@ class BudgetAlertState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),  # pylint: disable=not-callable
-        onupdate=func.now(),        # pylint: disable=not-callable
+        onupdate=func.now(),  # pylint: disable=not-callable
     )

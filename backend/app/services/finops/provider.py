@@ -23,29 +23,32 @@ from app.services.finops.recommendations import (
 
 class CostProvider(ABC):
     @abstractmethod
-    def specs(self, deployments: list) -> list[AppSpec]:
-        ...
+    def specs(self, deployments: list) -> list[AppSpec]: ...
 
     @abstractmethod
-    def timeline(self, apps: list[AppSpec], start: date, end: date,
-                 granularity: str) -> list[dict]:
-        ...
+    def timeline(
+        self, apps: list[AppSpec], start: date, end: date, granularity: str
+    ) -> list[dict]: ...
 
     @abstractmethod
-    def breakdown(self, apps: list[AppSpec], ref: date | None = None) -> dict[str, float]:
-        ...
+    def breakdown(
+        self, apps: list[AppSpec], ref: date | None = None
+    ) -> dict[str, float]: ...
 
     @abstractmethod
-    def summary(self, apps: list[AppSpec], ref: date | None = None) -> dict:
-        ...
+    def summary(
+        self, apps: list[AppSpec], ref: date | None = None
+    ) -> dict: ...
 
     @abstractmethod
-    def app_rows(self, apps: list[AppSpec], ref: date | None = None) -> list[dict]:
-        ...
+    def app_rows(
+        self, apps: list[AppSpec], ref: date | None = None
+    ) -> list[dict]: ...
 
     @abstractmethod
-    def recommendations(self, apps: list[AppSpec], ref: date | None = None) -> list[Recommendation]:
-        ...
+    def recommendations(
+        self, apps: list[AppSpec], ref: date | None = None
+    ) -> list[Recommendation]: ...
 
 
 class SimulatedCostProvider(CostProvider):
@@ -90,15 +93,17 @@ class SimulatedCostProvider(CostProvider):
             else:
                 trend = None
             projected = engine.projected_month_cost([app], ref)
-            rows.append({
-                "app_id": app.id,
-                "name": app.name,
-                "project_id": app.project_id,
-                "cost_per_day_eur": today,
-                "cost_month_estimate_eur": projected,
-                "month_to_date_eur": mtd,
-                "trend_pct": trend,
-            })
+            rows.append(
+                {
+                    "app_id": app.id,
+                    "name": app.name,
+                    "project_id": app.project_id,
+                    "cost_per_day_eur": today,
+                    "cost_month_estimate_eur": projected,
+                    "month_to_date_eur": mtd,
+                    "trend_pct": trend,
+                }
+            )
         rows.sort(key=lambda r: r["cost_month_estimate_eur"], reverse=True)
         return rows
 

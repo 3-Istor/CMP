@@ -176,7 +176,9 @@ class TerraformExecutor:
         # developer's kubeconfig. In-cluster (DEBUG=false) we leave this unset so
         # the provider uses the mounted ServiceAccount (in-cluster) credentials.
         if settings.DEBUG:
-            env["TF_VAR_kube_config_path"] = os.path.expanduser("~/.kube/config")
+            env["TF_VAR_kube_config_path"] = os.path.expanduser(
+                "~/.kube/config"
+            )
 
         # Pass Vault credentials to Terraform (for k3s-gitops-app template)
         if settings.VAULT_URL:

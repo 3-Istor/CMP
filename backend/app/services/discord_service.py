@@ -142,7 +142,9 @@ async def send_budget_alert(
             response.raise_for_status()
             logger.info(
                 "Discord budget alert sent for %s (%s, %.0f%%)",
-                project_name, level, consumed_pct,
+                project_name,
+                level,
+                consumed_pct,
             )
             return True
     except Exception as exc:
@@ -158,14 +160,14 @@ async def send_finops_recommendation(
 ) -> bool:
     """Notify the Project Owner of an optimisation recommendation."""
     if not settings.DISCORD_WEBHOOK_URL:
-        logger.debug("Discord webhook not configured, skipping recommendation notice")
+        logger.debug(
+            "Discord webhook not configured, skipping recommendation notice"
+        )
         return False
 
     embed = {
         "title": "💡 Recommandation d'optimisation FinOps",
-        "description": (
-            f"**{app_name}** ({project_name}) — {title}"
-        ),
+        "description": (f"**{app_name}** ({project_name}) — {title}"),
         "color": 0x3B82F6,
         "fields": [
             {

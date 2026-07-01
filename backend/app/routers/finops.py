@@ -140,7 +140,9 @@ def _load_deployments(
 # ── Budget helpers ────────────────────────────────────────────────────────────
 
 
-def _budget_read(budget: ProjectBudget | None, spent: float) -> BudgetRead | None:
+def _budget_read(
+    budget: ProjectBudget | None, spent: float
+) -> BudgetRead | None:
     if budget is None:
         return None
     amount = budget.monthly_amount_eur or 0.0
@@ -190,7 +192,8 @@ def get_overview(
 
     start, end = period_to_range(period)
     timeline = [
-        CostSeriesPoint(**p) for p in provider.timeline(apps, start, end, granularity)
+        CostSeriesPoint(**p)
+        for p in provider.timeline(apps, start, end, granularity)
     ]
     app_rows = [AppCostRow(**r) for r in provider.app_rows(apps)]
 
@@ -217,7 +220,9 @@ def get_timeline(
     db: Session = Depends(get_db),
     project: str | None = None,
     app: int | None = None,
-    resource: str | None = Query(default=None, description="cpu|ram|storage|network"),
+    resource: str | None = Query(
+        default=None, description="cpu|ram|storage|network"
+    ),
     granularity: str = "daily",
     period: str = "30d",
 ):
@@ -275,31 +280,37 @@ def get_recommendations(
     recs = provider.recommendations(apps)
 
     # Overlay persisted user decisions.
-    states = {
-        s.rec_id: s.status
-        for s in db.query(RecommendationState)
-        .filter(RecommendationState.rec_id.in_([r.id for r in recs]))
-        .all()
-    } if recs else {}
+    states = (
+        {
+            s.rec_id: s.status
+            for s in db.query(RecommendationState)
+            .filter(RecommendationState.rec_id.in_([r.id for r in recs]))
+            .all()
+        }
+        if recs
+        else {}
+    )
 
     result = []
     for r in recs:
-        result.append(Recommendation(
-            id=r.id,
-            app_id=r.app_id,
-            app_name=r.app_name,
-            project_id=r.project_id,
-            rec_type=r.rec_type,
-            title=r.title,
-            justification=r.justification,
-            current=r.current,
-            recommended=r.recommended,
-            monthly_saving_eur=r.monthly_saving_eur,
-            confidence=r.confidence,
-            effort=r.effort,
-            status=states.get(r.id, "pending"),
-            can_apply=r.patch is not None,
-        ))
+        result.append(
+            Recommendation(
+                id=r.id,
+                app_id=r.app_id,
+                app_name=r.app_name,
+                project_id=r.project_id,
+                rec_type=r.rec_type,
+                title=r.title,
+                justification=r.justification,
+                current=r.current,
+                recommended=r.recommended,
+                monthly_saving_eur=r.monthly_saving_eur,
+                confidence=r.confidence,
+                effort=r.effort,
+                status=states.get(r.id, "pending"),
+                can_apply=r.patch is not None,
+            )
+        )
     return result
 
 
@@ -308,7 +319,9 @@ def _find_recommendation(db: Session, token: dict, rec_id: str):
     try:
         app_id = int(rec_id.split(":", 1)[0])
     except (ValueError, IndexError):
-        raise HTTPException(status_code=400, detail="Invalid recommendation id.")
+        raise HTTPException(
+            status_code=400, detail="Invalid recommendation id."
+        )
 
     deployment = db.get(Deployment, app_id)
     if not deployment or deployment.project_id is None:
@@ -319,7 +332,9 @@ def _find_recommendation(db: Session, token: dict, rec_id: str):
     recs = provider.recommendations(provider.specs([deployment]))
     rec = next((r for r in recs if r.id == rec_id), None)
     if rec is None:
-        raise HTTPException(status_code=404, detail="Recommendation not found.")
+        raise HTTPException(
+            status_code=404, detail="Recommendation not found."
+        )
     return deployment, rec
 
 
@@ -385,7 +400,9 @@ def ignore_recommendation(
 ):
     _deployment, rec = _find_recommendation(db, token, rec_id)
     _upsert_state(db, rec, _username(token), "ignored")
-    return ActionResponse(message="Recommandation ignorée.", rec_id=rec.id, status="ignored")
+    return ActionResponse(
+        message="Recommandation ignorée.", rec_id=rec.id, status="ignored"
+    )
 
 
 @router.post("/recommendations/{rec_id}/notify", response_model=ActionResponse)
@@ -504,7 +521,9 @@ def get_alerts(
 # ── GitOps apply helper (reuses the deployments router primitives) ────────────
 
 
-async def _apply_patch_to_gitops(deployment: Deployment, patch: dict) -> str | None:
+async def _apply_patch_to_gitops(
+    deployment: Deployment, patch: dict
+) -> str | None:
     """
     Deep-merge ``patch`` into the app's ``deploy/values.yaml`` and commit.
     Mirrors ``update_deployment_config`` but is triggered by a recommendation.
@@ -546,4 +565,6 @@ async def _apply_patch_to_gitops(deployment: Deployment, patch: dict) -> str | N
         )
         return result.get("commit", {}).get("sha", "")
     except GitHubAppError as exc:
-        raise HTTPException(status_code=502, detail=f"GitHub error: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=f"GitHub error: {exc}"
+        ) from exc

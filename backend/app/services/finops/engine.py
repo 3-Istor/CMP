@@ -24,8 +24,8 @@ class Quota:
     """Requested resources of an application (the 'allocated' capacity)."""
 
     replicas: int
-    cpu_cores: float   # per replica
-    ram_gb: float      # per replica
+    cpu_cores: float  # per replica
+    ram_gb: float  # per replica
     storage_gb: float  # total
     network_gb: float  # baseline monthly egress allowance
 
@@ -74,14 +74,22 @@ def quota_from_deployment(deployment) -> Quota:
 
     app_id = int(deployment.id)
 
-    replicas = _coerce_int(cfg.get("replica_count") or cfg.get("replicaCount"),
-                           default=1 + round(_stable_unit(app_id, "rep") * 4))
-    cpu_cores = _coerce_float(_nested(cfg, "resources", "limits", "cpu"),
-                              default=round(0.5 + _stable_unit(app_id, "cpu") * 3.5, 2))
-    ram_gb = _coerce_float(_nested(cfg, "resources", "limits", "memory"),
-                           default=round(0.5 + _stable_unit(app_id, "ram") * 7.5, 2))
-    storage_gb = _coerce_float(cfg.get("storage_gb"),
-                               default=round(5 + _stable_unit(app_id, "sto") * 45))
+    replicas = _coerce_int(
+        cfg.get("replica_count") or cfg.get("replicaCount"),
+        default=1 + round(_stable_unit(app_id, "rep") * 4),
+    )
+    cpu_cores = _coerce_float(
+        _nested(cfg, "resources", "limits", "cpu"),
+        default=round(0.5 + _stable_unit(app_id, "cpu") * 3.5, 2),
+    )
+    ram_gb = _coerce_float(
+        _nested(cfg, "resources", "limits", "memory"),
+        default=round(0.5 + _stable_unit(app_id, "ram") * 7.5, 2),
+    )
+    storage_gb = _coerce_float(
+        cfg.get("storage_gb"),
+        default=round(5 + _stable_unit(app_id, "sto") * 45),
+    )
     network_gb = round(2 + _stable_unit(app_id, "net") * 18, 1)
 
     return Quota(
@@ -138,11 +146,13 @@ def app_cost_series(app: AppSpec, start: date, end: date) -> list[dict]:
     points: list[dict] = []
     for day in _active_days(app, start, end):
         costs = daily_cost(app, day)
-        points.append({
-            "date": day.isoformat(),
-            **{r: round(costs[r], 4) for r in pricing.RESOURCES},
-            "total": round(sum(costs.values()), 4),
-        })
+        points.append(
+            {
+                "date": day.isoformat(),
+                **{r: round(costs[r], 4) for r in pricing.RESOURCES},
+                "total": round(sum(costs.values()), 4),
+            }
+        )
     return points
 
 
@@ -161,11 +171,13 @@ def combined_series(apps: list[AppSpec], start: date, end: date) -> list[dict]:
     out: list[dict] = []
     for day in sorted(acc):
         slot = acc[day]
-        out.append({
-            "date": day,
-            **{r: round(slot[r], 4) for r in pricing.RESOURCES},
-            "total": round(sum(slot.values()), 4),
-        })
+        out.append(
+            {
+                "date": day,
+                **{r: round(slot[r], 4) for r in pricing.RESOURCES},
+                "total": round(sum(slot.values()), 4),
+            }
+        )
     return out
 
 
@@ -192,11 +204,13 @@ def aggregate_series(daily: list[dict], granularity: str) -> list[dict]:
     out: list[dict] = []
     for key in order:
         slot = buckets[key]
-        out.append({
-            "date": key,
-            **{r: round(slot[r], 4) for r in pricing.RESOURCES},
-            "total": round(sum(slot.values()), 4),
-        })
+        out.append(
+            {
+                "date": key,
+                **{r: round(slot[r], 4) for r in pricing.RESOURCES},
+                "total": round(sum(slot.values()), 4),
+            }
+        )
     return out
 
 
@@ -219,11 +233,15 @@ def previous_month_cost(apps: list[AppSpec], ref: date | None = None) -> float:
     start = last_prev.replace(day=1)
     total = 0.0
     for app in apps:
-        total += sum(p["total"] for p in app_cost_series(app, start, last_prev))
+        total += sum(
+            p["total"] for p in app_cost_series(app, start, last_prev)
+        )
     return round(total, 2)
 
 
-def projected_month_cost(apps: list[AppSpec], ref: date | None = None) -> float:
+def projected_month_cost(
+    apps: list[AppSpec], ref: date | None = None
+) -> float:
     """Extrapolate month-to-date spend to a full-month estimate."""
     ref = ref or date.today()
     mtd = month_to_date_cost(apps, ref)
@@ -234,7 +252,9 @@ def projected_month_cost(apps: list[AppSpec], ref: date | None = None) -> float:
     return round(mtd / days_elapsed * days_in_month, 2)
 
 
-def breakdown(apps: list[AppSpec], ref: date | None = None) -> dict[str, float]:
+def breakdown(
+    apps: list[AppSpec], ref: date | None = None
+) -> dict[str, float]:
     """Month-to-date cost split by resource type across apps."""
     ref = ref or date.today()
     start = ref.replace(day=1)
@@ -246,7 +266,9 @@ def breakdown(apps: list[AppSpec], ref: date | None = None) -> dict[str, float]:
     return {r: round(v, 2) for r, v in totals.items()}
 
 
-def app_daily_and_monthly(app: AppSpec, ref: date | None = None) -> tuple[float, float, float]:
+def app_daily_and_monthly(
+    app: AppSpec, ref: date | None = None
+) -> tuple[float, float, float]:
     """
     Return (cost_yesterday, cost_today, month_to_date) for a single app.
     The trend is derived by the caller from today vs yesterday.
