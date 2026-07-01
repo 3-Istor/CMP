@@ -3,12 +3,14 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.models.deployment import DeploymentStatus
+from app.models.deployment import DeploymentStatus, ProviderType
 
 
 class DeploymentCreate(BaseModel):
     name: str
     template_id: str
+    provider_type: ProviderType = ProviderType.LEGACY_HYBRID
+    project_id: str | None = None
     app_config: dict[str, Any] = {}
 
 
@@ -23,6 +25,14 @@ class DeploymentRead(BaseModel):
     template_category: str | None
     status: DeploymentStatus
     step_message: str
+
+    # Multi-provider fields (Phase 3)
+    provider_type: ProviderType
+    project_id: str | None
+    github_repo_url: str | None
+    argocd_app_name: str | None
+    k8s_namespace: str | None
+
     terraform_outputs: str | None  # JSON string
     resource_count: int | None
     created_at: datetime

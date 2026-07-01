@@ -1,9 +1,10 @@
 "use client";
 
 import { DeploymentHealthPanel } from "@/components/dashboard/DeploymentHealthPanel";
+import { Github } from "@/components/icons/Github";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
     Card,
     CardContent,
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
-import { Activity } from "lucide-react";
+import { Activity, ExternalLink, FileCode, Shield } from "lucide-react";
 import { useState } from "react";
 
 const ACTIVE_STATUSES = new Set([
@@ -183,57 +184,51 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                   Quick Actions
                 </div>
                 <div className="grid grid-cols-1 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="justify-start"
-                    asChild
+                  <a
+                    href={currentDeployment.github_repo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                      className: "justify-start",
+                    })}
                   >
+                    <Github className="h-4 w-4 mr-2" />
+                    Open GitHub Repository
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                  {currentDeployment.argocd_app_name && (
                     <a
-                      href={currentDeployment.github_repo_url}
+                      href={`https://argocd.3istor.com/applications/${currentDeployment.argocd_app_name}`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "justify-start",
+                      })}
                     >
-                      <Github className="h-4 w-4 mr-2" />
-                      Open GitHub Repository
+                      <FileCode className="h-4 w-4 mr-2" />
+                      View in ArgoCD
                       <ExternalLink className="h-3 w-3 ml-auto" />
                     </a>
-                  </Button>
-                  {currentDeployment.argocd_app_name && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="justify-start"
-                      asChild
-                    >
-                      <a
-                        href={`https://argocd.3istor.com/applications/${currentDeployment.argocd_app_name}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <FileCode className="h-4 w-4 mr-2" />
-                        View in ArgoCD
-                        <ExternalLink className="h-3 w-3 ml-auto" />
-                      </a>
-                    </Button>
                   )}
                   {currentDeployment.project_id && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="justify-start"
-                      asChild
+                    <a
+                      href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${currentDeployment.project_id}/${currentDeployment.name}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "justify-start",
+                      })}
                     >
-                      <a
-                        href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${currentDeployment.project_id}/${currentDeployment.name}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Shield className="h-4 w-4 mr-2" />
-                        Manage Secrets
-                        <ExternalLink className="h-3 w-3 ml-auto" />
-                      </a>
-                    </Button>
+                      <Shield className="h-4 w-4 mr-2" />
+                      Manage Secrets
+                      <ExternalLink className="h-3 w-3 ml-auto" />
+                    </a>
                   )}
                 </div>
                 {currentDeployment.k8s_namespace && (
@@ -313,8 +308,8 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
             </DialogTitle>
             <DialogDescription>
               {confirmStep === 1
-                ? `This will destroy all cloud resources for "${currentDeployment.name}" using Terraform. This cannot be undone.`
-                : `All resources (${currentDeployment.resource_count || "unknown"} resources) for "${currentDeployment.name}" will be permanently destroyed. Click confirm to proceed.`}
+                ? `This will destroy all cloud resources for &ldquo;${currentDeployment.name}&rdquo; using Terraform. This cannot be undone.`
+                : `All resources (${currentDeployment.resource_count || "unknown"} resources) for &ldquo;${currentDeployment.name}&rdquo; will be permanently destroyed. Click confirm to proceed.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

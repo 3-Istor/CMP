@@ -11,10 +11,14 @@ dist/
 build/
 *.egg-info/
 .pytest_cache/
+backend/logs/*
+.vscode/*
 
 # Terraform and template data
 backend/data/
 backend/arcl.db
+*.db-shm
+*.db-wal
 *.tfstate
 *.tfstate.backup
 .terraform/

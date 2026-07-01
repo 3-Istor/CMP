@@ -4,6 +4,64 @@ This document tracks major changes and releases of the Cloud Native Platform.
 
 ---
 
+## [Unreleased] - 2026-06-26
+
+### Added
+
+#### Frontend
+
+- **Public landing page (`/welcome`):** Marketing homepage for unauthenticated
+  visitors (hero, services, benefits, CTA) built with the new shared brand
+  `Logo` component (`src/components/brand/Logo.tsx`).
+- **Persistent sidebar polling:** `AppSidebar` now polls the project list (15s)
+  so it stays in sync with projects created or deleted elsewhere.
+- **Persistent pending projects:** Just-created projects are tracked in
+  `localStorage` (`src/lib/pendingProjects.ts`), so their optimistic
+  "bootstrapping" card with time-based progress survives a page reload.
+
+#### Backend
+
+- **OpenAPI OAuth2 Integration:** Swagger UI (`/docs`) now supports Keycloak OIDC authentication
+  - Authorization Code Flow implementation
+  - Interactive endpoint testing with real SSO
+  - All endpoints (except `/health`) require authentication
+  - Custom OpenAPI schema generator with security schemes
+- **Model Context Protocol (MCP) Server:** AI-native integration for coding assistants
+  - Documentation resources (architecture, components, workflows, API specs)
+  - API tools (list deployments, create apps, check status, manage projects)
+  - Claude Desktop and Cursor IDE compatible
+  - 5 tools and 3+ resource endpoints
+- **MCP Documentation & Tooling:**
+  - Complete setup guide (`MCP_SERVER_README.md`)
+  - Implementation summary (`MCP_IMPLEMENTATION_SUMMARY.md`)
+  - Automated test script (`test_mcp_server.py`)
+  - Setup automation script (`setup_mcp.sh`)
+  - Example config for Claude Desktop (`mcp-config-example.json`)
+  - Architecture guide (`.kiro/steering/docs/05-cmp-backend-api/11-cmp-mcp-integration.md`)
+
+### Changed
+
+#### Frontend
+
+- **Branding:** Renamed from "CMP — Hybrid Cloud Management" to
+  **"CNP — Cloud Native Platform"** in the app metadata.
+- **Auth routing (`middleware.ts`):** Unauthenticated users are now redirected
+  to `/welcome` (carrying their `callbackUrl`) instead of `/auth/signin`;
+  authenticated users on `/welcome` are sent to the app. The sidebar is hidden
+  on `/welcome`.
+- **`useProjects(intervalMs)`:** Now accepts an optional polling interval
+  (defaults to a single fetch on mount).
+
+#### Backend
+
+- **Resilient monitoring:** `monitoring_service.py` treats OpenStack
+  connectivity failures (VPN down / Keystone offline) as an expected
+  operational state — logged concisely as a warning and reported as `unknown`
+  status instead of raising a full stack trace.
+- **Dependencies:** Added `mcp==1.12.4` and related packages for MCP server support
+
+---
+
 ## [Phase 3] - 2026-05-24
 
 ### ✅ Kubernetes Provider Support - COMPLETE

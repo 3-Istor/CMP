@@ -21,6 +21,7 @@ class DeploymentStatus(str, enum.Enum):
 
 class ProviderType(str, enum.Enum):
     """Discriminator for multi-provider deployments."""
+
     LEGACY_HYBRID = "legacy_hybrid"  # OpenStack + AWS
     KUBERNETES = "kubernetes"  # K3s + ArgoCD + GitOps
 

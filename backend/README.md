@@ -303,6 +303,56 @@ tail -f /tmp/terraform-*.log
 
 ---
 
-**Version** : Phase 3 (Kubernetes Support)
-**Dernière mise à jour** : 2026-05-24
+**Version** : Phase 3 (Kubernetes Support) + MCP Integration
+**Dernière mise à jour** : 2026-06-26
 **Équipe** : CNP Platform Team
+
+---
+
+## 🆕 New Features (2026-06-26)
+
+### ✅ OAuth2 Swagger UI
+
+Interactive API testing with Keycloak authentication:
+
+```bash
+# Start backend
+poetry run uvicorn app.main:app --reload
+
+# Visit http://localhost:8000/docs
+# Click "Authorize" → Keycloak SSO → Test endpoints
+```
+
+**Benefits:**
+
+- No Postman needed
+- Real production auth
+- Interactive testing
+
+### ✅ MCP Server (AI Integration)
+
+AI assistants can read docs and call APIs:
+
+```bash
+# Quick setup
+./setup_mcp.sh
+
+# Test
+poetry run python test_mcp_server.py
+```
+
+**Documentation:**
+
+- **Quick Start** : [QUICK_START_MCP.md](QUICK_START_MCP.md)
+- **Complete Guide** : [MCP_SERVER_README.md](MCP_SERVER_README.md)
+- **Implementation** : [MCP_IMPLEMENTATION_SUMMARY.md](MCP_IMPLEMENTATION_SUMMARY.md)
+- **Integration Complete** : [MCP_INTEGRATION_COMPLETE.md](../MCP_INTEGRATION_COMPLETE.md)
+- **Architecture** : [.kiro/steering/docs/05-cmp-backend-api/11-cmp-mcp-integration.md](../.kiro/steering/docs/05-cmp-backend-api/11-cmp-mcp-integration.md)
+
+**Example AI Workflows:**
+
+```
+Claude: "Read docs://01-architecture/01-system-overview and explain CNP"
+Claude: "List all my deployments (token: eyJhbG...)"
+Claude: "Deploy 'billing-api' in project 'finance' with 3 replicas"
+```

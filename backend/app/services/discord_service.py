@@ -59,43 +59,32 @@ async def send_app_alert(
             {
                 "name": "Previous State",
                 "value": previous_state.upper(),
-                "inline": True
+                "inline": True,
             },
-            {
-                "name": "New State",
-                "value": new_state.upper(),
-                "inline": True
-            }
+            {"name": "New State", "value": new_state.upper(), "inline": True},
         ],
         "timestamp": datetime.utcnow().isoformat(),
-        "footer": {
-            "text": "CMP Health Monitor"
-        }
+        "footer": {"text": "CMP Health Monitor"},
     }
 
     if details:
-        embed["fields"].append({
-            "name": "Details",
-            "value": details,
-            "inline": False
-        })
+        embed["fields"].append(
+            {"name": "Details", "value": details, "inline": False}
+        )
 
-    payload = {
-        "embeds": [embed]
-    }
+    payload = {"embeds": [embed]}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
-                settings.DISCORD_WEBHOOK_URL,
-                json=payload
+                settings.DISCORD_WEBHOOK_URL, json=payload
             )
             response.raise_for_status()
             logger.info(
                 "Discord alert sent for %s: %s -> %s",
                 app_name,
                 previous_state,
-                new_state
+                new_state,
             )
             return True
     except Exception as exc:
@@ -107,7 +96,7 @@ async def send_infra_alert(
     component_name: str,
     previous_state: str,
     new_state: str,
-    component_type: str = "infrastructure"
+    component_type: str = "infrastructure",
 ) -> bool:
     """
     Send an alert when infrastructure component state changes.
@@ -147,36 +136,27 @@ async def send_infra_alert(
             {
                 "name": "Previous State",
                 "value": previous_state.upper(),
-                "inline": True
+                "inline": True,
             },
-            {
-                "name": "New State",
-                "value": new_state.upper(),
-                "inline": True
-            }
+            {"name": "New State", "value": new_state.upper(), "inline": True},
         ],
         "timestamp": datetime.utcnow().isoformat(),
-        "footer": {
-            "text": "CMP Infrastructure Monitor"
-        }
+        "footer": {"text": "CMP Infrastructure Monitor"},
     }
 
-    payload = {
-        "embeds": [embed]
-    }
+    payload = {"embeds": [embed]}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
-                settings.DISCORD_WEBHOOK_URL,
-                json=payload
+                settings.DISCORD_WEBHOOK_URL, json=payload
             )
             response.raise_for_status()
             logger.info(
                 "Discord alert sent for %s: %s -> %s",
                 component_name,
                 previous_state,
-                new_state
+                new_state,
             )
             return True
     except Exception as exc:

@@ -20,6 +20,7 @@ services:
     volumes:
       - backend-data:/app/data
       - backend-db:/app
+      - ~/.kube/config:/root/.kube/config:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

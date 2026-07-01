@@ -33,6 +33,61 @@ export interface Deployment {
   k8s_namespace: string | null;
 }
 
+// ── Projects (Phase 4) ────────────────────────────────────────────────────────
+
+export type ProjectRole = "owner" | "admin" | "member";
+
+export interface Project {
+  name: string;
+  role: ProjectRole;
+}
+
+export interface ProjectCreateResponse {
+  message: string;
+  project_name: string;
+  status: string;
+}
+
+export interface ProjectMember {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: ProjectRole;
+}
+
+export interface ProjectMembersResponse {
+  project_name: string;
+  members: ProjectMember[];
+}
+
+export interface AddMemberResponse {
+  message: string;
+  project_name: string;
+  username: string;
+  role: string;
+}
+
+// ── Day-2 GitOps Config (Phase 4) ─────────────────────────────────────────────
+
+export interface DeploymentConfig {
+  repo: string;
+  file_path: string;
+  /** File SHA — must be echoed back in PATCH requests */
+  _sha: string;
+  config: Record<string, unknown>;
+}
+
+export interface DeploymentConfigUpdateResponse {
+  message: string;
+  repo: string;
+  file_path: string;
+  commit_sha: string;
+  changed_keys: string[];
+}
+
+// ── Terraform / Catalog ───────────────────────────────────────────────────────
+
 export interface TerraformOutputs {
   [key: string]: string | number | boolean | null;
 }
@@ -57,7 +112,8 @@ export interface CatalogTemplate {
   enabled?: boolean;
 }
 
-// Infrastructure Monitoring Types
+// ── Infrastructure Monitoring ─────────────────────────────────────────────────
+
 export interface VPNStatus {
   name: string;
   status: string;
@@ -107,7 +163,8 @@ export interface AppHealthResponse {
   openstack_backend: OpenStackBackendHealth | null;
 }
 
-// Account & Profile Types
+// ── Account & Profile ─────────────────────────────────────────────────────────
+
 export interface UserProfile {
   sub: string;
   email: string;
@@ -123,7 +180,19 @@ export interface GitHubStatus {
   github_installation_id: string | null;
 }
 
+export interface GitHubInstallationResponse {
+  message: string;
+  installation_id: string;
+}
+
 export interface PictureUploadResponse {
   message: string;
   picture_url: string;
+}
+
+export interface KeycloakUserResult {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
 }

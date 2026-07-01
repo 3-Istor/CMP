@@ -207,7 +207,9 @@ export default function AccountPage() {
                 />
                 <div className="flex-1">
                   <h3 className="text-xl font-semibold">
-                    {user.name || `${user.given_name} ${user.family_name}`}
+                    {user.name ||
+                      `${user.given_name || ""} ${user.family_name || ""}`.trim() ||
+                      user.email}
                   </h3>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                   {user.groups.length > 0 && (

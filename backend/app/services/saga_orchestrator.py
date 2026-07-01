@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services import aws_service, github_service, openstack_service
+from app.services.github_service import get_installation_token
+from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ def _run_kubernetes_deployment(deployment: Deployment, db: Session) -> None:
         db,
         deployment,
         DeploymentStatus.DEPLOYING,
-        "🔐 Authenticating with GitHub App..."
+        "🔐 Authenticating with GitHub App...",
     )
 
     try:
@@ -68,6 +70,7 @@ def _run_kubernetes_deployment(deployment: Deployment, db: Session) -> None:
 
         # Exchange for installation token
         import asyncio
+
         installation_token = asyncio.run(
             github_service.get_installation_token(github_installation_id)
         )
@@ -76,14 +79,14 @@ def _run_kubernetes_deployment(deployment: Deployment, db: Session) -> None:
             db,
             deployment,
             DeploymentStatus.DEPLOYING,
-            "🛠️ Bootstrapping infrastructure with Terraform..."
+            "🛠️ Bootstrapping infrastructure with Terraform...",
         )
 
         # Execute Terraform with dynamic state
         tf_outputs = _execute_terraform_kubernetes(
             deployment=deployment,
             app_config=app_config,
-            github_token=installation_token
+            github_token=installation_token,
         )
 
         # Store outputs in deployment record
@@ -97,7 +100,7 @@ def _run_kubernetes_deployment(deployment: Deployment, db: Session) -> None:
             db,
             deployment,
             DeploymentStatus.RUNNING,
-            f"✅ Running - ArgoCD syncing from {deployment.github_repo_url}"
+            f"✅ Running - ArgoCD syncing from {deployment.github_repo_url}",
         )
 
     except Exception as exc:
@@ -106,83 +109,113 @@ def _run_kubernetes_deployment(deployment: Deployment, db: Session) -> None:
             db,
             deployment,
             DeploymentStatus.FAILED,
-            f"❌ Deployment failed: {str(exc)[:200]}"
+            f"❌ Deployment failed: {str(exc)[:200]}",
         )
 
 
 def _execute_terraform_kubernetes(
-    deployment: Deployment,
-    app_config: dict,
-    github_token: str
+    deployment: Deployment, app_config: dict, github_token: str
 ) -> dict:
     """
-    Execute the github_bootstrap Terraform module with dynamic S3 state.
+    Execute the ``github_bootstrap`` Terraform module with dynamic S3 state.
+
+    This module creates the full Day-0 stack for a containerised application:
+      - GitHub repository (bootstrapped from template)
+      - Kubernetes namespace
+      - Vault secrets
+      - Cloudflare Tunnel (optional)
+      - ArgoCD Application CRD
+
+    All credentials are injected as ``TF_VAR_*`` environment variables so
+    they never appear in tfvars files or Terraform state.
 
     Returns:
-        dict: Terraform outputs (github_repo_url, argocd_app_name, k8s_namespace)
+        dict: Terraform outputs (github_repo_url, argocd_app_name, k8s_namespace, …)
     """
-    module_path = Path(__file__).parent.parent / "terraform" / "github_bootstrap"
+    # Get the template path dynamically from the cloned repository
+    repo = get_repository()
+    template = repo.get_template_by_id(deployment.template_id)
+
+    if not template:
+        raise ValueError(
+            f"Template '{deployment.template_id}' not found in repository. "
+            "Please ensure the template exists and is enabled."
+        )
+
+    module_path = Path(template["_template_path"])
 
     if not module_path.exists():
-        raise FileNotFoundError(f"Terraform module not found: {module_path}")
+        raise FileNotFoundError(
+            f"Terraform module not found: {module_path}. "
+            "Please ensure the template repository is properly cloned."
+        )
 
-    # Create temporary working directory
+    project_name = app_config.get("project_name", "default")
+    state_key = f"cmp/projects/{project_name}/{deployment.name}.tfstate"
+    deployment.terraform_state_path = state_key
+
     with tempfile.TemporaryDirectory() as tmpdir:
         work_dir = Path(tmpdir)
 
-        # Generate tfvars file
-        tfvars_content = f"""
-project_name            = "{app_config.get('project_name', 'default')}"
-app_name                = "{deployment.name}"
-replica_count           = {app_config.get('replica_count', 2)}
-sso_protected           = {str(app_config.get('sso_protected', False)).lower()}
-github_installation_id  = "{app_config.get('github_installation_id')}"
-github_app_private_key  = <<-EOT
-{settings.GITHUB_APP_PRIVATE_KEY}
-EOT
-"""
+        logger.info(
+            "Initialising Terraform (module: k3s-gitops-app, state: %s)",
+            state_key,
+        )
 
-        tfvars_file = work_dir / "terraform.tfvars"
-        tfvars_file.write_text(tfvars_content)
-
-        # Dynamic S3 state key
-        project_name = app_config.get('project_name', 'default')
-        state_key = f"cmp/projects/{project_name}/{deployment.name}.tfstate"
-        deployment.terraform_state_path = state_key
-
-        # Initialize Terraform with dynamic backend
-        logger.info("Initializing Terraform with state key: %s", state_key)
-
+        # ── terraform init ────────────────────────────────────────────
         init_cmd = [
-            "terraform", "init",
-            "-backend-config=bucket=3-istor-tf-infra-aws",
+            "terraform",
+            "init",
+            f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
             f"-backend-config=key={state_key}",
-            "-backend-config=region=eu-west-3",
+            f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
             "-backend-config=encrypt=true",
-            "-backend-config=dynamodb_table=terraform-state-lock",
-            "-reconfigure"
+            *(
+                [
+                    f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"
+                ]
+                if settings.TF_BACKEND_S3_DYNAMODB_TABLE
+                else []
+            ),
+            "-reconfigure",
         ]
+        _run_terraform_command(
+            init_cmd, module_path, work_dir, github_token=github_token
+        )
 
-        _run_terraform_command(init_cmd, module_path, work_dir)
-
-        # Apply Terraform
-        logger.info("Applying Terraform configuration...")
+        # ── terraform apply ───────────────────────────────────────────
+        logger.info("Applying github_bootstrap Terraform module…")
         apply_cmd = [
-            "terraform", "apply",
+            "terraform",
+            "apply",
             "-auto-approve",
-            f"-var-file={tfvars_file}"
+            # Non-sensitive variables passed as -var flags
+            f"-var=project_name={project_name}",
+            f"-var=app_name={deployment.name}",
+            f"-var=replica_count={app_config.get('replica_count', 2)}",
+            f"-var=sso_protected={str(app_config.get('sso_protected', False)).lower()}",
+            f"-var=github_installation_id={app_config.get('github_installation_id', '')}",
+            f"-var=github_owner={app_config.get('github_owner', '3-Istor')}",
+            f"-var=template_repo_name={app_config.get('template_repo_name', 'template-html-css')}",
+            f"-var=app_type={app_config.get('app_type', 'static')}",
         ]
+        _run_terraform_command(
+            apply_cmd, module_path, work_dir, github_token=github_token
+        )
 
-        _run_terraform_command(apply_cmd, module_path, work_dir)
-
-        # Extract outputs
+        # ── terraform output ──────────────────────────────────────────
         output_cmd = ["terraform", "output", "-json"]
-        result = _run_terraform_command(output_cmd, module_path, work_dir, capture=True)
+        result = _run_terraform_command(
+            output_cmd,
+            module_path,
+            work_dir,
+            github_token=github_token,
+            capture=True,
+        )
 
         outputs_raw = json.loads(result.stdout)
         outputs = {k: v["value"] for k, v in outputs_raw.items()}
-
-        logger.info("Terraform outputs: %s", outputs)
+        logger.info("Terraform outputs: %s", list(outputs.keys()))
         return outputs
 
 
@@ -190,19 +223,76 @@ def _run_terraform_command(
     cmd: list[str],
     module_path: Path,
     work_dir: Path,
-    capture: bool = False
+    github_token: str = "",
+    capture: bool = False,
 ) -> subprocess.CompletedProcess:
     """
-    Execute a Terraform command with proper environment and error handling.
+    Execute a Terraform command with all required credentials injected as
+    environment variables.
+
+    Sensitive values are passed via ``TF_VAR_*`` env vars (never as -var flags
+    on the command line) so they don't appear in shell history or logs.
+
+    Args:
+        cmd:          Terraform command list.
+        module_path:  Directory of the Terraform module.
+        work_dir:     Temporary working directory (used for TF_DATA_DIR).
+        github_token: Short-lived GitHub installation access token.
+        capture:      Whether to capture stdout/stderr for parsing.
     """
     env = os.environ.copy()
     env["TF_IN_AUTOMATION"] = "1"
     env["TF_INPUT"] = "0"
+    env["TF_DATA_DIR"] = str(work_dir / ".terraform")
 
-    # Add AWS credentials for S3 backend
+    # ── S3 backend credentials ────────────────────────────────────────────
     if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
         env["AWS_ACCESS_KEY_ID"] = settings.TF_BACKEND_AWS_ACCESS_KEY_ID
-        env["AWS_SECRET_ACCESS_KEY"] = settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
+        env["AWS_SECRET_ACCESS_KEY"] = (
+            settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
+        )
+        env["AWS_DEFAULT_REGION"] = settings.TF_BACKEND_AWS_REGION
+
+    # ── GitHub (short-lived installation token, generated per operation) ──
+    if github_token:
+        env["TF_VAR_github_token"] = github_token
+
+    # ── GitHub App (for repository creation and management) ───────────────
+    if settings.GITHUB_APP_PRIVATE_KEY:
+        env["TF_VAR_github_app_private_key"] = settings.GITHUB_APP_PRIVATE_KEY
+
+    # ── GitHub Registry Token (PAT for pulling private images from GHCR) ──
+    if settings.GITHUB_REGISTRY_TOKEN:
+        env["TF_VAR_github_registry_token"] = settings.GITHUB_REGISTRY_TOKEN
+
+    # ── Vault ─────────────────────────────────────────────────────────────
+    if settings.VAULT_URL:
+        env["TF_VAR_vault_url"] = settings.VAULT_URL
+        env["VAULT_ADDR"] = settings.VAULT_URL
+    if settings.VAULT_TOKEN:
+        env["TF_VAR_vault_token"] = settings.VAULT_TOKEN
+        env["VAULT_TOKEN"] = settings.VAULT_TOKEN
+
+    # ── Keycloak ──────────────────────────────────────────────────────────
+    if settings.KEYCLOAK_URL:
+        env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
+    if settings.KEYCLOAK_ADMIN_USERNAME:
+        env["TF_VAR_keycloak_admin_username"] = (
+            settings.KEYCLOAK_ADMIN_USERNAME
+        )
+    if settings.KEYCLOAK_ADMIN_PASSWORD:
+        env["TF_VAR_keycloak_admin_password"] = (
+            settings.KEYCLOAK_ADMIN_PASSWORD
+        )
+
+    # ── Cloudflare ────────────────────────────────────────────────────────
+    if settings.CLOUDFLARE_API_TOKEN:
+        env["TF_VAR_cloudflare_api_token"] = settings.CLOUDFLARE_API_TOKEN
+        env["CLOUDFLARE_API_TOKEN"] = settings.CLOUDFLARE_API_TOKEN
+    if settings.CLOUDFLARE_ZONE_ID:
+        env["TF_VAR_cloudflare_zone_id"] = settings.CLOUDFLARE_ZONE_ID
+    if settings.CLOUDFLARE_ACCOUNT_ID:
+        env["TF_VAR_cloudflare_account_id"] = settings.CLOUDFLARE_ACCOUNT_ID
 
     try:
         result = subprocess.run(
@@ -211,12 +301,13 @@ def _run_terraform_command(
             env=env,
             check=True,
             capture_output=capture,
-            text=True
+            text=True,
         )
         return result
     except subprocess.CalledProcessError as exc:
-        logger.error("Terraform command failed: %s", exc.stderr if capture else exc)
-        raise RuntimeError(f"Terraform failed: {exc.stderr if capture else str(exc)}") from exc
+        stderr = exc.stderr if capture else str(exc)
+        logger.error("Terraform command failed: %s", stderr)
+        raise RuntimeError(f"Terraform failed: {stderr[:500]}") from exc
 
 
 def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
@@ -261,7 +352,9 @@ def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
         "☁️ Deploying AWS ASG + Load Balancer...",
     )
     try:
-        vm_data = json.loads(deployment.terraform_outputs).get("openstack_vms", {})
+        vm_data = json.loads(deployment.terraform_outputs).get(
+            "openstack_vms", {}
+        )
         aws_result = aws_service.provision_web_layer(
             deployment.name,
             deployment.template_id,
@@ -283,10 +376,11 @@ def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
             "⏪ AWS failed - rolling back OpenStack VMs...",
         )
         # Rollback OpenStack
-        vm_data = json.loads(deployment.terraform_outputs).get("openstack_vms", {})
+        vm_data = json.loads(deployment.terraform_outputs).get(
+            "openstack_vms", {}
+        )
         openstack_service.rollback_db_vms(
-            vm_data.get("vm1", {}).get("id"),
-            vm_data.get("vm2", {}).get("id")
+            vm_data.get("vm1", {}).get("id"), vm_data.get("vm2", {}).get("id")
         )
         _update(
             db,
@@ -322,7 +416,7 @@ def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
         deployment.os_vm_db2_id = vm2["id"]
         deployment.os_vm_db2_ip = vm2["ip"]
         db.commit()
-        logger.info("OpenStack VMs ready for deployment %s", deployment_id)
+        logger.info("OpenStack VMs ready for deployment %s", deployment.id)
     except Exception as exc:
         logger.error("OpenStack step failed: %s", exc)
         _update(
@@ -351,7 +445,7 @@ def _run_legacy_hybrid_deployment(deployment: Deployment, db: Session) -> None:
         deployment.aws_asg_name = aws_result["asg_name"]
         deployment.aws_alb_dns = aws_result["alb_dns"]
         db.commit()
-        logger.info("AWS layer ready for deployment %s", deployment_id)
+        logger.info("AWS layer ready for deployment %s", deployment.id)
     except Exception as exc:
         logger.error("AWS step failed - triggering SAGA rollback: %s", exc)
         _update(
@@ -397,7 +491,8 @@ def run_deletion(deployment_id: int, db: Session) -> None:
 
 def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
     """
-    Delete Kubernetes deployment using Terraform destroy.
+    Delete Kubernetes deployment using Terraform destroy against the
+    ``k3s-gitops-app`` module.
     """
     _update(
         db,
@@ -407,28 +502,89 @@ def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
     )
 
     try:
-        module_path = Path(__file__).parent.parent / "terraform" / "github_bootstrap"
+        # Get the template path dynamically from the cloned repository
+        repo = get_repository()
+        template = repo.get_template_by_id(deployment.template_id)
+
+        if not template:
+            raise ValueError(
+                f"Template '{deployment.template_id}' not found in repository"
+            )
+
+        module_path = Path(template["_template_path"])
+
+        if not module_path.exists():
+            raise FileNotFoundError(
+                f"Terraform module not found: {module_path}"
+            )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             work_dir = Path(tmpdir)
 
-            # Initialize with the same state key
+            # Parse config and resolve GitHub token with fallback
+            app_config = json.loads(deployment.app_config or "{}")
+            github_installation_id = app_config.get("github_installation_id")
+            github_token = ""
+
+            if github_installation_id:
+                try:
+                    import asyncio
+
+                    github_token = asyncio.run(
+                        get_installation_token(int(github_installation_id))
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to generate GitHub token: {e}")
+
+            if not github_token and getattr(
+                settings, "GITHUB_INSTALLATION_ID", None
+            ):
+                try:
+                    import asyncio
+
+                    github_token = asyncio.run(
+                        get_installation_token(
+                            int(settings.GITHUB_INSTALLATION_ID)
+                        )
+                    )
+                    logger.info(
+                        "✅ Used global GITHUB_INSTALLATION_ID fallback token"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️ Failed to generate global fallback GitHub token: {e}"
+                    )
+
+            # Re-initialise with the same state key used during creation
             init_cmd = [
-                "terraform", "init",
-                "-backend-config=bucket=3-istor-tf-infra-aws",
+                "terraform",
+                "init",
+                f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
                 f"-backend-config=key={deployment.terraform_state_path}",
-                "-backend-config=region=eu-west-3",
+                f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
                 "-backend-config=encrypt=true",
-                "-reconfigure"
+                *(
+                    [
+                        f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"
+                    ]
+                    if settings.TF_BACKEND_S3_DYNAMODB_TABLE
+                    else []
+                ),
+                "-reconfigure",
             ]
+            _run_terraform_command(
+                init_cmd, module_path, work_dir, github_token=github_token
+            )
 
-            _run_terraform_command(init_cmd, module_path, work_dir)
-
-            # Destroy
             destroy_cmd = ["terraform", "destroy", "-auto-approve"]
-            _run_terraform_command(destroy_cmd, module_path, work_dir)
+            _run_terraform_command(
+                destroy_cmd, module_path, work_dir, github_token=github_token
+            )
 
-            logger.info("Kubernetes resources destroyed for deployment %s", deployment.id)
+            logger.info(
+                "Kubernetes resources destroyed for deployment %s",
+                deployment.id,
+            )
 
     except Exception as exc:
         logger.error("Kubernetes deletion failed: %s", exc)
@@ -470,8 +626,7 @@ def _run_legacy_hybrid_deletion(deployment: Deployment, db: Session) -> None:
 
         vm_data = outputs.get("openstack_vms", {})
         openstack_service.delete_db_vms(
-            vm_data.get("vm1", {}).get("id"),
-            vm_data.get("vm2", {}).get("id")
+            vm_data.get("vm1", {}).get("id"), vm_data.get("vm2", {}).get("id")
         )
 
     except Exception as exc:

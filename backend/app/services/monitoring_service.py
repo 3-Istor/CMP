@@ -16,10 +16,19 @@ from typing import Any
 import boto3
 import openstack
 from botocore.exceptions import BotoCoreError, ClientError
+from keystoneauth1 import exceptions as ksa_exceptions
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Exceptions that just mean "OpenStack isn't reachable right now" — VPN down or
+# the Keystone endpoint offline. These are expected operational states, not code
+# errors, so we log them concisely (no stack trace) and report status unknown.
+OPENSTACK_UNREACHABLE = (
+    ksa_exceptions.ConnectionError,
+    ksa_exceptions.DiscoveryFailure,
+)
 
 
 # ── Pydantic Models for Response Schemas ──────────────────────────────────
@@ -64,7 +73,9 @@ class AppHealthResponse(BaseModel):
 # ── OpenStack Connection ───────────────────────────────────────────────────
 
 
-def _get_openstack_connection(project_override: str | None = None) -> openstack.connection.Connection:
+def _get_openstack_connection(
+    project_override: str | None = None,
+) -> openstack.connection.Connection:
     """
     Create OpenStack connection from settings.
 
@@ -72,14 +83,22 @@ def _get_openstack_connection(project_override: str | None = None) -> openstack.
         project_override: Optional project name to use instead of settings.OS_PROJECT_NAME.
                          Useful for operations requiring different project scope (e.g., admin).
     """
-    if not settings.OS_AUTH_URL or not settings.OS_USERNAME or not settings.OS_PASSWORD:
+    if (
+        not settings.OS_AUTH_URL
+        or not settings.OS_USERNAME
+        or not settings.OS_PASSWORD
+    ):
         raise ValueError(
             "OpenStack credentials not configured. Please set OS_AUTH_URL, "
             "OS_USERNAME, and OS_PASSWORD in your .env file."
         )
 
     # Use override project if provided, otherwise use default from settings
-    project_name = project_override if project_override is not None else settings.OS_PROJECT_NAME
+    project_name = (
+        project_override
+        if project_override is not None
+        else settings.OS_PROJECT_NAME
+    )
 
     # Disable service discovery to avoid hanging
     return openstack.connect(
@@ -89,6 +108,8 @@ def _get_openstack_connection(project_override: str | None = None) -> openstack.
         project_name=project_name,
         user_domain_name=settings.OS_USER_DOMAIN_NAME,
         project_domain_name=settings.OS_PROJECT_DOMAIN_NAME,
+        api_timeout=3,
+        connect_retries=0,
     )
 
 
@@ -131,7 +152,7 @@ async def get_global_health() -> GlobalHealthResponse:
                     hypervisors_task,
                     return_exceptions=True,
                 ),
-                timeout=30.0
+                timeout=30.0,
             )
         except asyncio.TimeoutError:
             logger.error("Global health check timed out after 30 seconds")
@@ -175,7 +196,9 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
         logger.info("Fetching OpenStack VPN status...")
         try:
             conn = _get_openstack_connection()
-            logger.info("Searching for vpn-gateway server across all projects...")
+            logger.info(
+                "Searching for vpn-gateway server across all projects..."
+            )
 
             # List all servers across all projects and find vpn-gateway
             # This is more reliable than find_server() which can hang
@@ -189,22 +212,33 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
                                 fixed_ip = addr["addr"]
                                 break
 
-                    logger.info("Found VPN gateway: %s (IP: %s)", server.name, fixed_ip)
+                    logger.info(
+                        "Found VPN gateway: %s (IP: %s)", server.name, fixed_ip
+                    )
                     return VPNStatus(
-                        name=server.name, status=server.status.lower(), ip=fixed_ip
+                        name=server.name,
+                        status=server.status.lower(),
+                        ip=fixed_ip,
                     )
 
         except openstack.exceptions.HttpException as e:
             if "ServiceUnavailable" in str(e) or "500" in str(e):
                 logger.warning(
                     "OpenStack Neutron service unavailable, VPN status unknown: %s",
-                    str(e)[:200]
+                    str(e)[:200],
                 )
                 return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
-            raise            logger.warning("VPN gateway server not found")
+            logger.warning("VPN gateway server not found")
             return None
+        except OPENSTACK_UNREACHABLE as exc:
+            logger.warning(
+                "OpenStack unreachable, VPN status unknown: %s", str(exc)[:200]
+            )
+            return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
         except Exception as exc:
-            logger.error("Error fetching OpenStack VPN: %s", exc, exc_info=True)
+            logger.error(
+                "Error fetching OpenStack VPN: %s", exc, exc_info=True
+            )
             return None
 
     try:
@@ -265,13 +299,21 @@ async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
             hypervisors = []
             for hypervisor in conn.compute.hypervisors(details=True):
                 # Extract host IP address (management IP)
-                host_ip = getattr(hypervisor, 'host_ip', None)
+                host_ip = getattr(hypervisor, "host_ip", None)
 
                 hypervisors.append(
                     HypervisorStatus(
                         name=hypervisor.name,
-                        state=hypervisor.state.lower() if hypervisor.state else "unknown",
-                        status=hypervisor.status.lower() if hypervisor.status else "unknown",
+                        state=(
+                            hypervisor.state.lower()
+                            if hypervisor.state
+                            else "unknown"
+                        ),
+                        status=(
+                            hypervisor.status.lower()
+                            if hypervisor.status
+                            else "unknown"
+                        ),
                         ip=host_ip,
                     )
                 )
@@ -282,17 +324,35 @@ async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
             if "ServiceUnavailable" in error_msg or "500" in error_msg:
                 logger.warning(
                     "OpenStack Neutron service unavailable, hypervisor status unknown: %s",
-                    error_msg[:200]
+                    error_msg[:200],
                 )
                 return []
-            elif "403" in error_msg or "Forbidden" in error_msg or "Policy doesn't allow" in error_msg:
-                logger.warning("OpenStack hypervisors access forbidden (403) - user lacks permissions")
+            elif (
+                "403" in error_msg
+                or "Forbidden" in error_msg
+                or "Policy doesn't allow" in error_msg
+            ):
+                logger.warning(
+                    "OpenStack hypervisors access forbidden (403) - user lacks permissions"
+                )
                 return []
             else:
-                logger.error("Error fetching OpenStack hypervisors: %s", exc, exc_info=True)
+                logger.error(
+                    "Error fetching OpenStack hypervisors: %s",
+                    exc,
+                    exc_info=True,
+                )
                 return []
+        except OPENSTACK_UNREACHABLE as exc:
+            logger.warning(
+                "OpenStack unreachable, hypervisor status unknown: %s",
+                str(exc)[:200],
+            )
+            return []
         except Exception as exc:
-            logger.error("Error fetching OpenStack hypervisors: %s", exc, exc_info=True)
+            logger.error(
+                "Error fetching OpenStack hypervisors: %s", exc, exc_info=True
+            )
             return []
 
     try:
@@ -507,7 +567,10 @@ async def _get_openstack_backend_health(
                     )
 
             if not servers:
-                logger.warning("No OpenStack VMs found for deployment: %s", deployment_name)
+                logger.warning(
+                    "No OpenStack VMs found for deployment: %s",
+                    deployment_name,
+                )
                 return None
 
             healthy_count = sum(
@@ -550,7 +613,9 @@ def _aggregate_health_status(
     """
     # If we have no data from either cloud, status is unknown
     if aws_health is None and os_health is None:
-        logger.warning("No health data from AWS or OpenStack - deployment may not exist")
+        logger.warning(
+            "No health data from AWS or OpenStack - deployment may not exist"
+        )
         return "unknown"
 
     total_healthy = 0
@@ -589,17 +654,23 @@ def _aggregate_health_status(
 
         if os_healthy < os_total:
             logger.debug(
-                "OpenStack degraded: healthy=%d, total=%d", os_healthy, os_total
+                "OpenStack degraded: healthy=%d, total=%d",
+                os_healthy,
+                os_total,
             )
 
     # No resources found in either cloud - deployment might not exist or failed
     if total_count == 0:
-        logger.warning("No resources found in AWS or OpenStack - deployment may have failed or been deleted")
+        logger.warning(
+            "No resources found in AWS or OpenStack - deployment may have failed or been deleted"
+        )
         return "unknown"
 
     # Check for degraded state
     # 1. If AWS desired capacity doesn't match actual count
-    if aws_health and aws_health.get("desired_capacity", 0) > aws_health.get("total_count", 0):
+    if aws_health and aws_health.get("desired_capacity", 0) > aws_health.get(
+        "total_count", 0
+    ):
         return "degraded"
 
     # 2. If any unhealthy instances exist

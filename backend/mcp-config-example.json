@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cnp-portal": {
+      "command": "poetry",
+      "args": ["run", "python", "app/mcp_server.py"],
+      "cwd": "/home/brian/Documents/aepita/ing2/3-Istor/CMP/backend",
+      "env": {
+        "CMP_API_URL": "http://localhost:8000/api",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
