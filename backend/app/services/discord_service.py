@@ -92,6 +92,105 @@ async def send_app_alert(
         return False
 
 
+async def send_budget_alert(
+    project_name: str,
+    level: str,
+    consumed_pct: float,
+    spent_eur: float,
+    budget_eur: float,
+) -> bool:
+    """
+    Send a FinOps budget alert when a project crosses a spending threshold.
+
+    Args:
+        project_name: Project identifier.
+        level: "warning" (≥70%) or "critical" (≥90%).
+        consumed_pct: Percentage of the budget consumed.
+        spent_eur: Amount spent so far this month.
+        budget_eur: Monthly budget.
+    """
+    if not settings.DISCORD_WEBHOOK_URL:
+        logger.debug("Discord webhook not configured, skipping budget alert")
+        return False
+
+    if level == "critical":
+        color, emoji = 0xEF4444, "🔴"
+    else:
+        color, emoji = 0xF59E0B, "🟡"
+
+    embed = {
+        "title": f"{emoji} Alerte budgétaire FinOps",
+        "description": (
+            f"Le projet **{project_name}** a consommé "
+            f"**{consumed_pct:.0f}%** de son budget mensuel."
+        ),
+        "color": color,
+        "fields": [
+            {"name": "Dépensé", "value": f"{spent_eur:.2f} €", "inline": True},
+            {"name": "Budget", "value": f"{budget_eur:.2f} €", "inline": True},
+            {"name": "Seuil", "value": level.upper(), "inline": True},
+        ],
+        "timestamp": datetime.utcnow().isoformat(),
+        "footer": {"text": "CMP FinOps"},
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                settings.DISCORD_WEBHOOK_URL, json={"embeds": [embed]}
+            )
+            response.raise_for_status()
+            logger.info(
+                "Discord budget alert sent for %s (%s, %.0f%%)",
+                project_name, level, consumed_pct,
+            )
+            return True
+    except Exception as exc:
+        logger.error("Failed to send Discord budget alert: %s", exc)
+        return False
+
+
+async def send_finops_recommendation(
+    project_name: str,
+    app_name: str,
+    title: str,
+    saving_eur: float,
+) -> bool:
+    """Notify the Project Owner of an optimisation recommendation."""
+    if not settings.DISCORD_WEBHOOK_URL:
+        logger.debug("Discord webhook not configured, skipping recommendation notice")
+        return False
+
+    embed = {
+        "title": "💡 Recommandation d'optimisation FinOps",
+        "description": (
+            f"**{app_name}** ({project_name}) — {title}"
+        ),
+        "color": 0x3B82F6,
+        "fields": [
+            {
+                "name": "Économie estimée",
+                "value": f"{saving_eur:.2f} € / mois",
+                "inline": True,
+            },
+        ],
+        "timestamp": datetime.utcnow().isoformat(),
+        "footer": {"text": "CMP FinOps"},
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                settings.DISCORD_WEBHOOK_URL, json={"embeds": [embed]}
+            )
+            response.raise_for_status()
+            logger.info("Discord recommendation notice sent for %s", app_name)
+            return True
+    except Exception as exc:
+        logger.error("Failed to send Discord recommendation notice: %s", exc)
+        return False
+
+
 async def send_infra_alert(
     component_name: str,
     previous_state: str,

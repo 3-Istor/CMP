@@ -13,8 +13,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.routers import account, catalog, deployments, infra, projects
+from app.routers import account, catalog, deployments, finops, infra, projects
 from app.services import health_poller
+from app.services.finops import alert_poller
 from app.services.template_repository import get_repository
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -203,6 +204,11 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Health poller started")
 
+    # Start background FinOps budget/consumption alert poller
+    logger.info("Starting FinOps alert poller...")
+    finops_poller_task = asyncio.create_task(alert_poller.finops_alert_loop())
+    logger.info("FinOps alert poller started")
+
     logger.info("✅ Application startup complete")
 
     yield
@@ -210,10 +216,12 @@ async def lifespan(app: FastAPI):
     # Shutdown: cancel background tasks
     logger.info("Shutting down application...")
     health_poller_task.cancel()
-    try:
-        await health_poller_task
-    except asyncio.CancelledError:
-        pass
+    finops_poller_task.cancel()
+    for task in (health_poller_task, finops_poller_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     logger.info("✅ Application shutdown complete")
 
 
@@ -247,6 +255,7 @@ app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
+app.include_router(finops.router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])

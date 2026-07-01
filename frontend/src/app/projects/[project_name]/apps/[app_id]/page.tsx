@@ -38,6 +38,7 @@ import {
     RefreshCw,
     Shield,
     Trash2,
+    Wallet,
     XCircle,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -264,6 +265,18 @@ export default function AppControlCenterPage() {
                         >
                             <RefreshCw className="mr-2 h-4 w-4" />
                             Refresh
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                                router.push(
+                                    `/finops?project=${encodeURIComponent(projectName)}`,
+                                )
+                            }
+                        >
+                            <Wallet className="mr-2 h-4 w-4" />
+                            Détails FinOps
                         </Button>
                         <Button
                             variant="destructive"

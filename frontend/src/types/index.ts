@@ -196,3 +196,106 @@ export interface KeycloakUserResult {
   first_name: string;
   last_name: string;
 }
+
+// ── FinOps ────────────────────────────────────────────────────────────────────
+
+export type FinopsResource = "cpu" | "ram" | "storage" | "network";
+
+export interface CostBreakdown {
+  cpu: number;
+  ram: number;
+  storage: number;
+  network: number;
+}
+
+export interface CostSummary {
+  month_to_date_eur: number;
+  projected_month_eur: number;
+  previous_month_eur: number;
+  trend_pct: number | null;
+  breakdown: CostBreakdown;
+  potential_savings_eur: number;
+  app_count: number;
+  currency: string;
+}
+
+export interface CostSeriesPoint {
+  date: string;
+  cpu: number;
+  ram: number;
+  storage: number;
+  network: number;
+  total: number;
+}
+
+export interface AppCostRow {
+  app_id: number;
+  name: string;
+  project_id: string | null;
+  cost_per_day_eur: number;
+  cost_month_estimate_eur: number;
+  month_to_date_eur: number;
+  trend_pct: number | null;
+}
+
+export interface Budget {
+  project_name: string;
+  monthly_amount_eur: number;
+  threshold_warn: number;
+  threshold_critical: number;
+  currency: string;
+  spent_eur: number;
+  remaining_eur: number;
+  consumed_pct: number | null;
+  status: "ok" | "warning" | "critical";
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface FinopsOverview {
+  summary: CostSummary;
+  budget: Budget | null;
+  apps: AppCostRow[];
+  timeline: CostSeriesPoint[];
+}
+
+export type RecommendationType =
+  | "replicas"
+  | "rightsizing"
+  | "inactivity"
+  | "storage";
+
+export interface Recommendation {
+  id: string;
+  app_id: number;
+  app_name: string;
+  project_id: string | null;
+  rec_type: RecommendationType;
+  title: string;
+  justification: string;
+  current: Record<string, string | number>;
+  recommended: Record<string, string | number>;
+  monthly_saving_eur: number;
+  confidence: number;
+  effort: "low" | "medium" | "high";
+  status: "pending" | "applied" | "ignored" | "notified";
+  can_apply: boolean;
+}
+
+export interface CostAlert {
+  id: number;
+  project_name: string;
+  app_id: number | null;
+  level: "info" | "warning" | "critical";
+  kind: "budget" | "spike";
+  message: string;
+  value_pct: number | null;
+  triggered_at: string;
+}
+
+export interface FinopsActionResponse {
+  message: string;
+  rec_id: string;
+  status: string;
+  commit_sha: string | null;
+}

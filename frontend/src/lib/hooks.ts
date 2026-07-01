@@ -246,6 +246,44 @@ export function useProjectApps(projectName: string | null) {
   return { apps, loading, error, refresh };
 }
 
+/**
+ * Fetch the FinOps overview (KPIs + budget + apps + timeline), re-fetching when
+ * the project/period/granularity filters change.
+ */
+export function useFinopsOverview(
+  project?: string,
+  period = "30d",
+  granularity = "daily",
+) {
+  const [data, setData] = useState<import("@/types").FinopsOverview | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const initialLoadDone = useRef(false);
+
+  const refresh = useCallback(async () => {
+    if (!initialLoadDone.current) setLoading(true);
+    try {
+      const { getFinopsOverview } = await import("./api");
+      const res = await getFinopsOverview({ project, period, granularity });
+      setData(res);
+      setError(null);
+      initialLoadDone.current = true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch FinOps data");
+    } finally {
+      setLoading(false);
+    }
+  }, [project, period, granularity]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
 /** Fetch members of a specific project. */
 export function useProjectMembers(projectName: string | null) {
   const [members, setMembers] = useState<import("@/types").ProjectMember[]>([]);

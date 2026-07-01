@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Trash2,
   Users,
+  Wallet,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -208,9 +209,23 @@ export default function ProjectPage() {
                 </p>
               </div>
             </div>
-            <Badge variant="outline" className="font-mono text-xs">
-              {apps.length} app{apps.length !== 1 ? "s" : ""}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  router.push(
+                    `/finops?project=${encodeURIComponent(projectName)}`,
+                  )
+                }
+              >
+                <Wallet className="mr-2 h-4 w-4" />
+                Voir détails FinOps
+              </Button>
+              <Badge variant="outline" className="font-mono text-xs">
+                {apps.length} app{apps.length !== 1 ? "s" : ""}
+              </Badge>
+            </div>
           </div>
         </div>
 

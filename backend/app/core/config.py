@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     APP_NAME: str = "CMP API"
     DEBUG: bool = False
 
+    # FinOps — comma-separated Keycloak usernames granted the global
+    # "Admin CNP" role (visibility over every project's costs).
+    FINOPS_ADMIN_USERS: str = ""
+
     # Database
     DATABASE_URL: str = "sqlite:///./arcl.db"
 
