@@ -77,7 +77,9 @@ def run_project_bootstrap(project_name: str) -> None:
     # cnp-projects repository) — minted once and reused for init + apply
     try:
         github_token = (
-            asyncio.run(get_installation_token(settings.GITHUB_INSTALLATION_ID))
+            asyncio.run(
+                get_installation_token(settings.GITHUB_INSTALLATION_ID)
+            )
             if settings.GITHUB_INSTALLATION_ID
             else ""
         )
@@ -104,7 +106,8 @@ def run_project_bootstrap(project_name: str) -> None:
             logger.info("[%s] Applying Terraform configuration…", project_name)
             _run(
                 [
-                    "terraform", "apply",
+                    "terraform",
+                    "apply",
                     "-auto-approve",
                     f"-var=project_name={project_name}",
                 ],
@@ -114,7 +117,8 @@ def run_project_bootstrap(project_name: str) -> None:
             )
 
             logger.info(
-                "Project bootstrap completed successfully for '%s'", project_name
+                "Project bootstrap completed successfully for '%s'",
+                project_name,
             )
 
     except RuntimeError as exc:
@@ -153,7 +157,9 @@ def run_project_teardown(project_name: str) -> None:
     # provider can authenticate while destroying GitHub resources.
     try:
         github_token = (
-            asyncio.run(get_installation_token(settings.GITHUB_INSTALLATION_ID))
+            asyncio.run(
+                get_installation_token(settings.GITHUB_INSTALLATION_ID)
+            )
             if settings.GITHUB_INSTALLATION_ID
             else ""
         )
@@ -177,10 +183,13 @@ def run_project_teardown(project_name: str) -> None:
             _terraform_init(module_path, work_dir, github_token, state_key)
 
             # ── Step 2: terraform destroy ──────────────────────────────
-            logger.info("[%s] Destroying Terraform configuration…", project_name)
+            logger.info(
+                "[%s] Destroying Terraform configuration…", project_name
+            )
             _run(
                 [
-                    "terraform", "destroy",
+                    "terraform",
+                    "destroy",
                     "-auto-approve",
                     f"-var=project_name={project_name}",
                 ],
@@ -190,7 +199,8 @@ def run_project_teardown(project_name: str) -> None:
             )
 
             logger.info(
-                "Project teardown completed successfully for '%s'", project_name
+                "Project teardown completed successfully for '%s'",
+                project_name,
             )
 
     except RuntimeError as exc:
@@ -221,13 +231,17 @@ def _terraform_init(
     """
     _run(
         [
-            "terraform", "init",
+            "terraform",
+            "init",
             "-backend-config=bucket=" + settings.TF_BACKEND_S3_BUCKET,
             f"-backend-config=key={state_key}",
             "-backend-config=region=" + settings.TF_BACKEND_AWS_REGION,
             "-backend-config=encrypt=true",
             *(
-                ["-backend-config=dynamodb_table=" + settings.TF_BACKEND_S3_DYNAMODB_TABLE]
+                [
+                    "-backend-config=dynamodb_table="
+                    + settings.TF_BACKEND_S3_DYNAMODB_TABLE
+                ]
                 if settings.TF_BACKEND_S3_DYNAMODB_TABLE
                 else []
             ),
@@ -239,7 +253,9 @@ def _terraform_init(
     )
 
 
-def _run(cmd: list[str], cwd: Path, work_dir: Path, github_token: str = "") -> None:
+def _run(
+    cmd: list[str], cwd: Path, work_dir: Path, github_token: str = ""
+) -> None:
     """
     Execute a Terraform command, forwarding all necessary credentials as
     environment variables.
@@ -261,7 +277,9 @@ def _run(cmd: list[str], cwd: Path, work_dir: Path, github_token: str = "") -> N
     # ── S3 backend credentials ────────────────────────────────────────────
     if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
         env["AWS_ACCESS_KEY_ID"] = settings.TF_BACKEND_AWS_ACCESS_KEY_ID
-        env["AWS_SECRET_ACCESS_KEY"] = settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
+        env["AWS_SECRET_ACCESS_KEY"] = (
+            settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
+        )
         env["AWS_DEFAULT_REGION"] = settings.TF_BACKEND_AWS_REGION
 
     # ── Vault ─────────────────────────────────────────────────────────────
@@ -276,9 +294,13 @@ def _run(cmd: list[str], cwd: Path, work_dir: Path, github_token: str = "") -> N
     if settings.KEYCLOAK_URL:
         env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
     if settings.KEYCLOAK_ADMIN_USERNAME:
-        env["TF_VAR_keycloak_admin_username"] = settings.KEYCLOAK_ADMIN_USERNAME
+        env["TF_VAR_keycloak_admin_username"] = (
+            settings.KEYCLOAK_ADMIN_USERNAME
+        )
     if settings.KEYCLOAK_ADMIN_PASSWORD:
-        env["TF_VAR_keycloak_admin_password"] = settings.KEYCLOAK_ADMIN_PASSWORD
+        env["TF_VAR_keycloak_admin_password"] = (
+            settings.KEYCLOAK_ADMIN_PASSWORD
+        )
 
     # ── Cloudflare ────────────────────────────────────────────────────────
     if settings.CLOUDFLARE_API_TOKEN:

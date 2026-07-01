@@ -46,7 +46,9 @@ class TerraformExecutor:
                 with open(self.log_file, "a", encoding="utf-8") as f:
                     f.write(f"{message}\n")
             except Exception as e:
-                logger.error("Failed to write to log file %s: %s", self.log_file, e)
+                logger.error(
+                    "Failed to write to log file %s: %s", self.log_file, e
+                )
 
     def _get_backend_config(self) -> list[str]:
         """Generate backend configuration for Terraform init."""
@@ -96,7 +98,10 @@ class TerraformExecutor:
         return backend_config
 
     def _run_command(
-        self, command: list[str], capture_output: bool = True, stream_output: bool = False
+        self,
+        command: list[str],
+        capture_output: bool = True,
+        stream_output: bool = False,
     ) -> subprocess.CompletedProcess:
         """
         Run a Terraform command in the working directory.
@@ -150,14 +155,20 @@ class TerraformExecutor:
             env["TF_VAR_cloudflare_zone_id"] = settings.CLOUDFLARE_ZONE_ID
             env["CLOUDFLARE_ZONE_ID"] = settings.CLOUDFLARE_ZONE_ID
         if settings.CLOUDFLARE_ACCOUNT_ID:
-            env["TF_VAR_cloudflare_account_id"] = settings.CLOUDFLARE_ACCOUNT_ID
+            env["TF_VAR_cloudflare_account_id"] = (
+                settings.CLOUDFLARE_ACCOUNT_ID
+            )
             env["CLOUDFLARE_ACCOUNT_ID"] = settings.CLOUDFLARE_ACCOUNT_ID
 
         # Pass Keycloak credentials to Terraform (for k3s-gitops-app template)
         if settings.KEYCLOAK_ADMIN_USERNAME:
-            env["TF_VAR_keycloak_admin_username"] = settings.KEYCLOAK_ADMIN_USERNAME
+            env["TF_VAR_keycloak_admin_username"] = (
+                settings.KEYCLOAK_ADMIN_USERNAME
+            )
         if settings.KEYCLOAK_ADMIN_PASSWORD:
-            env["TF_VAR_keycloak_admin_password"] = settings.KEYCLOAK_ADMIN_PASSWORD
+            env["TF_VAR_keycloak_admin_password"] = (
+                settings.KEYCLOAK_ADMIN_PASSWORD
+            )
         if settings.KEYCLOAK_URL:
             env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
 
@@ -169,9 +180,13 @@ class TerraformExecutor:
 
         # Pass GitHub Registry credentials to Terraform (for image pull secrets)
         if settings.GITHUB_REGISTRY_TOKEN:
-            env["TF_VAR_github_registry_token"] = settings.GITHUB_REGISTRY_TOKEN
+            env["TF_VAR_github_registry_token"] = (
+                settings.GITHUB_REGISTRY_TOKEN
+            )
         # GitHub registry username (hardcoded as it's always the same org)
-        env["TF_VAR_github_registry_username"] = settings.GITHUB_REGISTRY_USERNAME
+        env["TF_VAR_github_registry_username"] = (
+            settings.GITHUB_REGISTRY_USERNAME
+        )
 
         # Sanitize command for logging (hide sensitive values)
         safe_command = self._sanitize_command_for_logging(command)
@@ -186,7 +201,9 @@ class TerraformExecutor:
 
             # Force unbuffered output with PYTHONUNBUFFERED and TF_IN_AUTOMATION
             env["PYTHONUNBUFFERED"] = "1"
-            env["TF_IN_AUTOMATION"] = "1"  # Makes Terraform output more machine-friendly
+            env["TF_IN_AUTOMATION"] = (
+                "1"  # Makes Terraform output more machine-friendly
+            )
 
             process = subprocess.Popen(
                 command,
@@ -205,6 +222,7 @@ class TerraformExecutor:
 
             # Read with timeout detection
             import selectors
+
             sel = selectors.DefaultSelector()
             sel.register(process.stdout, selectors.EVENT_READ)
 
@@ -234,18 +252,30 @@ class TerraformExecutor:
                     else:
                         # No output for 1 second, log that we're still waiting
                         elapsed = time.time() - start_time
-                        if int(elapsed) % 10 == 0 and int(elapsed) > 0:  # Every 10 seconds
-                            self._log_message(f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)")
+                        if (
+                            int(elapsed) % 10 == 0 and int(elapsed) > 0
+                        ):  # Every 10 seconds
+                            self._log_message(
+                                f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)"
+                            )
             finally:
                 sel.close()
 
             stdout_output = "\n".join(stdout_lines)
             elapsed_time = time.time() - start_time
-            self._log_message(f"⏱️  Terraform command completed in {elapsed_time:.1f}s")
+            self._log_message(
+                f"⏱️  Terraform command completed in {elapsed_time:.1f}s"
+            )
 
             if process.returncode != 0:
-                self._log_message(f"❌ Command failed with exit code {process.returncode}", logging.ERROR)
-                self._log_message(f"Last 500 chars of output: {stdout_output[-500:]}", logging.ERROR)
+                self._log_message(
+                    f"❌ Command failed with exit code {process.returncode}",
+                    logging.ERROR,
+                )
+                self._log_message(
+                    f"Last 500 chars of output: {stdout_output[-500:]}",
+                    logging.ERROR,
+                )
                 raise RuntimeError(
                     f"Terraform command failed with exit code {process.returncode}"
                 )
@@ -270,7 +300,9 @@ class TerraformExecutor:
         )
 
         if result.returncode != 0:
-            self._log_message(f"Command failed: {result.stderr}", logging.ERROR)
+            self._log_message(
+                f"Command failed: {result.stderr}", logging.ERROR
+            )
             raise RuntimeError(
                 f"Terraform command failed: {result.stderr or result.stdout}"
             )
@@ -321,7 +353,7 @@ class TerraformExecutor:
         # Build the base URL
         base_url = f"{scheme}://{host}"
 
-        override_content = f'''# Auto-generated by CMP - DO NOT EDIT
+        override_content = f"""# Auto-generated by CMP - DO NOT EDIT
 # This file overrides provider configuration to use actual endpoints
 
 terraform {{
@@ -349,7 +381,7 @@ provider "openstack" {{
     "load-balancer" = "{base_url}:9876/v2/"
   }}
 }}
-'''
+"""
 
         # Write override file in the working directory
         override_file = self.working_dir / "cmp_override.tf"
@@ -359,7 +391,7 @@ provider "openstack" {{
         logger.info(
             "Created provider override file: %s (using %s)",
             override_file.name,
-            base_url
+            base_url,
         )
 
     def init(self) -> None:
@@ -375,7 +407,14 @@ provider "openstack" {{
         # Create provider override file before init
         self._create_provider_override()
 
-        command = ["terraform", "init", "-no-color", "-reconfigure", "-upgrade", "-input=false"]
+        command = [
+            "terraform",
+            "init",
+            "-no-color",
+            "-reconfigure",
+            "-upgrade",
+            "-input=false",
+        ]
         backend_config = self._get_backend_config()
 
         if backend_config:
@@ -389,7 +428,11 @@ provider "openstack" {{
                     + "/terraform.tfstate"
                 )
 
-            logger.info("📦 Using S3 backend: s3://%s/%s", settings.TF_BACKEND_S3_BUCKET, s3_key)
+            logger.info(
+                "📦 Using S3 backend: s3://%s/%s",
+                settings.TF_BACKEND_S3_BUCKET,
+                s3_key,
+            )
             command.extend(backend_config)
         else:
             logger.info("Using local backend")
@@ -534,4 +577,6 @@ def create_executor(
                      If not provided, uses default prefix + deployment_name
         log_file: Optional path to log file to write all output to.
     """
-    return TerraformExecutor(template_path, deployment_name, s3_key_path, log_file)
+    return TerraformExecutor(
+        template_path, deployment_name, s3_key_path, log_file
+    )

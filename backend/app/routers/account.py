@@ -43,7 +43,12 @@ async def get_current_user(
     try:
         # Decode without verification (Envoy already validated it)
         payload = jwt.decode(
-            token, options={"verify_signature": False, "verify_aud": False, "verify_exp": False}
+            token,
+            options={
+                "verify_signature": False,
+                "verify_aud": False,
+                "verify_exp": False,
+            },
         )
         return payload
     except jwt.DecodeError as e:
@@ -81,7 +86,9 @@ async def get_user_profile(
     keycloak_last_name = None
 
     # Initialize variables
-    user_sub = token_payload.get("preferred_username") or token_payload.get("sub", "")
+    user_sub = token_payload.get("preferred_username") or token_payload.get(
+        "sub", ""
+    )
     user_uuid = None
     keycloak_first_name = None
     keycloak_last_name = None
@@ -134,16 +141,20 @@ async def get_user_profile(
 
     # Récupérer l'ID d'installation GitHub depuis la base de données
     if user_sub:
-        github_record = db.query(UserGitHubInstallation).filter(
-            UserGitHubInstallation.user_sub == user_sub
-        ).first()
+        github_record = (
+            db.query(UserGitHubInstallation)
+            .filter(UserGitHubInstallation.user_sub == user_sub)
+            .first()
+        )
         if github_record:
             github_installation_id = github_record.installation_id
 
     # Construire le nom complet en évitant les "null null"
     computed_name = token_payload.get("name")
     if not computed_name and (keycloak_first_name or keycloak_last_name):
-        computed_name = f"{keycloak_first_name or ''} {keycloak_last_name or ''}".strip()
+        computed_name = (
+            f"{keycloak_first_name or ''} {keycloak_last_name or ''}".strip()
+        )
 
     return UserProfile(
         sub=user_uuid or token_payload.get("sub", ""),
@@ -374,8 +385,7 @@ async def save_github_installation(
 
     if not installation_id:
         raise HTTPException(
-            status_code=400,
-            detail="Installation ID cannot be empty"
+            status_code=400, detail="Installation ID cannot be empty"
         )
 
     # Get user identifier from token (use preferred_username for consistency)
@@ -388,48 +398,59 @@ async def save_github_installation(
     if not user_sub:
         raise HTTPException(
             status_code=400,
-            detail=f"User identifier not found in token. Available fields: {list(token_payload.keys())}"
+            detail=f"User identifier not found in token. Available fields: {list(token_payload.keys())}",
         )
 
     try:
-        print(f"DEBUG /github-installation: Saving installation_id {installation_id} for user {user_sub}")
+        print(
+            f"DEBUG /github-installation: Saving installation_id {installation_id} for user {user_sub}"
+        )
 
         # Check if record exists
-        existing = db.query(UserGitHubInstallation).filter(
-            UserGitHubInstallation.user_sub == user_sub
-        ).first()
+        existing = (
+            db.query(UserGitHubInstallation)
+            .filter(UserGitHubInstallation.user_sub == user_sub)
+            .first()
+        )
 
         if existing:
             # Update existing record
-            print(f"DEBUG /github-installation: Updating existing record (old ID: {existing.installation_id})")
+            print(
+                f"DEBUG /github-installation: Updating existing record (old ID: {existing.installation_id})"
+            )
             existing.installation_id = installation_id
         else:
             # Create new record
             print(f"DEBUG /github-installation: Creating new record")
             new_record = UserGitHubInstallation(
-                user_sub=user_sub,
-                installation_id=installation_id
+                user_sub=user_sub, installation_id=installation_id
             )
             db.add(new_record)
 
         db.commit()
 
         # Verify the save
-        verify_record = db.query(UserGitHubInstallation).filter(
-            UserGitHubInstallation.user_sub == user_sub
-        ).first()
+        verify_record = (
+            db.query(UserGitHubInstallation)
+            .filter(UserGitHubInstallation.user_sub == user_sub)
+            .first()
+        )
 
         if verify_record and verify_record.installation_id == installation_id:
-            print(f"DEBUG /github-installation: Successfully saved and verified installation_id")
+            print(
+                f"DEBUG /github-installation: Successfully saved and verified installation_id"
+            )
             return GitHubInstallationResponse(
                 message="GitHub installation ID saved successfully",
                 installation_id=installation_id,
             )
         else:
-            print(f"ERROR /github-installation: Verification failed after save")
+            print(
+                f"ERROR /github-installation: Verification failed after save"
+            )
             raise HTTPException(
                 status_code=500,
-                detail="Failed to verify saved installation ID"
+                detail="Failed to verify saved installation ID",
             )
 
     except Exception as e:
@@ -437,5 +458,5 @@ async def save_github_installation(
         print(f"ERROR /github-installation: Database error: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to save GitHub installation ID: {str(e)}"
+            detail=f"Failed to save GitHub installation ID: {str(e)}",
         ) from e

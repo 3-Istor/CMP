@@ -21,6 +21,7 @@ from app.services.template_repository import get_repository
 # LOGGING CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def setup_logging():
     """Configure logging to output to both console and file."""
     # Create logs directory
@@ -30,7 +31,7 @@ def setup_logging():
     # Create formatters
     detailed_formatter = logging.Formatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     simple_formatter = logging.Formatter(
@@ -43,12 +44,16 @@ def setup_logging():
     console_handler.setFormatter(simple_formatter)
 
     # File handler (DEBUG and above) - detailed logs
-    file_handler = logging.FileHandler(logs_dir / "app.log", mode="a", encoding="utf-8")
+    file_handler = logging.FileHandler(
+        logs_dir / "app.log", mode="a", encoding="utf-8"
+    )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(detailed_formatter)
 
     # Deployment-specific handler (all deployment-related logs)
-    deployment_handler = logging.FileHandler(logs_dir / "deployments.log", mode="a", encoding="utf-8")
+    deployment_handler = logging.FileHandler(
+        logs_dir / "deployments.log", mode="a", encoding="utf-8"
+    )
     deployment_handler.setLevel(logging.DEBUG)
     deployment_handler.setFormatter(detailed_formatter)
 
@@ -59,7 +64,9 @@ def setup_logging():
     root_logger.addHandler(file_handler)
 
     # Configure deployment-specific logger
-    deployment_logger = logging.getLogger("app.services.terraform_orchestrator")
+    deployment_logger = logging.getLogger(
+        "app.services.terraform_orchestrator"
+    )
     deployment_logger.addHandler(deployment_handler)
 
     # Configure terraform executor logger
@@ -73,13 +80,13 @@ def setup_logging():
     logging.getLogger("git").setLevel(logging.WARNING)
 
     # Log startup message
-    root_logger.info("="* 80)
+    root_logger.info("=" * 80)
     root_logger.info("🚀 Starting Cloud Management Platform (CMP)")
-    root_logger.info("="* 80)
+    root_logger.info("=" * 80)
     root_logger.info(f"Logs directory: {logs_dir.absolute()}")
     root_logger.info(f"Application log: {logs_dir / 'app.log'}")
     root_logger.info(f"Deployment log: {logs_dir / 'deployments.log'}")
-    root_logger.info("="* 80)
+    root_logger.info("=" * 80)
 
 
 # Initialize logging immediately
@@ -98,8 +105,8 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
     scopes={
         "openid": "Required for authentication",
         "profile": "Access user profile metadata",
-        "groups": "Project boundary mappings"
-    }
+        "groups": "Project boundary mappings",
+    },
 )
 
 
@@ -133,11 +140,11 @@ def custom_openapi():
                     "scopes": {
                         "openid": "Required for authentication",
                         "profile": "Access user profile metadata",
-                        "groups": "Project boundary mappings"
-                    }
+                        "groups": "Project boundary mappings",
+                    },
                 }
             },
-            "description": "Keycloak OIDC authentication for CNP Portal"
+            "description": "Keycloak OIDC authentication for CNP Portal",
         }
     }
 
@@ -149,7 +156,9 @@ def custom_openapi():
 
         for method_obj in path_obj.values():
             if isinstance(method_obj, dict) and "security" not in method_obj:
-                method_obj["security"] = [{"KeycloakOAuth2": ["openid", "profile", "groups"]}]
+                method_obj["security"] = [
+                    {"KeycloakOAuth2": ["openid", "profile", "groups"]}
+                ]
 
     app.openapi_schema = openapi_schema
     logger.info("✅ Custom OpenAPI schema with Keycloak OAuth2 configured")
@@ -174,6 +183,7 @@ async def lifespan(app: FastAPI):
 
     # Backfill github_repo_url for GitOps apps created before it was persisted
     from app.services.terraform_orchestrator import backfill_gitops_repo_urls
+
     backfill_gitops_repo_urls()
 
     # Mount static files after repository is cloned
@@ -188,7 +198,9 @@ async def lifespan(app: FastAPI):
 
     # Start background health poller
     logger.info("Starting health poller...")
-    health_poller_task = asyncio.create_task(health_poller.health_poller_loop())
+    health_poller_task = asyncio.create_task(
+        health_poller.health_poller_loop()
+    )
     logger.info("Health poller started")
 
     logger.info("✅ Application startup complete")

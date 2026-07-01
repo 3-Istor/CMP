@@ -109,8 +109,7 @@ async def get_deployment_outputs(
 
 @router.get("/{deployment_id}/logs/stream")
 async def stream_deployment_logs(
-    deployment_id: int,
-    db: Session = Depends(get_db)
+    deployment_id: int, db: Session = Depends(get_db)
 ):
     """
     Stream Terraform execution logs for a deployment in real-time.
@@ -137,6 +136,7 @@ async def stream_deployment_logs(
                     # Check if the deployment has reached a terminal state
                     # We create a new DB session since the original DB session might be closed/expired
                     from app.core.database import SessionLocal
+
                     with SessionLocal() as check_db:
                         dep = check_db.get(Deployment, deployment_id)
                         if not dep or dep.status not in (
@@ -245,7 +245,11 @@ def _deep_merge(base: Any, updates: Any) -> Any:
     """
     if isinstance(updates, dict) and isinstance(base, dict):
         for key, value in updates.items():
-            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            if (
+                key in base
+                and isinstance(base[key], dict)
+                and isinstance(value, dict)
+            ):
                 _deep_merge(base[key], value)
             else:
                 base[key] = value

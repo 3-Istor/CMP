@@ -47,15 +47,15 @@ def generate_jwt() -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "iat": int(now.timestamp()),  # Issued at
-        "exp": int((now + timedelta(minutes=10)).timestamp()),  # Expires in 10 min
+        "exp": int(
+            (now + timedelta(minutes=10)).timestamp()
+        ),  # Expires in 10 min
         "iss": GITHUB_APP_ID,  # Issuer (GitHub App ID)
     }
 
     try:
         token = jwt.encode(
-            payload,
-            settings.GITHUB_APP_PRIVATE_KEY,
-            algorithm="RS256"
+            payload, settings.GITHUB_APP_PRIVATE_KEY, algorithm="RS256"
         )
         logger.debug("Generated GitHub App JWT (expires in 10 minutes)")
         return token
@@ -81,7 +81,9 @@ async def get_installation_token(installation_id: str) -> str:
     """
     app_jwt = generate_jwt()
 
-    url = f"{GITHUB_API_BASE}/app/installations/{installation_id}/access_tokens"
+    url = (
+        f"{GITHUB_API_BASE}/app/installations/{installation_id}/access_tokens"
+    )
     headers = {
         "Authorization": f"Bearer {app_jwt}",
         "Accept": "application/vnd.github+json",
@@ -101,7 +103,7 @@ async def get_installation_token(installation_id: str) -> str:
 
             logger.info(
                 "Successfully obtained installation token for installation %s",
-                installation_id
+                installation_id,
             )
             return token
 
@@ -109,7 +111,7 @@ async def get_installation_token(installation_id: str) -> str:
         logger.error(
             "GitHub API returned %s: %s",
             exc.response.status_code,
-            exc.response.text
+            exc.response.text,
         )
         raise GitHubAppError(
             f"Failed to get installation token: {exc.response.status_code}"
@@ -125,7 +127,7 @@ async def create_repository(
     repo_name: str,
     org_name: str | None = None,
     private: bool = True,
-    description: str = "Application provisioned by CNP"
+    description: str = "Application provisioned by CNP",
 ) -> dict:
     """
     Create a new GitHub repository using the Installation Access Token.
@@ -169,26 +171,19 @@ async def create_repository(
             response.raise_for_status()
 
             repo_data = response.json()
-            logger.info(
-                "Created repository: %s",
-                repo_data.get("full_name")
-            )
+            logger.info("Created repository: %s", repo_data.get("full_name"))
             return repo_data
 
     except httpx.HTTPStatusError as exc:
         error_msg = exc.response.json().get("message", exc.response.text)
         logger.error(
-            "Failed to create repository %s: %s",
-            repo_name,
-            error_msg
+            "Failed to create repository %s: %s", repo_name, error_msg
         )
         raise GitHubAppError(
             f"Repository creation failed: {error_msg}"
         ) from exc
     except Exception as exc:
-        raise GitHubAppError(
-            f"Failed to create repository: {exc}"
-        ) from exc
+        raise GitHubAppError(f"Failed to create repository: {exc}") from exc
 
 
 async def get_file_content(
@@ -244,10 +239,15 @@ async def get_file_content(
                 )
 
             # GitHub returns content as base64 with newlines – strip them before decoding
-            decoded = base64.b64decode(raw_content.replace("\n", "")).decode("utf-8")
+            decoded = base64.b64decode(raw_content.replace("\n", "")).decode(
+                "utf-8"
+            )
 
             logger.info(
-                "Fetched file '%s' from '%s' (sha: %.8s)", file_path, repo_full_name, sha
+                "Fetched file '%s' from '%s' (sha: %.8s)",
+                file_path,
+                repo_full_name,
+                sha,
             )
             return decoded, sha
 
@@ -255,7 +255,9 @@ async def get_file_content(
         raise
     except httpx.HTTPStatusError as exc:
         error_msg = exc.response.json().get("message", exc.response.text)
-        logger.error("GitHub API error fetching '%s': %s", file_path, error_msg)
+        logger.error(
+            "GitHub API error fetching '%s': %s", file_path, error_msg
+        )
         raise GitHubAppError(
             f"Failed to fetch file '{file_path}': {error_msg}"
         ) from exc
@@ -341,7 +343,9 @@ async def update_file_content(
         raise
     except httpx.HTTPStatusError as exc:
         error_msg = exc.response.json().get("message", exc.response.text)
-        logger.error("GitHub API error updating '%s': %s", file_path, error_msg)
+        logger.error(
+            "GitHub API error updating '%s': %s", file_path, error_msg
+        )
         raise GitHubAppError(
             f"Failed to update file '{file_path}': {error_msg}"
         ) from exc

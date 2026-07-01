@@ -8,8 +8,12 @@ from pydantic import BaseModel, Field
 class ProjectRead(BaseModel):
     """A project the current user has access to."""
 
-    name: str = Field(..., description="Unique project identifier (lowercase, kebab-case)")
-    role: str = Field(..., description="User role in this project: 'admin' or 'member'")
+    name: str = Field(
+        ..., description="Unique project identifier (lowercase, kebab-case)"
+    )
+    role: str = Field(
+        ..., description="User role in this project: 'admin' or 'member'"
+    )
 
 
 class ProjectCreate(BaseModel):

@@ -136,17 +136,22 @@ def get_user_id_from_token(token_payload: dict) -> str:
 
     # If sub is empty but we have username, lookup user_id from Keycloak
     if not user_id and username:
-        logger.warning(f"⚠️  Token missing 'sub' claim, looking up user_id from username '{username}'")
+        logger.warning(
+            f"⚠️  Token missing 'sub' claim, looking up user_id from username '{username}'"
+        )
         try:
             from app.services.keycloak_service import (
                 _find_user_by_username,
                 _get_admin_token,
             )
+
             admin_token = _get_admin_token()
             user = _find_user_by_username(username, admin_token)
             if user:
                 user_id = user["id"]
-                logger.info(f"✅ Found user_id '{user_id}' for username '{username}'")
+                logger.info(
+                    f"✅ Found user_id '{user_id}' for username '{username}'"
+                )
             else:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -199,7 +204,9 @@ async def list_projects(
 
     projects = fetch_user_projects_from_keycloak(user_id)
 
-    logger.info(f"📋 Found {len(projects)} projects for user: {[p['name'] for p in projects]}")
+    logger.info(
+        f"📋 Found {len(projects)} projects for user: {[p['name'] for p in projects]}"
+    )
 
     # Promote owned projects to role "owner"
     if username:
@@ -274,12 +281,16 @@ async def create_project(
 
     # Store creator temporarily (will be removed once added to Keycloak group)
     _project_creators[payload.project_name] = user_id
-    logger.info(f"🔐 Stored creator user_id='{user_id}' for project '{payload.project_name}'")
+    logger.info(
+        f"🔐 Stored creator user_id='{user_id}' for project '{payload.project_name}'"
+    )
 
     # Persist the project owner (creator) — immutable, can never be removed.
-    if not db.query(ProjectOwner).filter(
-        ProjectOwner.project_name == payload.project_name
-    ).first():
+    if (
+        not db.query(ProjectOwner)
+        .filter(ProjectOwner.project_name == payload.project_name)
+        .first()
+    ):
         db.add(
             ProjectOwner(
                 project_name=payload.project_name,
@@ -359,11 +370,15 @@ async def list_project_apps(
     """
     user_id = get_user_id_from_token(token_payload)
 
-    logger.info(f"🔍 Checking access for user_id='{user_id}' to project '{project_name}'")
+    logger.info(
+        f"🔍 Checking access for user_id='{user_id}' to project '{project_name}'"
+    )
 
     # Quick check: is this user the creator (temporary during bootstrap)?
     if _project_creators.get(project_name) == user_id:
-        logger.info(f"✅ User '{user_id}' is creator of project '{project_name}' (bootstrap in progress)")
+        logger.info(
+            f"✅ User '{user_id}' is creator of project '{project_name}' (bootstrap in progress)"
+        )
         # Allow access immediately for creator
         apps = (
             db.query(Deployment)
@@ -377,9 +392,13 @@ async def list_project_apps(
     else:
         creator_id = _project_creators.get(project_name)
         if creator_id:
-            logger.warning(f"⚠️  Creator mismatch: stored='{creator_id}', current='{user_id}'")
+            logger.warning(
+                f"⚠️  Creator mismatch: stored='{creator_id}', current='{user_id}'"
+            )
         else:
-            logger.info(f"ℹ️  No creator stored for project '{project_name}', checking Keycloak groups")
+            logger.info(
+                f"ℹ️  No creator stored for project '{project_name}', checking Keycloak groups"
+            )
 
     # Check if user has access to this project via Keycloak groups
     try:
@@ -395,7 +414,9 @@ async def list_project_apps(
         for suffix in ("admins", "members"):
             group_name = f"project-{project_name}-{suffix}"
             group = _find_group_by_name(group_name, admin_token)
-            if group and _check_user_in_group_realtime(user_id, group["id"], admin_token):
+            if group and _check_user_in_group_realtime(
+                user_id, group["id"], admin_token
+            ):
                 has_access = True
                 break
 
@@ -408,7 +429,9 @@ async def list_project_apps(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Failed to verify access for project '%s': %s", project_name, exc)
+        logger.error(
+            "Failed to verify access for project '%s': %s", project_name, exc
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to verify project access: {exc}",
@@ -465,7 +488,9 @@ async def get_project_members(
             for suffix in ("admins", "members"):
                 group_name = f"project-{project_name}-{suffix}"
                 group = _find_group_by_name(group_name, admin_token)
-                if group and _check_user_in_group_realtime(user_id, group["id"], admin_token):
+                if group and _check_user_in_group_realtime(
+                    user_id, group["id"], admin_token
+                ):
                     has_access = True
                     break
 
@@ -494,7 +519,9 @@ async def get_project_members(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Failed to list members for project '%s': %s", project_name, exc)
+        logger.error(
+            "Failed to list members for project '%s': %s", project_name, exc
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to fetch project members: {exc}",
@@ -572,6 +599,7 @@ async def add_project_member(
 
         # Add user to group
         import requests as _requests
+
         resp = _requests.put(
             f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
             f"/users/{target_user['id']}/groups/{target_group['id']}",
@@ -590,9 +618,16 @@ async def add_project_member(
     except HTTPException:
         raise
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     except Exception as exc:
-        logger.error("Failed to add user '%s' to project '%s': %s", username, project_name, exc)
+        logger.error(
+            "Failed to add user '%s' to project '%s': %s",
+            username,
+            project_name,
+            exc,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to add user to project: {exc}",
@@ -720,7 +755,9 @@ async def delete_project(
                 detail=f"Project '{project_name}' not found.",
             )
 
-        if not _check_user_in_group_realtime(user_id, admin_group["id"], admin_token):
+        if not _check_user_in_group_realtime(
+            user_id, admin_group["id"], admin_token
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied: admin role required for project '{project_name}'.",

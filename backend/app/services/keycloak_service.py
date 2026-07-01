@@ -119,7 +119,9 @@ def _get_admin_token() -> str:
         if now < expires_at:
             return token
 
-    url = f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
+    url = (
+        f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
+    )
     response = requests.post(
         url,
         data={
@@ -246,7 +248,9 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         response.raise_for_status()
         groups: list[dict] = response.json()
 
-        logger.info(f"📋 Keycloak returned {len(groups)} groups for user {user_id}")
+        logger.info(
+            f"📋 Keycloak returned {len(groups)} groups for user {user_id}"
+        )
         logger.debug(f"Raw groups: {[g.get('name') for g in groups]}")
 
     except requests.RequestException as exc:
@@ -266,11 +270,17 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
             # Admin role wins over member role for the same project
             if project_name not in projects or role == "admin":
                 projects[project_name] = role
-                logger.debug(f"  ✅ Matched project group: {group_name} → project={project_name}, role={role}")
+                logger.debug(
+                    f"  ✅ Matched project group: {group_name} → project={project_name}, role={role}"
+                )
 
-    logger.info(f"📊 Extracted {len(projects)} projects: {list(projects.keys())}")
+    logger.info(
+        f"📊 Extracted {len(projects)} projects: {list(projects.keys())}"
+    )
 
-    return [{"name": name, "role": role} for name, role in sorted(projects.items())]
+    return [
+        {"name": name, "role": role} for name, role in sorted(projects.items())
+    ]
 
 
 def add_user_to_project(username: str, project_name: str, role: str) -> None:
@@ -287,7 +297,9 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
         requests.RequestException: On Keycloak API errors.
     """
     if role not in ("admin", "member"):
-        raise ValueError(f"Invalid role '{role}'. Must be 'admin' or 'member'.")
+        raise ValueError(
+            f"Invalid role '{role}'. Must be 'admin' or 'member'."
+        )
 
     admin_token = _get_admin_token()
 
@@ -463,12 +475,18 @@ async def get_current_user(
     try:
         payload = jwt.decode(
             token,
-            options={"verify_signature": False, "verify_aud": False, "verify_exp": False},
+            options={
+                "verify_signature": False,
+                "verify_aud": False,
+                "verify_exp": False,
+            },
         )
 
         # DEBUG: Log what's in the token
         logger.debug(f"🔑 JWT payload keys: {list(payload.keys())}")
-        logger.debug(f"🔑 sub={payload.get('sub', 'MISSING')}, preferred_username={payload.get('preferred_username', 'MISSING')}")
+        logger.debug(
+            f"🔑 sub={payload.get('sub', 'MISSING')}, preferred_username={payload.get('preferred_username', 'MISSING')}"
+        )
 
         return payload
     except jwt.DecodeError as exc:

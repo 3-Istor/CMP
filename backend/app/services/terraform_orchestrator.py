@@ -35,9 +35,11 @@ def run_deployment(deployment_id: int) -> None:
     4. Capture outputs
     5. Mark as RUNNING
     """
-    logger.info("="* 80)
-    logger.info(f"🚀 Starting deployment task for deployment_id={deployment_id}")
-    logger.info("="* 80)
+    logger.info("=" * 80)
+    logger.info(
+        f"🚀 Starting deployment task for deployment_id={deployment_id}"
+    )
+    logger.info("=" * 80)
 
     # Create a new database session for this background task
     db = SessionLocal()
@@ -45,10 +47,14 @@ def run_deployment(deployment_id: int) -> None:
         logger.debug(f"Fetching deployment {deployment_id} from database...")
         deployment = db.get(Deployment, deployment_id)
         if not deployment:
-            logger.error(f"❌ Deployment {deployment_id} not found in database")
+            logger.error(
+                f"❌ Deployment {deployment_id} not found in database"
+            )
             return
 
-        logger.info(f"✅ Found deployment: {deployment.name} (template={deployment.template_id}, provider={deployment.provider_type})")
+        logger.info(
+            f"✅ Found deployment: {deployment.name} (template={deployment.template_id}, provider={deployment.provider_type})"
+        )
 
         try:
             # Parse user configuration
@@ -65,31 +71,49 @@ def run_deployment(deployment_id: int) -> None:
             if "project_name" not in app_config:
                 if deployment.project_id:
                     app_config["project_name"] = deployment.project_id
-                    logger.debug(f"Injected project_name={deployment.project_id} from deployment.project_id")
+                    logger.debug(
+                        f"Injected project_name={deployment.project_id} from deployment.project_id"
+                    )
                 else:
                     # Fallback for deployments without project_id
                     app_config["project_name"] = "default"
-                    logger.warning(f"⚠️  No project_id found, using default project_name='default'")
+                    logger.warning(
+                        f"⚠️  No project_id found, using default project_name='default'"
+                    )
 
             # CRITICAL: Generate GitHub token for deployment
             # The token is NOT stored in app_config (security), so we must generate it
-            if "github_installation_id" in app_config and "github_token" not in app_config:
-                logger.info("🔑 Generating GitHub installation token for deployment...")
+            if (
+                "github_installation_id" in app_config
+                and "github_token" not in app_config
+            ):
+                logger.info(
+                    "🔑 Generating GitHub installation token for deployment..."
+                )
                 try:
                     import asyncio
-                    installation_token = asyncio.run(get_installation_token(
-                        int(app_config["github_installation_id"])
-                    ))
+
+                    installation_token = asyncio.run(
+                        get_installation_token(
+                            int(app_config["github_installation_id"])
+                        )
+                    )
                     app_config["github_token"] = installation_token
                     logger.info("✅ GitHub token generated successfully")
 
                     # Remove github_installation_id from app_config before passing to Terraform
                     # The template only needs github_token, not the installation_id
                     del app_config["github_installation_id"]
-                    logger.debug("Removed github_installation_id from app_config (not needed by Terraform)")
+                    logger.debug(
+                        "Removed github_installation_id from app_config (not needed by Terraform)"
+                    )
                 except Exception as token_error:
-                    logger.error(f"❌ Failed to generate GitHub token: {token_error}")
-                    raise RuntimeError(f"Cannot deploy without GitHub token: {token_error}")
+                    logger.error(
+                        f"❌ Failed to generate GitHub token: {token_error}"
+                    )
+                    raise RuntimeError(
+                        f"Cannot deploy without GitHub token: {token_error}"
+                    )
             elif deployment.template_id == "k3s-gitops-app":
                 if "github_token" not in app_config:
                     error_msg = (
@@ -109,23 +133,31 @@ def run_deployment(deployment_id: int) -> None:
                     raise ValueError(error_msg)
 
             logger.info(f"Final app_config keys: {list(app_config.keys())}")
-            logger.debug(f"App config values (sanitized): {_sanitize_config_for_logging(app_config)}")
+            logger.debug(
+                f"App config values (sanitized): {_sanitize_config_for_logging(app_config)}"
+            )
 
             # Get template from repository
             logger.debug("Fetching template from repository...")
             repo = get_repository()
             template = repo.get_template_by_id(deployment.template_id)
             if not template:
-                logger.error(f"❌ Template {deployment.template_id} not found in repository")
+                logger.error(
+                    f"❌ Template {deployment.template_id} not found in repository"
+                )
                 raise ValueError(
                     f"Template {deployment.template_id} not found"
                 )
 
-            logger.info(f"✅ Template found: {template.get('name', 'Unknown')} at {template.get('_template_path', 'Unknown')}")
+            logger.info(
+                f"✅ Template found: {template.get('name', 'Unknown')} at {template.get('_template_path', 'Unknown')}"
+            )
 
             template_path = Path(template["_template_path"])
             if not template_path.exists():
-                logger.error(f"❌ Template path does not exist: {template_path}")
+                logger.error(
+                    f"❌ Template path does not exist: {template_path}"
+                )
                 raise ValueError(
                     f"Template path does not exist: {template_path}"
                 )
@@ -138,12 +170,18 @@ def run_deployment(deployment_id: int) -> None:
             # For Kubernetes deployments, use structured S3 path: cnp/projects/{project}/{app}
             s3_key_path = None
             if deployment.project_id:
-                s3_key_path = f"cnp/projects/{deployment.project_id}/{deployment.name}"
+                s3_key_path = (
+                    f"cnp/projects/{deployment.project_id}/{deployment.name}"
+                )
                 logger.info(f"📁 Using structured S3 path: {s3_key_path}")
 
             log_file = Path("logs/deployments") / f"{deployment.id}.log"
-            executor = create_executor(template_path, deployment.name, s3_key_path, log_file=log_file)
-            logger.info(f"✅ Terraform executor created (working_dir={executor.working_dir})")
+            executor = create_executor(
+                template_path, deployment.name, s3_key_path, log_file=log_file
+            )
+            logger.info(
+                f"✅ Terraform executor created (working_dir={executor.working_dir})"
+            )
 
             # Step 1: Initialize
             logger.info("─" * 80)
@@ -169,7 +207,9 @@ def run_deployment(deployment_id: int) -> None:
                 "📋 Planning deployment...",
             )
             plan_output = executor.plan(app_config)
-            logger.info(f"Terraform plan output (first 500 chars):\n{plan_output[:500]}")
+            logger.info(
+                f"Terraform plan output (first 500 chars):\n{plan_output[:500]}"
+            )
             logger.debug(f"Full plan output:\n{plan_output}")
 
             # Step 3: Apply
@@ -182,9 +222,13 @@ def run_deployment(deployment_id: int) -> None:
                 DeploymentStatus.DEPLOYING,
                 "🚀 Deploying resources...",
             )
-            logger.info("Running terraform apply... (this may take several minutes)")
+            logger.info(
+                "Running terraform apply... (this may take several minutes)"
+            )
             outputs = executor.apply(app_config)
-            logger.info(f"✅ Terraform apply completed. Outputs: {list(outputs.keys())}")
+            logger.info(
+                f"✅ Terraform apply completed. Outputs: {list(outputs.keys())}"
+            )
             logger.debug(f"Full outputs: {outputs}")
 
             # Step 4: Capture outputs and state
@@ -224,7 +268,9 @@ def run_deployment(deployment_id: int) -> None:
             if app_url:
                 url_ready = _wait_for_url_ready(db, deployment, app_url)
                 if not url_ready:
-                    logger.warning(f"⚠️ {app_url} not accessible within timeout — ArgoCD may still be syncing")
+                    logger.warning(
+                        f"⚠️ {app_url} not accessible within timeout — ArgoCD may still be syncing"
+                    )
 
             # Step 6: Success
             logger.info("─" * 80)
@@ -238,14 +284,16 @@ def run_deployment(deployment_id: int) -> None:
                 f"✅ Running - {output_msg}",
             )
 
-            logger.info("="* 80)
-            logger.info(f"✅ Deployment {deployment_id} completed successfully")
-            logger.info("="* 80)
+            logger.info("=" * 80)
+            logger.info(
+                f"✅ Deployment {deployment_id} completed successfully"
+            )
+            logger.info("=" * 80)
 
         except Exception as exc:
-            logger.error("="* 80)
+            logger.error("=" * 80)
             logger.error(f"❌ Deployment {deployment_id} FAILED")
-            logger.error("="* 80)
+            logger.error("=" * 80)
             logger.error(f"Error type: {type(exc).__name__}")
             logger.error(f"Error message: {str(exc)}")
             logger.exception("Full traceback:")
@@ -289,7 +337,9 @@ def backfill_gitops_repo_urls() -> None:
             updated += 1
         if updated:
             db.commit()
-            logger.info("Backfilled github_repo_url for %d deployment(s)", updated)
+            logger.info(
+                "Backfilled github_repo_url for %d deployment(s)", updated
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning("github_repo_url backfill skipped: %s", exc)
     finally:
@@ -300,9 +350,9 @@ def run_deletion(deployment_id: int) -> None:
     """
     Destroy all Terraform-managed resources for a deployment.
     """
-    logger.info("="* 80)
+    logger.info("=" * 80)
     logger.info(f"🗑️  Starting deletion task for deployment_id={deployment_id}")
-    logger.info("="* 80)
+    logger.info("=" * 80)
 
     # Create a new database session for this background task
     db = SessionLocal()
@@ -310,10 +360,14 @@ def run_deletion(deployment_id: int) -> None:
         logger.debug(f"Fetching deployment {deployment_id} from database...")
         deployment = db.get(Deployment, deployment_id)
         if not deployment:
-            logger.error(f"❌ Deployment {deployment_id} not found in database")
+            logger.error(
+                f"❌ Deployment {deployment_id} not found in database"
+            )
             return
 
-        logger.info(f"✅ Found deployment: {deployment.name} (template={deployment.template_id})")
+        logger.info(
+            f"✅ Found deployment: {deployment.name} (template={deployment.template_id})"
+        )
 
         try:
             _update(
@@ -328,12 +382,16 @@ def run_deletion(deployment_id: int) -> None:
             repo = get_repository()
             template = repo.get_template_by_id(deployment.template_id)
             if not template:
-                logger.error(f"❌ Template {deployment.template_id} not found in repository")
+                logger.error(
+                    f"❌ Template {deployment.template_id} not found in repository"
+                )
                 raise ValueError(
                     f"Template {deployment.template_id} not found"
                 )
 
-            logger.info(f"✅ Template found: {template.get('name', 'Unknown')}")
+            logger.info(
+                f"✅ Template found: {template.get('name', 'Unknown')}"
+            )
 
             template_path = Path(template["_template_path"])
             logger.debug("Creating Terraform executor...")
@@ -341,12 +399,18 @@ def run_deletion(deployment_id: int) -> None:
             # For Kubernetes deployments, use structured S3 path: cnp/projects/{project}/{app}
             s3_key_path = None
             if deployment.project_id:
-                s3_key_path = f"cnp/projects/{deployment.project_id}/{deployment.name}"
+                s3_key_path = (
+                    f"cnp/projects/{deployment.project_id}/{deployment.name}"
+                )
                 logger.info(f"📁 Using structured S3 path: {s3_key_path}")
 
             log_file = Path("logs/deployments") / f"{deployment.id}.log"
-            executor = create_executor(template_path, deployment.name, s3_key_path, log_file=log_file)
-            logger.info(f"✅ Terraform executor created (working_dir={executor.working_dir})")
+            executor = create_executor(
+                template_path, deployment.name, s3_key_path, log_file=log_file
+            )
+            logger.info(
+                f"✅ Terraform executor created (working_dir={executor.working_dir})"
+            )
 
             # Parse original config for destroy
             logger.debug("Parsing original app_config...")
@@ -360,28 +424,39 @@ def run_deletion(deployment_id: int) -> None:
             if "project_name" not in app_config:
                 if deployment.project_id:
                     app_config["project_name"] = deployment.project_id
-                    logger.debug(f"Injected project_name={deployment.project_id} from deployment.project_id")
+                    logger.debug(
+                        f"Injected project_name={deployment.project_id} from deployment.project_id"
+                    )
                 else:
                     # Fallback for old deployments without project_id
                     app_config["project_name"] = "default"
-                    logger.warning(f"⚠️  No project_id found, using default project_name='default'")
+                    logger.warning(
+                        f"⚠️  No project_id found, using default project_name='default'"
+                    )
 
             # CRITICAL: Regenerate GitHub token for destroy
             # The token is NOT stored in app_config (security), so we must regenerate it
             if "github_installation_id" in app_config:
-                logger.info("🔑 Regenerating GitHub installation token for destroy...")
+                logger.info(
+                    "🔑 Regenerating GitHub installation token for destroy..."
+                )
                 try:
                     import asyncio
-                    installation_token = asyncio.run(get_installation_token(
-                        int(app_config["github_installation_id"])
-                    ))
+
+                    installation_token = asyncio.run(
+                        get_installation_token(
+                            int(app_config["github_installation_id"])
+                        )
+                    )
                     app_config["github_token"] = installation_token
                     logger.info("✅ GitHub token regenerated successfully")
 
                     # Remove github_installation_id from app_config before passing to Terraform
                     # The template only needs github_token, not the installation_id
                     del app_config["github_installation_id"]
-                    logger.debug("Removed github_installation_id from app_config (not needed by Terraform)")
+                    logger.debug(
+                        "Removed github_installation_id from app_config (not needed by Terraform)"
+                    )
                 except Exception as token_error:
                     logger.warning(
                         f"⚠️  Failed to regenerate GitHub token: {token_error}"
@@ -396,15 +471,23 @@ def run_deletion(deployment_id: int) -> None:
                     app_config["github_token"] = "dummy-token-for-destroy"
             else:
                 logger.warning("⚠️  No github_installation_id in config")
-                logger.warning("This deployment may have been created before GitHub integration")
+                logger.warning(
+                    "This deployment may have been created before GitHub integration"
+                )
                 # For k3s-gitops-app template, github_token is required
                 # Set a dummy token to prevent Terraform from blocking on input
                 if deployment.template_id == "k3s-gitops-app":
-                    logger.warning("Setting dummy github_token for k3s-gitops-app template")
+                    logger.warning(
+                        "Setting dummy github_token for k3s-gitops-app template"
+                    )
                     app_config["github_token"] = "dummy-token-for-destroy"
 
-            logger.info(f"App config keys for destroy: {list(app_config.keys())}")
-            logger.debug(f"App config values (sanitized): {_sanitize_config_for_logging(app_config)}")
+            logger.info(
+                f"App config keys for destroy: {list(app_config.keys())}"
+            )
+            logger.debug(
+                f"App config values (sanitized): {_sanitize_config_for_logging(app_config)}"
+            )
 
             # Initialize Terraform backend before destroy
             logger.info("─" * 80)
@@ -429,7 +512,9 @@ def run_deletion(deployment_id: int) -> None:
                 DeploymentStatus.DELETING,
                 "🗑️ Destroying resources...",
             )
-            logger.info("Running terraform destroy... (this may take several minutes)")
+            logger.info(
+                "Running terraform destroy... (this may take several minutes)"
+            )
             executor.destroy(app_config)
             logger.info("✅ Terraform destroy completed")
 
@@ -440,14 +525,14 @@ def run_deletion(deployment_id: int) -> None:
                 "✅ Resources destroyed",
             )
 
-            logger.info("="* 80)
+            logger.info("=" * 80)
             logger.info(f"✅ Deletion {deployment_id} completed successfully")
-            logger.info("="* 80)
+            logger.info("=" * 80)
 
         except Exception as exc:
-            logger.error("="* 80)
+            logger.error("=" * 80)
             logger.error(f"❌ Deletion {deployment_id} FAILED")
-            logger.error("="* 80)
+            logger.error("=" * 80)
             logger.error(f"Error type: {type(exc).__name__}")
             logger.error(f"Error message: {str(exc)}")
             logger.exception("Full traceback:")
@@ -497,7 +582,9 @@ def _wait_for_url_ready(
     so the frontend shows live progress.
     Returns True if the URL became accessible within the timeout.
     """
-    logger.info(f"⏳ Polling {url} for HTTP 200 (timeout={timeout_seconds}s, interval={poll_interval}s)")
+    logger.info(
+        f"⏳ Polling {url} for HTTP 200 (timeout={timeout_seconds}s, interval={poll_interval}s)"
+    )
     start = time.monotonic()
     deadline = start + timeout_seconds
 
@@ -512,9 +599,13 @@ def _wait_for_url_ready(
         try:
             resp = httpx.get(url, timeout=10, follow_redirects=True)
             if resp.status_code < 400:
-                logger.info(f"✅ {url} responded with HTTP {resp.status_code} after {elapsed}s")
+                logger.info(
+                    f"✅ {url} responded with HTTP {resp.status_code} after {elapsed}s"
+                )
                 return True
-            logger.debug(f"HTTP {resp.status_code} from {url} — retrying in {poll_interval}s")
+            logger.debug(
+                f"HTTP {resp.status_code} from {url} — retrying in {poll_interval}s"
+            )
         except Exception as exc:
             logger.debug(f"Connection attempt failed ({elapsed}s): {exc}")
 

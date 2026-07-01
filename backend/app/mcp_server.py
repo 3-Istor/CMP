@@ -44,6 +44,7 @@ API_TIMEOUT = 30.0
 # MCP RESOURCES (Read-only documentation)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 @mcp.resource("docs://index")
 def get_docs_index() -> str:
     """Get the main documentation index with all available documents."""
@@ -114,6 +115,7 @@ def get_roadmap() -> str:
 # MCP TOOLS (API actions)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 @mcp.tool()
 async def list_active_deployments(token: str) -> str:
     """
@@ -130,8 +132,7 @@ async def list_active_deployments(token: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.get(
-                f"{CMP_API_URL}/deployments",
-                headers=headers
+                f"{CMP_API_URL}/deployments", headers=headers
             )
 
             if response.status_code == 401:
@@ -150,13 +151,15 @@ async def list_active_deployments(token: str) -> str:
                         "id": d["id"],
                         "name": d["name"],
                         "status": d["status"],
-                        "provider_type": d.get("provider_type", "legacy_hybrid"),
+                        "provider_type": d.get(
+                            "provider_type", "legacy_hybrid"
+                        ),
                         "project_id": d.get("project_id"),
                         "github_repo_url": d.get("github_repo_url"),
                         "argocd_app_name": d.get("argocd_app_name"),
                     }
                     for d in data
-                ]
+                ],
             }
 
             return json.dumps(result, indent=2)
@@ -184,8 +187,7 @@ async def get_deployment_status(token: str, deployment_id: int) -> str:
     try:
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.get(
-                f"{CMP_API_URL}/deployments/{deployment_id}",
-                headers=headers
+                f"{CMP_API_URL}/deployments/{deployment_id}", headers=headers
             )
 
             if response.status_code == 404:
@@ -218,8 +220,7 @@ async def list_projects(token: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.get(
-                f"{CMP_API_URL}/projects",
-                headers=headers
+                f"{CMP_API_URL}/projects", headers=headers
             )
 
             if response.status_code != 200:
@@ -241,7 +242,7 @@ async def deploy_new_app(
     template_id: str = "kubernetes-fastapi",
     github_installation_id: str = "12345678",
     replica_count: int = 2,
-    sso_protected: bool = False
+    sso_protected: bool = False,
 ) -> str:
     """
     Trigger Day-0 provisioning of a new Kubernetes GitOps application.
@@ -260,7 +261,7 @@ async def deploy_new_app(
     """
     headers = {
         "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     payload = {
@@ -271,16 +272,14 @@ async def deploy_new_app(
             "project_name": project_name,
             "github_installation_id": github_installation_id,
             "replica_count": replica_count,
-            "sso_protected": sso_protected
-        }
+            "sso_protected": sso_protected,
+        },
     }
 
     try:
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.post(
-                f"{CMP_API_URL}/deployments",
-                headers=headers,
-                json=payload
+                f"{CMP_API_URL}/deployments", headers=headers, json=payload
             )
 
             if response.status_code == 400:
@@ -293,17 +292,20 @@ async def deploy_new_app(
                 return f"Error: Failed to create deployment (HTTP {response.status_code}): {response.text}"
 
             data = response.json()
-            return json.dumps({
-                "status": "success",
-                "message": f"Deployment '{name}' created successfully",
-                "deployment_id": data.get("id"),
-                "deployment_status": data.get("status"),
-                "next_steps": [
-                    "Monitor deployment status with get_deployment_status",
-                    f"Check GitHub repo once status is 'running'",
-                    f"View in ArgoCD: https://argocd.3istor.com"
-                ]
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": f"Deployment '{name}' created successfully",
+                    "deployment_id": data.get("id"),
+                    "deployment_status": data.get("status"),
+                    "next_steps": [
+                        "Monitor deployment status with get_deployment_status",
+                        f"Check GitHub repo once status is 'running'",
+                        f"View in ArgoCD: https://argocd.3istor.com",
+                    ],
+                },
+                indent=2,
+            )
 
     except httpx.TimeoutException:
         return "Error: Request timed out. Deployment may still be processing."
@@ -328,10 +330,11 @@ async def delete_deployment(token: str, deployment_id: int) -> str:
     headers = {"Authorization": f"Bearer {token}"}
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:  # Longer timeout for deletion
+        async with httpx.AsyncClient(
+            timeout=60.0
+        ) as client:  # Longer timeout for deletion
             response = await client.delete(
-                f"{CMP_API_URL}/deployments/{deployment_id}",
-                headers=headers
+                f"{CMP_API_URL}/deployments/{deployment_id}", headers=headers
             )
 
             if response.status_code == 404:
@@ -340,11 +343,14 @@ async def delete_deployment(token: str, deployment_id: int) -> str:
             if response.status_code != 200:
                 return f"Error: Failed to delete deployment (HTTP {response.status_code})"
 
-            return json.dumps({
-                "status": "success",
-                "message": f"Deployment {deployment_id} deletion initiated",
-                "note": "Terraform destroy is running in background"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": f"Deployment {deployment_id} deletion initiated",
+                    "note": "Terraform destroy is running in background",
+                },
+                indent=2,
+            )
 
     except httpx.TimeoutException:
         return "Error: Request timed out. Deletion may still be processing."

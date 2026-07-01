@@ -30,10 +30,9 @@ async def check_app_health() -> None:
         deployments = (
             db.query(Deployment)
             .filter(
-                Deployment.status.in_([
-                    DeploymentStatus.RUNNING,
-                    DeploymentStatus.DEGRADED
-                ])
+                Deployment.status.in_(
+                    [DeploymentStatus.RUNNING, DeploymentStatus.DEGRADED]
+                )
             )
             .all()
         )
@@ -41,10 +40,14 @@ async def check_app_health() -> None:
         for deployment in deployments:
             try:
                 # Fetch real-time health
-                health = await monitoring_service.get_app_health(deployment.name)
+                health = await monitoring_service.get_app_health(
+                    deployment.name
+                )
 
                 current_db_status = deployment.status
-                health_status = health.status  # "healthy", "degraded", "down", "unknown"
+                health_status = (
+                    health.status
+                )  # "healthy", "degraded", "down", "unknown"
 
                 # Determine if we need to update the DB status
                 should_update = False
@@ -64,7 +67,7 @@ async def check_app_health() -> None:
                             app_name=deployment.name,
                             previous_state="RUNNING",
                             new_state="DEGRADED",
-                            details=details
+                            details=details,
                         )
 
                 elif current_db_status == DeploymentStatus.DEGRADED:
@@ -77,7 +80,7 @@ async def check_app_health() -> None:
                             app_name=deployment.name,
                             previous_state="DEGRADED",
                             new_state="RUNNING",
-                            details="All components are now healthy"
+                            details="All components are now healthy",
                         )
 
                 # Update DB if needed
@@ -88,7 +91,7 @@ async def check_app_health() -> None:
                         "Updated %s status: %s -> %s",
                         deployment.name,
                         current_db_status.value,
-                        new_db_status.value
+                        new_db_status.value,
                     )
 
             except Exception as exc:
@@ -96,7 +99,7 @@ async def check_app_health() -> None:
                     "Error checking health for %s: %s",
                     deployment.name,
                     exc,
-                    exc_info=True
+                    exc_info=True,
                 )
 
     finally:
@@ -123,7 +126,7 @@ async def check_infra_health() -> None:
                     component_name=hv.name,
                     previous_state=previous_state,
                     new_state=current_state,
-                    component_type="hypervisor"
+                    component_type="hypervisor",
                 )
 
             previous_infra_state[key] = current_state
@@ -139,7 +142,7 @@ async def check_infra_health() -> None:
                     component_name=health.openstack_vpn.name,
                     previous_state=previous_state,
                     new_state=current_state,
-                    component_type="vpn"
+                    component_type="vpn",
                 )
 
             previous_infra_state[key] = current_state
@@ -155,13 +158,15 @@ async def check_infra_health() -> None:
                     component_name=vpn.name,
                     previous_state=previous_state,
                     new_state=current_state,
-                    component_type="aws-vpn"
+                    component_type="aws-vpn",
                 )
 
             previous_infra_state[key] = current_state
 
     except Exception as exc:
-        logger.error("Error checking infrastructure health: %s", exc, exc_info=True)
+        logger.error(
+            "Error checking infrastructure health: %s", exc, exc_info=True
+        )
 
 
 async def health_poller_loop() -> None:
@@ -176,7 +181,7 @@ async def health_poller_loop() -> None:
             await asyncio.gather(
                 check_app_health(),
                 check_infra_health(),
-                return_exceptions=True
+                return_exceptions=True,
             )
         except Exception as exc:
             logger.error("Error in health poller loop: %s", exc, exc_info=True)

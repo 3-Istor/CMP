@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     OS_PROJECT_NAME: str = "3-istor-cloud"
     OS_USER_DOMAIN_NAME: str = "Default"
     OS_PROJECT_DOMAIN_NAME: str = "Default"
-    OS_ENDPOINT_TYPE: str = "internalURL"  # Use internal endpoints for better performance
+    OS_ENDPOINT_TYPE: str = (
+        "internalURL"  # Use internal endpoints for better performance
+    )
     OS_IDENTITY_API_VERSION: str = "3"
     OS_REGION_NAME: str = "RegionOne"
 
