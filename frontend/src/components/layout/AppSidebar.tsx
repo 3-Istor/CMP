@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   User,
   Users,
+  Wallet,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -111,14 +112,21 @@ export function AppSidebar() {
         </button>
       )}
 
-      {/* ── Quick link: Home ── */}
-      <nav className="px-2 pt-2">
+      {/* ── Quick links: Home + FinOps ── */}
+      <nav className="px-2 pt-2 space-y-0.5">
         <NavLink
           href="/"
           active={pathname === "/"}
           collapsed={collapsed}
           icon={<Home className="h-4 w-4 shrink-0" />}
           label="Home"
+        />
+        <NavLink
+          href="/finops"
+          active={pathname.startsWith("/finops")}
+          collapsed={collapsed}
+          icon={<Wallet className="h-4 w-4 shrink-0" />}
+          label="FinOps"
         />
       </nav>
 

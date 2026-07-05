@@ -287,3 +287,90 @@ export const deleteProject = (project_name: string) =>
   request<void>(`/projects/${project_name}`, {
     method: "DELETE",
   });
+
+// ── FinOps ────────────────────────────────────────────────────────────────────
+
+function finopsQuery(params: Record<string, string | number | undefined>): string {
+  const qs = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== "" && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  return qs ? `?${qs}` : "";
+}
+
+export const getFinopsOverview = (opts: {
+  project?: string;
+  period?: string;
+  granularity?: string;
+} = {}) =>
+  request<import("@/types").FinopsOverview>(
+    `/finops/overview${finopsQuery(opts)}`,
+  );
+
+export const getFinopsTimeline = (opts: {
+  project?: string;
+  app?: number;
+  resource?: string;
+  granularity?: string;
+  period?: string;
+} = {}) =>
+  request<import("@/types").CostSeriesPoint[]>(
+    `/finops/timeline${finopsQuery(opts)}`,
+  );
+
+export const getFinopsBreakdown = (opts: { project?: string; app?: number } = {}) =>
+  request<import("@/types").CostBreakdown>(
+    `/finops/breakdown${finopsQuery(opts)}`,
+  );
+
+export const getFinopsApps = (project?: string) =>
+  request<import("@/types").AppCostRow[]>(
+    `/finops/apps${finopsQuery({ project })}`,
+  );
+
+export const getRecommendations = (project?: string) =>
+  request<import("@/types").Recommendation[]>(
+    `/finops/recommendations${finopsQuery({ project })}`,
+  );
+
+export const applyRecommendation = (recId: string) =>
+  request<import("@/types").FinopsActionResponse>(
+    `/finops/recommendations/${encodeURIComponent(recId)}/apply`,
+    { method: "POST" },
+  );
+
+export const ignoreRecommendation = (recId: string) =>
+  request<import("@/types").FinopsActionResponse>(
+    `/finops/recommendations/${encodeURIComponent(recId)}/ignore`,
+    { method: "POST" },
+  );
+
+export const notifyRecommendation = (recId: string) =>
+  request<import("@/types").FinopsActionResponse>(
+    `/finops/recommendations/${encodeURIComponent(recId)}/notify`,
+    { method: "POST" },
+  );
+
+export const getBudget = (project_name: string) =>
+  request<import("@/types").Budget | null>(
+    `/finops/budgets/${encodeURIComponent(project_name)}`,
+  );
+
+export const putBudget = (
+  project_name: string,
+  payload: {
+    monthly_amount_eur: number;
+    threshold_warn: number;
+    threshold_critical: number;
+    currency?: string;
+  },
+) =>
+  request<import("@/types").Budget>(
+    `/finops/budgets/${encodeURIComponent(project_name)}`,
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+
+export const getFinopsAlerts = (project?: string) =>
+  request<import("@/types").CostAlert[]>(
+    `/finops/alerts${finopsQuery({ project })}`,
+  );
