@@ -186,7 +186,9 @@ class TerraformExecutor:
             logger.debug(f"Using kubeconfig from {kubeconfig_path}")
         else:
             # In-cluster: let the provider use ServiceAccount credentials
-            logger.debug("No kubeconfig found, Kubernetes provider will use in-cluster config")
+            logger.debug(
+                "No kubeconfig found, Kubernetes provider will use in-cluster config"
+            )
 
         # Pass Vault credentials to Terraform (for k3s-gitops-app template)
         if settings.VAULT_URL:

@@ -206,8 +206,11 @@ async def add_user_to_project_org(
 
     # Step 1: Get user email from Keycloak (Grafana OIDC uses email as login)
     try:
-        from app.services.keycloak_service import _find_user_by_username, _get_admin_token
-        
+        from app.services.keycloak_service import (
+            _find_user_by_username,
+            _get_admin_token,
+        )
+
         admin_token = _get_admin_token()
         keycloak_user = _find_user_by_username(username, admin_token)
         if not keycloak_user or not keycloak_user.get("email"):
@@ -215,12 +218,16 @@ async def add_user_to_project_org(
                 f"⚠️  User '{username}' not found in Keycloak or has no email — Grafana sync skipped"
             )
             return False
-        
+
         user_email = keycloak_user["email"]
-        logger.debug(f"📊 Resolved username '{username}' → email '{user_email}'")
-    
+        logger.debug(
+            f"📊 Resolved username '{username}' → email '{user_email}'"
+        )
+
     except Exception as exc:
-        logger.warning(f"⚠️  Failed to fetch user '{username}' from Keycloak: {exc}")
+        logger.warning(
+            f"⚠️  Failed to fetch user '{username}' from Keycloak: {exc}"
+        )
         return False
 
     # Step 2: Get org ID
