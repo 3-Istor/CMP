@@ -33,6 +33,10 @@ from app.schemas.project import (
     ProjectCreateResponse,
     ProjectRead,
 )
+from app.services.grafana_service import (
+    add_user_to_project_org,
+    remove_user_from_project_org,
+)
 from app.services.keycloak_service import (
     add_user_to_project,
     fetch_user_projects_from_keycloak,
@@ -326,6 +330,20 @@ async def create_project(
             )
             # Remove from temporary storage once successfully added
             _project_creators.pop(payload.project_name, None)
+
+            # Sync to Grafana (non-blocking, best-effort)
+            try:
+                await add_user_to_project_org(
+                    payload.project_name, username, "admin"
+                )
+            except Exception as grafana_exc:
+                logger.warning(
+                    "⚠️  Grafana sync failed for creator '%s' in project '%s': %s",
+                    username,
+                    payload.project_name,
+                    grafana_exc,
+                )
+
         except Exception as e:
             logger.error(
                 "❌ Failed to add creator to project '%s': %s",
@@ -608,6 +626,17 @@ async def add_project_member(
         )
         resp.raise_for_status()
 
+        # Sync to Grafana (non-blocking, best-effort)
+        try:
+            await add_user_to_project_org(project_name, username, role)
+        except Exception as grafana_exc:
+            logger.warning(
+                "⚠️  Grafana sync failed for user '%s' in project '%s': %s",
+                username,
+                project_name,
+                grafana_exc,
+            )
+
         return {
             "message": f"User '{username}' added to project '{project_name}' with role '{role}'.",
             "project_name": project_name,
@@ -685,6 +714,17 @@ async def remove_project_member(
             )
 
         remove_user_from_project(username, project_name)
+
+        # Sync to Grafana (non-blocking, best-effort)
+        try:
+            await remove_user_from_project_org(project_name, username)
+        except Exception as grafana_exc:
+            logger.warning(
+                "⚠️  Grafana sync failed for removing user '%s' from project '%s': %s",
+                username,
+                project_name,
+                grafana_exc,
+            )
 
     except HTTPException:
         raise

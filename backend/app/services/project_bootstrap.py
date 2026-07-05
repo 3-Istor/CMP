@@ -319,6 +319,9 @@ def _run(
     if settings.DISCORD_WEBHOOK_URL:
         env["TF_VAR_discord_webhook_url"] = settings.DISCORD_WEBHOOK_URL
 
+    if settings.GRAFANA_ADMIN_PASSWORD:
+            env["TF_VAR_grafana_admin_password"] = settings.GRAFANA_ADMIN_PASSWORD
+
     try:
         result = subprocess.run(
             cmd,

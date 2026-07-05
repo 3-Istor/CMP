@@ -160,6 +160,12 @@ class TerraformExecutor:
             )
             env["CLOUDFLARE_ACCOUNT_ID"] = settings.CLOUDFLARE_ACCOUNT_ID
 
+        # Pass Grafana admin password to Terraform (for k3s-gitops-app template)
+        if settings.GRAFANA_ADMIN_PASSWORD:
+            env["TF_VAR_grafana_admin_password"] = (
+                settings.GRAFANA_ADMIN_PASSWORD
+            )
+
         # Pass Keycloak credentials to Terraform (for k3s-gitops-app template)
         if settings.KEYCLOAK_ADMIN_USERNAME:
             env["TF_VAR_keycloak_admin_username"] = (
@@ -172,13 +178,15 @@ class TerraformExecutor:
         if settings.KEYCLOAK_URL:
             env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
 
-        # Local development only: point the Kubernetes provider at the
-        # developer's kubeconfig. In-cluster (DEBUG=false) we leave this unset so
-        # the provider uses the mounted ServiceAccount (in-cluster) credentials.
-        if settings.DEBUG:
-            env["TF_VAR_kube_config_path"] = os.path.expanduser(
-                "~/.kube/config"
-            )
+        # Kubernetes configuration: Try to use kubeconfig if it exists
+        # In-cluster deployments should mount ServiceAccount credentials and leave this unset
+        kubeconfig_path = os.path.expanduser("~/.kube/config")
+        if os.path.exists(kubeconfig_path):
+            env["TF_VAR_kube_config_path"] = kubeconfig_path
+            logger.debug(f"Using kubeconfig from {kubeconfig_path}")
+        else:
+            # In-cluster: let the provider use ServiceAccount credentials
+            logger.debug("No kubeconfig found, Kubernetes provider will use in-cluster config")
 
         # Pass Vault credentials to Terraform (for k3s-gitops-app template)
         if settings.VAULT_URL:

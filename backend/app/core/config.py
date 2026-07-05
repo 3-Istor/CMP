@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "CMP API"
-    DEBUG: bool = False
+    DEBUG: bool = True
 
     # FinOps — comma-separated Keycloak usernames granted the global
     # "Admin CNP" role (visibility over every project's costs).
@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     # Personal Access Token (PAT) with read:packages scope
     GITHUB_REGISTRY_USERNAME: str = ""
     GITHUB_REGISTRY_TOKEN: str = ""
+
+    GRAFANA_ADMIN_PASSWORD: str = ""
 
 
 settings = Settings()
