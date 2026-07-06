@@ -3,9 +3,9 @@
 import { Github } from "@/components/icons/Github";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
-import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
-import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
+import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
+import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -333,18 +333,42 @@ export default function AppControlCenterPage() {
                                         </a>
                                     )}
 
-                                    {current.argocd_app_name && (
-                                        <a
-                                            href={`https://argocd.3istor.com/applications/${current.argocd_app_name}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <FileCode className="mr-2 h-4 w-4" />
-                                            View in ArgoCD
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
+                                    {current.project_id && current.name && (() => {
+                                        // Determine which ArgoCD app links to show based on template
+                                        const templateId = (current.template_id ?? "").toLowerCase();
+                                        const hasFrontend = templateId.includes("frontend") || templateId.includes("fullstack") || templateId.includes("full-stack") || templateId.includes("full_stack");
+                                        const hasBackend = !templateId.includes("frontend-only");
+                                        const base = `https://argocd.3istor.com/applications/argocd/${current.project_id}-${current.name}`;
+
+                                        return (
+                                            <>
+                                                {hasBackend && (
+                                                    <a
+                                                        href={`${base}-backend?resource=`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                                                    >
+                                                        <FileCode className="mr-2 h-4 w-4" />
+                                                        ArgoCD — Backend
+                                                        <ExternalLink className="ml-auto h-3 w-3" />
+                                                    </a>
+                                                )}
+                                                {hasFrontend && (
+                                                    <a
+                                                        href={`${base}-frontend?resource=`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                                                    >
+                                                        <FileCode className="mr-2 h-4 w-4" />
+                                                        ArgoCD — Frontend
+                                                        <ExternalLink className="ml-auto h-3 w-3" />
+                                                    </a>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
 
                                     {current.project_id && current.name && (
                                         <a

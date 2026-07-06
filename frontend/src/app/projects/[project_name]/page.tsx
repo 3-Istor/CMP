@@ -6,7 +6,13 @@ import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
 import { MembersPanel } from "@/components/projects/MembersPanel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +27,11 @@ import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
 import { useProjectApps } from "@/lib/hooks";
 import type { CatalogTemplate } from "@/types";
 import {
+  Activity,
+  AlarmClock,
   ArrowLeft,
+  ExternalLink,
+  FileCode,
   FolderKanban,
   LayoutGrid,
   Loader2,
@@ -29,7 +39,7 @@ import {
   RefreshCw,
   Trash2,
   Users,
-  Wallet,
+  Wallet
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -230,6 +240,50 @@ export default function ProjectPage() {
         </div>
 
         <Separator />
+
+        {/* ── Project quick links ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Project Links</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {/* ArgoCD bootstrap */}
+            <a
+              href={`https://argocd.3istor.com/applications/argocd/${projectName}-bootstrap?resource=`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+            >
+              <FileCode className="mr-2 h-4 w-4" />
+              ArgoCD
+              <ExternalLink className="ml-auto h-3 w-3" />
+            </a>
+
+            {/* Offhours */}
+            <a
+              href={`https://offhours-${projectName}.3istor.com/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+            >
+              <AlarmClock className="mr-2 h-4 w-4" />
+              Offhours
+              <ExternalLink className="ml-auto h-3 w-3" />
+            </a>
+
+            {/* Gatus / Status */}
+            <a
+              href={`https://status-${projectName}.3istor.com/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+            >
+              <Activity className="mr-2 h-4 w-4" />
+              Status
+              <ExternalLink className="ml-auto h-3 w-3" />
+            </a>
+          </CardContent>
+        </Card>
 
         {/* ── Tabs ── */}
         <Tabs defaultValue="apps">
