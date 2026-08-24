@@ -50,7 +50,7 @@ jobs:
           helm push .helm-releases/arcl-cmp-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/${REPO_OWNER}/charts
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: .helm-releases/*.tgz
           generate_release_notes: true
