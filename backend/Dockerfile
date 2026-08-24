@@ -1,5 +1,5 @@
 # Multi-stage build for Python FastAPI backend
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --no-root --only main
 
 # Final stage
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
