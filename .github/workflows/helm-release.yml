@@ -38,7 +38,7 @@ jobs:
           helm package helm/arcl-cmp -d .helm-releases
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
