@@ -55,15 +55,20 @@ def _get_module_path() -> Path:
         FileNotFoundError: If the module doesn't exist in the repository.
     """
     repo = get_repository()
-    module_path = repo.repo_path / "templates" / "k3s-project-bootstrap"
 
-    if not module_path.exists():
-        raise FileNotFoundError(
-            f"Terraform module not found at {module_path}. "
-            "Please ensure the templates repository contains k3s-project-bootstrap."
-        )
+    # The module was renamed: its old name encoded the on-prem runtime and reads
+    # wrong the moment AWS exists. Both names are accepted so the rename in
+    # app-templates and this change can merge in either order; drop the fallback
+    # once app-templates is on main.
+    for name in ("project-bootstrap", "k3s-project-bootstrap"):
+        module_path = repo.repo_path / "templates" / name
+        if module_path.exists():
+            return module_path
 
-    return module_path
+    raise FileNotFoundError(
+        f"Terraform module not found under {repo.repo_path / 'templates'}. "
+        "Expected 'project-bootstrap' (or the legacy 'k3s-project-bootstrap')."
+    )
 
 
 def run_project_bootstrap(
