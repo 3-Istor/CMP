@@ -29,7 +29,7 @@ async def main():
     print("=" * 80)
 
     from app.core.database import SessionLocal
-    from app.models.project import ProjectOwner
+    from app.models.project import Project
     from app.services.grafana_service import add_user_to_project_org
     from app.services.keycloak_service import list_project_members
 
@@ -37,7 +37,7 @@ async def main():
 
     try:
         # Get all projects that have owners
-        project_owners = db.query(ProjectOwner).all()
+        project_owners = db.query(Project).all()
 
         print(f"\nFound {len(project_owners)} projects with owners")
 

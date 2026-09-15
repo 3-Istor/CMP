@@ -11,10 +11,28 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { createProject } from "@/lib/api";
+import type { TargetCloud } from "@/types";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
+const CLOUDS: { value: TargetCloud; label: string; hint: string }[] = [
+    {
+        value: "onprem",
+        label: "On-premise",
+        hint: "The 3istor cluster. Default, and where every existing project runs.",
+    },
+    { value: "aws", label: "AWS", hint: "Requires a registered AWS cluster." },
+    { value: "gcp", label: "GCP", hint: "Requires a registered GCP cluster." },
+];
 
 interface Props {
     open: boolean;
@@ -33,6 +51,7 @@ function validateName(name: string): string | null {
 
 export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     const [name, setName] = useState("");
+    const [targetCloud, setTargetCloud] = useState<TargetCloud>("onprem");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +60,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     useEffect(() => {
         if (open) {
             setName("");
+            setTargetCloud("onprem");
             setError(null);
             setTimeout(() => inputRef.current?.focus(), 100);
         }
@@ -58,9 +78,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         setLoading(true);
         setError(null);
         try {
-            await createProject(trimmed);
+            await createProject(trimmed, targetCloud);
             toast.success(
-                `Project "${trimmed}" is being bootstrapped. Keycloak groups and ArgoCD AppProject will be ready shortly.`,
+                `Project "${trimmed}" is being bootstrapped on ${targetCloud}. Keycloak groups and ArgoCD AppProject will be ready shortly.`,
                 { duration: 6000 },
             );
             onCreated(trimmed);
@@ -119,6 +139,35 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         )}
                     </div>
 
+                    <div className="space-y-2">
+                        <Label htmlFor="target-cloud">
+                            Target Cloud <span className="text-destructive">*</span>
+                        </Label>
+                        <Select
+                            value={targetCloud}
+                            onValueChange={(v) => setTargetCloud(v as TargetCloud)}
+                            disabled={loading}
+                        >
+                            <SelectTrigger id="target-cloud">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {CLOUDS.map((cloud) => (
+                                    <SelectItem key={cloud.value} value={cloud.value}>
+                                        {cloud.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            {CLOUDS.find((c) => c.value === targetCloud)?.hint}{" "}
+                            <span className="text-foreground">
+                                This cannot be changed later
+                            </span>{" "}
+                            — moving a project means re-creating it.
+                        </p>
+                    </div>
+
                     <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
                         <div className="font-medium text-foreground mb-1.5">
                             What will be created
@@ -136,7 +185,15 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                            ArgoCD AppProject
+                            ArgoCD AppProject on{" "}
+                            <span className="font-mono">{targetCloud}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary/25" />
+                            Registry record:{" "}
+                            <span className="font-mono">
+                                registry/projects/{name || "…"}.yaml
+                            </span>
                         </div>
                     </div>
 
