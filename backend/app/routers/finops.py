@@ -27,7 +27,7 @@ from app.models.finops import (
     ProjectBudget,
     RecommendationState,
 )
-from app.models.project import ProjectOwner
+from app.models.project import Project
 from app.schemas.finops import (
     ActionResponse,
     AppCostRow,
@@ -104,11 +104,7 @@ def _require_project_access(token: dict, project: str) -> None:
 
 
 def _is_owner(db: Session, project: str, username: str) -> bool:
-    owner = (
-        db.query(ProjectOwner)
-        .filter(ProjectOwner.project_name == project)
-        .first()
-    )
+    owner = db.query(Project).filter(Project.project_name == project).first()
     return bool(owner and owner.owner_username == username)
 
 

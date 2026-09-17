@@ -187,10 +187,13 @@ export const saveGitHubInstallationId = async (
 export const getProjects = () =>
   request<import("@/types").Project[]>("/projects/");
 
-export const createProject = (project_name: string) =>
+export const createProject = (
+  project_name: string,
+  target_cloud: import("@/types").TargetCloud = "onprem",
+) =>
   request<import("@/types").ProjectCreateResponse>("/projects/", {
     method: "POST",
-    body: JSON.stringify({ project_name }),
+    body: JSON.stringify({ project_name, target_cloud }),
   });
 
 export const getProjectApps = (project_name: string) =>

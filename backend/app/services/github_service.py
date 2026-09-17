@@ -26,6 +26,14 @@ class GitHubAppError(Exception):
     """Raised when GitHub App operations fail."""
 
 
+class FileNotInRepoError(GitHubAppError):
+    """Raised when a requested file does not exist in the repository.
+
+    Subclasses GitHubAppError so existing callers that catch the base class are
+    unaffected; callers that need to tell "absent" from "broken" catch this.
+    """
+
+
 def generate_jwt() -> str:
     """
     Generate a JSON Web Token (JWT) signed with the CNP GitHub App Private Key.
@@ -223,7 +231,7 @@ async def get_file_content(
             )
 
             if response.status_code == 404:
-                raise GitHubAppError(
+                raise FileNotInRepoError(
                     f"File not found: '{file_path}' in repository '{repo_full_name}'"
                 )
 
@@ -352,4 +360,149 @@ async def update_file_content(
     except Exception as exc:
         raise GitHubAppError(
             f"Unexpected error updating file '{file_path}': {exc}"
+        ) from exc
+
+
+async def put_file_content(
+    installation_token: str,
+    repo_full_name: str,
+    file_path: str,
+    content: str,
+    message: str,
+    sha: str | None = None,
+    branch: str = "main",
+) -> dict:
+    """
+    Create or replace a file in a GitHub repository.
+
+    Unlike :func:`update_file_content`, ``sha`` is optional: omit it to create a
+    file that does not exist yet, pass it to replace one that does.
+
+    Args:
+        installation_token: Short-lived GitHub installation access token.
+        repo_full_name:     ``owner/repo``.
+        file_path:          Path inside the repository.
+        content:            Raw file content (UTF-8 string).
+        message:            Git commit message.
+        sha:                SHA of the version being replaced, or ``None`` to create.
+        branch:             Target branch (default: ``"main"``).
+
+    Returns:
+        dict: GitHub API response containing ``commit`` and ``content`` metadata.
+
+    Raises:
+        GitHubAppError: On HTTP errors, including 409 Conflict (stale SHA).
+    """
+    url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/contents/{file_path}"
+    headers = {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    payload: dict = {
+        "message": message,
+        "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+        "branch": branch,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.put(
+                url, headers=headers, json=payload, timeout=20.0
+            )
+
+            if response.status_code == 409:
+                raise GitHubAppError(
+                    f"Conflict (409) writing '{file_path}': the file SHA is "
+                    "outdated. Another commit modified it — re-read and retry."
+                )
+
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(
+                "Committed '%s' to '%s' on branch '%s' (commit: %.8s)",
+                file_path,
+                repo_full_name,
+                branch,
+                data.get("commit", {}).get("sha", ""),
+            )
+            return data
+
+    except GitHubAppError:
+        raise
+    except httpx.HTTPStatusError as exc:
+        error_msg = exc.response.json().get("message", exc.response.text)
+        raise GitHubAppError(
+            f"Failed to write file '{file_path}': {error_msg}"
+        ) from exc
+    except Exception as exc:
+        raise GitHubAppError(
+            f"Unexpected error writing file '{file_path}': {exc}"
+        ) from exc
+
+
+async def delete_file(
+    installation_token: str,
+    repo_full_name: str,
+    file_path: str,
+    message: str,
+    sha: str,
+    branch: str = "main",
+) -> dict:
+    """
+    Delete a file from a GitHub repository.
+
+    Args:
+        installation_token: Short-lived GitHub installation access token.
+        repo_full_name:     ``owner/repo``.
+        file_path:          Path inside the repository.
+        message:            Git commit message.
+        sha:                SHA of the file being deleted (from ``get_file_content``).
+        branch:             Target branch (default: ``"main"``).
+
+    Returns:
+        dict: GitHub API response containing ``commit`` metadata.
+
+    Raises:
+        GitHubAppError: On HTTP errors.
+    """
+    url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/contents/{file_path}"
+    headers = {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                "DELETE",
+                url,
+                headers=headers,
+                json={"message": message, "sha": sha, "branch": branch},
+                timeout=20.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(
+                "Deleted '%s' from '%s' (commit: %.8s)",
+                file_path,
+                repo_full_name,
+                data.get("commit", {}).get("sha", ""),
+            )
+            return data
+
+    except httpx.HTTPStatusError as exc:
+        error_msg = exc.response.json().get("message", exc.response.text)
+        raise GitHubAppError(
+            f"Failed to delete file '{file_path}': {error_msg}"
+        ) from exc
+    except Exception as exc:
+        raise GitHubAppError(
+            f"Unexpected error deleting file '{file_path}': {exc}"
         ) from exc

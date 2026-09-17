@@ -26,9 +26,15 @@ class Settings(BaseSettings):
     TF_BACKEND_AWS_REGION: str = "eu-west-3"
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
-    TF_BACKEND_S3_DYNAMODB_TABLE: str = (
-        ""  # Optional: leave empty to disable locking
-    )
+    # Locking is not optional (D-09): with the S3 backend enabled and no lock
+    # table configured, the runner refuses to start rather than warning. Two
+    # concurrent applies on the same project corrupt state silently.
+    TF_BACKEND_S3_DYNAMODB_TABLE: str = ""
+
+    # Project registry — the Git source of truth for project placement (D-01)
+    CNP_REGISTRY_REPO: str = "3-Istor/cnp-projects"
+    CNP_REGISTRY_BRANCH: str = "main"
+    CNP_REGISTRY_PATH_PREFIX: str = "registry/projects"
 
     # OpenStack - loaded from environment (required for deployments)
     OS_AUTH_URL: str = ""
