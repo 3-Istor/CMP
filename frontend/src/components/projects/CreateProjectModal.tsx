@@ -9,29 +9,55 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { createProject } from "@/lib/api";
 import type { TargetCloud } from "@/types";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-const CLOUDS: { value: TargetCloud; label: string; hint: string }[] = [
+interface CloudOption {
+    value: TargetCloud;
+    label: string;
+    /** Why you'd pick this cloud, shown even while it's disabled — the point
+     * is to let people plan ahead, not just to fill space. */
+    advantages: string[];
+    available: boolean;
+}
+
+const CLOUDS: CloudOption[] = [
     {
         value: "onprem",
         label: "On-premise",
-        hint: "The 3istor cluster. Default, and where every existing project runs.",
+        advantages: [
+            "No data egress cost",
+            "Full infrastructure control",
+            "Already live — zero setup wait",
+        ],
+        available: true,
     },
-    { value: "aws", label: "AWS", hint: "Requires a registered AWS cluster." },
-    { value: "gcp", label: "GCP", hint: "Requires a registered GCP cluster." },
+    {
+        value: "aws",
+        label: "AWS",
+        advantages: [
+            "Widest catalog of managed services",
+            "Mature IAM & compliance tooling",
+            "Broad global region coverage",
+        ],
+        available: false,
+    },
+    {
+        value: "gcp",
+        label: "GCP",
+        advantages: [
+            "Native Kubernetes heritage",
+            "Typically the most competitive compute pricing",
+            "Strong data & AI tooling",
+        ],
+        available: false,
+    },
 ];
 
 interface Props {
@@ -140,27 +166,61 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="target-cloud">
+                        <Label>
                             Target Cloud <span className="text-destructive">*</span>
                         </Label>
-                        <Select
-                            value={targetCloud}
-                            onValueChange={(v) => setTargetCloud(v as TargetCloud)}
-                            disabled={loading}
+                        <div
+                            role="radiogroup"
+                            aria-label="Target Cloud"
+                            className="grid grid-cols-1 gap-2 sm:grid-cols-3"
                         >
-                            <SelectTrigger id="target-cloud">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {CLOUDS.map((cloud) => (
-                                    <SelectItem key={cloud.value} value={cloud.value}>
-                                        {cloud.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            {CLOUDS.map((cloud) => {
+                                const selected = targetCloud === cloud.value;
+                                return (
+                                    <button
+                                        key={cloud.value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={selected}
+                                        disabled={loading || !cloud.available}
+                                        onClick={() => setTargetCloud(cloud.value)}
+                                        className={`relative flex flex-col gap-1.5 rounded-lg border p-3 text-left text-xs transition-colors ${
+                                            selected
+                                                ? "border-primary bg-primary/5"
+                                                : "border-input hover:bg-muted/40"
+                                        } ${
+                                            !cloud.available
+                                                ? "cursor-not-allowed opacity-50 hover:bg-transparent"
+                                                : "cursor-pointer"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-1">
+                                            <span className="font-medium text-foreground">
+                                                {cloud.label}
+                                            </span>
+                                            {selected ? (
+                                                <Check className="h-3.5 w-3.5 text-primary" />
+                                            ) : !cloud.available ? (
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-[10px] px-1.5 py-0"
+                                                >
+                                                    Coming soon
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                        <ul className="space-y-0.5 text-muted-foreground">
+                                            {cloud.advantages.map((a) => (
+                                                <li key={a}>{a}</li>
+                                            ))}
+                                        </ul>
+                                    </button>
+                                );
+                            })}
+                        </div>
                         <p className="text-xs text-muted-foreground">
-                            {CLOUDS.find((c) => c.value === targetCloud)?.hint}{" "}
+                            AWS and GCP need a cluster registered by the infra team before
+                            they can be selected.{" "}
                             <span className="text-foreground">
                                 This cannot be changed later
                             </span>{" "}
