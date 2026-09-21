@@ -39,6 +39,7 @@ import {
   RefreshCw,
   Trash2,
   Users,
+  Vault,
   Wallet
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -268,6 +269,18 @@ export default function ProjectPage() {
             >
               <AlarmClock className="mr-2 h-4 w-4" />
               Offhours
+              <ExternalLink className="ml-auto h-3 w-3" />
+            </a>
+
+            {/* Vault */}
+            <a
+              href={`https://vault.3istor.com/ui/vault/secrets-engines/project-${encodeURIComponent(projectName)}/kv/list`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+            >
+              <Vault className="mr-2 h-4 w-4" />
+              Vault
               <ExternalLink className="ml-auto h-3 w-3" />
             </a>
 
