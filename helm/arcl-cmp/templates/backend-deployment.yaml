@@ -77,6 +77,8 @@ spec:
           mountPath: /app/data
         - name: db-storage
           mountPath: /app/db
+        - name: logs-storage
+          mountPath: /app/logs
       volumes:
       - name: data
         persistentVolumeClaim:
@@ -84,6 +86,8 @@ spec:
       - name: db-storage
         persistentVolumeClaim:
           claimName: {{ include "arcl-cmp.fullname" . }}-backend-db
+      - name: logs-storage
+        emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -27,11 +27,6 @@ export function GitHubLinkButton() {
 
   const searchParams = useSearchParams();
 
-  useEffect(() => {
-    handleCallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleCallback = async () => {
     // Check if we have an installation_id in the URL (GitHub callback)
     const callbackInstallationId = searchParams.get("installation_id");
@@ -84,6 +79,11 @@ export function GitHubLinkButton() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    handleCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLink = () => {
     // Open GitHub App installation in a new tab

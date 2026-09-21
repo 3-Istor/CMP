@@ -222,6 +222,14 @@ async def lifespan(app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+
+    # Close Grafana HTTP client
+    logger.info("Closing Grafana HTTP client...")
+    from app.services.grafana_service import close_http_client
+
+    await close_http_client()
+    logger.info("Grafana HTTP client closed")
+
     logger.info("✅ Application shutdown complete")
 
 

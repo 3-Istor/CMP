@@ -57,9 +57,9 @@ export function CostDonut({
               ))}
             </Pie>
             <Tooltip
-              formatter={(value: number, name: string) => [
-                formatEUR(value),
-                name,
+              formatter={(value, name) => [
+                formatEUR(Number(value) || 0),
+                String(name),
               ]}
               contentStyle={{
                 borderRadius: 8,

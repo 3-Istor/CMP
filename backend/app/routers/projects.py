@@ -26,12 +26,16 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus
-from app.models.project import ProjectOwner
+from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     ProjectCreate,
     ProjectCreateResponse,
     ProjectRead,
+)
+from app.services.grafana_service import (
+    add_user_to_project_org,
+    remove_user_from_project_org,
 )
 from app.services.keycloak_service import (
     add_user_to_project,
@@ -45,6 +49,12 @@ from app.services.keycloak_service import (
 from app.services.project_bootstrap import (
     run_project_bootstrap,
     run_project_teardown,
+)
+from app.services.project_registry import (
+    ImmutableCloudError,
+    RegistryError,
+    publish_record,
+    remove_record,
 )
 
 logger = logging.getLogger(__name__)
@@ -208,16 +218,22 @@ async def list_projects(
         f"📋 Found {len(projects)} projects for user: {[p['name'] for p in projects]}"
     )
 
-    # Promote owned projects to role "owner"
-    if username:
-        owned = {
-            o.project_name
-            for o in db.query(ProjectOwner)
-            .filter(ProjectOwner.owner_username == username)
-            .all()
-        }
-        for p in projects:
-            if p["name"] in owned:
+    # Mirror of the Git registry — used to render the cloud badge without a
+    # round-trip to GitHub on every listing.
+    rows = {
+        row.project_name: row
+        for row in db.query(Project)
+        .filter(Project.project_name.in_([p["name"] for p in projects]))
+        .all()
+    }
+
+    for p in projects:
+        row = rows.get(p["name"])
+        # Projects created before the multicloud chantier have no row; they are
+        # on-prem by definition, which is what the schema default says.
+        if row is not None:
+            p["target_cloud"] = row.target_cloud
+            if username and row.owner_username == username:
                 p["role"] = "owner"
 
     return [ProjectRead(**p) for p in projects]
@@ -285,29 +301,58 @@ async def create_project(
         f"🔐 Stored creator user_id='{user_id}' for project '{payload.project_name}'"
     )
 
-    # Persist the project owner (creator) — immutable, can never be removed.
+    # The Git registry is the source of truth for placement (D-01), so it is
+    # written first and synchronously: a project whose record failed to commit
+    # has nothing for Argo CD to reconcile, and half-creating it is worse than
+    # refusing.
+    try:
+        await publish_record(
+            project_name=payload.project_name,
+            owner_username=username,
+            target_cloud=payload.target_cloud,
+        )
+    except ImmutableCloudError as exc:
+        _project_creators.pop(payload.project_name, None)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    except RegistryError as exc:
+        _project_creators.pop(payload.project_name, None)
+        logger.error(
+            "Registry write failed for '%s': %s", payload.project_name, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not register the project: {exc}",
+        ) from exc
+
+    # Persist the project owner (creator) — immutable, can never be removed —
+    # and mirror the cloud choice for the portal.
     if (
-        not db.query(ProjectOwner)
-        .filter(ProjectOwner.project_name == payload.project_name)
+        not db.query(Project)
+        .filter(Project.project_name == payload.project_name)
         .first()
     ):
         db.add(
-            ProjectOwner(
+            Project(
                 project_name=payload.project_name,
                 owner_username=username,
+                target_cloud=payload.target_cloud,
             )
         )
         db.commit()
         logger.info(
-            "👑 Recorded '%s' as owner of project '%s'",
+            "👑 Recorded '%s' as owner of project '%s' on '%s'",
             username,
             payload.project_name,
+            payload.target_cloud.value,
         )
 
     # Trigger bootstrap
     background_tasks.add_task(
         run_project_bootstrap,
         project_name=payload.project_name,
+        target_cloud=payload.target_cloud.value,
     )
 
     # Add creator to project as admin (after a short delay to let Terraform finish)
@@ -326,6 +371,20 @@ async def create_project(
             )
             # Remove from temporary storage once successfully added
             _project_creators.pop(payload.project_name, None)
+
+            # Sync to Grafana (non-blocking, best-effort)
+            try:
+                await add_user_to_project_org(
+                    payload.project_name, username, "admin"
+                )
+            except Exception as grafana_exc:
+                logger.warning(
+                    "⚠️  Grafana sync failed for creator '%s' in project '%s': %s",
+                    username,
+                    payload.project_name,
+                    grafana_exc,
+                )
+
         except Exception as e:
             logger.error(
                 "❌ Failed to add creator to project '%s': %s",
@@ -336,18 +395,21 @@ async def create_project(
     background_tasks.add_task(add_creator_to_project)
 
     logger.info(
-        "Project bootstrap triggered for '%s' by user '%s'",
+        "Project bootstrap triggered for '%s' on '%s' by user '%s'",
         payload.project_name,
+        payload.target_cloud.value,
         username,
     )
 
     return ProjectCreateResponse(
         message=(
-            f"Project '{payload.project_name}' bootstrap started. "
+            f"Project '{payload.project_name}' bootstrap started on "
+            f"{payload.target_cloud.value}. "
             "Keycloak groups, Vault policies, and ArgoCD AppProject will be created shortly. "
             f"You will be added as project admin."
         ),
         project_name=payload.project_name,
+        target_cloud=payload.target_cloud,
     )
 
 
@@ -505,8 +567,8 @@ async def get_project_members(
         # Mark the owner (creator) — they always rank above admin and cannot
         # be removed from the project.
         owner = (
-            db.query(ProjectOwner)
-            .filter(ProjectOwner.project_name == project_name)
+            db.query(Project)
+            .filter(Project.project_name == project_name)
             .first()
         )
         if owner:
@@ -608,6 +670,17 @@ async def add_project_member(
         )
         resp.raise_for_status()
 
+        # Sync to Grafana (non-blocking, best-effort)
+        try:
+            await add_user_to_project_org(project_name, username, role)
+        except Exception as grafana_exc:
+            logger.warning(
+                "⚠️  Grafana sync failed for user '%s' in project '%s': %s",
+                username,
+                project_name,
+                grafana_exc,
+            )
+
         return {
             "message": f"User '{username}' added to project '{project_name}' with role '{role}'.",
             "project_name": project_name,
@@ -655,9 +728,7 @@ async def remove_project_member(
 
     # The owner (creator) can never be removed from their project.
     owner = (
-        db.query(ProjectOwner)
-        .filter(ProjectOwner.project_name == project_name)
-        .first()
+        db.query(Project).filter(Project.project_name == project_name).first()
     )
     if owner and owner.owner_username == username:
         raise HTTPException(
@@ -685,6 +756,17 @@ async def remove_project_member(
             )
 
         remove_user_from_project(username, project_name)
+
+        # Sync to Grafana (non-blocking, best-effort)
+        try:
+            await remove_user_from_project_org(project_name, username)
+        except Exception as grafana_exc:
+            logger.warning(
+                "⚠️  Grafana sync failed for removing user '%s' from project '%s': %s",
+                username,
+                project_name,
+                grafana_exc,
+            )
 
     except HTTPException:
         raise
@@ -781,17 +863,48 @@ async def delete_project(
 
         logger.info(f"🗑️  Scheduling teardown for project '{project_name}'...")
 
-        db.query(ProjectOwner).filter(
-            ProjectOwner.project_name == project_name
-        ).delete()
+        row = (
+            db.query(Project)
+            .filter(Project.project_name == project_name)
+            .first()
+        )
+        target_cloud = (
+            row.target_cloud if row is not None else TargetCloud.ONPREM
+        )
+
+        # Removing the registry record is what makes the generated Argo CD
+        # Applications and the AppProject disappear, so it is a teardown step
+        # rather than a cleanup afterwards — and it has to happen before the
+        # Terraform destroy, not after, or Argo CD re-creates what Terraform
+        # just removed.
+        try:
+            await remove_record(project_name)
+        except RegistryError as exc:
+            logger.error(
+                "Could not deregister '%s' — aborting teardown so the project "
+                "is not half-deleted: %s",
+                project_name,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not deregister the project: {exc}",
+            ) from exc
+
+        db.query(Project).filter(Project.project_name == project_name).delete()
         db.commit()
 
         background_tasks.add_task(
             run_project_teardown,
             project_name=project_name,
+            target_cloud=target_cloud.value,
         )
 
-        logger.info("✅ Project '%s' teardown scheduled", project_name)
+        logger.info(
+            "✅ Project '%s' teardown scheduled on '%s'",
+            project_name,
+            target_cloud.value,
+        )
 
     except HTTPException:
         raise

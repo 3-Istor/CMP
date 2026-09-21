@@ -11,7 +11,7 @@ This module creates the Day-0 infrastructure for a new Project:
 The Terraform module is expected to be located in the cloned templates repository.
 
 Terraform variables injected:
-  project_name, keycloak_url, keycloak_admin_username,
+  project_name, target_cloud, keycloak_url, keycloak_admin_username,
   keycloak_admin_password, vault_url, vault_token,
   github_token, discord_webhook_url
 """
@@ -30,6 +30,20 @@ from app.services.template_repository import get_repository
 logger = logging.getLogger(__name__)
 
 
+class TerraformBackendError(RuntimeError):
+    """Raised when the Terraform state backend is unsafe to use."""
+
+
+def _state_key(project_name: str, target_cloud: str) -> str:
+    """
+    Build the S3 state key for a project's bootstrap state.
+
+    Keys are laid out per cloud (D-09) so that a per-cloud inventory — which is
+    what the decommission runbook needs — is a prefix listing rather than a scan.
+    """
+    return f"cmp/{target_cloud}/projects/{project_name}/bootstrap.tfstate"
+
+
 def _get_module_path() -> Path:
     """
     Get the path to the k3s-project-bootstrap Terraform module.
@@ -41,18 +55,25 @@ def _get_module_path() -> Path:
         FileNotFoundError: If the module doesn't exist in the repository.
     """
     repo = get_repository()
-    module_path = repo.repo_path / "templates" / "k3s-project-bootstrap"
 
-    if not module_path.exists():
-        raise FileNotFoundError(
-            f"Terraform module not found at {module_path}. "
-            "Please ensure the templates repository contains k3s-project-bootstrap."
-        )
+    # The module was renamed: its old name encoded the on-prem runtime and reads
+    # wrong the moment AWS exists. Both names are accepted so the rename in
+    # app-templates and this change can merge in either order; drop the fallback
+    # once app-templates is on main.
+    for name in ("project-bootstrap", "k3s-project-bootstrap"):
+        module_path = repo.repo_path / "templates" / name
+        if module_path.exists():
+            return module_path
 
-    return module_path
+    raise FileNotFoundError(
+        f"Terraform module not found under {repo.repo_path / 'templates'}. "
+        "Expected 'project-bootstrap' (or the legacy 'k3s-project-bootstrap')."
+    )
 
 
-def run_project_bootstrap(project_name: str) -> None:
+def run_project_bootstrap(
+    project_name: str, target_cloud: str = "onprem"
+) -> None:
     """
     Entry point for the BackgroundTask.
 
@@ -61,8 +82,14 @@ def run_project_bootstrap(project_name: str) -> None:
 
     Args:
         project_name: Lowercase kebab-case project identifier.
+        target_cloud: Which cloud the project runs on — selects the state key
+            prefix and the per-provider module implementation.
     """
-    logger.info("Starting project bootstrap for '%s'", project_name)
+    logger.info(
+        "Starting project bootstrap for '%s' on '%s'",
+        project_name,
+        target_cloud,
+    )
 
     try:
         module_path = _get_module_path()
@@ -91,8 +118,8 @@ def run_project_bootstrap(project_name: str) -> None:
         )
         return
 
-    # S3 state key — isolated per project
-    state_key = f"cmp/projects/{project_name}/bootstrap.tfstate"
+    # S3 state key — isolated per project, grouped per cloud
+    state_key = _state_key(project_name, target_cloud)
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -110,6 +137,7 @@ def run_project_bootstrap(project_name: str) -> None:
                     "apply",
                     "-auto-approve",
                     f"-var=project_name={project_name}",
+                    f"-var=target_cloud={target_cloud}",
                 ],
                 cwd=module_path,
                 work_dir=work_dir,
@@ -127,7 +155,9 @@ def run_project_bootstrap(project_name: str) -> None:
         )
 
 
-def run_project_teardown(project_name: str) -> None:
+def run_project_teardown(
+    project_name: str, target_cloud: str = "onprem"
+) -> None:
     """
     Entry point for the BackgroundTask triggered on project deletion.
 
@@ -140,8 +170,13 @@ def run_project_teardown(project_name: str) -> None:
 
     Args:
         project_name: Lowercase kebab-case project identifier.
+        target_cloud: Which cloud the project runs on — selects the state key.
     """
-    logger.info("Starting project teardown for '%s'", project_name)
+    logger.info(
+        "Starting project teardown for '%s' on '%s'",
+        project_name,
+        target_cloud,
+    )
 
     try:
         module_path = _get_module_path()
@@ -172,7 +207,7 @@ def run_project_teardown(project_name: str) -> None:
         return
 
     # Same S3 state key used by the bootstrap — destroy operates on that state.
-    state_key = f"cmp/projects/{project_name}/bootstrap.tfstate"
+    state_key = _state_key(project_name, target_cloud)
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -192,6 +227,7 @@ def run_project_teardown(project_name: str) -> None:
                     "destroy",
                     "-auto-approve",
                     f"-var=project_name={project_name}",
+                    f"-var=target_cloud={target_cloud}",
                 ],
                 cwd=module_path,
                 work_dir=work_dir,
@@ -228,7 +264,18 @@ def _terraform_init(
 
     Shared by bootstrap (apply) and teardown (destroy) so both operate on the
     exact same backend configuration and state key.
+
+    Raises:
+        TerraformBackendError: If the backend is configured without locking.
     """
+    if not settings.TF_BACKEND_S3_DYNAMODB_TABLE:
+        raise TerraformBackendError(
+            "TF_BACKEND_S3_DYNAMODB_TABLE is empty: the S3 backend would run "
+            "without state locking, and two concurrent applies on the same "
+            "project corrupt state with no warning (D-09). Configure a lock "
+            "table before running Terraform."
+        )
+
     _run(
         [
             "terraform",
@@ -237,14 +284,8 @@ def _terraform_init(
             f"-backend-config=key={state_key}",
             "-backend-config=region=" + settings.TF_BACKEND_AWS_REGION,
             "-backend-config=encrypt=true",
-            *(
-                [
-                    "-backend-config=dynamodb_table="
-                    + settings.TF_BACKEND_S3_DYNAMODB_TABLE
-                ]
-                if settings.TF_BACKEND_S3_DYNAMODB_TABLE
-                else []
-            ),
+            "-backend-config=dynamodb_table="
+            + settings.TF_BACKEND_S3_DYNAMODB_TABLE,
             "-reconfigure",
         ],
         cwd=module_path,
@@ -318,6 +359,9 @@ def _run(
     # ── Discord (alerting webhook, stored into the project's Vault namespace) ──
     if settings.DISCORD_WEBHOOK_URL:
         env["TF_VAR_discord_webhook_url"] = settings.DISCORD_WEBHOOK_URL
+
+    if settings.GRAFANA_ADMIN_PASSWORD:
+        env["TF_VAR_grafana_admin_password"] = settings.GRAFANA_ADMIN_PASSWORD
 
     try:
         result = subprocess.run(

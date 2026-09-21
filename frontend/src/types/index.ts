@@ -37,14 +37,19 @@ export interface Deployment {
 
 export type ProjectRole = "owner" | "admin" | "member";
 
+/** The cloud a project's workloads run on. Immutable after creation. */
+export type TargetCloud = "onprem" | "aws" | "gcp";
+
 export interface Project {
   name: string;
   role: ProjectRole;
+  target_cloud: TargetCloud;
 }
 
 export interface ProjectCreateResponse {
   message: string;
   project_name: string;
+  target_cloud: TargetCloud;
   status: string;
 }
 

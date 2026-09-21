@@ -9,12 +9,56 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createProject } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import type { TargetCloud } from "@/types";
+import { Check, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
+interface CloudOption {
+    value: TargetCloud;
+    label: string;
+    /** Why you'd pick this cloud, shown even while it's disabled — the point
+     * is to let people plan ahead, not just to fill space. */
+    advantages: string[];
+    available: boolean;
+}
+
+const CLOUDS: CloudOption[] = [
+    {
+        value: "onprem",
+        label: "On-premise",
+        advantages: [
+            "No data egress cost",
+            "Full infrastructure control",
+            "Already live — zero setup wait",
+        ],
+        available: true,
+    },
+    {
+        value: "aws",
+        label: "AWS",
+        advantages: [
+            "Widest catalog of managed services",
+            "Mature IAM & compliance tooling",
+            "Broad global region coverage",
+        ],
+        available: false,
+    },
+    {
+        value: "gcp",
+        label: "GCP",
+        advantages: [
+            "Native Kubernetes heritage",
+            "Typically the most competitive compute pricing",
+            "Strong data & AI tooling",
+        ],
+        available: false,
+    },
+];
 
 interface Props {
     open: boolean;
@@ -33,6 +77,7 @@ function validateName(name: string): string | null {
 
 export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     const [name, setName] = useState("");
+    const [targetCloud, setTargetCloud] = useState<TargetCloud>("onprem");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +86,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     useEffect(() => {
         if (open) {
             setName("");
+            setTargetCloud("onprem");
             setError(null);
             setTimeout(() => inputRef.current?.focus(), 100);
         }
@@ -58,9 +104,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         setLoading(true);
         setError(null);
         try {
-            await createProject(trimmed);
+            await createProject(trimmed, targetCloud);
             toast.success(
-                `Project "${trimmed}" is being bootstrapped. Keycloak groups and ArgoCD AppProject will be ready shortly.`,
+                `Project "${trimmed}" is being bootstrapped on ${targetCloud}. Keycloak groups and ArgoCD AppProject will be ready shortly.`,
                 { duration: 6000 },
             );
             onCreated(trimmed);
@@ -119,6 +165,69 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         )}
                     </div>
 
+                    <div className="space-y-2">
+                        <Label>
+                            Target Cloud <span className="text-destructive">*</span>
+                        </Label>
+                        <div
+                            role="radiogroup"
+                            aria-label="Target Cloud"
+                            className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+                        >
+                            {CLOUDS.map((cloud) => {
+                                const selected = targetCloud === cloud.value;
+                                return (
+                                    <button
+                                        key={cloud.value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={selected}
+                                        disabled={loading || !cloud.available}
+                                        onClick={() => setTargetCloud(cloud.value)}
+                                        className={`relative flex flex-col gap-1.5 rounded-lg border p-3 text-left text-xs transition-colors ${
+                                            selected
+                                                ? "border-primary bg-primary/5"
+                                                : "border-input hover:bg-muted/40"
+                                        } ${
+                                            !cloud.available
+                                                ? "cursor-not-allowed opacity-50 hover:bg-transparent"
+                                                : "cursor-pointer"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-1">
+                                            <span className="font-medium text-foreground">
+                                                {cloud.label}
+                                            </span>
+                                            {selected ? (
+                                                <Check className="h-3.5 w-3.5 text-primary" />
+                                            ) : !cloud.available ? (
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-[10px] px-1.5 py-0"
+                                                >
+                                                    Coming soon
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                        <ul className="space-y-0.5 text-muted-foreground">
+                                            {cloud.advantages.map((a) => (
+                                                <li key={a}>{a}</li>
+                                            ))}
+                                        </ul>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            AWS and GCP need a cluster registered by the infra team before
+                            they can be selected.{" "}
+                            <span className="text-foreground">
+                                This cannot be changed later
+                            </span>{" "}
+                            — moving a project means re-creating it.
+                        </p>
+                    </div>
+
                     <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
                         <div className="font-medium text-foreground mb-1.5">
                             What will be created
@@ -136,7 +245,15 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                            ArgoCD AppProject
+                            ArgoCD AppProject on{" "}
+                            <span className="font-mono">{targetCloud}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary/25" />
+                            Registry record:{" "}
+                            <span className="font-mono">
+                                registry/projects/{name || "…"}.yaml
+                            </span>
                         </div>
                     </div>
 
