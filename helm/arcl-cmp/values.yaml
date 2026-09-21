@@ -104,11 +104,7 @@ affinity: {}
 env:
   backend:
     DATABASE_URL: "sqlite:////app/db/arcl.db"
-    TF_BACKEND_S3_ENABLED: true
-    OS_USER_DOMAIN_NAME: "Default"
-    OS_PROJECT_DOMAIN_NAME: "Default"
-    AWS_DEFAULT_REGION: "eu-west-3"
-    OS_ENDPOINT_TYPE: "internalURL"
+    TF_BACKEND_S3_ENABLED: "true"
 
 # Secrets (should be created separately or use external-secrets)
 secrets:

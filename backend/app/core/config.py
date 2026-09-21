@@ -10,7 +10,11 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "CMP API"
-    DEBUG: bool = False
+    DEBUG: bool = True
+
+    # FinOps — comma-separated Keycloak usernames granted the global
+    # "Admin CNP" role (visibility over every project's costs).
+    FINOPS_ADMIN_USERS: str = ""
 
     # Database
     DATABASE_URL: str = "sqlite:///./arcl.db"
@@ -22,9 +26,15 @@ class Settings(BaseSettings):
     TF_BACKEND_AWS_REGION: str = "eu-west-3"
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
-    TF_BACKEND_S3_DYNAMODB_TABLE: str = (
-        ""  # Optional: leave empty to disable locking
-    )
+    # Locking is not optional (D-09): with the S3 backend enabled and no lock
+    # table configured, the runner refuses to start rather than warning. Two
+    # concurrent applies on the same project corrupt state silently.
+    TF_BACKEND_S3_DYNAMODB_TABLE: str = ""
+
+    # Project registry — the Git source of truth for project placement (D-01)
+    CNP_REGISTRY_REPO: str = "3-Istor/cnp-projects"
+    CNP_REGISTRY_BRANCH: str = "main"
+    CNP_REGISTRY_PATH_PREFIX: str = "registry/projects"
 
     # OpenStack - loaded from environment (required for deployments)
     OS_AUTH_URL: str = ""
@@ -33,7 +43,9 @@ class Settings(BaseSettings):
     OS_PROJECT_NAME: str = "3-istor-cloud"
     OS_USER_DOMAIN_NAME: str = "Default"
     OS_PROJECT_DOMAIN_NAME: str = "Default"
-    OS_ENDPOINT_TYPE: str = "internalURL"  # Use internal endpoints for better performance
+    OS_ENDPOINT_TYPE: str = (
+        "internalURL"  # Use internal endpoints for better performance
+    )
     OS_IDENTITY_API_VERSION: str = "3"
     OS_REGION_NAME: str = "RegionOne"
 
@@ -41,6 +53,7 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_DEFAULT_REGION: str = "eu-west-3"
+    AWS_INSTANCE_TYPE: str = "t3.micro"  # Budget-safe instance type
 
     # User Avatars S3 Storage (self-managed S3-compatible storage)
     AVATARS_S3_ENDPOINT: str = "https://s3.3istor.com"
@@ -50,17 +63,38 @@ class Settings(BaseSettings):
     AVATARS_S3_REGION: str = "eu-west-3"
     AVATARS_PUBLIC_URL_BASE: str = "https://avatars-s3.3istor.com"
 
-    # Keycloak (for user profile management)
+    # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
     KEYCLOAK_CLIENT_ID: str = "3-istor-openid"
     KEYCLOAK_CLIENT_SECRET: str = ""
+    # Admin credentials used by Terraform k3s-project-bootstrap module
+    KEYCLOAK_ADMIN_USERNAME: str = ""
+    KEYCLOAK_ADMIN_PASSWORD: str = ""
+
+    # Vault (for secret management in Terraform modules)
+    VAULT_URL: str = ""
+    VAULT_TOKEN: str = ""
 
     # Cloudflare (for dynamic DNS in Terraform templates)
     CLOUDFLARE_API_TOKEN: str = ""
     CLOUDFLARE_ZONE_ID: str = ""
+    CLOUDFLARE_ACCOUNT_ID: str = ""
 
     # Discord Alerting (optional - for health monitoring alerts)
     DISCORD_WEBHOOK_URL: str = ""
+
+    # GitHub App Integration (for Kubernetes GitOps provisioning)
+    GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
+    # Installation ID of the GitHub App on the 3-Istor org — used to mint
+    # installation tokens for org-level Terraform operations (e.g. project bootstrap)
+    GITHUB_INSTALLATION_ID: str = ""
+
+    # GitHub Registry (GHCR) Token for pulling private container images
+    # Personal Access Token (PAT) with read:packages scope
+    GITHUB_REGISTRY_USERNAME: str = ""
+    GITHUB_REGISTRY_TOKEN: str = ""
+
+    GRAFANA_ADMIN_PASSWORD: str = ""
 
 
 settings = Settings()

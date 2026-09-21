@@ -80,6 +80,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 );
               }
             }
+            // Sauvegarder le prénom/nom dans la session
+            if (userData.given_name) token.given_name = userData.given_name;
+            if (userData.family_name) token.family_name = userData.family_name;
+            if (userData.name) token.name = userData.name;
           } else if (trigger === "update") {
             console.error(
               "JWT callback - failed to refresh user data:",

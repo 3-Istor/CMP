@@ -1,0 +1,54 @@
+# ══════════════════════════════════════════════════════════════════════════
+# 🚀 CNP Application Configuration
+# ══════════════════════════════════════════════════════════════════════════
+# This file is the source of truth for your application's infrastructure.
+# You can edit these values manually or via the CMP Dashboard.
+# ArgoCD will automatically apply changes to the cluster.
+
+# -- Application Metadata
+appName: ${app_name}
+projectName: ${project_name}
+
+# -- Number of application pods running simultaneously
+replicaCount: ${replica_count}
+
+# -- Container Image (Automatically updated by CI/CD & ArgoCD Image Updater)
+image:
+  repository: ghcr.io/CHANGE-ME/${app_name}
+  tag: "latest"  # Will be updated by ArgoCD Image Updater
+  pullPolicy: IfNotPresent
+
+# -- Compute Resources (CPU & Memory)
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# -- Networking & Edge Security
+ingress:
+  enabled: true
+  # If true, Envoy Gateway will enforce Keycloak SSO authentication
+  sso_protected: ${sso_protected}
+  hostname: ${app_name}.3istor.com
+
+# -- Environment Variables
+env:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+
+# -- Secrets Management
+# Secrets are automatically injected by the Vault Secrets Operator
+# via the 'kvv2/projects/${project_name}/${app_name}/' Vault path
+secrets:
+  enabled: true
+  vaultPath: "kvv2/data/projects/${project_name}/${app_name}"
+
+# -- Database (CloudNativePG)
+database:
+  enabled: false
+  type: "postgres"
+  instances: 3
+  storageSize: "10Gi"
+  backupBucket: "project-backups"

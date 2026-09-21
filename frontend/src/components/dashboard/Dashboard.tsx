@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { DeploymentCard } from "./DeploymentCard";
 
 export function Dashboard() {
-  const { deployments, loading, refresh } = useDeploymentsList(3000); // Keep 3s refresh for deployments
+  // Fast (3s) only while a deployment is in progress; idle every 10s otherwise.
+  const { deployments, loading, refresh } = useDeploymentsList(3000, 10000);
 
   const handleDelete = async (id: number) => {
     try {

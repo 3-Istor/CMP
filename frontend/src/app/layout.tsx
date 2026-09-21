@@ -1,3 +1,4 @@
+import { AppShell } from "@/components/layout/AppShell";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
@@ -13,8 +14,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CMP - Hybrid Cloud Management",
-  description: "Self-service hybrid cloud management platform",
+  title: "CNP - Cloud Native Platform",
+  description: "Self-service cloud native platform",
 };
 
 export default function RootLayout({
@@ -39,7 +40,7 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
       >
         <SessionProvider>
-          {children}
+          <AppShell>{children}</AppShell>
           <Toaster richColors position="bottom-right" />
         </SessionProvider>
       </body>

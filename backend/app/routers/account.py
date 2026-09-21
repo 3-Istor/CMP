@@ -14,9 +14,17 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.schemas.account import PictureUploadResponse, UserProfile
+from app.core.database import get_db
+from app.models.user_github import UserGitHubInstallation
+from app.schemas.account import (
+    GitHubInstallationRequest,
+    GitHubInstallationResponse,
+    PictureUploadResponse,
+    UserProfile,
+)
 
 router = APIRouter(prefix="/account", tags=["Account"])
 security = HTTPBearer(auto_error=True)
@@ -35,7 +43,12 @@ async def get_current_user(
     try:
         # Decode without verification (Envoy already validated it)
         payload = jwt.decode(
-            token, options={"verify_signature": False, "verify_aud": False}
+            token,
+            options={
+                "verify_signature": False,
+                "verify_aud": False,
+                "verify_exp": False,
+            },
         )
         return payload
     except jwt.DecodeError as e:
@@ -49,6 +62,7 @@ async def get_user_profile(
     request: Request,
     token_payload: Annotated[dict, Depends(get_current_user)],
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    db: Session = Depends(get_db),
 ) -> UserProfile:
     """
     Get current user profile with fresh data from Keycloak.
@@ -65,14 +79,20 @@ async def get_user_profile(
 
     # Get picture from token as fallback
     picture = token_payload.get("picture")
+    github_installation_id = None
 
-    # Try to fetch fresh picture from Keycloak Admin API
-    # Use preferred_username which is the actual username in Keycloak
+    # Initialize fallback variables for name from Keycloak Admin API
+    keycloak_first_name = None
+    keycloak_last_name = None
+
+    # Initialize variables
     user_sub = token_payload.get("preferred_username") or token_payload.get(
         "sub", ""
     )
-    user_uuid = None  # Will store the actual UUID
-    print(f"DEBUG /me: Looking up user: {user_sub}")
+    user_uuid = None
+    keycloak_first_name = None
+    keycloak_last_name = None
+    github_installation_id = None
 
     try:
         # Get admin token
@@ -89,7 +109,6 @@ async def get_user_profile(
         if token_response.ok:
             admin_token = token_response.json()["access_token"]
 
-            # Search for user by username to get UUID
             search_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
             search_response = requests.get(
                 search_url,
@@ -98,73 +117,54 @@ async def get_user_profile(
                 timeout=10,
             )
 
-            if search_response.ok:
-                users = search_response.json()
-                if users:
-                    user_uuid = users[0]["id"]
-                    print(f"DEBUG /me: Found user UUID: {user_uuid}")
+            if search_response.ok and search_response.json():
+                user_uuid = search_response.json()[0]["id"]
 
-                    # Get user details including attributes
-                    user_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{user_uuid}"
-                    user_response = requests.get(
-                        user_url,
-                        headers={"Authorization": f"Bearer {admin_token}"},
-                        timeout=10,
-                    )
-
-                    if user_response.ok:
-                        user_data = user_response.json()
-                        print(
-                            f"DEBUG /me: User data attributes: {user_data.get('attributes', {})}"
-                        )
-                        # Extract picture from attributes
-                        if (
-                            "attributes" in user_data
-                            and "picture" in user_data["attributes"]
-                        ):
-                            picture_list = user_data["attributes"]["picture"]
-                            if picture_list and len(picture_list) > 0:
-                                picture = picture_list[0]
-                                print(
-                                    f"DEBUG /me: Retrieved picture from Keycloak: {picture}"
-                                )
-                        else:
-                            print(
-                                f"DEBUG /me: No picture attribute found in user data"
-                            )
-                    else:
-                        print(
-                            f"DEBUG /me: Failed to get user details: {user_response.status_code}"
-                        )
-                else:
-                    print(
-                        f"DEBUG /me: No users found for username: {user_sub}"
-                    )
-            else:
-                print(
-                    f"DEBUG /me: Search failed: {search_response.status_code}"
+                user_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{user_uuid}"
+                user_response = requests.get(
+                    user_url,
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                    timeout=10,
                 )
-        else:
-            print(
-                f"DEBUG /me: Failed to get admin token: {token_response.status_code}"
-            )
-    except requests.RequestException as e:
-        # Log error but don't fail the request - use JWT picture as fallback
-        print(f"Warning /me: Failed to fetch user data from Keycloak: {e}")
 
-    print(f"DEBUG /me: Returning picture: {picture}")
+                if user_response.ok:
+                    user_data = user_response.json()
+                    keycloak_first_name = user_data.get("firstName")
+                    keycloak_last_name = user_data.get("lastName")
+
+                    attributes = user_data.get("attributes", {})
+                    if "picture" in attributes and attributes["picture"]:
+                        picture = attributes["picture"][0]
+
+    except Exception as e:
+        print(f"Warning /me: Failed to fetch user data: {e}")
+
+    # Récupérer l'ID d'installation GitHub depuis la base de données
+    if user_sub:
+        github_record = (
+            db.query(UserGitHubInstallation)
+            .filter(UserGitHubInstallation.user_sub == user_sub)
+            .first()
+        )
+        if github_record:
+            github_installation_id = github_record.installation_id
+
+    # Construire le nom complet en évitant les "null null"
+    computed_name = token_payload.get("name")
+    if not computed_name and (keycloak_first_name or keycloak_last_name):
+        computed_name = (
+            f"{keycloak_first_name or ''} {keycloak_last_name or ''}".strip()
+        )
 
     return UserProfile(
-        sub=user_uuid
-        or token_payload.get(
-            "sub", ""
-        ),  # Use UUID if found, otherwise fallback to token sub
+        sub=user_uuid or token_payload.get("sub", ""),
         email=token_payload.get("email", ""),
-        given_name=token_payload.get("given_name"),
-        family_name=token_payload.get("family_name"),
-        name=token_payload.get("name"),
+        given_name=token_payload.get("given_name") or keycloak_first_name,
+        family_name=token_payload.get("family_name") or keycloak_last_name,
+        name=computed_name,
         picture=picture,
         groups=groups,
+        github_installation_id=github_installation_id,
     )
 
 
@@ -366,3 +366,97 @@ async def upload_profile_picture(
         message="Profile picture updated successfully",
         picture_url=public_url,
     )
+
+
+@router.post("/github-installation", response_model=GitHubInstallationResponse)
+async def save_github_installation(
+    request_data: GitHubInstallationRequest,
+    token_payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GitHubInstallationResponse:
+    """
+    Save GitHub App installation ID to database.
+
+    This endpoint is called either:
+    1. Automatically when GitHub redirects back after app installation
+    2. Manually when user enters existing installation ID
+    """
+    installation_id = request_data.installation_id.strip()
+
+    if not installation_id:
+        raise HTTPException(
+            status_code=400, detail="Installation ID cannot be empty"
+        )
+
+    # Get user identifier from token (use preferred_username for consistency)
+    user_sub = (
+        token_payload.get("preferred_username")
+        or token_payload.get("sub")
+        or token_payload.get("username")
+    )
+
+    if not user_sub:
+        raise HTTPException(
+            status_code=400,
+            detail=f"User identifier not found in token. Available fields: {list(token_payload.keys())}",
+        )
+
+    try:
+        print(
+            f"DEBUG /github-installation: Saving installation_id {installation_id} for user {user_sub}"
+        )
+
+        # Check if record exists
+        existing = (
+            db.query(UserGitHubInstallation)
+            .filter(UserGitHubInstallation.user_sub == user_sub)
+            .first()
+        )
+
+        if existing:
+            # Update existing record
+            print(
+                f"DEBUG /github-installation: Updating existing record (old ID: {existing.installation_id})"
+            )
+            existing.installation_id = installation_id
+        else:
+            # Create new record
+            print(f"DEBUG /github-installation: Creating new record")
+            new_record = UserGitHubInstallation(
+                user_sub=user_sub, installation_id=installation_id
+            )
+            db.add(new_record)
+
+        db.commit()
+
+        # Verify the save
+        verify_record = (
+            db.query(UserGitHubInstallation)
+            .filter(UserGitHubInstallation.user_sub == user_sub)
+            .first()
+        )
+
+        if verify_record and verify_record.installation_id == installation_id:
+            print(
+                f"DEBUG /github-installation: Successfully saved and verified installation_id"
+            )
+            return GitHubInstallationResponse(
+                message="GitHub installation ID saved successfully",
+                installation_id=installation_id,
+            )
+        else:
+            print(
+                f"ERROR /github-installation: Verification failed after save"
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to verify saved installation ID",
+            )
+
+    except Exception as e:
+        db.rollback()
+        print(f"ERROR /github-installation: Database error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save GitHub installation ID: {str(e)}",
+        ) from e

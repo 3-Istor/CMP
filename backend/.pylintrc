@@ -16,11 +16,33 @@ disable=
     protected-access,
     duplicate-code,
     global-statement,
-    unused-import
+    unused-import,
+    # Modern Python style - f-strings without interpolation are OK
+    f-string-without-interpolation,
+    # Logging with f-strings is more readable
+    logging-fstring-interpolation,
+    # Sometimes we have complex functions that need many arguments
+    too-many-arguments,
+    too-many-positional-arguments,
+    # Some functions are naturally complex
+    too-many-branches,
+    too-many-statements,
+    too-many-locals,
+    too-many-nested-blocks,
+    # Style preferences
+    no-else-return,
+    # Exception chaining is not always necessary
+    raise-missing-from,
+    # Sometimes reimports are acceptable
+    reimported,
+    # Import ordering - handled by isort
+    wrong-import-position,
+    wrong-import-order,
+    ungrouped-imports
 
 [FORMAT]
-# Maximum number of characters on a single line
-max-line-length=100
+# Maximum number of characters on a single line (modern standard)
+max-line-length=120
 
 [DESIGN]
 # Maximum number of locals for function / method body

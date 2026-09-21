@@ -3,18 +3,31 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
-  const isAuthPage = req.nextUrl.pathname.startsWith("/auth");
+  const { pathname } = req.nextUrl;
+  const isAuthPage = pathname.startsWith("/auth");
+  const isWelcomePage = pathname === "/welcome";
 
-  // Allow auth pages without login
+  // Auth pages (Keycloak redirect dance) are always reachable.
   if (isAuthPage) {
     return NextResponse.next();
   }
 
-  // Redirect to signin if not logged in
+  // The public landing page is for visitors who aren't signed in yet — send
+  // authenticated users straight to the app instead.
+  if (isWelcomePage) {
+    if (isLoggedIn) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Everything else is protected: unauthenticated users land on the marketing
+  // homepage, which carries the original destination so we can return there
+  // once they log in.
   if (!isLoggedIn) {
-    const signInUrl = new URL("/auth/signin", req.url);
-    signInUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
-    return NextResponse.redirect(signInUrl);
+    const welcomeUrl = new URL("/welcome", req.url);
+    welcomeUrl.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(welcomeUrl);
   }
 
   return NextResponse.next();

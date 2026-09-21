@@ -9,6 +9,8 @@ export type DeploymentStatus =
   | "deleting"
   | "deleted";
 
+export type ProviderType = "legacy_hybrid" | "kubernetes";
+
 export interface Deployment {
   id: number;
   name: string;
@@ -22,7 +24,74 @@ export interface Deployment {
   resource_count: number | null;
   created_at: string;
   updated_at: string;
+
+  // Phase 3: Multi-Provider Support
+  provider_type: ProviderType;
+  project_id: string | null;
+  github_repo_url: string | null;
+  argocd_app_name: string | null;
+  k8s_namespace: string | null;
 }
+
+// ── Projects (Phase 4) ────────────────────────────────────────────────────────
+
+export type ProjectRole = "owner" | "admin" | "member";
+
+/** The cloud a project's workloads run on. Immutable after creation. */
+export type TargetCloud = "onprem" | "aws" | "gcp";
+
+export interface Project {
+  name: string;
+  role: ProjectRole;
+  target_cloud: TargetCloud;
+}
+
+export interface ProjectCreateResponse {
+  message: string;
+  project_name: string;
+  target_cloud: TargetCloud;
+  status: string;
+}
+
+export interface ProjectMember {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: ProjectRole;
+}
+
+export interface ProjectMembersResponse {
+  project_name: string;
+  members: ProjectMember[];
+}
+
+export interface AddMemberResponse {
+  message: string;
+  project_name: string;
+  username: string;
+  role: string;
+}
+
+// ── Day-2 GitOps Config (Phase 4) ─────────────────────────────────────────────
+
+export interface DeploymentConfig {
+  repo: string;
+  file_path: string;
+  /** File SHA — must be echoed back in PATCH requests */
+  _sha: string;
+  config: Record<string, unknown>;
+}
+
+export interface DeploymentConfigUpdateResponse {
+  message: string;
+  repo: string;
+  file_path: string;
+  commit_sha: string;
+  changed_keys: string[];
+}
+
+// ── Terraform / Catalog ───────────────────────────────────────────────────────
 
 export interface TerraformOutputs {
   [key: string]: string | number | boolean | null;
@@ -48,7 +117,8 @@ export interface CatalogTemplate {
   enabled?: boolean;
 }
 
-// Infrastructure Monitoring Types
+// ── Infrastructure Monitoring ─────────────────────────────────────────────────
+
 export interface VPNStatus {
   name: string;
   status: string;
@@ -98,7 +168,8 @@ export interface AppHealthResponse {
   openstack_backend: OpenStackBackendHealth | null;
 }
 
-// Account & Profile Types
+// ── Account & Profile ─────────────────────────────────────────────────────────
+
 export interface UserProfile {
   sub: string;
   email: string;
@@ -107,9 +178,129 @@ export interface UserProfile {
   name: string | null;
   picture: string | null;
   groups: string[];
+  github_installation_id?: string | null; // Phase 3: GitHub App integration
+}
+
+export interface GitHubStatus {
+  github_installation_id: string | null;
+}
+
+export interface GitHubInstallationResponse {
+  message: string;
+  installation_id: string;
 }
 
 export interface PictureUploadResponse {
   message: string;
   picture_url: string;
+}
+
+export interface KeycloakUserResult {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+// ── FinOps ────────────────────────────────────────────────────────────────────
+
+export type FinopsResource = "cpu" | "ram" | "storage" | "network";
+
+export interface CostBreakdown {
+  cpu: number;
+  ram: number;
+  storage: number;
+  network: number;
+}
+
+export interface CostSummary {
+  month_to_date_eur: number;
+  projected_month_eur: number;
+  previous_month_eur: number;
+  trend_pct: number | null;
+  breakdown: CostBreakdown;
+  potential_savings_eur: number;
+  app_count: number;
+  currency: string;
+}
+
+export interface CostSeriesPoint {
+  date: string;
+  cpu: number;
+  ram: number;
+  storage: number;
+  network: number;
+  total: number;
+}
+
+export interface AppCostRow {
+  app_id: number;
+  name: string;
+  project_id: string | null;
+  cost_per_day_eur: number;
+  cost_month_estimate_eur: number;
+  month_to_date_eur: number;
+  trend_pct: number | null;
+}
+
+export interface Budget {
+  project_name: string;
+  monthly_amount_eur: number;
+  threshold_warn: number;
+  threshold_critical: number;
+  currency: string;
+  spent_eur: number;
+  remaining_eur: number;
+  consumed_pct: number | null;
+  status: "ok" | "warning" | "critical";
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface FinopsOverview {
+  summary: CostSummary;
+  budget: Budget | null;
+  apps: AppCostRow[];
+  timeline: CostSeriesPoint[];
+}
+
+export type RecommendationType =
+  | "replicas"
+  | "rightsizing"
+  | "inactivity"
+  | "storage";
+
+export interface Recommendation {
+  id: string;
+  app_id: number;
+  app_name: string;
+  project_id: string | null;
+  rec_type: RecommendationType;
+  title: string;
+  justification: string;
+  current: Record<string, string | number>;
+  recommended: Record<string, string | number>;
+  monthly_saving_eur: number;
+  confidence: number;
+  effort: "low" | "medium" | "high";
+  status: "pending" | "applied" | "ignored" | "notified";
+  can_apply: boolean;
+}
+
+export interface CostAlert {
+  id: number;
+  project_name: string;
+  app_id: number | null;
+  level: "info" | "warning" | "critical";
+  kind: "budget" | "spike";
+  message: string;
+  value_pct: number | null;
+  triggered_at: string;
+}
+
+export interface FinopsActionResponse {
+  message: string;
+  rec_id: string;
+  status: string;
+  commit_sha: string | null;
 }

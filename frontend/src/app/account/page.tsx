@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { GitHubLinkButton } from "@/components/account/GitHubLinkButton";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -206,7 +207,9 @@ export default function AccountPage() {
                 />
                 <div className="flex-1">
                   <h3 className="text-xl font-semibold">
-                    {user.name || `${user.given_name} ${user.family_name}`}
+                    {user.name ||
+                      `${user.given_name || ""} ${user.family_name || ""}`.trim() ||
+                      user.email}
                   </h3>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                   {user.groups.length > 0 && (
@@ -361,6 +364,9 @@ export default function AccountPage() {
               </p>
             </CardContent>
           </Card>
+
+          {/* GitHub Integration Card */}
+          <GitHubLinkButton />
         </div>
       </main>
     </div>
