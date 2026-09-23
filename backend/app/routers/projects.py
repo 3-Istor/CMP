@@ -207,14 +207,14 @@ async def list_projects(
     Projects the user owns (created) are returned with role ``"owner"``.
     """
     username = token_payload.get("preferred_username", "")
-    logger.info(f"🔍 Fetching projects for username='{username}'")
+    logger.debug(f"🔍 Fetching projects for username='{username}'")
 
     user_id = get_user_id_from_token(token_payload)
-    logger.info(f"🔍 Using user_id='{user_id}'")
+    logger.debug(f"🔍 Using user_id='{user_id}'")
 
     projects = fetch_user_projects_from_keycloak(user_id)
 
-    logger.info(
+    logger.debug(
         f"📋 Found {len(projects)} projects for user: {[p['name'] for p in projects]}"
     )
 

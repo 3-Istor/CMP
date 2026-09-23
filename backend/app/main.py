@@ -23,8 +23,21 @@ from app.services.template_repository import get_repository
 # ══════════════════════════════════════════════════════════════════════════
 
 
+class _HealthProbeFilter(logging.Filter):
+    """Drop uvicorn access-log lines for /health.
+
+    Readiness and liveness probes hit this endpoint every 5-10s; logging each
+    one at INFO buries real request traffic.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/health" not in record.getMessage()
+
+
 def setup_logging():
     """Configure logging to output to both console and file."""
+    logging.getLogger("uvicorn.access").addFilter(_HealthProbeFilter())
+
     # Create logs directory
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
