@@ -104,6 +104,9 @@ affinity: {}
 env:
   backend:
     DATABASE_URL: "sqlite:////app/db/arcl.db"
+    # When true, secrets.aws.s3Bucket and secrets.aws.dynamodbTable are both
+    # required. Left true on purpose: flipping it to false would silently move
+    # project state to the pod's volume instead of failing loudly.
     TF_BACKEND_S3_ENABLED: "true"
 
 # Secrets (should be created separately or use external-secrets)
@@ -120,5 +123,8 @@ secrets:
     region: "eu-west-3"
     s3Bucket: ""
     s3KeyPrefix: ""
+    # Required when TF_BACKEND_S3_ENABLED is true (D-09): the S3 backend
+    # refuses to start without a lock table.
+    dynamodbTable: ""
   discord:
     webhookUrl: "" # Optional: Discord webhook for health alerts
