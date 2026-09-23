@@ -136,7 +136,7 @@ async def get_global_health() -> GlobalHealthResponse:
     - AWS VPN instances
     - OpenStack hypervisors
     """
-    logger.info("Starting global health check...")
+    logger.debug("Starting global health check...")
     try:
         # Run all checks concurrently with timeout
         os_vpn_task = asyncio.create_task(_get_openstack_vpn_status())
@@ -174,7 +174,7 @@ async def get_global_health() -> GlobalHealthResponse:
             logger.error("Failed to get hypervisor status: %s", hypervisors)
             hypervisors = []
 
-        logger.info("Global health check completed successfully")
+        logger.debug("Global health check completed successfully")
         return GlobalHealthResponse(
             openstack_vpn=os_vpn,
             aws_vpns=aws_vpns,
@@ -193,10 +193,10 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
     """
 
     def _fetch():
-        logger.info("Fetching OpenStack VPN status...")
+        logger.debug("Fetching OpenStack VPN status...")
         try:
             conn = _get_openstack_connection()
-            logger.info(
+            logger.debug(
                 "Searching for vpn-gateway server across all projects..."
             )
 
@@ -212,7 +212,7 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
                                 fixed_ip = addr["addr"]
                                 break
 
-                    logger.info(
+                    logger.debug(
                         "Found VPN gateway: %s (IP: %s)", server.name, fixed_ip
                     )
                     return VPNStatus(
@@ -252,7 +252,7 @@ async def _get_aws_vpn_status() -> list[VPNStatus]:
     """Get status of AWS VPN instances (tagged with Role=vpn)."""
 
     def _fetch():
-        logger.info("Fetching AWS VPN status...")
+        logger.debug("Fetching AWS VPN status...")
         try:
             ec2 = _get_boto3_client("ec2")
             response = ec2.describe_instances(
@@ -271,7 +271,7 @@ async def _get_aws_vpn_status() -> list[VPNStatus]:
                             ip=instance.get("PrivateIpAddress"),
                         )
                     )
-            logger.info("Found %d AWS VPN instances", len(vpns))
+            logger.debug("Found %d AWS VPN instances", len(vpns))
             return vpns
         except Exception as exc:
             logger.error("Error fetching AWS VPN: %s", exc, exc_info=True)
@@ -292,7 +292,7 @@ async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
     """
 
     def _fetch():
-        logger.info("Fetching OpenStack hypervisors...")
+        logger.debug("Fetching OpenStack hypervisors...")
         try:
             # Connect with admin project to bypass RBAC restrictions
             conn = _get_openstack_connection(project_override="admin")
@@ -317,7 +317,7 @@ async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
                         ip=host_ip,
                     )
                 )
-            logger.info("Found %d OpenStack hypervisors", len(hypervisors))
+            logger.debug("Found %d OpenStack hypervisors", len(hypervisors))
             return hypervisors
         except openstack.exceptions.HttpException as exc:
             error_msg = str(exc)
