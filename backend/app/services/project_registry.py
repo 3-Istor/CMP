@@ -85,6 +85,14 @@ def build_record(
             "features": {
                 "gatus": True,
                 "offhoursGuard": True,
+                # An app's DNS record always points at the project's own
+                # Cloudflare tunnel (D-06, k3s-gitops-app/main.tf), and that
+                # tunnel forwards to the project's own gateway — there is no
+                # code path where an app is reachable with either of these
+                # off. Both need to be on from project creation, not opted
+                # into later.
+                "gateway": True,
+                "tunnel": True,
             },
         },
     }
