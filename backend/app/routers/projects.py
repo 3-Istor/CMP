@@ -146,7 +146,11 @@ def get_user_id_from_token(token_payload: dict) -> str:
 
     # If sub is empty but we have username, lookup user_id from Keycloak
     if not user_id and username:
-        logger.warning(
+        # Every token issued in this environment is missing 'sub' — not an
+        # intermittent anomaly, so warning on every single request adds
+        # nothing (see CMP#38). Worth root-causing separately: this also
+        # means an extra Keycloak admin API round-trip on every request.
+        logger.debug(
             f"⚠️  Token missing 'sub' claim, looking up user_id from username '{username}'"
         )
         try:
@@ -159,7 +163,7 @@ def get_user_id_from_token(token_payload: dict) -> str:
             user = _find_user_by_username(username, admin_token)
             if user:
                 user_id = user["id"]
-                logger.info(
+                logger.debug(
                     f"✅ Found user_id '{user_id}' for username '{username}'"
                 )
             else:
@@ -444,13 +448,13 @@ async def list_project_apps(
     """
     user_id = get_user_id_from_token(token_payload)
 
-    logger.info(
+    logger.debug(
         f"🔍 Checking access for user_id='{user_id}' to project '{project_name}'"
     )
 
     # Quick check: is this user the creator (temporary during bootstrap)?
     if _project_creators.get(project_name) == user_id:
-        logger.info(
+        logger.debug(
             f"✅ User '{user_id}' is creator of project '{project_name}' (bootstrap in progress)"
         )
         # Allow access immediately for creator
@@ -470,7 +474,7 @@ async def list_project_apps(
                 f"⚠️  Creator mismatch: stored='{creator_id}', current='{user_id}'"
             )
         else:
-            logger.info(
+            logger.debug(
                 f"ℹ️  No creator stored for project '{project_name}', checking Keycloak groups"
             )
 
