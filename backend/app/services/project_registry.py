@@ -191,6 +191,131 @@ async def publish_record(
     )
 
 
+async def register_app(
+    project_name: str,
+    app_name: str,
+    app_type: str,
+    repo_url: str,
+    hostname: str,
+) -> None:
+    """
+    Add or update an app's entry in a project's registry record.
+
+    This is what puts the app in the connector's routing table and the
+    blackbox probe target list (see k3s-gitops-app/outputs.tf's ``hostname``
+    output) — an app whose Terraform apply succeeded but was never
+    registered here is unreachable: its Cloudflare tunnel and Gateway exist,
+    but nothing tells them the app's hostname.
+
+    Idempotent: re-registering an existing app (redeploy) updates its entry
+    in place rather than duplicating it.
+
+    Raises:
+        RegistryError: If the project has no record, or the registry cannot
+            be written.
+    """
+    existing = await read_record(project_name)
+    if existing is None:
+        raise RegistryError(
+            f"Cannot register app '{app_name}': project '{project_name}' "
+            "has no registry record."
+        )
+
+    record, sha = existing
+    apps: list[dict] = record.setdefault("spec", {}).setdefault("apps", [])
+    entry = {
+        "name": app_name,
+        "type": app_type,
+        "repoURL": repo_url,
+        "hostnames": {"prod": hostname},
+    }
+    for i, app in enumerate(apps):
+        if app.get("name") == app_name:
+            apps[i] = entry
+            break
+    else:
+        apps.append(entry)
+
+    buffer = StringIO()
+    _yaml.dump(record, buffer)
+
+    token = await _installation_token()
+    try:
+        await put_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            record_path(project_name),
+            buffer.getvalue(),
+            message=(
+                f"feat(registry): register app {app_name} on "
+                f"{project_name} [skip ci]"
+            ),
+            sha=sha,
+            branch=settings.CNP_REGISTRY_BRANCH,
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not register app '{app_name}' for '{project_name}': {exc}"
+        ) from exc
+
+    logger.info(
+        "Registered app '%s' (%s) on project '%s' with hostname '%s'",
+        app_name,
+        app_type,
+        project_name,
+        hostname,
+    )
+
+
+async def unregister_app(project_name: str, app_name: str) -> None:
+    """
+    Remove an app's entry from a project's registry record.
+
+    A project with no record, or a record with no matching app entry, is not
+    an error — the app may already be gone, or the project itself may have
+    been torn down first.
+
+    Raises:
+        RegistryError: If the registry cannot be written.
+    """
+    existing = await read_record(project_name)
+    if existing is None:
+        return
+
+    record, sha = existing
+    apps: list[dict] = record.get("spec", {}).get("apps", [])
+    remaining = [app for app in apps if app.get("name") != app_name]
+    if len(remaining) == len(apps):
+        return
+    record["spec"]["apps"] = remaining
+
+    buffer = StringIO()
+    _yaml.dump(record, buffer)
+
+    token = await _installation_token()
+    try:
+        await put_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            record_path(project_name),
+            buffer.getvalue(),
+            message=(
+                f"feat(registry): unregister app {app_name} on "
+                f"{project_name} [skip ci]"
+            ),
+            sha=sha,
+            branch=settings.CNP_REGISTRY_BRANCH,
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not unregister app '{app_name}' for '{project_name}': {exc}"
+        ) from exc
+
+    logger.info(
+        "Unregistered app '%s' from project '%s'", app_name, project_name
+    )
+
+
 async def remove_record(project_name: str) -> None:
     """
     Remove a project's registry record.
