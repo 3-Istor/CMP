@@ -254,6 +254,48 @@ def run_deployment(deployment_id: int) -> None:
             if outputs.get("k8s_namespace"):
                 deployment.k8s_namespace = outputs["k8s_namespace"]
 
+            # Register the app's hostname in the project's registry record —
+            # this is what puts it in the connector's routing table
+            # (k3s-gitops-app/outputs.tf's hostname output description).
+            # Without it the app's tunnel and Gateway exist but nothing tells
+            # them the hostname, and every request 404s at the connector.
+            # Best-effort: the deployment itself already succeeded, and a
+            # registry write failure here shouldn't be reported as a failed
+            # deployment.
+            if (
+                deployment.template_id == "k3s-gitops-app"
+                and outputs.get("hostname")
+            ):
+                import asyncio
+
+                from app.services.project_registry import (
+                    RegistryError,
+                    register_app,
+                )
+
+                try:
+                    asyncio.run(
+                        register_app(
+                            project_name=app_config["project_name"],
+                            app_name=deployment.name,
+                            app_type=outputs.get("app_type", "static"),
+                            repo_url=repo_url or "",
+                            hostname=outputs["hostname"],
+                        )
+                    )
+                    logger.info(
+                        "✅ Registered '%s' in the project registry",
+                        deployment.name,
+                    )
+                except RegistryError as exc:
+                    logger.error(
+                        "⚠️  Could not register '%s' in the project "
+                        "registry — its tunnel/Gateway will not route to "
+                        "it until this is retried: %s",
+                        deployment.name,
+                        exc,
+                    )
+
             state_summary = executor.get_state_summary()
             deployment.resource_count = state_summary.get("resource_count", 0)
             logger.info(f"Resources created: {deployment.resource_count}")
@@ -517,6 +559,32 @@ def run_deletion(deployment_id: int) -> None:
             )
             executor.destroy(app_config)
             logger.info("✅ Terraform destroy completed")
+
+            if (
+                deployment.template_id == "k3s-gitops-app"
+                and deployment.project_id
+            ):
+                import asyncio
+
+                from app.services.project_registry import (
+                    RegistryError,
+                    unregister_app,
+                )
+
+                try:
+                    asyncio.run(
+                        unregister_app(
+                            project_name=deployment.project_id,
+                            app_name=deployment.name,
+                        )
+                    )
+                except RegistryError as exc:
+                    logger.error(
+                        "⚠️  Could not unregister '%s' from the project "
+                        "registry — a stale hostname entry may remain: %s",
+                        deployment.name,
+                        exc,
+                    )
 
             _update(
                 db,
