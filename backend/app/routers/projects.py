@@ -146,7 +146,11 @@ def get_user_id_from_token(token_payload: dict) -> str:
 
     # If sub is empty but we have username, lookup user_id from Keycloak
     if not user_id and username:
-        logger.warning(
+        # Every token issued in this environment is missing 'sub' — not an
+        # intermittent anomaly, so warning on every single request adds
+        # nothing (see CMP#38). Worth root-causing separately: this also
+        # means an extra Keycloak admin API round-trip on every request.
+        logger.debug(
             f"⚠️  Token missing 'sub' claim, looking up user_id from username '{username}'"
         )
         try:
@@ -159,7 +163,7 @@ def get_user_id_from_token(token_payload: dict) -> str:
             user = _find_user_by_username(username, admin_token)
             if user:
                 user_id = user["id"]
-                logger.info(
+                logger.debug(
                     f"✅ Found user_id '{user_id}' for username '{username}'"
                 )
             else:
@@ -207,14 +211,14 @@ async def list_projects(
     Projects the user owns (created) are returned with role ``"owner"``.
     """
     username = token_payload.get("preferred_username", "")
-    logger.info(f"🔍 Fetching projects for username='{username}'")
+    logger.debug(f"🔍 Fetching projects for username='{username}'")
 
     user_id = get_user_id_from_token(token_payload)
-    logger.info(f"🔍 Using user_id='{user_id}'")
+    logger.debug(f"🔍 Using user_id='{user_id}'")
 
     projects = fetch_user_projects_from_keycloak(user_id)
 
-    logger.info(
+    logger.debug(
         f"📋 Found {len(projects)} projects for user: {[p['name'] for p in projects]}"
     )
 
@@ -348,20 +352,32 @@ async def create_project(
             payload.target_cloud.value,
         )
 
-    # Trigger bootstrap
-    background_tasks.add_task(
-        run_project_bootstrap,
-        project_name=payload.project_name,
-        target_cloud=payload.target_cloud.value,
-    )
+    # Bootstrap, then grant the creator admin on what it created. Starlette runs
+    # background tasks in order and awaits each one, so the grant already starts
+    # after Terraform has returned; what it was missing is whether Terraform
+    # succeeded. The groups only exist if it did.
+    bootstrap_outcome: dict[str, bool] = {}
 
-    # Add creator to project as admin (after a short delay to let Terraform finish)
+    def bootstrap_project():
+        bootstrap_outcome["ok"] = run_project_bootstrap(
+            project_name=payload.project_name,
+            target_cloud=payload.target_cloud.value,
+        )
+
+    background_tasks.add_task(bootstrap_project)
+
     async def add_creator_to_project():
-        """Add the project creator as admin after bootstrap completes."""
-        import asyncio
+        """Add the project creator as admin once bootstrap has succeeded."""
+        if not bootstrap_outcome.get("ok"):
+            logger.error(
+                "❌ Skipping creator grant for '%s': bootstrap failed, so "
+                "'project-%s-admins' was never created. Fix the bootstrap "
+                "error above and retry.",
+                payload.project_name,
+                payload.project_name,
+            )
+            return
 
-        # Wait for Terraform to create the groups
-        await asyncio.sleep(8)  # Reduced from 10s but not too short
         try:
             add_user_to_project(username, payload.project_name, "admin")
             logger.info(
@@ -432,13 +448,13 @@ async def list_project_apps(
     """
     user_id = get_user_id_from_token(token_payload)
 
-    logger.info(
+    logger.debug(
         f"🔍 Checking access for user_id='{user_id}' to project '{project_name}'"
     )
 
     # Quick check: is this user the creator (temporary during bootstrap)?
     if _project_creators.get(project_name) == user_id:
-        logger.info(
+        logger.debug(
             f"✅ User '{user_id}' is creator of project '{project_name}' (bootstrap in progress)"
         )
         # Allow access immediately for creator
@@ -458,7 +474,7 @@ async def list_project_apps(
                 f"⚠️  Creator mismatch: stored='{creator_id}', current='{user_id}'"
             )
         else:
-            logger.info(
+            logger.debug(
                 f"ℹ️  No creator stored for project '{project_name}', checking Keycloak groups"
             )
 

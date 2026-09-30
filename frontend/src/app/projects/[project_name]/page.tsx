@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
 import { useProjectApps } from "@/lib/hooks";
+import { addPendingDeletion, usePendingDeletions } from "@/lib/pendingDeletions";
 import type { CatalogTemplate } from "@/types";
 import {
   ArrowLeft,
@@ -42,6 +43,13 @@ export default function ProjectPage() {
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // If this project is already being torn down (e.g. reached via a stale
+  // tab or the back button after a delete elsewhere), don't render the
+  // normal admin UI — the Keycloak groups backing project access can
+  // disappear mid-render.
+  const pendingDeletions = usePendingDeletions();
+  const isBeingDeleted = pendingDeletions.some((d) => d.name === projectName);
 
   const {
     apps,
@@ -164,7 +172,12 @@ export default function ProjectPage() {
     try {
       await deleteProject(projectName);
 
-      toast.success(`Project "${projectName}" deleted successfully`);
+      // The call only schedules teardown — Keycloak group removal (which
+      // the project list is derived from) happens in the background and
+      // can take a while, so mark it as deleting rather than claim it's
+      // already gone.
+      addPendingDeletion(projectName);
+      toast.success(`Deletion of "${projectName}" started`);
       router.push("/");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -174,6 +187,39 @@ export default function ProjectPage() {
       setShowDeleteDialog(false);
     }
   };
+
+  if (isBeingDeleted) {
+    return (
+      <div className="min-h-screen">
+        <header className="border-b px-6 py-4 flex items-center gap-3">
+          <div className="ml-auto">
+            <UserNav />
+          </div>
+        </header>
+        <main className="px-6 py-8 max-w-3xl mx-auto">
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-destructive mb-4" />
+            <p className="font-medium">
+              &quot;{projectName}&quot; is being deleted
+            </p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+              Its resources are being torn down in the background. This page
+              will stay unavailable until that finishes.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => router.push("/")}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to projects
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

@@ -11,6 +11,10 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
 import {
+  prunePendingDeletions,
+  usePendingDeletions,
+} from "@/lib/pendingDeletions";
+import {
   addPendingProject,
   prunePendingProjects,
   usePendingProjects,
@@ -27,6 +31,11 @@ export default function Home() {
   // optimistically with a loading bar until they appear in the real list.
   // Backed by localStorage so the card persists across reloads.
   const pendingProjects = usePendingProjects();
+  // Projects whose delete was just confirmed and are still tearing down —
+  // the project list is derived from Keycloak group membership, which only
+  // clears once the background Terraform destroy finishes, so the project
+  // stays in `projects` for a while after the delete call returns.
+  const pendingDeletions = usePendingDeletions();
 
   const {
     projects,
@@ -47,6 +56,12 @@ export default function Home() {
     prunePendingProjects(projects);
   }, [projects]);
 
+  // Drop pending-deletion entries once the project has actually left the
+  // real list.
+  useEffect(() => {
+    prunePendingDeletions(projects);
+  }, [projects]);
+
   // Only render placeholders that aren't already in the real list. Once a
   // pending project appears in `projects`, it drops out of this derived list
   // which both hides its placeholder and stops the polling effect below.
@@ -54,12 +69,12 @@ export default function Home() {
     (p) => !projects.some((real) => real.name === p.name),
   );
 
-  // Poll the project list while any creation is still in flight.
+  // Poll the project list while any creation or deletion is still in flight.
   useEffect(() => {
-    if (visiblePending.length === 0) return;
+    if (visiblePending.length === 0 && pendingDeletions.length === 0) return;
     const interval = setInterval(refreshProjects, 3000);
     return () => clearInterval(interval);
-  }, [visiblePending.length, refreshProjects]);
+  }, [visiblePending.length, pendingDeletions.length, refreshProjects]);
 
   const userName =
     session?.user?.name ||
@@ -133,9 +148,18 @@ export default function Home() {
                   createdAt={p.ts}
                 />
               ))}
-              {projects.map((p) => (
-                <ProjectCard key={p.name} project={p} />
-              ))}
+              {projects.map((p) => {
+                const deletion = pendingDeletions.find(
+                  (d) => d.name === p.name,
+                );
+                return (
+                  <ProjectCard
+                    key={p.name}
+                    project={p}
+                    deletingSince={deletion?.ts}
+                  />
+                );
+              })}
             </div>
           )}
         </section>

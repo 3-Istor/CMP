@@ -232,7 +232,7 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         List of project dicts:
         ``[{"name": "sandbox", "role": "admin"}, ...]``
     """
-    logger.info(f"🔍 Fetching groups from Keycloak for user_id: {user_id}")
+    logger.debug(f"🔍 Fetching groups from Keycloak for user_id: {user_id}")
 
     try:
         admin_token = _get_admin_token()
@@ -248,7 +248,7 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         response.raise_for_status()
         groups: list[dict] = response.json()
 
-        logger.info(
+        logger.debug(
             f"📋 Keycloak returned {len(groups)} groups for user {user_id}"
         )
         logger.debug(f"Raw groups: {[g.get('name') for g in groups]}")
@@ -274,7 +274,7 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
                     f"  ✅ Matched project group: {group_name} → project={project_name}, role={role}"
                 )
 
-    logger.info(
+    logger.debug(
         f"📊 Extracted {len(projects)} projects: {list(projects.keys())}"
     )
 
