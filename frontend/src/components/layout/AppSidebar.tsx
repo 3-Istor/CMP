@@ -6,9 +6,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDeploymentsList, useProjects } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import {
+  BookOpen,
   Boxes,
   ChevronLeft,
   Crown,
+  ExternalLink,
+  Eye,
   FolderKanban,
   Home,
   PanelLeft,
@@ -58,9 +61,15 @@ export function AppSidebar() {
   // The sidebar list rarely needs fresh data: 15s while active, 30s when idle.
   const { deployments, loading: loadingApps } = useDeploymentsList(15000, 30000);
 
-  // Only deployments that belong to a project (and are not deleted) are linkable
+  // Only deployments that belong to a project (and are not deleted) are
+  // linkable. The project check is redundant with the server-side scoping on
+  // `GET /deployments/`, and kept so a stale response cannot surface a link
+  // into a project the user cannot open.
   const apps = deployments.filter(
-    (d) => d.project_id && d.status !== "deleted",
+    (d) =>
+      d.project_id &&
+      d.status !== "deleted" &&
+      projects.some((p) => p.name === d.project_id),
   );
 
   const displayName =
@@ -112,7 +121,7 @@ export function AppSidebar() {
         </button>
       )}
 
-      {/* ── Quick links: Home + FinOps ── */}
+      {/* ── Quick links: Home + FinOps + Docs ── */}
       <nav className="px-2 pt-2 space-y-0.5">
         <NavLink
           href="/"
@@ -127,6 +136,12 @@ export function AppSidebar() {
           collapsed={collapsed}
           icon={<Wallet className="h-4 w-4 shrink-0" />}
           label="FinOps"
+        />
+        <ExternalNavLink
+          href="https://3-istor.github.io/cnp-docs/"
+          collapsed={collapsed}
+          icon={<BookOpen className="h-4 w-4 shrink-0" />}
+          label="Docs"
         />
       </nav>
 
@@ -153,7 +168,9 @@ export function AppSidebar() {
                   ? Crown
                   : p.role === "admin"
                     ? ShieldCheck
-                    : Users;
+                    : p.role === "guest"
+                      ? Eye
+                      : Users;
               return (
                 <NavLink
                   key={p.name}
@@ -304,6 +321,39 @@ function NavLink({
         <span className={cn("truncate", labelClassName)}>{label}</span>
       )}
     </Link>
+  );
+}
+
+function ExternalNavLink({
+  href,
+  collapsed,
+  icon,
+  label,
+}: {
+  href: string;
+  collapsed: boolean;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={label}
+      className={cn(
+        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-foreground/80 hover:bg-accent hover:text-foreground",
+        collapsed && "justify-center",
+      )}
+    >
+      {icon}
+      {!collapsed && (
+        <>
+          <span className="truncate flex-1">{label}</span>
+          <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+        </>
+      )}
+    </a>
   );
 }
 

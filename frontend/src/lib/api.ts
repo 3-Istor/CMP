@@ -20,6 +20,26 @@ export const getApiUrl = () => {
 
 const BASE = getApiUrl();
 
+/**
+ * A non-2xx response from the backend.
+ *
+ * Extends Error, so existing `err instanceof Error` / `err.message` handling
+ * keeps working — but carries the status, so callers can tell a 403 (role
+ * changed under them) from a 409 (the project's guests group does not exist
+ * yet) without matching on the message text.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(body || `HTTP ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 // ── Access-token cache ────────────────────────────────────────────────────────
 // `getSession()` performs a network round-trip to `/api/auth/session` on every
 // call. With polling hooks (deployments refresh every 3s, plus the sidebar),
@@ -79,7 +99,7 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || `HTTP ${res.status}`);
+    throw new ApiError(res.status, err);
   }
 
   // 204 No Content (e.g. DELETE endpoints) and empty bodies have no JSON to
@@ -210,10 +230,17 @@ export const getProjectMembers = (project_name: string) =>
     `/projects/${project_name}/members`,
   );
 
+/**
+ * Add a user to a project, or change the role they already hold.
+ *
+ * Throws an ApiError with status 409 when the project has no
+ * `project-<name>-guests` group yet; its message is written for the user and
+ * can be shown as-is.
+ */
 export const addProjectMember = (
   project_name: string,
   username: string,
-  role: "admin" | "member" = "member",
+  role: import("@/types").AssignableRole = "member",
 ) =>
   request<import("@/types").AddMemberResponse>(
     `/projects/${project_name}/members`,
@@ -239,7 +266,7 @@ export const removeProjectMember = async (
     },
   );
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, await res.text());
   return Promise.resolve();
 };
 
@@ -280,7 +307,7 @@ export const uploadProfilePicture = async (file: File) => {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || `HTTP ${res.status}`);
+    throw new ApiError(res.status, err);
   }
 
   return res.json() as Promise<import("@/types").PictureUploadResponse>;

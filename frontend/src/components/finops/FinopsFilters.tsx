@@ -23,9 +23,10 @@ function NativeSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none",
+        "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none",
         "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
         "dark:bg-input/30",
+        "[&>option]:bg-popover [&>option]:text-popover-foreground",
         className,
       )}
     >

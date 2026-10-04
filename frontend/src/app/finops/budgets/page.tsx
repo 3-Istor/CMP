@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { getBudget, getFinopsAlerts } from "@/lib/api";
 import { useProjects } from "@/lib/hooks";
+import { can } from "@/lib/permissions";
 import type { Budget, CostAlert } from "@/types";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -41,7 +42,10 @@ function BudgetsInner() {
     }
   }, [projects, project]);
 
-  const canEdit = projects.find((p) => p.name === project)?.role === "owner";
+  const canEdit = can(
+    projects.find((p) => p.name === project)?.role,
+    "finops.editBudget",
+  );
 
   const refresh = useCallback(async () => {
     if (!project) return;
@@ -67,7 +71,7 @@ function BudgetsInner() {
   }, [refresh]);
 
   const selectCls =
-    "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+    "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
 
   return (
     <div className="space-y-6">

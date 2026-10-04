@@ -7,7 +7,10 @@ history and recommendation decisions are persisted.
 
 Access control (spec matrix):
   * **Admin CNP** (``FINOPS_ADMIN_USERS``) — sees every project's costs.
-  * **Project members/admins** — see their own projects' costs.
+  * **Any role on a project, guests included** — sees that project's costs.
+  * **Project admins/owner** — the only roles allowed to act on a
+    recommendation (applying one commits to GitOps and changes running
+    infrastructure).
   * **Project Owner** — the ONLY role allowed to set a project budget.
 """
 
@@ -20,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import (
     BudgetAlertState,
@@ -40,10 +44,12 @@ from app.schemas.finops import (
     OverviewResponse,
     Recommendation,
 )
+from app.services.authz import assert_project_role
 from app.services.finops.provider import get_cost_provider, period_to_range
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
+    get_user_id_from_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,11 +85,9 @@ def _user_project_names(token: dict) -> list[str]:
     Admin API — the same mechanism the projects/apps routers use. This avoids
     relying on the JWT ``groups`` claim, which is not populated in this setup.
 
-    Uses the same ``get_user_id_from_token`` resolution as the projects router
-    (``sub`` claim, with a username fallback) so results match exactly.
+    Includes projects where the caller is only a guest: guests are allowed to
+    read costs.
     """
-    from app.routers.projects import get_user_id_from_token
-
     try:
         user_id = get_user_id_from_token(token)
     except HTTPException:
@@ -94,6 +98,7 @@ def _user_project_names(token: dict) -> list[str]:
 
 
 def _require_project_access(token: dict, project: str) -> None:
+    """Any role on the project is enough to read its costs."""
     if is_cnp_admin(token):
         return
     if project not in _user_project_names(token):
@@ -101,6 +106,20 @@ def _require_project_access(token: dict, project: str) -> None:
             status_code=403,
             detail=f"Access denied: you are not a member of project '{project}'.",
         )
+
+
+def _require_project_admin(db: Session, token: dict, project: str) -> None:
+    """
+    Guard the mutating FinOps endpoints.
+
+    Reading costs is open to every role, so the actions on a recommendation
+    need their own check: applying one commits to the app's GitOps repository
+    and ArgoCD then changes what is running. A CNP admin is allowed through,
+    matching the read path.
+    """
+    if is_cnp_admin(token):
+        return
+    assert_project_role(db, token, project, ProjectRole.ADMIN)
 
 
 def _is_owner(db: Session, project: str, username: str) -> bool:
@@ -310,8 +329,18 @@ def get_recommendations(
     return result
 
 
-def _find_recommendation(db: Session, token: dict, rec_id: str):
-    """Recompute recommendations for the owning app and return the match."""
+def _find_recommendation(
+    db: Session,
+    token: dict,
+    rec_id: str,
+    minimum: ProjectRole = ProjectRole.ADMIN,
+):
+    """
+    Recompute recommendations for the owning app and return the match.
+
+    Every caller of this helper acts on the recommendation, so it defaults to
+    requiring admin. Pass a lower *minimum* only for a read.
+    """
     try:
         app_id = int(rec_id.split(":", 1)[0])
     except (ValueError, IndexError):
@@ -322,7 +351,11 @@ def _find_recommendation(db: Session, token: dict, rec_id: str):
     deployment = db.get(Deployment, app_id)
     if not deployment or deployment.project_id is None:
         raise HTTPException(status_code=404, detail="Application not found.")
-    _require_project_access(token, deployment.project_id)
+
+    if minimum is ProjectRole.GUEST:
+        _require_project_access(token, deployment.project_id)
+    else:
+        _require_project_admin(db, token, deployment.project_id)
 
     provider = get_cost_provider()
     recs = provider.recommendations(provider.specs([deployment]))

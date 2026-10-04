@@ -6,7 +6,13 @@ import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
 import { MembersPanel } from "@/components/projects/MembersPanel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -18,11 +24,16 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
-import { useProjectApps } from "@/lib/hooks";
+import { useCan, useProjectApps } from "@/lib/hooks";
 import { addPendingDeletion, usePendingDeletions } from "@/lib/pendingDeletions";
+import { ROLE_LABEL } from "@/lib/permissions";
 import type { CatalogTemplate } from "@/types";
 import {
+  Activity,
+  AlarmClock,
   ArrowLeft,
+  ExternalLink,
+  FileCode,
   FolderKanban,
   LayoutGrid,
   Loader2,
@@ -30,7 +41,8 @@ import {
   RefreshCw,
   Trash2,
   Users,
-  Wallet,
+  Vault,
+  Wallet
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -50,6 +62,16 @@ export default function ProjectPage() {
   // disappear mid-render.
   const pendingDeletions = usePendingDeletions();
   const isBeingDeleted = pendingDeletions.some((d) => d.name === projectName);
+
+  // What this user may do here. Every can() is false while the role loads,
+  // so action buttons stay absent instead of flashing into view and then
+  // disappearing. A project mid-teardown needs no separate guard: the
+  // isBeingDeleted branch below returns before any of this is rendered.
+  const { role, can } = useCan(projectName);
+  const canDeploy = can("app.deploy");
+  const canDeleteProject = can("project.delete");
+  const canViewMembers = can("members.view");
+  const canViewObservability = can("app.viewObservability");
 
   const {
     apps,
@@ -117,6 +139,12 @@ export default function ProjectPage() {
   };
 
   const handleOpenCatalog = () => {
+    // Guard as well as hide: the role can change between the render that drew
+    // the button and the click.
+    if (!canDeploy) {
+      toast.error("Only project admins can deploy applications");
+      return;
+    }
     setShowCatalog(true);
     loadCatalog();
   };
@@ -160,6 +188,12 @@ export default function ProjectPage() {
   };
 
   const handleDeleteProject = async () => {
+    if (!canDeleteProject) {
+      toast.error("Only project admins can delete a project");
+      setShowDeleteDialog(false);
+      return;
+    }
+
     if (apps.length > 0) {
       toast.error(
         `Cannot delete project: ${apps.length} active application(s). Delete all apps first.`,
@@ -252,6 +286,7 @@ export default function ProjectPage() {
                 <h2 className="text-2xl font-bold capitalize">{projectName}</h2>
                 <p className="text-sm text-muted-foreground">
                   Kubernetes project
+                  {role ? ` · ${ROLE_LABEL[role]}` : ""}
                 </p>
               </div>
             </div>
@@ -277,6 +312,70 @@ export default function ProjectPage() {
 
         <Separator />
 
+        {/* ── Project quick links ──
+            Hidden from guests: these are the observability and secrets
+            surfaces, and a guest who is not allowed to read logs has no
+            business in Grafana, Vault or the status page either. */}
+        {canViewObservability && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Project Links</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {/* ArgoCD bootstrap */}
+            <a
+              href={`https://argocd.3istor.com/applications/argocd/${projectName}-bootstrap?resource=`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+            >
+              <FileCode className="mr-2 h-4 w-4" />
+              ArgoCD
+              <ExternalLink className="ml-auto h-3 w-3" />
+            </a>
+
+            {/* Offhours */}
+            <a
+              href={`https://offhours-${projectName}.3istor.com/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+            >
+              <AlarmClock className="mr-2 h-4 w-4" />
+              Offhours
+              <ExternalLink className="ml-auto h-3 w-3" />
+            </a>
+
+            {/* Vault — admin only: a deep link that 403s inside Vault is
+                worse than no link at all. */}
+            {can("app.viewSecretsLink") && (
+              <a
+                href={`https://vault.3istor.com/ui/vault/secrets-engines/project-${encodeURIComponent(projectName)}/kv/list`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+              >
+                <Vault className="mr-2 h-4 w-4" />
+                Vault
+                <ExternalLink className="ml-auto h-3 w-3" />
+              </a>
+            )}
+
+            {/* Gatus / Status */}
+            <a
+              href={`https://status-${projectName}.3istor.com/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+            >
+              <Activity className="mr-2 h-4 w-4" />
+              Status
+              <ExternalLink className="ml-auto h-3 w-3" />
+            </a>
+          </CardContent>
+        </Card>
+        )}
+
         {/* ── Tabs ── */}
         <Tabs defaultValue="apps">
           <TabsList>
@@ -284,10 +383,14 @@ export default function ProjectPage() {
               <LayoutGrid className="h-4 w-4" />
               Applications
             </TabsTrigger>
-            <TabsTrigger value="members" className="gap-2">
-              <Users className="h-4 w-4" />
-              Members
-            </TabsTrigger>
+            {/* Guests don't get the roster — who else works here is not
+                theirs to see, and the API would 403 the fetch anyway. */}
+            {canViewMembers && (
+              <TabsTrigger value="members" className="gap-2">
+                <Users className="h-4 w-4" />
+                Members
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ── Applications tab ── */}
@@ -318,29 +421,33 @@ export default function ProjectPage() {
                     className={`h-4 w-4 ${loadingApps ? "animate-spin" : ""}`}
                   />
                 </Button>
-                <Button size="sm" onClick={handleOpenCatalog}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Deploy App
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setShowDeleteDialog(true)}
-                  disabled={apps.length > 0}
-                  title={
-                    apps.length > 0
-                      ? `Delete all ${apps.length} app(s) first`
-                      : "Delete this project"
-                  }
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Project
-                </Button>
+                {canDeploy && (
+                  <Button size="sm" onClick={handleOpenCatalog}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Deploy App
+                  </Button>
+                )}
+                {canDeleteProject && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteDialog(true)}
+                    disabled={apps.length > 0}
+                    title={
+                      apps.length > 0
+                        ? `Delete all ${apps.length} app(s) first`
+                        : "Delete this project"
+                    }
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Project
+                  </Button>
+                )}
               </div>
             </div>
 
             {/* Inline catalog (shown when user clicks "Deploy App") */}
-            {showCatalog && (
+            {showCatalog && canDeploy && (
               <div className="rounded-xl border bg-card p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">
@@ -366,6 +473,7 @@ export default function ProjectPage() {
                 ) : (
                   <CatalogGrid
                     templates={paasTemplates}
+                    canDeploy={canDeploy}
                     onDeploy={(t) => {
                       setSelectedTemplate(t);
                       setShowCatalog(false);
@@ -395,17 +503,21 @@ export default function ProjectPage() {
                 <span className="text-4xl mb-3">🚀</span>
                 <p className="font-medium">No applications yet</p>
                 <p className="text-sm mt-1">
-                  Deploy your first app to this project.
+                  {canDeploy
+                    ? "Deploy your first app to this project."
+                    : "Nothing has been deployed here yet."}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={handleOpenCatalog}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Deploy App
-                </Button>
+                {canDeploy && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={handleOpenCatalog}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Deploy App
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -417,15 +529,20 @@ export default function ProjectPage() {
           </TabsContent>
 
           {/* ── Members tab ── */}
-          <TabsContent value="members" className="mt-6 space-y-6">
-            <MembersPanel projectName={projectName} />
-          </TabsContent>
+          {canViewMembers && (
+            <TabsContent value="members" className="mt-6 space-y-6">
+              <MembersPanel
+                projectName={projectName}
+                canManage={can("members.manage")}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
 
       {/* ── Deploy modal ── */}
       <DeployModal
-        template={selectedTemplate}
+        template={canDeploy ? selectedTemplate : null}
         onClose={() => setSelectedTemplate(null)}
         onConfirm={handleDeploy}
         loading={deploying}
@@ -439,7 +556,7 @@ export default function ProjectPage() {
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>This will permanently delete:</p>
             <ul className="list-disc list-inside text-sm space-y-1 ml-2">
-              <li>Keycloak groups (admins & members)</li>
+              <li>Keycloak groups (admins, members & guests)</li>
               <li>Vault policies</li>
               <li>ArgoCD AppProject</li>
             </ul>

@@ -9,8 +9,16 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import type { Project } from "@/types";
-import { Crown, FolderKanban, Loader2, ShieldCheck, Users } from "lucide-react";
+import { GROUP_SUFFIX, ROLE_BLURB } from "@/lib/permissions";
+import type { Project, ProjectRole } from "@/types";
+import {
+    Crown,
+    Eye,
+    FolderKanban,
+    Loader2,
+    ShieldCheck,
+    Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -19,6 +27,13 @@ interface Props {
     /** Epoch ms when the delete was confirmed, if a teardown is in flight. */
     deletingSince?: number;
 }
+
+const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
+    owner: Crown,
+    admin: ShieldCheck,
+    member: Users,
+    guest: Eye,
+};
 
 // Same asymptotic-progress trick as PendingProjectCard, so the bar resumes
 // correctly across a reload instead of restarting at zero.
@@ -35,6 +50,7 @@ function progressFor(since: number): number {
 export function ProjectCard({ project, deletingSince }: Props) {
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
+    const RoleIcon = ROLE_ICON[project.role] ?? Users;
     const isDeleting = deletingSince !== undefined;
 
     const [progress, setProgress] = useState(() =>
@@ -69,16 +85,16 @@ export function ProjectCard({ project, deletingSince }: Props) {
                         </Badge>
                     ) : (
                         <Badge
-                            variant={isAdmin ? "default" : "secondary"}
+                            variant={
+                                isAdmin
+                                    ? "default"
+                                    : project.role === "guest"
+                                      ? "outline"
+                                      : "secondary"
+                            }
                             className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
                         >
-                            {isOwner ? (
-                                <Crown className="mr-1 h-3 w-3" />
-                            ) : project.role === "admin" ? (
-                                <ShieldCheck className="mr-1 h-3 w-3" />
-                            ) : (
-                                <Users className="mr-1 h-3 w-3" />
-                            )}
+                            <RoleIcon className="mr-1 h-3 w-3" />
                             {project.role}
                         </Badge>
                     )}
@@ -89,7 +105,7 @@ export function ProjectCard({ project, deletingSince }: Props) {
                 <CardDescription className="text-xs">
                     {isDeleting
                         ? "Tearing down project resources…"
-                        : `Kubernetes project · ${isOwner ? "Owner" : isAdmin ? "Full access" : "Read & deploy"}`}
+                        : `Kubernetes project · ${ROLE_BLURB[project.role]}`}
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-0 space-y-1.5">
@@ -105,7 +121,7 @@ export function ProjectCard({ project, deletingSince }: Props) {
                     </>
                 ) : (
                     <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
-                        project-{project.name}-{isAdmin ? "admins" : "members"}
+                        project-{project.name}-{GROUP_SUFFIX[project.role]}
                     </div>
                 )}
             </CardContent>
