@@ -51,6 +51,30 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        {{- if .Values.secrets.create }}
+        {{- $secret := include "arcl-cmp.fullname" . }}
+        {{- range $env, $key := dict
+              "OS_AUTH_URL" "os-auth-url"
+              "OS_USERNAME" "os-username"
+              "OS_PASSWORD" "os-password"
+              "OS_PROJECT_NAME" "os-project-name"
+              "AWS_ACCESS_KEY_ID" "aws-access-key-id"
+              "AWS_SECRET_ACCESS_KEY" "aws-secret-access-key"
+              "AWS_DEFAULT_REGION" "aws-region"
+              "TF_BACKEND_AWS_ACCESS_KEY_ID" "aws-access-key-id"
+              "TF_BACKEND_AWS_SECRET_ACCESS_KEY" "aws-secret-access-key"
+              "TF_BACKEND_AWS_REGION" "aws-region"
+              "TF_BACKEND_S3_BUCKET" "aws-s3-bucket"
+              "TF_BACKEND_S3_KEY_PREFIX" "aws-s3-key-prefix"
+              "TF_BACKEND_S3_DYNAMODB_TABLE" "aws-dynamodb-table"
+              "DISCORD_WEBHOOK_URL" "discord-webhook-url" }}
+        - name: {{ $env }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ $secret }}-secret
+              key: {{ $key }}
+        {{- end }}
+        {{- end }}
         {{- with .Values.extraEnv }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

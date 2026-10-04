@@ -103,9 +103,13 @@ def get_user_id_from_token(token_payload: dict) -> str:
     user_id = token_payload.get("sub", "")
     username = token_payload.get("preferred_username", "")
 
-    # If sub is empty but we have username, lookup user_id from Keycloak
+    # If sub is empty but we have username, lookup user_id from Keycloak.
+    # Every token issued in this environment is missing 'sub' — not an
+    # intermittent anomaly, so warning on every single request adds nothing
+    # (see CMP#38). Worth root-causing separately: this also means an extra
+    # Keycloak admin API round-trip on every request.
     if not user_id and username:
-        logger.warning(
+        logger.debug(
             "⚠️  Token missing 'sub' claim, looking up user_id from "
             "username '%s'",
             username,
@@ -115,7 +119,7 @@ def get_user_id_from_token(token_payload: dict) -> str:
             user = _find_user_by_username(username, admin_token)
             if user:
                 user_id = user["id"]
-                logger.info(
+                logger.debug(
                     "✅ Found user_id '%s' for username '%s'",
                     user_id,
                     username,
@@ -338,13 +342,15 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         List of project dicts, sorted by name:
         ``[{"name": "sandbox", "role": "admin"}, ...]``
     """
-    logger.info("🔍 Fetching groups from Keycloak for user_id: %s", user_id)
+    logger.debug(
+        "🔍 Fetching groups from Keycloak for user_id: %s", user_id
+    )
 
     groups = _fetch_user_groups(user_id)
     logger.debug("Raw groups: %s", [g.get("name") for g in groups])
 
     projects = _project_roles_from_groups(groups)
-    logger.info(
+    logger.debug(
         "📊 Extracted %d projects: %s", len(projects), list(projects)
     )
 

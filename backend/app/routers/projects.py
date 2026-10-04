@@ -183,15 +183,15 @@ async def list_projects(
     what they made.
     """
     username = token_payload.get("preferred_username", "")
-    logger.info("🔍 Fetching projects for username='%s'", username)
+    logger.debug("🔍 Fetching projects for username='%s'", username)
 
     user_id = get_user_id_from_token(token_payload)
-    logger.info("🔍 Using user_id='%s'", user_id)
+    logger.debug("🔍 Using user_id='%s'", user_id)
 
     projects = fetch_user_projects_from_keycloak(user_id)
     by_name = {p["name"]: p for p in projects}
 
-    logger.info(
+    logger.debug(
         "📋 Found %d projects for user: %s", len(projects), list(by_name)
     )
 
@@ -338,20 +338,32 @@ async def create_project(
             payload.target_cloud.value,
         )
 
-    # Trigger bootstrap
-    background_tasks.add_task(
-        run_project_bootstrap,
-        project_name=payload.project_name,
-        target_cloud=payload.target_cloud.value,
-    )
+    # Bootstrap, then grant the creator admin on what it created. Starlette runs
+    # background tasks in order and awaits each one, so the grant already starts
+    # after Terraform has returned; what it was missing is whether Terraform
+    # succeeded. The groups only exist if it did.
+    bootstrap_outcome: dict[str, bool] = {}
 
-    # Add creator to project as admin (after a short delay to let Terraform finish)
+    def bootstrap_project():
+        bootstrap_outcome["ok"] = run_project_bootstrap(
+            project_name=payload.project_name,
+            target_cloud=payload.target_cloud.value,
+        )
+
+    background_tasks.add_task(bootstrap_project)
+
     async def add_creator_to_project():
-        """Add the project creator as admin after bootstrap completes."""
-        import asyncio
+        """Add the project creator as admin once bootstrap has succeeded."""
+        if not bootstrap_outcome.get("ok"):
+            logger.error(
+                "❌ Skipping creator grant for '%s': bootstrap failed, so "
+                "'project-%s-admins' was never created. Fix the bootstrap "
+                "error above and retry.",
+                payload.project_name,
+                payload.project_name,
+            )
+            return
 
-        # Wait for Terraform to create the groups
-        await asyncio.sleep(8)  # Reduced from 10s but not too short
         try:
             add_user_to_project(username, payload.project_name, "admin")
             logger.info(
@@ -417,7 +429,7 @@ async def list_project_apps(
     Access control: any role on the project, guests included — seeing the
     application list is the whole of what a guest is for.
     """
-    logger.info(
+    logger.debug(
         "🔍 Listing apps of '%s' for '%s' (%s)",
         ctx.project_name,
         ctx.username,
