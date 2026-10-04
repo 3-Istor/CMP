@@ -8,17 +8,26 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import type { Project } from "@/types";
-import { Crown, FolderKanban, ShieldCheck, Users } from "lucide-react";
+import { GROUP_SUFFIX, ROLE_BLURB } from "@/lib/permissions";
+import type { Project, ProjectRole } from "@/types";
+import { Crown, Eye, FolderKanban, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 
 interface Props {
     project: Project;
 }
 
+const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
+    owner: Crown,
+    admin: ShieldCheck,
+    member: Users,
+    guest: Eye,
+};
+
 export function ProjectCard({ project }: Props) {
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
+    const RoleIcon = ROLE_ICON[project.role] ?? Users;
 
     return (
         <Link href={`/projects/${project.name}`} className="group block">
@@ -29,16 +38,16 @@ export function ProjectCard({ project }: Props) {
                             <FolderKanban className="h-5 w-5 text-primary" />
                         </div>
                         <Badge
-                            variant={isAdmin ? "default" : "secondary"}
+                            variant={
+                                isAdmin
+                                    ? "default"
+                                    : project.role === "guest"
+                                      ? "outline"
+                                      : "secondary"
+                            }
                             className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
                         >
-                            {isOwner ? (
-                                <Crown className="mr-1 h-3 w-3" />
-                            ) : project.role === "admin" ? (
-                                <ShieldCheck className="mr-1 h-3 w-3" />
-                            ) : (
-                                <Users className="mr-1 h-3 w-3" />
-                            )}
+                            <RoleIcon className="mr-1 h-3 w-3" />
                             {project.role}
                         </Badge>
                     </div>
@@ -46,12 +55,12 @@ export function ProjectCard({ project }: Props) {
                         {project.name}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                        Kubernetes project · {isOwner ? "Owner" : isAdmin ? "Full access" : "Read & deploy"}
+                        Kubernetes project · {ROLE_BLURB[project.role]}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
                     <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
-                        project-{project.name}-{isAdmin ? "admins" : "members"}
+                        project-{project.name}-{GROUP_SUFFIX[project.role]}
                     </div>
                 </CardContent>
             </Card>

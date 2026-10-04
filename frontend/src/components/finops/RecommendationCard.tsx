@@ -63,9 +63,16 @@ function ConfigBox({
 export function RecommendationCard({
   rec,
   onChanged,
+  canAct = true,
 }: {
   rec: Recommendation;
   onChanged?: () => void;
+  /**
+   * Whether the viewer may act on this recommendation. Members and guests
+   * read the saving but cannot act: applying one commits to the app's GitOps
+   * repository and ArgoCD then changes what is running.
+   */
+  canAct?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const done = rec.status !== "pending";
@@ -74,6 +81,12 @@ export function RecommendationCard({
     action: "apply" | "ignore" | "notify",
     fn: () => Promise<{ message: string }>,
   ) => {
+    if (!canAct) {
+      toast.error(
+        "Seuls les admins du projet peuvent agir sur une recommandation",
+      );
+      return;
+    }
     setBusy(action);
     try {
       const res = await fn();
@@ -135,8 +148,14 @@ export function RecommendationCard({
           <Badge variant="outline">{EFFORT_LABEL[rec.effort]}</Badge>
         </div>
 
-        {/* Actions */}
-        {!done && (
+        {/* Actions — admins only. Everyone else still sees the finding and
+            the estimated saving above. */}
+        {!done && !canAct && (
+          <p className="text-xs text-muted-foreground">
+            Seuls les admins du projet peuvent appliquer cette recommandation.
+          </p>
+        )}
+        {!done && canAct && (
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"

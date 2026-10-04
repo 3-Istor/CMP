@@ -6,8 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getRecommendations } from "@/lib/api";
 import { useProjects } from "@/lib/hooks";
+import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import type { Recommendation } from "@/types";
+import type { ProjectRole, Recommendation } from "@/types";
 import { AlertCircle, Lightbulb } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -56,6 +57,14 @@ function RecommendationsInner() {
   }, [recs, hideDone, sort]);
 
   const totalSaving = visible.reduce((s, r) => s + r.monthly_saving_eur, 0);
+
+  // Each recommendation belongs to a different project, so the role is looked
+  // up per card rather than once for the page.
+  const roleByProject = useMemo(() => {
+    const map = new Map<string, ProjectRole>();
+    for (const p of projects) map.set(p.name, p.role);
+    return map;
+  }, [projects]);
 
   const selectCls =
     "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
@@ -133,7 +142,17 @@ function RecommendationsInner() {
       ) : (
         <div className="space-y-4">
           {visible.map((rec) => (
-            <RecommendationCard key={rec.id} rec={rec} onChanged={refresh} />
+            <RecommendationCard
+              key={rec.id}
+              rec={rec}
+              onChanged={refresh}
+              canAct={can(
+                rec.project_id
+                  ? roleByProject.get(rec.project_id)
+                  : undefined,
+                "finops.act",
+              )}
+            />
           ))}
         </div>
       )}

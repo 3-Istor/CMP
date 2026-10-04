@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   Crown,
   ExternalLink,
+  Eye,
   FolderKanban,
   Home,
   PanelLeft,
@@ -60,9 +61,15 @@ export function AppSidebar() {
   // The sidebar list rarely needs fresh data: 15s while active, 30s when idle.
   const { deployments, loading: loadingApps } = useDeploymentsList(15000, 30000);
 
-  // Only deployments that belong to a project (and are not deleted) are linkable
+  // Only deployments that belong to a project (and are not deleted) are
+  // linkable. The project check is redundant with the server-side scoping on
+  // `GET /deployments/`, and kept so a stale response cannot surface a link
+  // into a project the user cannot open.
   const apps = deployments.filter(
-    (d) => d.project_id && d.status !== "deleted",
+    (d) =>
+      d.project_id &&
+      d.status !== "deleted" &&
+      projects.some((p) => p.name === d.project_id),
   );
 
   const displayName =
@@ -161,7 +168,9 @@ export function AppSidebar() {
                   ? Crown
                   : p.role === "admin"
                     ? ShieldCheck
-                    : Users;
+                    : p.role === "guest"
+                      ? Eye
+                      : Users;
               return (
                 <NavLink
                   key={p.name}

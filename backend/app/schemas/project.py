@@ -2,8 +2,11 @@
 Pydantic schemas for Projects API.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
+from app.core.roles import ProjectRole
 from app.models.project import TargetCloud
 
 
@@ -13,8 +16,12 @@ class ProjectRead(BaseModel):
     name: str = Field(
         ..., description="Unique project identifier (lowercase, kebab-case)"
     )
-    role: str = Field(
-        ..., description="User role in this project: 'admin' or 'member'"
+    role: ProjectRole = Field(
+        ...,
+        description=(
+            "User role in this project: 'owner', 'admin', 'member' or "
+            "'guest'."
+        ),
     )
     target_cloud: TargetCloud = Field(
         default=TargetCloud.ONPREM,
@@ -44,6 +51,21 @@ class ProjectCreate(BaseModel):
             "Which cloud the project's workloads run on. Immutable after creation: "
             "changing it is a re-create, not a move. Defaults to on-prem so existing "
             "clients keep working unchanged."
+        ),
+    )
+
+
+class AddMemberRequest(BaseModel):
+    """Payload for adding a user to a project, or changing their role."""
+
+    username: str = Field(
+        ..., min_length=1, description="Keycloak username of the target user"
+    )
+    role: Literal["admin", "member", "guest"] = Field(
+        default="member",
+        description=(
+            "Role to grant. 'owner' is not assignable: it belongs to whoever "
+            "created the project."
         ),
     )
 

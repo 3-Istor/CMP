@@ -35,7 +35,16 @@ export interface Deployment {
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────
 
-export type ProjectRole = "owner" | "admin" | "member";
+/**
+ * A user's role on one project, strongest first.
+ *
+ * `owner` is the creator and is stored in the database; the other three are
+ * Keycloak groups. See `src/lib/permissions.ts` for what each one may do.
+ */
+export type ProjectRole = "owner" | "admin" | "member" | "guest";
+
+/** The roles an admin can hand out. `owner` is not among them. */
+export type AssignableRole = Exclude<ProjectRole, "owner">;
 
 /** The cloud a project's workloads run on. Immutable after creation. */
 export type TargetCloud = "onprem" | "aws" | "gcp";
@@ -64,6 +73,12 @@ export interface ProjectMember {
 export interface ProjectMembersResponse {
   project_name: string;
   members: ProjectMember[];
+  /**
+   * False for projects bootstrapped before the `project-<name>-guests`
+   * Keycloak group existed. The Guest option is hidden when it is false,
+   * rather than offering a role the backend would reject with a 409.
+   */
+  guests_supported?: boolean;
 }
 
 export interface AddMemberResponse {

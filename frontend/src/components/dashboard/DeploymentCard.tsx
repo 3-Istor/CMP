@@ -36,9 +36,18 @@ const ACTIVE_STATUSES = new Set([
 interface Props {
   deployment: Deployment;
   onDelete: (id: number) => void;
+  /**
+   * Whether the viewer may delete this app. Defaults to true so callers that
+   * render the card without project context keep their current behaviour.
+   */
+  canDelete?: boolean;
 }
 
-export function DeploymentCard({ deployment, onDelete }: Props) {
+export function DeploymentCard({
+  deployment,
+  onDelete,
+  canDelete = true,
+}: Props) {
   const isActive = ACTIVE_STATUSES.has(deployment.status);
   // Poll only while the deployment is in a transient state
   const polled = useDeploymentPolling(isActive ? deployment.id : null);
@@ -283,16 +292,18 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                 Health Details
               </Button>
             )}
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDeleteClick}
-              disabled={["deleting", "deleted", "pending"].includes(
-                currentDeployment.status,
-              )}
-            >
-              Delete
-            </Button>
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeleteClick}
+                disabled={["deleting", "deleted", "pending"].includes(
+                  currentDeployment.status,
+                )}
+              >
+                Delete
+              </Button>
+            )}
           </div>
         </CardFooter>
       </Card>

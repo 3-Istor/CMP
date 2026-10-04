@@ -162,15 +162,20 @@ def _map_role_to_grafana(
     Map CMP role to Grafana org role.
 
     Args:
-        role: CMP role ("admin", "owner", "member").
+        role: CMP role ("owner", "admin", "member" or "guest").
 
     Returns:
         Grafana role ("Admin", "Editor", "Viewer").
     """
-    if role.lower() in ("admin", "owner"):
+    normalised = role.lower()
+    if normalised in ("admin", "owner"):
         return "Admin"
-    elif role.lower() == "member":
+    elif normalised == "member":
         return "Editor"
+    elif normalised == "guest":
+        # Guests read dashboards and nothing else. Spelled out rather than
+        # left to the fallback below, which would log a spurious warning.
+        return "Viewer"
     else:
         # Fallback to Viewer for unknown roles
         logger.warning(f"⚠️  Unknown role '{role}' — defaulting to Viewer")

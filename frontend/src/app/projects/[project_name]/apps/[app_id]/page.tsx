@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { deleteDeployment, getDeployment } from "@/lib/api";
-import { useDeploymentPolling } from "@/lib/hooks";
+import { useCan, useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import {
     ArrowLeft,
@@ -111,6 +111,15 @@ export default function AppControlCenterPage() {
     const [deleteConfirmName, setDeleteConfirmName] = useState("");
     const [deleting, setDeleting] = useState(false);
 
+    // The app's project comes from the route, so the role is available here
+    // without an extra request.
+    const { can } = useCan(projectName);
+    const canDelete = can("app.delete");
+    const canViewLogs = can("app.viewLogs");
+    const canViewConfig = can("app.viewConfig");
+    const canEditConfig = can("app.editConfig");
+    const canViewFinops = can("finops.view");
+
     // Poll only while in transient state
     const ACTIVE_STATUSES = new Set([
         "pending",
@@ -144,6 +153,11 @@ export default function AppControlCenterPage() {
         current?.status === "running" || current?.status === "degraded";
 
     const handleDelete = async () => {
+        if (!canDelete) {
+            toast.error("Only project admins can delete an application");
+            setDeleteOpen(false);
+            return;
+        }
         if (!current || deleteConfirmName !== current.name) return;
         setDeleting(true);
         try {
@@ -266,30 +280,34 @@ export default function AppControlCenterPage() {
                             <RefreshCw className="mr-2 h-4 w-4" />
                             Refresh
                         </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                                router.push(
-                                    `/finops?project=${encodeURIComponent(projectName)}`,
-                                )
-                            }
-                        >
-                            <Wallet className="mr-2 h-4 w-4" />
-                            Détails FinOps
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                                setDeleteConfirmName("");
-                                setDeleteOpen(true);
-                            }}
-                            disabled={["deleting", "deleted"].includes(current.status)}
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete App
-                        </Button>
+                        {canViewFinops && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                    router.push(
+                                        `/finops?project=${encodeURIComponent(projectName)}`,
+                                    )
+                                }
+                            >
+                                <Wallet className="mr-2 h-4 w-4" />
+                                Détails FinOps
+                            </Button>
+                        )}
+                        {canDelete && (
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                    setDeleteConfirmName("");
+                                    setDeleteOpen(true);
+                                }}
+                                disabled={["deleting", "deleted"].includes(current.status)}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete App
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -310,11 +328,18 @@ export default function AppControlCenterPage() {
                             </CardContent>
                         </Card>
 
-                        {/* Live deployment log streaming */}
-                        <DeploymentLogs deploymentId={appId} deploymentStatus={current.status} />
+                        {/* Live deployment log streaming — members and up.
+                            A guest sees the status badge and the stepper, not
+                            the build output. */}
+                        {canViewLogs && (
+                            <DeploymentLogs deploymentId={appId} deploymentStatus={current.status} />
+                        )}
 
-                        {/* Quick Actions (Kubernetes only) */}
-                        {isKubernetes && (
+                        {/* Quick Actions (Kubernetes only) — these link into
+                            ArgoCD, Vault and the repo, so they follow the
+                            config/secrets permissions rather than being shown
+                            to every viewer. */}
+                        {isKubernetes && canViewLogs && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="text-base">Quick Actions</CardTitle>
@@ -370,7 +395,10 @@ export default function AppControlCenterPage() {
                                         );
                                     })()}
 
-                                    {current.project_id && current.name && (
+                                    {/* Vault is admin-only: only admins hold the
+                                        project's Vault policy, so for anyone
+                                        else this link leads to a 403. */}
+                                    {current.project_id && current.name && can("app.viewSecretsLink") && (
                                         <a
                                             href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`}
                                             target="_blank"
@@ -387,15 +415,20 @@ export default function AppControlCenterPage() {
                         )}
 
                         {/* Health summary (inline, collapsible like the logs) */}
-                        {shouldFetchHealth && (
+                        {shouldFetchHealth && canViewLogs && (
                             <DeploymentHealth deploymentId={appId} />
                         )}
                     </div>
 
-                    {/* ── Right column: Day-2 config ── */}
+                    {/* ── Right column: Day-2 config ──
+                        Two levels: members see the values read-only, admins can
+                        change them, guests get no column at all. */}
                     <div className="space-y-6">
-                        {isKubernetes && isRunning ? (
-                            <AppConfigPanel deploymentId={appId} />
+                        {!canViewConfig ? null : isKubernetes && isRunning ? (
+                            <AppConfigPanel
+                                deploymentId={appId}
+                                readOnly={!canEditConfig}
+                            />
                         ) : isKubernetes && !isRunning ? (
                             <Card>
                                 <CardContent className="pt-6">

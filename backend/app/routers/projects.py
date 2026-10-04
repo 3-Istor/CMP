@@ -16,7 +16,6 @@ import requests
 from fastapi import (
     APIRouter,
     BackgroundTasks,
-    Body,
     Depends,
     HTTPException,
     status,
@@ -25,26 +24,30 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
+    AddMemberRequest,
     ProjectCreate,
     ProjectCreateResponse,
     ProjectRead,
 )
+from app.services.authz import RequireAdmin, RequireGuest, RequireMember
 from app.services.grafana_service import (
     add_user_to_project_org,
     remove_user_from_project_org,
 )
 from app.services.keycloak_service import (
+    ProjectGroupMissingError,
     add_user_to_project,
     fetch_user_projects_from_keycloak,
     get_current_user,
-    has_project_access,
+    get_user_id_from_token,  # noqa: F401  (re-exported: finops imports it)
     list_project_members,
+    project_guests_supported,
     remove_user_from_project,
-    verify_project_access,
 )
 from app.services.project_bootstrap import (
     run_project_bootstrap,
@@ -61,9 +64,29 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
-# Temporary storage for project creators (until they're added to Keycloak groups)
-# Format: {project_name: user_id}
-_project_creators: dict[str, str] = {}
+
+def _administers_any_project(db: Session, token_payload: dict) -> bool:
+    """
+    Return True if the caller is admin or owner of at least one project.
+
+    Used by the endpoints that are not scoped to a single project but should
+    still not be open to every authenticated account.
+    """
+    user_id = get_user_id_from_token(token_payload)
+    username = token_payload.get("preferred_username") or user_id
+
+    if any(
+        entry["role"] == ProjectRole.ADMIN.value
+        for entry in fetch_user_projects_from_keycloak(user_id)
+    ):
+        return True
+
+    return (
+        db.query(Project)
+        .filter(Project.owner_username == username)
+        .first()
+        is not None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +98,7 @@ _project_creators: dict[str, str] = {}
 async def search_keycloak_users(
     q: str,
     token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> list[dict]:
     """
     Search Keycloak users by username or email (prefix search).
@@ -82,14 +106,27 @@ async def search_keycloak_users(
     Used by the Members panel autocomplete to find users to add to a project.
     Returns at most 10 results.
 
+    Access control: only users who administer at least one project. The
+    endpoint exists to fill the "add a member" field, and that field is
+    admin-only — without this check any authenticated account could
+    enumerate every username and email in the realm.
+
     Query params:
         q: Search string (minimum 2 chars).
 
     Returns:
-        List of ``{"username": str, "email": str, "first_name": str, "last_name": str}``
+        List of ``{"username", "email", "first_name", "last_name"}``
     """
     if len(q.strip()) < 2:
         return []
+
+    if not _administers_any_project(db, token_payload):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Access denied: only project admins can search for users."
+            ),
+        )
 
     try:
         from app.services.keycloak_service import _get_admin_token
@@ -124,68 +161,6 @@ async def search_keycloak_users(
 
 
 # ---------------------------------------------------------------------------
-# Helper function to get user_id from token
-# ---------------------------------------------------------------------------
-
-
-def get_user_id_from_token(token_payload: dict) -> str:
-    """
-    Extract user_id from token, with fallback to username lookup if sub is missing.
-
-    Args:
-        token_payload: Decoded JWT token payload
-
-    Returns:
-        str: User ID (UUID)
-
-    Raises:
-        HTTPException: If user cannot be determined
-    """
-    user_id = token_payload.get("sub", "")
-    username = token_payload.get("preferred_username", "")
-
-    # If sub is empty but we have username, lookup user_id from Keycloak
-    if not user_id and username:
-        logger.warning(
-            f"⚠️  Token missing 'sub' claim, looking up user_id from username '{username}'"
-        )
-        try:
-            from app.services.keycloak_service import (
-                _find_user_by_username,
-                _get_admin_token,
-            )
-
-            admin_token = _get_admin_token()
-            user = _find_user_by_username(username, admin_token)
-            if user:
-                user_id = user["id"]
-                logger.info(
-                    f"✅ Found user_id '{user_id}' for username '{username}'"
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"User '{username}' not found in Keycloak",
-                )
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ Failed to lookup user: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to lookup user: {e}",
-            )
-
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not determine user identity from token.",
-        )
-
-    return user_id
-
-
-# ---------------------------------------------------------------------------
 # GET /api/projects
 # ---------------------------------------------------------------------------
 
@@ -198,45 +173,59 @@ async def list_projects(
     """
     Return the list of projects the authenticated user belongs to.
 
-    Projects are derived exclusively from Keycloak group membership:
-      ``project-<name>-admins`` or ``project-<name>-members``
+    Membership comes from Keycloak group membership, fetched fresh from the
+    Admin API rather than read off the JWT, which carries stale claims:
+      ``project-<name>-<admins|members|guests>``
 
-    The JWT is used only for authentication; group data is fetched fresh
-    from the Keycloak Admin API to avoid stale JWT claims.
-
-    Projects the user owns (created) are returned with role ``"owner"``.
+    Projects the user owns are merged in on top, with role ``"owner"``. They
+    are added even when no group grants access, so a creator whose Keycloak
+    group assignment is still in flight — or failed outright — can still see
+    what they made.
     """
     username = token_payload.get("preferred_username", "")
-    logger.info(f"🔍 Fetching projects for username='{username}'")
+    logger.info("🔍 Fetching projects for username='%s'", username)
 
     user_id = get_user_id_from_token(token_payload)
-    logger.info(f"🔍 Using user_id='{user_id}'")
+    logger.info("🔍 Using user_id='%s'", user_id)
 
     projects = fetch_user_projects_from_keycloak(user_id)
+    by_name = {p["name"]: p for p in projects}
 
     logger.info(
-        f"📋 Found {len(projects)} projects for user: {[p['name'] for p in projects]}"
+        "📋 Found %d projects for user: %s", len(projects), list(by_name)
     )
 
-    # Mirror of the Git registry — used to render the cloud badge without a
-    # round-trip to GitHub on every listing.
+    # Owned projects, plus the registry mirror used to render the cloud badge
+    # without a round-trip to GitHub on every listing.
+    owned = (
+        db.query(Project).filter(Project.owner_username == username).all()
+        if username
+        else []
+    )
+    for row in owned:
+        by_name.setdefault(row.project_name, {"name": row.project_name})
+
     rows = {
         row.project_name: row
         for row in db.query(Project)
-        .filter(Project.project_name.in_([p["name"] for p in projects]))
+        .filter(Project.project_name.in_(list(by_name)))
         .all()
     }
 
-    for p in projects:
-        row = rows.get(p["name"])
+    for name, entry in by_name.items():
+        row = rows.get(name)
         # Projects created before the multicloud chantier have no row; they are
         # on-prem by definition, which is what the schema default says.
         if row is not None:
-            p["target_cloud"] = row.target_cloud
+            entry["target_cloud"] = row.target_cloud
             if username and row.owner_username == username:
-                p["role"] = "owner"
+                entry["role"] = ProjectRole.OWNER.value
 
-    return [ProjectRead(**p) for p in projects]
+    return [
+        ProjectRead(**entry)
+        for _, entry in sorted(by_name.items())
+        if entry.get("role")
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -295,10 +284,10 @@ async def create_project(
     user_id = get_user_id_from_token(token_payload)
     username = token_payload.get("preferred_username") or user_id
 
-    # Store creator temporarily (will be removed once added to Keycloak group)
-    _project_creators[payload.project_name] = user_id
     logger.info(
-        f"🔐 Stored creator user_id='{user_id}' for project '{payload.project_name}'"
+        "🔐 Creating project '%s' for user_id='%s'",
+        payload.project_name,
+        user_id,
     )
 
     # The Git registry is the source of truth for placement (D-01), so it is
@@ -312,12 +301,10 @@ async def create_project(
             target_cloud=payload.target_cloud,
         )
     except ImmutableCloudError as exc:
-        _project_creators.pop(payload.project_name, None)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
     except RegistryError as exc:
-        _project_creators.pop(payload.project_name, None)
         logger.error(
             "Registry write failed for '%s': %s", payload.project_name, exc
         )
@@ -327,7 +314,10 @@ async def create_project(
         ) from exc
 
     # Persist the project owner (creator) — immutable, can never be removed —
-    # and mirror the cloud choice for the portal.
+    # and mirror the cloud choice for the portal. This row is what grants the
+    # creator access from the very next request: authorization resolves owner
+    # from the database, so it does not wait on Terraform or on the background
+    # task below.
     if (
         not db.query(Project)
         .filter(Project.project_name == payload.project_name)
@@ -369,8 +359,6 @@ async def create_project(
                 username,
                 payload.project_name,
             )
-            # Remove from temporary storage once successfully added
-            _project_creators.pop(payload.project_name, None)
 
             # Sync to Grafana (non-blocking, best-effort)
             try:
@@ -420,95 +408,30 @@ async def create_project(
 
 @router.get("/{project_name}/apps", response_model=list[DeploymentRead])
 async def list_project_apps(
-    project_name: str,
-    token_payload: Annotated[dict, Depends(get_current_user)],
+    ctx: RequireGuest,
     db: Session = Depends(get_db),
 ) -> list[DeploymentRead]:
     """
-    Return all applications (deployments) belonging to *project_name*.
+    Return all applications (deployments) belonging to a project.
 
-    Access control: the authenticated user must be a member or admin of the
-    project (verified via real-time Keycloak API query).
+    Access control: any role on the project, guests included — seeing the
+    application list is the whole of what a guest is for.
     """
-    user_id = get_user_id_from_token(token_payload)
-
     logger.info(
-        f"🔍 Checking access for user_id='{user_id}' to project '{project_name}'"
+        "🔍 Listing apps of '%s' for '%s' (%s)",
+        ctx.project_name,
+        ctx.username,
+        ctx.role.value,
     )
 
-    # Quick check: is this user the creator (temporary during bootstrap)?
-    if _project_creators.get(project_name) == user_id:
-        logger.info(
-            f"✅ User '{user_id}' is creator of project '{project_name}' (bootstrap in progress)"
-        )
-        # Allow access immediately for creator
-        apps = (
-            db.query(Deployment)
-            .filter(
-                Deployment.project_id == project_name,
-                Deployment.status != DeploymentStatus.DELETED,
-            )
-            .all()
-        )
-        return apps
-    else:
-        creator_id = _project_creators.get(project_name)
-        if creator_id:
-            logger.warning(
-                f"⚠️  Creator mismatch: stored='{creator_id}', current='{user_id}'"
-            )
-        else:
-            logger.info(
-                f"ℹ️  No creator stored for project '{project_name}', checking Keycloak groups"
-            )
-
-    # Check if user has access to this project via Keycloak groups
-    try:
-        from app.services.keycloak_service import (
-            _check_user_in_group_realtime,
-            _find_group_by_name,
-            _get_admin_token,
-        )
-
-        admin_token = _get_admin_token()
-        has_access = False
-
-        for suffix in ("admins", "members"):
-            group_name = f"project-{project_name}-{suffix}"
-            group = _find_group_by_name(group_name, admin_token)
-            if group and _check_user_in_group_realtime(
-                user_id, group["id"], admin_token
-            ):
-                has_access = True
-                break
-
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: you are not a member of project '{project_name}'.",
-            )
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(
-            "Failed to verify access for project '%s': %s", project_name, exc
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to verify project access: {exc}",
-        ) from exc
-
-    apps = (
+    return (
         db.query(Deployment)
         .filter(
-            Deployment.project_id == project_name,
+            Deployment.project_id == ctx.project_name,
             Deployment.status != DeploymentStatus.DELETED,
         )
         .all()
     )
-
-    return apps
 
 
 # ---------------------------------------------------------------------------
@@ -518,50 +441,25 @@ async def list_project_apps(
 
 @router.get("/{project_name}/members")
 async def get_project_members(
-    project_name: str,
-    token_payload: Annotated[dict, Depends(get_current_user)],
+    ctx: RequireMember,
     db: Session = Depends(get_db),
 ) -> dict:
     """
-    List all members of a project (both admins and members).
+    List every member of a project, across all role groups.
 
-    Access control: requires membership in the project (admin or member).
+    Access control: member or above. Guests are excluded on purpose — who
+    else works on the project is not theirs to see.
+
+    ``guests_supported`` is False for projects bootstrapped before the guests
+    group existed; the UI uses it to hide the Guest option rather than offer
+    a role that would be rejected.
 
     Returns:
-        dict: ``{"project_name": "...", "members": [...]}``
+        dict: ``{"project_name", "members", "guests_supported"}``
     """
-    user_id = get_user_id_from_token(token_payload)
+    project_name = ctx.project_name
 
-    # Quick check: is this user the creator (temporary during bootstrap)?
-    is_creator = _project_creators.get(project_name) == user_id
-
-    # Check if user has access to this project
     try:
-        from app.services.keycloak_service import (
-            _check_user_in_group_realtime,
-            _find_group_by_name,
-            _get_admin_token,
-        )
-
-        admin_token = _get_admin_token()
-        has_access = is_creator  # Creator always has access
-
-        if not has_access:
-            for suffix in ("admins", "members"):
-                group_name = f"project-{project_name}-{suffix}"
-                group = _find_group_by_name(group_name, admin_token)
-                if group and _check_user_in_group_realtime(
-                    user_id, group["id"], admin_token
-                ):
-                    has_access = True
-                    break
-
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: you are not a member of project '{project_name}'.",
-            )
-
         members = list_project_members(project_name)
 
         # Mark the owner (creator) — they always rank above admin and cannot
@@ -574,9 +472,13 @@ async def get_project_members(
         if owner:
             for member in members:
                 if member["username"] == owner.owner_username:
-                    member["role"] = "owner"
+                    member["role"] = ProjectRole.OWNER.value
 
-        return {"project_name": project_name, "members": members}
+        return {
+            "project_name": project_name,
+            "members": members,
+            "guests_supported": project_guests_supported(project_name),
+        }
 
     except HTTPException:
         raise
@@ -592,83 +494,40 @@ async def get_project_members(
 
 @router.post("/{project_name}/members", status_code=201)
 async def add_project_member(
-    project_name: str,
-    token_payload: Annotated[dict, Depends(get_current_user)],
-    username: Annotated[str, Body(..., embed=True)],
-    role: Annotated[str, Body(..., embed=True)] = "member",
+    payload: AddMemberRequest,
+    ctx: RequireAdmin,
 ) -> dict:
     """
-    Add a user to a project Keycloak group.
+    Add a user to a project, or change the role they already hold.
 
-    Access control: requires admin role in the project.
-    Optimised: admin check and user lookup run in parallel.
+    Access control: admin or owner.
+
+    The user is first removed from every role group of the project, then
+    added to the requested one. Skipping that first step is what used to make
+    a demotion a silent no-op: the old group stayed, and role resolution
+    takes the strongest group a user is in.
+
+    Raises:
+        409: the target group does not exist — the project predates guest
+            support and its Terraform module needs re-running.
     """
-    user_id = get_user_id_from_token(token_payload)
+    project_name = ctx.project_name
+    username = payload.username
+    role = payload.role
 
     try:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        from app.services.keycloak_service import (
-            _check_user_in_group_realtime,
-            _find_group_by_name,
-            _find_user_by_username,
-            _get_admin_token,
-        )
-
-        admin_token = _get_admin_token()
-
-        # ── Run admin-group lookup AND user lookup in parallel ────────────
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            admin_group_future = pool.submit(
-                _find_group_by_name,
-                f"project-{project_name}-admins",
-                admin_token,
-            )
-            user_future = pool.submit(
-                _find_user_by_username, username, admin_token
-            )
-            admin_group = admin_group_future.result()
-            target_user = user_future.result()
-
-        if not admin_group or not _check_user_in_group_realtime(
-            user_id, admin_group["id"], admin_token
-        ):
+        # Clear any role the user already holds here, so the new one is the
+        # only one left. No-op for a brand new member.
+        try:
+            remove_user_from_project(username, project_name)
+        except ValueError as exc:
+            # User genuinely does not exist in Keycloak — report it as such
+            # rather than letting the add below fail more obscurely.
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: admin role required for project '{project_name}'.",
-            )
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from exc
 
-        if not target_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"User '{username}' not found in Keycloak.",
-            )
-
-        # Find target group and add user in parallel
-        group_suffix = "admins" if role == "admin" else "members"
-        target_group = _find_group_by_name(
-            f"project-{project_name}-{group_suffix}", admin_token
-        )
-
-        if not target_group:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Group 'project-{project_name}-{group_suffix}' not found. "
-                    "Ensure the project has been bootstrapped."
-                ),
-            )
-
-        # Add user to group
-        import requests as _requests
-
-        resp = _requests.put(
-            f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
-            f"/users/{target_user['id']}/groups/{target_group['id']}",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
+        add_user_to_project(username, project_name, role)
 
         # Sync to Grafana (non-blocking, best-effort)
         try:
@@ -681,8 +540,19 @@ async def add_project_member(
                 grafana_exc,
             )
 
+        logger.info(
+            "👥 '%s' set '%s' to role '%s' on project '%s'",
+            ctx.username,
+            username,
+            role,
+            project_name,
+        )
+
         return {
-            "message": f"User '{username}' added to project '{project_name}' with role '{role}'.",
+            "message": (
+                f"User '{username}' added to project '{project_name}' "
+                f"with role '{role}'."
+            ),
             "project_name": project_name,
             "username": username,
             "role": role,
@@ -690,6 +560,22 @@ async def add_project_member(
 
     except HTTPException:
         raise
+    except ProjectGroupMissingError as exc:
+        logger.error(
+            "Cannot assign role '%s' on '%s': %s",
+            role,
+            project_name,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Group '{exc.group_name}' does not exist. This project was "
+                "bootstrapped before guest support was added — re-run the "
+                f"project-bootstrap Terraform module for '{project_name}' "
+                "to create it."
+            ),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
@@ -709,22 +595,21 @@ async def add_project_member(
 
 @router.delete("/{project_name}/members/{username}", status_code=204)
 async def remove_project_member(
-    project_name: str,
     username: str,
-    token_payload: Annotated[dict, Depends(get_current_user)],
+    ctx: RequireAdmin,
     db: Session = Depends(get_db),
 ) -> None:
     """
-    Remove a user from a project (both admin and member groups).
+    Remove a user from a project, whatever role they held.
 
-    Access control: requires admin role in the project.
+    Access control: admin or owner.
 
     Raises:
         400: User not found, or target is the project owner.
         403: Caller is not a project admin.
         502: Keycloak API error.
     """
-    user_id = get_user_id_from_token(token_payload)
+    project_name = ctx.project_name
 
     # The owner (creator) can never be removed from their project.
     owner = (
@@ -737,24 +622,6 @@ async def remove_project_member(
         )
 
     try:
-        from app.services.keycloak_service import (
-            _check_user_in_group_realtime,
-            _find_group_by_name,
-            _get_admin_token,
-        )
-
-        admin_token = _get_admin_token()
-        admin_group_name = f"project-{project_name}-admins"
-        admin_group = _find_group_by_name(admin_group_name, admin_token)
-
-        if not admin_group or not _check_user_in_group_realtime(
-            user_id, admin_group["id"], admin_token
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: admin role required for project '{project_name}'.",
-            )
-
         remove_user_from_project(username, project_name)
 
         # Sync to Grafana (non-blocking, best-effort)
@@ -795,56 +662,29 @@ async def remove_project_member(
 
 @router.delete("/{project_name}", status_code=202)
 async def delete_project(
-    project_name: str,
+    ctx: RequireAdmin,
     background_tasks: BackgroundTasks,
-    token_payload: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ) -> None:
     """
     Delete a project and tear down its Day-0 infrastructure.
 
-    Keycloak groups and the ownership record are removed synchronously so the
-    project disappears from listings immediately; the remaining infrastructure
-    (Vault policy, ArgoCD AppProject, GitHub resources and the per-project
-    Terraform state) is destroyed in the background via ``terraform destroy``.
+    The ownership record is removed synchronously so the project disappears
+    from listings immediately; the rest (Keycloak groups, Vault policy, ArgoCD
+    AppProject, GitHub resources and the per-project Terraform state) is
+    destroyed in the background via ``terraform destroy``.
 
     Requirements:
-    - User must be project admin
+    - Caller must be project admin or owner
     - Project must have NO applications (all apps must be deleted first)
 
     Raises:
         400: Project has active applications
-        403: User is not project admin
-        404: Project not found
+        403: Caller is not a project admin
     """
-    user_id = get_user_id_from_token(token_payload)
+    project_name = ctx.project_name
 
-    # Check admin access
     try:
-        from app.services.keycloak_service import (
-            _check_user_in_group_realtime,
-            _find_group_by_name,
-            _get_admin_token,
-        )
-
-        admin_token = _get_admin_token()
-        admin_group_name = f"project-{project_name}-admins"
-        admin_group = _find_group_by_name(admin_group_name, admin_token)
-
-        if not admin_group:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project '{project_name}' not found.",
-            )
-
-        if not _check_user_in_group_realtime(
-            user_id, admin_group["id"], admin_token
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: admin role required for project '{project_name}'.",
-            )
-
         # Check if project has any applications
         app_count = (
             db.query(Deployment)

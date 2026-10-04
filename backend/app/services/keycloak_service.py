@@ -2,17 +2,27 @@
 Keycloak Service
 
 Provides utilities for:
-- Extracting project membership from JWT group claims
-- Fetching user groups from the Keycloak Admin API
-- Verifying project access for FastAPI dependency injection
+- Resolving a user's role on a project from the Keycloak Admin API
+- Managing project group membership (add / remove / list)
+- Decoding the Bearer JWT for FastAPI dependency injection
 
-Group naming convention: project-<project_name>-admins | project-<project_name>-members
-Example: project-sandbox-admins, project-sandbox-members
+Group naming convention: project-<project_name>-<admins|members|guests>
+Example: project-sandbox-admins, project-sandbox-guests
+
+The ``guests`` group is created by the ``project-bootstrap`` Terraform
+module alongside the other two. Projects bootstrapped before guests existed
+have no such group: every read path here degrades to "nobody is a guest",
+and only the write path complains — loudly, via
+:class:`ProjectGroupMissingError`.
+
+Note that group membership is always resolved against the Admin API, never
+from the JWT's ``groups`` claim, which is not populated in this realm.
 
 Performance notes:
 - Admin token is cached for 55 seconds (tokens live 60s by default)
-- Group IDs are cached for 5 minutes (groups rarely change)
-- Member lists are fetched in parallel (admins + members simultaneously)
+- Group IDs are cached for 5 minutes (groups rarely change); misses are not
+  cached, so a freshly created group is visible immediately
+- Member lists are fetched in parallel (one request per group)
 """
 
 import logging
@@ -27,15 +37,38 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
+from app.core.roles import (
+    ALL_GROUP_SUFFIXES,
+    ASSIGNABLE,
+    GROUP_SUFFIX,
+    SUFFIX_TO_ROLE,
+    ProjectRole,
+    rank,
+)
 
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer(auto_error=True)
 
-# Regex that matches Keycloak project group names
+# Regex that matches Keycloak project group names. The suffix is captured so
+# the role can be looked up directly instead of re-parsing the group name.
 _PROJECT_GROUP_RE = re.compile(
-    r"^/?project-(?P<name>[a-z0-9-]+)-(admins|members)$"
+    r"^/?project-(?P<name>[a-z0-9-]+)-(?P<suffix>admins|members|guests)$"
 )
+
+
+class ProjectGroupMissingError(ValueError):
+    """
+    A project group that should exist does not.
+
+    In practice this means the project was bootstrapped before the guests
+    group was added to the Terraform module. Carries the group name so
+    callers can name it in the response.
+    """
+
+    def __init__(self, group_name: str) -> None:
+        self.group_name = group_name
+        super().__init__(f"Keycloak group '{group_name}' does not exist.")
 
 # ── Simple in-process caches ──────────────────────────────────────────────────
 
@@ -48,57 +81,66 @@ _GROUP_CACHE_TTL = 300  # 5 minutes
 
 
 # ---------------------------------------------------------------------------
-# JWT helpers
+# Identity helpers
 # ---------------------------------------------------------------------------
 
 
-def extract_projects_from_jwt(token_payload: dict) -> list[str]:
+def get_user_id_from_token(token_payload: dict) -> str:
     """
-    Parse the Keycloak JWT payload and return the list of project names
-    the user belongs to (de-duplicated, sorted).
+    Extract the Keycloak user UUID from a decoded token.
 
-    Groups are expected under the ``groups`` claim as paths like:
-      - ``/project-sandbox-admins``
-      - ``project-sandbox-members``
+    Falls back to a username lookup when the ``sub`` claim is missing.
 
     Args:
-        token_payload: Decoded JWT payload dict.
+        token_payload: Decoded JWT token payload.
 
     Returns:
-        Sorted, unique list of project names (e.g. ``["sandbox", "myteam"]``).
+        str: User ID (UUID).
+
+    Raises:
+        HTTPException: If the user cannot be determined.
     """
-    raw_groups: list[str] = token_payload.get("groups", [])
-    projects: set[str] = set()
+    user_id = token_payload.get("sub", "")
+    username = token_payload.get("preferred_username", "")
 
-    for group in raw_groups:
-        m = _PROJECT_GROUP_RE.match(group.strip())
-        if m:
-            projects.add(m.group("name"))
+    # If sub is empty but we have username, lookup user_id from Keycloak
+    if not user_id and username:
+        logger.warning(
+            "⚠️  Token missing 'sub' claim, looking up user_id from "
+            "username '%s'",
+            username,
+        )
+        try:
+            admin_token = _get_admin_token()
+            user = _find_user_by_username(username, admin_token)
+            if user:
+                user_id = user["id"]
+                logger.info(
+                    "✅ Found user_id '%s' for username '%s'",
+                    user_id,
+                    username,
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User '{username}' not found in Keycloak",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("❌ Failed to lookup user: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to lookup user: {exc}",
+            ) from exc
 
-    return sorted(projects)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not determine user identity from token.",
+        )
 
-
-def has_project_access(token_payload: dict, project_name: str) -> bool:
-    """
-    Return True if the JWT grants access (admin or member) to *project_name*.
-
-    Args:
-        token_payload: Decoded JWT payload dict.
-        project_name: Lowercase project identifier (e.g. ``"sandbox"``).
-
-    Returns:
-        bool
-    """
-    raw_groups: list[str] = token_payload.get("groups", [])
-    target_admins = f"project-{project_name}-admins"
-    target_members = f"project-{project_name}-members"
-
-    for group in raw_groups:
-        clean = group.strip().lstrip("/")
-        if clean in (target_admins, target_members):
-            return True
-
-    return False
+    return user_id
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +207,11 @@ def _find_user_by_username(username: str, admin_token: str) -> dict | None:
 def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     """
     Search for a Keycloak group by exact name.
-    Results cached for 5 minutes — group IDs rarely change.
+
+    Hits are cached for 5 minutes — group IDs rarely change. Misses are NOT
+    cached: a project's guests group may be created by Terraform at any
+    moment, and caching the "not found" would keep rejecting guest
+    assignments for minutes after the operator fixed the project.
     """
     now = time.monotonic()
     cached = _group_cache.get(group_name)
@@ -185,7 +231,11 @@ def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     groups = response.json()
     # Keycloak search returns partial matches — filter exact
     group = next((g for g in groups if g.get("name") == group_name), None)
-    _group_cache[group_name] = (group, now + _GROUP_CACHE_TTL)
+    if group is not None:
+        _group_cache[group_name] = (group, now + _GROUP_CACHE_TTL)
+    else:
+        # Drop any stale entry so a later hit isn't shadowed.
+        _group_cache.pop(group_name, None)
     return group
 
 
@@ -220,20 +270,19 @@ def _check_user_in_group_realtime(
         return False
 
 
-def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
+def _fetch_user_groups(user_id: str) -> list[dict]:
     """
-    Query the Keycloak Admin API to retrieve the group membership of a user
-    and convert it to a list of project dicts.
+    Return every Keycloak group a user belongs to.
 
-    Args:
-        user_id: Keycloak user UUID (the ``sub`` claim).
+    One Admin API call. ``briefRepresentation`` trims the payload to what the
+    callers need (the name), and ``max`` lifts the default page size, which
+    would otherwise silently truncate the groups of a user who belongs to
+    many projects.
 
-    Returns:
-        List of project dicts:
-        ``[{"name": "sandbox", "role": "admin"}, ...]``
+    Returns an empty list — never raises — when Keycloak is unreachable, so a
+    transient outage reads as "no projects" rather than a 500. Callers that
+    must distinguish the two should probe Keycloak themselves.
     """
-    logger.info(f"🔍 Fetching groups from Keycloak for user_id: {user_id}")
-
     try:
         admin_token = _get_admin_token()
         url = (
@@ -243,62 +292,113 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         response = requests.get(
             url,
             headers={"Authorization": f"Bearer {admin_token}"},
+            params={"briefRepresentation": "true", "max": 500},
             timeout=10,
         )
         response.raise_for_status()
-        groups: list[dict] = response.json()
-
-        logger.info(
-            f"📋 Keycloak returned {len(groups)} groups for user {user_id}"
-        )
-        logger.debug(f"Raw groups: {[g.get('name') for g in groups]}")
-
+        return response.json()
     except requests.RequestException as exc:
         logger.warning("Could not fetch groups from Keycloak: %s", exc)
         return []
 
-    projects: dict[str, str] = {}  # name -> role (admin wins over member)
+
+def _project_roles_from_groups(groups: list[dict]) -> dict[str, ProjectRole]:
+    """
+    Map Keycloak groups to ``{project_name: role}``.
+
+    A user can sit in several groups of one project — being added as admin
+    never removed them from ``-members``. The strongest role wins.
+    """
+    projects: dict[str, ProjectRole] = {}
+
     for group in groups:
         group_name: str = group.get("name", "")
-        m = _PROJECT_GROUP_RE.match(group_name.strip())
-        if m:
-            project_name = m.group("name")
-            role_str = m.group(2) if len(m.groups()) >= 2 else ""
-            # Resolve via the full match to get the suffix
-            suffix = group_name.rsplit("-", 1)[-1]  # "admins" or "members"
-            role = "admin" if suffix == "admins" else "member"
-            # Admin role wins over member role for the same project
-            if project_name not in projects or role == "admin":
-                projects[project_name] = role
-                logger.debug(
-                    f"  ✅ Matched project group: {group_name} → project={project_name}, role={role}"
-                )
+        match = _PROJECT_GROUP_RE.match(group_name.strip())
+        if not match:
+            continue
 
+        project_name = match.group("name")
+        role = SUFFIX_TO_ROLE[match.group("suffix")]
+
+        if rank(role) > rank(projects.get(project_name)):
+            projects[project_name] = role
+
+    return projects
+
+
+def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
+    """
+    Query the Keycloak Admin API to retrieve the group membership of a user
+    and convert it to a list of project dicts.
+
+    Args:
+        user_id: Keycloak user UUID (the ``sub`` claim).
+
+    Returns:
+        List of project dicts, sorted by name:
+        ``[{"name": "sandbox", "role": "admin"}, ...]``
+    """
+    logger.info("🔍 Fetching groups from Keycloak for user_id: %s", user_id)
+
+    groups = _fetch_user_groups(user_id)
+    logger.debug("Raw groups: %s", [g.get("name") for g in groups])
+
+    projects = _project_roles_from_groups(groups)
     logger.info(
-        f"📊 Extracted {len(projects)} projects: {list(projects.keys())}"
+        "📊 Extracted %d projects: %s", len(projects), list(projects)
     )
 
     return [
-        {"name": name, "role": role} for name, role in sorted(projects.items())
+        {"name": name, "role": role.value}
+        for name, role in sorted(projects.items())
     ]
+
+
+def get_user_project_role(
+    user_id: str, project_name: str
+) -> ProjectRole | None:
+    """
+    Return the user's role on one project, or None if they have none.
+
+    This is the primitive every authorization check is built on. It costs a
+    single Admin API call — the user's own group list — and matches locally.
+    The alternative (looking up each project group's id, then probing
+    membership) costs up to six calls and grows with every new role.
+
+    ``owner`` is never returned: it lives in the database, and the caller
+    that has a session resolves it. See ``app.services.authz``.
+    """
+    groups = _fetch_user_groups(user_id)
+    return _project_roles_from_groups(groups).get(project_name)
 
 
 def add_user_to_project(username: str, project_name: str, role: str) -> None:
     """
     Add a user to a project Keycloak group.
 
+    Does not clear the user's other groups on the project — callers changing
+    someone's role must call :func:`remove_user_from_project` first, or the
+    old group lingers and the stronger role keeps winning.
+
     Args:
         username: Keycloak username.
         project_name: Project identifier (e.g. ``"sandbox"``).
-        role: Either ``"admin"`` or ``"member"``.
+        role: One of ``"admin"``, ``"member"`` or ``"guest"``.
 
     Raises:
-        ValueError: If user or group not found, or role is invalid.
+        ValueError: If the role is invalid or the user is not found.
+        ProjectGroupMissingError: If the target group does not exist.
         requests.RequestException: On Keycloak API errors.
     """
-    if role not in ("admin", "member"):
+    try:
+        target_role = ProjectRole(role)
+    except ValueError as exc:
+        raise ValueError(f"Invalid role '{role}'.") from exc
+
+    if target_role not in ASSIGNABLE:
+        allowed = ", ".join(repr(r.value) for r in ASSIGNABLE)
         raise ValueError(
-            f"Invalid role '{role}'. Must be 'admin' or 'member'."
+            f"Invalid role '{role}'. Must be one of: {allowed}."
         )
 
     admin_token = _get_admin_token()
@@ -311,16 +411,12 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
     user_id = user["id"]
 
     # Construct group name
-    group_suffix = "admins" if role == "admin" else "members"
-    group_name = f"project-{project_name}-{group_suffix}"
+    group_name = f"project-{project_name}-{GROUP_SUFFIX[target_role]}"
 
     # Find group
     group = _find_group_by_name(group_name, admin_token)
     if not group:
-        raise ValueError(
-            f"Group '{group_name}' not found. "
-            f"Ensure the project '{project_name}' has been bootstrapped."
-        )
+        raise ProjectGroupMissingError(group_name)
 
     group_id = group["id"]
 
@@ -343,7 +439,14 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
 
 def remove_user_from_project(username: str, project_name: str) -> None:
     """
-    Remove a user from BOTH admin and member groups of a project.
+    Remove a user from EVERY role group of a project.
+
+    Used both to drop someone from a project and, before an
+    :func:`add_user_to_project`, to change their role: without this the user
+    keeps their old group and the stronger of the two keeps winning.
+
+    A group that does not exist is skipped, so this is safe on projects
+    bootstrapped before the guests group was introduced.
 
     Args:
         username: Keycloak username.
@@ -362,8 +465,8 @@ def remove_user_from_project(username: str, project_name: str) -> None:
 
     user_id = user["id"]
 
-    # Remove from both groups (if they exist)
-    for suffix in ("admins", "members"):
+    # Remove from every role group (if they exist)
+    for suffix in ALL_GROUP_SUFFIXES:
         group_name = f"project-{project_name}-{suffix}"
         group = _find_group_by_name(group_name, admin_token)
 
@@ -395,23 +498,45 @@ def remove_user_from_project(username: str, project_name: str) -> None:
         logger.info("Removed user '%s' from group '%s'", username, group_name)
 
 
+def project_guests_supported(project_name: str) -> bool:
+    """
+    Return True if this project has a guests group.
+
+    Projects bootstrapped before guest support was added to the
+    ``project-bootstrap`` Terraform module do not. The UI uses this to hide
+    the Guest option rather than letting an admin pick it and collect a 409.
+    """
+    admin_token = _get_admin_token()
+    group_name = (
+        f"project-{project_name}-{GROUP_SUFFIX[ProjectRole.GUEST]}"
+    )
+    return _find_group_by_name(group_name, admin_token) is not None
+
+
 def list_project_members(project_name: str) -> list[dict]:
     """
-    List all members of a project (both admins and members).
+    List every member of a project, across all role groups.
 
-    Optimised: the two group lookups and their member fetches run in parallel.
+    Optimised: the group lookups and their member fetches run in parallel.
 
     Returns:
-        Sorted list of member dicts with role resolved (admin wins over member).
+        Sorted list of member dicts with the strongest role resolved per
+        user.
     """
     admin_token = _get_admin_token()
 
-    def _fetch_group_members(suffix: str, role: str) -> list[dict]:
-        """Fetch members of one group, returning [] if the group doesn't exist."""
+    def _fetch_group_members(suffix: str, role: ProjectRole) -> list[dict]:
+        """Fetch members of one group, returning [] if the group is absent."""
         group_name = f"project-{project_name}-{suffix}"
         group = _find_group_by_name(group_name, admin_token)
         if not group:
-            logger.debug("Group '%s' not found — skipping", group_name)
+            logger.info(
+                "Group '%s' does not exist — treating it as empty. Re-run "
+                "the project-bootstrap Terraform module for '%s' to create "
+                "it.",
+                group_name,
+                project_name,
+            )
             return []
 
         url = (
@@ -430,29 +555,36 @@ def list_project_members(project_name: str) -> list[dict]:
                 "email": u.get("email", ""),
                 "first_name": u.get("firstName", ""),
                 "last_name": u.get("lastName", ""),
-                "role": role,
+                "role": role.value,
             }
             for u in response.json()
             if u.get("username")
         ]
 
-    # ── Fetch admins and members in parallel ─────────────────────────────
+    # ── Fetch every role group in parallel ───────────────────────────────
     members: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=len(ASSIGNABLE)) as pool:
         futures = {
-            pool.submit(_fetch_group_members, "admins", "admin"): "admin",
-            pool.submit(_fetch_group_members, "members", "member"): "member",
+            pool.submit(
+                _fetch_group_members, GROUP_SUFFIX[role], role
+            ): role
+            for role in ASSIGNABLE
         }
         for future in as_completed(futures):
             role = futures[future]
             try:
                 for user in future.result():
                     username = user["username"]
-                    # Admin role wins over member role for the same user
-                    if username not in members or role == "admin":
+                    # The strongest role wins when a user is in several groups
+                    existing = members.get(username)
+                    if existing is None or rank(role) > rank(
+                        existing["role"]
+                    ):
                         members[username] = user
             except Exception as exc:
-                logger.warning("Failed to fetch %s group: %s", role, exc)
+                logger.warning(
+                    "Failed to fetch %s group: %s", role.value, exc
+                )
 
     return sorted(members.values(), key=lambda x: x["username"])
 
@@ -494,97 +626,3 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {exc}",
         ) from exc
-
-
-def verify_project_access(project_name: str, require_admin: bool = False):
-    """
-    FastAPI dependency factory for real-time RBAC verification.
-
-    Unlike JWT-only checks, this queries the Keycloak Admin API to verify
-    current group membership, preventing token staleness issues.
-
-    Args:
-        project_name: Project identifier to check access for.
-        require_admin: If True, requires admin role. If False, allows admin or member.
-
-    Returns:
-        FastAPI dependency that raises HTTPException 403 on access denial.
-
-    Usage::
-
-        @router.get("/api/projects/{project_name}/apps")
-        async def list_apps(
-            project_name: str,
-            user: dict = Depends(verify_project_access(project_name)),
-        ): ...
-
-        @router.post("/api/projects/{project_name}/members")
-        async def add_member(
-            project_name: str,
-            user: dict = Depends(verify_project_access(project_name, require_admin=True)),
-        ): ...
-    """
-
-    async def _inner(
-        token_payload: Annotated[dict, Depends(get_current_user)],
-    ) -> dict:
-        user_id = token_payload.get("sub", "")
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not determine user identity from token.",
-            )
-
-        try:
-            admin_token = _get_admin_token()
-
-            # Check admin group
-            admin_group_name = f"project-{project_name}-admins"
-            admin_group = _find_group_by_name(admin_group_name, admin_token)
-
-            if admin_group:
-                is_admin = _check_user_in_group_realtime(
-                    user_id, admin_group["id"], admin_token
-                )
-                if is_admin:
-                    return token_payload  # Admin access granted
-
-            # If admin role required but user is not admin, deny
-            if require_admin:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Access denied: admin role required for project '{project_name}'.",
-                )
-
-            # Check member group
-            member_group_name = f"project-{project_name}-members"
-            member_group = _find_group_by_name(member_group_name, admin_token)
-
-            if member_group:
-                is_member = _check_user_in_group_realtime(
-                    user_id, member_group["id"], admin_token
-                )
-                if is_member:
-                    return token_payload  # Member access granted
-
-            # No access found
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: you are not a member of project '{project_name}'.",
-            )
-
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.error(
-                "Error verifying project access for user %s in project %s: %s",
-                user_id,
-                project_name,
-                exc,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Failed to verify project access. Please try again.",
-            ) from exc
-
-    return _inner

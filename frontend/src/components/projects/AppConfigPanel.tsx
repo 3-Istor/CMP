@@ -21,6 +21,12 @@ import { toast } from "sonner";
 
 interface Props {
     deploymentId: number;
+    /**
+     * Show the values but refuse edits. Members are meant to read the
+     * configuration, so the fields are disabled rather than hidden — an empty
+     * panel would look like a loading failure.
+     */
+    readOnly?: boolean;
 }
 
 // ── Value helpers ─────────────────────────────────────────────────────────────
@@ -60,9 +66,16 @@ interface FieldProps {
     value: ConfigValue;
     onChange: (keyPath: string, newVal: ConfigValue) => void;
     depth?: number;
+    readOnly?: boolean;
 }
 
-function ConfigField({ keyPath, value, onChange, depth = 0 }: FieldProps) {
+function ConfigField({
+    keyPath,
+    value,
+    onChange,
+    depth = 0,
+    readOnly = false,
+}: FieldProps) {
     const leafKey = keyPath.split(".").pop()!;
     const fieldType = guessFieldType(leafKey, value);
     const label = humanLabel(leafKey);
@@ -81,6 +94,7 @@ function ConfigField({ keyPath, value, onChange, depth = 0 }: FieldProps) {
                         value={v as ConfigValue}
                         onChange={onChange}
                         depth={depth + 1}
+                        readOnly={readOnly}
                     />
                 ))}
             </div>
@@ -97,6 +111,7 @@ function ConfigField({ keyPath, value, onChange, depth = 0 }: FieldProps) {
                     id={keyPath}
                     checked={value as boolean}
                     onCheckedChange={(checked) => onChange(keyPath, checked)}
+                    disabled={readOnly}
                 />
             </div>
         );
@@ -120,6 +135,7 @@ function ConfigField({ keyPath, value, onChange, depth = 0 }: FieldProps) {
                     value={[num]}
                     onValueChange={([v]) => onChange(keyPath, v)}
                     className="w-full"
+                    disabled={readOnly}
                 />
             </div>
         );
@@ -136,6 +152,7 @@ function ConfigField({ keyPath, value, onChange, depth = 0 }: FieldProps) {
                     type="number"
                     value={String(value)}
                     onChange={(e) => onChange(keyPath, Number(e.target.value))}
+                    disabled={readOnly}
                 />
             </div>
         );
@@ -152,6 +169,7 @@ function ConfigField({ keyPath, value, onChange, depth = 0 }: FieldProps) {
                 type="text"
                 value={String(value)}
                 onChange={(e) => onChange(keyPath, e.target.value)}
+                disabled={readOnly}
             />
         </div>
     );
@@ -181,7 +199,7 @@ function deepSet(
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function AppConfigPanel({ deploymentId }: Props) {
+export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
     const [remoteConfig, setRemoteConfig] = useState<DeploymentConfig | null>(
         null,
     );
@@ -220,6 +238,7 @@ export function AppConfigPanel({ deploymentId }: Props) {
     }, []);
 
     const handleSave = async () => {
+        if (readOnly) return;
         setSaving(true);
         try {
             await updateDeploymentConfig(deploymentId, {
@@ -270,9 +289,19 @@ export function AppConfigPanel({ deploymentId }: Props) {
                     </Button>
                 </div>
                 <CardDescription className="text-xs">
-                    Changes are committed to{" "}
-                    <span className="font-mono">deploy/values.yaml</span> on{" "}
-                    <span className="font-mono">main</span>. ArgoCD syncs automatically.
+                    {readOnly ? (
+                        <>
+                            Read-only view of{" "}
+                            <span className="font-mono">deploy/values.yaml</span>.
+                        </>
+                    ) : (
+                        <>
+                            Changes are committed to{" "}
+                            <span className="font-mono">deploy/values.yaml</span> on{" "}
+                            <span className="font-mono">main</span>. ArgoCD syncs
+                            automatically.
+                        </>
+                    )}
                     {remoteConfig?.repo && (
                         <>
                             {" "}
@@ -309,6 +338,7 @@ export function AppConfigPanel({ deploymentId }: Props) {
                                 keyPath={key}
                                 value={value as ConfigValue}
                                 onChange={handleChange}
+                                readOnly={readOnly}
                             />
                         ))}
 
@@ -319,26 +349,33 @@ export function AppConfigPanel({ deploymentId }: Props) {
                             </p>
                         )}
 
-                        {isDirty && (
-                            <div className="pt-2 border-t border-border">
-                                <Button
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    className="w-full"
-                                >
-                                    {saving ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Saving…
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-4 w-4" />
-                                            Save Changes
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
+                        {readOnly ? (
+                            <p className="pt-2 border-t border-border text-xs text-muted-foreground">
+                                Only project admins can change this
+                                configuration.
+                            </p>
+                        ) : (
+                            isDirty && (
+                                <div className="pt-2 border-t border-border">
+                                    <Button
+                                        onClick={handleSave}
+                                        disabled={saving}
+                                        className="w-full"
+                                    >
+                                        {saving ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Saving…
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Save className="mr-2 h-4 w-4" />
+                                                Save Changes
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            )
                         )}
                     </div>
                 )}

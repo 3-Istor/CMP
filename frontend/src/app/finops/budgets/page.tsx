@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { getBudget, getFinopsAlerts } from "@/lib/api";
 import { useProjects } from "@/lib/hooks";
+import { can } from "@/lib/permissions";
 import type { Budget, CostAlert } from "@/types";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -41,7 +42,10 @@ function BudgetsInner() {
     }
   }, [projects, project]);
 
-  const canEdit = projects.find((p) => p.name === project)?.role === "owner";
+  const canEdit = can(
+    projects.find((p) => p.name === project)?.role,
+    "finops.editBudget",
+  );
 
   const refresh = useCallback(async () => {
     if (!project) return;
