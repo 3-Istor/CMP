@@ -27,6 +27,7 @@ class ProjectStatus(str, enum.Enum):
     SUSPENDED = "suspended"
     DECOMMISSIONING = "decommissioning"
     FAILED = "failed"
+    DECOMMISSION_FAILED = "decommission_failed"
 
 
 class Project(Base):

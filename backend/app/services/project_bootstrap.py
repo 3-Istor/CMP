@@ -290,7 +290,7 @@ def run_project_teardown(
         )
         set_project_status(
             project_name,
-            ProjectStatus.FAILED,
+            ProjectStatus.DECOMMISSION_FAILED,
             _failure_message("Teardown", "while locating the module", exc),
         )
         return
@@ -313,7 +313,7 @@ def run_project_teardown(
         )
         set_project_status(
             project_name,
-            ProjectStatus.FAILED,
+            ProjectStatus.DECOMMISSION_FAILED,
             _failure_message(
                 "Teardown", "while authenticating to GitHub", exc
             ),
@@ -380,7 +380,7 @@ def run_project_teardown(
         )
         set_project_status(
             project_name,
-            ProjectStatus.FAILED,
+            ProjectStatus.DECOMMISSION_FAILED,
             _failure_message("Teardown", "while destroying Terraform", exc),
         )
 
