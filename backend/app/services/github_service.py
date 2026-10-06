@@ -275,6 +275,48 @@ async def get_file_content(
         ) from exc
 
 
+async def list_directory(
+    installation_token: str,
+    repo_full_name: str,
+    dir_path: str,
+    ref: str = "main",
+) -> list[str]:
+    """
+    List the file names directly under a directory of a GitHub repository.
+
+    Returns an empty list when the directory does not exist.
+
+    Raises:
+        GitHubAppError: On HTTP errors or an unexpected response shape.
+    """
+    url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/contents/{dir_path}"
+    headers = {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url, headers=headers, params={"ref": ref}, timeout=15.0
+            )
+            if response.status_code == 404:
+                return []
+            response.raise_for_status()
+            entries = response.json()
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to list '{dir_path}' in '{repo_full_name}': {exc}"
+        ) from exc
+
+    if not isinstance(entries, list):
+        raise GitHubAppError(
+            f"'{dir_path}' in '{repo_full_name}' is not a directory"
+        )
+    return [e["name"] for e in entries if e.get("type") == "file"]
+
+
 async def update_file_content(
     installation_token: str,
     repo_full_name: str,

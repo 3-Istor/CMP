@@ -20,6 +20,11 @@ from app.services.github_service import (
     get_installation_token,
     update_file_content,
 )
+from app.services.project_registry import (
+    NameCollisionError,
+    RegistryError,
+    ensure_app_names_free,
+)
 
 router = APIRouter(prefix="/deployments", tags=["Deployments"])
 
@@ -55,6 +60,23 @@ async def create_deployment(
     template = get_template_by_id(payload.template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+
+    if payload.template_id == "k3s-gitops-app":
+        project_name = payload.app_config.get("project_name")
+        if project_name:
+            try:
+                await ensure_app_names_free(
+                    project_name,
+                    payload.name,
+                    payload.app_config.get("app_type", "static"),
+                )
+            except NameCollisionError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except RegistryError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Could not check the project registry: {exc}",
+                ) from exc
 
     deployment = Deployment(
         name=payload.name,
