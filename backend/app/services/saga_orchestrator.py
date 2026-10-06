@@ -18,10 +18,10 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.services.state_lock import raise_if_state_locked
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services import aws_service, github_service, openstack_service
 from app.services.github_service import get_installation_token
+from app.services.state_lock import raise_if_state_locked
 from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
