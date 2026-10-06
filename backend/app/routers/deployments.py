@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.routers.finops import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import terraform_orchestrator
-from app.routers.finops import is_cnp_admin
 from app.services.catalog_service import get_template_by_id
 from app.services.github_service import (
     GitHubAppError,
@@ -117,7 +117,9 @@ async def create_deployment(
                 detail="app_config.project_name must match project_id.",
             )
         if payload.project_id:
-            payload.app_config["project_name"] = project_name = payload.project_id
+            payload.app_config["project_name"] = project_name = (
+                payload.project_id
+            )
         if project_name:
             try:
                 await ensure_app_names_free(
@@ -160,14 +162,18 @@ async def create_deployment(
 
 @router.get("/{deployment_id}", response_model=DeploymentRead)
 async def get_deployment(
-    deployment_id: int, token_payload: CurrentUser, db: Session = Depends(get_db)
+    deployment_id: int,
+    token_payload: CurrentUser,
+    db: Session = Depends(get_db),
 ):
     return _authorized_deployment(deployment_id, db, token_payload)
 
 
 @router.get("/{deployment_id}/outputs")
 async def get_deployment_outputs(
-    deployment_id: int, token_payload: CurrentUser, db: Session = Depends(get_db)
+    deployment_id: int,
+    token_payload: CurrentUser,
+    db: Session = Depends(get_db),
 ):
     """Return Terraform outputs for a deployment."""
     deployment = _authorized_deployment(deployment_id, db, token_payload)
@@ -183,7 +189,9 @@ async def get_deployment_outputs(
 
 @router.get("/{deployment_id}/logs/stream")
 async def stream_deployment_logs(
-    deployment_id: int, token_payload: CurrentUser, db: Session = Depends(get_db)
+    deployment_id: int,
+    token_payload: CurrentUser,
+    db: Session = Depends(get_db),
 ):
     """
     Stream Terraform execution logs for a deployment in real-time.

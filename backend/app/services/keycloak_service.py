@@ -492,7 +492,9 @@ def decode_platform_token(token: str) -> dict:
             options={"verify_aud": False, "require": ["exp", "iss", "sub"]},
         )
     except jwt.PyJWKClientConnectionError as exc:
-        logger.error("Could not fetch the platform realm's signing keys: %s", exc)
+        logger.error(
+            "Could not fetch the platform realm's signing keys: %s", exc
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Token verification is temporarily unavailable.",
