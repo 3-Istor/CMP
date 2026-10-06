@@ -18,6 +18,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.services.state_lock import raise_if_state_locked
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services import aws_service, github_service, openstack_service
 from app.services.github_service import get_installation_token
@@ -295,11 +296,13 @@ def _run_terraform_command(
             env=env,
             check=True,
             capture_output=capture,
+            stderr=None if capture else subprocess.PIPE,
             text=True,
         )
         return result
     except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr if capture else str(exc)
+        stderr = exc.stderr or str(exc)
+        raise_if_state_locked(stderr)
         logger.error("Terraform command failed: %s", stderr)
         raise RuntimeError(f"Terraform failed: {stderr[:500]}") from exc
 

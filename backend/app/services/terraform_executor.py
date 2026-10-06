@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
+from app.services.state_lock import raise_if_state_locked
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +281,7 @@ class TerraformExecutor:
             )
 
             if process.returncode != 0:
+                raise_if_state_locked(stdout_output)
                 self._log_message(
                     f"❌ Command failed with exit code {process.returncode}",
                     logging.ERROR,
@@ -312,6 +314,7 @@ class TerraformExecutor:
         )
 
         if result.returncode != 0:
+            raise_if_state_locked(f"{result.stderr}\n{result.stdout}")
             self._log_message(
                 f"Command failed: {result.stderr}", logging.ERROR
             )

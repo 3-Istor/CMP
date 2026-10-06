@@ -26,6 +26,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.services.github_service import GitHubAppError, get_installation_token
+from app.services.state_lock import raise_if_state_locked
 from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
@@ -466,6 +467,7 @@ def _run(
             logger.debug("Terraform stdout: %s", result.stdout[-2000:])
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr or ""
+        raise_if_state_locked(stderr)
         logger.error("Terraform error: %s", stderr[-2000:])
         raise RuntimeError(
             f"Terraform command failed: {stderr[-500:]}"
