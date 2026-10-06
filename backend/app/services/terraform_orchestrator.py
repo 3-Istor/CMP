@@ -262,9 +262,8 @@ def run_deployment(deployment_id: int) -> None:
             # Best-effort: the deployment itself already succeeded, and a
             # registry write failure here shouldn't be reported as a failed
             # deployment.
-            if (
-                deployment.template_id == "k3s-gitops-app"
-                and outputs.get("hostname")
+            if deployment.template_id == "k3s-gitops-app" and outputs.get(
+                "hostname"
             ):
                 import asyncio
 
