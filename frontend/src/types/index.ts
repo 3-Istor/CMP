@@ -355,3 +355,28 @@ export interface FinopsActionResponse {
   status: string;
   commit_sha: string | null;
 }
+
+export type SecurityStatus = "ok" | "warn" | "fail" | "unknown";
+
+export interface SecurityFinding {
+  subject: string;
+  status: SecurityStatus;
+  detail: string;
+}
+
+export interface SecurityControl {
+  id: string;
+  title: string;
+  description: string;
+  status: SecurityStatus;
+  summary: string;
+  findings: SecurityFinding[];
+}
+
+export interface ProjectSecurityReport {
+  project: string;
+  generated_at: string;
+  score: number | null;
+  controls: SecurityControl[];
+  platform_controls: SecurityControl[];
+}
