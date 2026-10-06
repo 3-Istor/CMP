@@ -66,7 +66,6 @@ spec:
               "TF_BACKEND_AWS_REGION" "aws-region"
               "TF_BACKEND_S3_BUCKET" "aws-s3-bucket"
               "TF_BACKEND_S3_KEY_PREFIX" "aws-s3-key-prefix"
-              "TF_BACKEND_S3_DYNAMODB_TABLE" "aws-dynamodb-table"
               "DISCORD_WEBHOOK_URL" "discord-webhook-url" }}
         - name: {{ $env }}
           valueFrom:
