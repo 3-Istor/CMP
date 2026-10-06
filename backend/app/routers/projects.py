@@ -883,13 +883,30 @@ async def delete_project(
         admin_group_name = f"project-{project_name}-admins"
         admin_group = _find_group_by_name(admin_group_name, admin_token)
 
-        if not admin_group:
+        row = (
+            db.query(Project)
+            .filter(Project.project_name == project_name)
+            .first()
+        )
+
+        # A teardown that failed after destroying the Keycloak groups leaves
+        # nobody an admin by group membership, yet it has to be retried. Its
+        # owner may do so; everyone else still gets a 404.
+        username = token_payload.get("preferred_username", "")
+        is_retry_by_owner = (
+            row is not None
+            and row.status == ProjectStatus.DECOMMISSION_FAILED
+            and bool(username)
+            and row.owner_username == username
+        )
+
+        if not admin_group and not is_retry_by_owner:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Project '{project_name}' not found.",
             )
 
-        if not _check_user_in_group_realtime(
+        if admin_group and not _check_user_in_group_realtime(
             user_id, admin_group["id"], admin_token
         ):
             raise HTTPException(
@@ -915,11 +932,6 @@ async def delete_project(
 
         logger.info(f"🗑️  Scheduling teardown for project '{project_name}'...")
 
-        row = (
-            db.query(Project)
-            .filter(Project.project_name == project_name)
-            .first()
-        )
         target_cloud = (
             row.target_cloud if row is not None else TargetCloud.ONPREM
         )

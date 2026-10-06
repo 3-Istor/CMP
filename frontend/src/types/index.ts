@@ -45,7 +45,8 @@ export type ProjectStatus =
   | "active"
   | "suspended"
   | "decommissioning"
-  | "failed";
+  | "failed"
+  | "decommission_failed";
 
 export interface Project {
   name: string;
@@ -56,6 +57,10 @@ export interface Project {
   step_message: string | null;
   /** False while the project's Keycloak groups do not exist. */
   is_accessible: boolean;
+}
+
+export function isProjectFailed(project: Project): boolean {
+  return project.status === "failed" || project.status === "decommission_failed";
 }
 
 export function isProjectInFlight(project: Project): boolean {

@@ -8,30 +8,57 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { createProject, deleteProject } from "@/lib/api";
 import type { Project } from "@/types";
-import { isProjectInFlight } from "@/types";
+import { isProjectFailed, isProjectInFlight } from "@/types";
 import {
     AlertTriangle,
     Crown,
     FolderKanban,
     Loader2,
+    RotateCw,
     ShieldCheck,
     Users,
 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface Props {
     project: Project;
+    /** Called after a retry was accepted, so the list picks up the new status. */
+    onRetried?: () => void;
 }
 
-export function ProjectCard({ project }: Props) {
+export function ProjectCard({ project, onRetried }: Props) {
+    const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
     const isCreating = project.status === "provisioning";
     const isDeleting = project.status === "decommissioning";
-    const isFailed = project.status === "failed";
+    const isFailed = isProjectFailed(project);
     const isInFlight = isProjectInFlight(project);
+
+    // A failed bootstrap is retried by creating the project again, a failed
+    // teardown by deleting it again. The backend resumes from what is left.
+    const retry = async () => {
+        setRetrying(true);
+        try {
+            if (project.status === "decommission_failed") {
+                await deleteProject(project.name);
+            } else {
+                await createProject(project.name, project.target_cloud);
+            }
+            onRetried?.();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            toast.error(`Retry failed: ${msg}`);
+        } finally {
+            setRetrying(false);
+        }
+    };
 
     const cardBody = (
         <Card
@@ -100,9 +127,29 @@ export function ProjectCard({ project }: Props) {
                         />
                     </>
                 ) : isFailed ? (
-                    <p className="text-xs text-destructive">
-                        {project.step_message}
-                    </p>
+                    <>
+                        <p className="text-xs text-destructive">
+                            {project.step_message}
+                        </p>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-1 cursor-pointer"
+                            disabled={retrying}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                void retry();
+                            }}
+                        >
+                            {retrying ? (
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            ) : (
+                                <RotateCw className="mr-2 h-3 w-3" />
+                            )}
+                            Retry
+                        </Button>
+                    </>
                 ) : (
                     <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
                         project-{project.name}-{isAdmin ? "admins" : "members"}
@@ -125,7 +172,9 @@ export function ProjectCard({ project }: Props) {
                         ? "This project is being deleted"
                         : isCreating
                           ? "This project is still being created"
-                          : "This project could not be created"
+                          : project.status === "decommission_failed"
+                            ? "This project could not be deleted"
+                            : "This project could not be created"
                 }
                 aria-disabled="true"
             >
