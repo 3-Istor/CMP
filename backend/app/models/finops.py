@@ -100,7 +100,7 @@ class BudgetAlertState(Base):
     project_name: Mapped[str] = mapped_column(
         String(100), nullable=False, unique=True, index=True
     )
-    # 0 = nominal, 1 = warning (70%), 2 = critical (90%)
+    # 0 = nominal, 1 = warning, 2 = critical (thresholds from ProjectBudget)
     last_level: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,

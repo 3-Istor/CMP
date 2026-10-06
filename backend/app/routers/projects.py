@@ -4,9 +4,14 @@ Projects Router
 Implements the Project > Application hierarchy.
 
 Endpoints:
-  GET  /api/projects                       - List projects the current user belongs to
-  POST /api/projects                       - Bootstrap a new project via Terraform
-  GET  /api/projects/{project_name}/apps   - List applications in a project
+  GET    /api/projects/users/search                    - Keycloak user search (member autocomplete)
+  GET    /api/projects                                 - List projects the current user belongs to
+  POST   /api/projects                                 - Bootstrap a new project via Terraform
+  GET    /api/projects/{project_name}/apps             - List applications in a project
+  GET    /api/projects/{project_name}/members          - List project members
+  POST   /api/projects/{project_name}/members          - Add a member or change their role
+  DELETE /api/projects/{project_name}/members/{user}   - Remove a member
+  DELETE /api/projects/{project_name}                  - Delete a project and tear it down
 """
 
 import logging
@@ -44,7 +49,7 @@ from app.services.keycloak_service import (
     add_user_to_project,
     fetch_user_projects_from_keycloak,
     get_current_user,
-    get_user_id_from_token,  # noqa: F401  (re-exported: finops imports it)
+    get_user_id_from_token,
     list_project_members,
     project_guests_supported,
     remove_user_from_project,
@@ -245,7 +250,7 @@ async def create_project(
 
     This is an async operation — Terraform runs in a background task.
     The module creates:
-    - Keycloak groups: ``project-<name>-admins`` / ``project-<name>-members``
+    - Keycloak groups: ``project-<name>-admins`` / ``-members`` / ``-guests``
     - Vault policies scoped to the project
     - ArgoCD AppProject
 
@@ -372,7 +377,7 @@ async def create_project(
                 payload.project_name,
             )
 
-            # Sync to Grafana (non-blocking, best-effort)
+            # Sync to Grafana (best-effort: failures are logged, not raised)
             try:
                 await add_user_to_project_org(
                     payload.project_name, username, "admin"
@@ -541,7 +546,7 @@ async def add_project_member(
 
         add_user_to_project(username, project_name, role)
 
-        # Sync to Grafana (non-blocking, best-effort)
+        # Sync to Grafana (best-effort: failures are logged, not raised)
         try:
             await add_user_to_project_org(project_name, username, role)
         except Exception as grafana_exc:
@@ -636,7 +641,7 @@ async def remove_project_member(
     try:
         remove_user_from_project(username, project_name)
 
-        # Sync to Grafana (non-blocking, best-effort)
+        # Sync to Grafana (best-effort: failures are logged, not raised)
         try:
             await remove_user_from_project_org(project_name, username)
         except Exception as grafana_exc:
@@ -681,10 +686,12 @@ async def delete_project(
     """
     Delete a project and tear down its Day-0 infrastructure.
 
-    The ownership record is removed synchronously so the project disappears
-    from listings immediately; the rest (Keycloak groups, Vault policy, ArgoCD
-    AppProject, GitHub resources and the per-project Terraform state) is
-    destroyed in the background via ``terraform destroy``.
+    The registry record and the ownership row are removed synchronously; the
+    rest (Keycloak groups, Vault policy, ArgoCD AppProject, GitHub resources
+    and the per-project Terraform state) is destroyed in the background via
+    ``terraform destroy``. The project keeps showing in ``GET /projects/``
+    until that finishes, since the listing comes from Keycloak groups — the
+    frontend masks it in the meantime (``lib/pending.ts``).
 
     Requirements:
     - Caller must be project admin or owner

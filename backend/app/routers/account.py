@@ -40,10 +40,11 @@ def get_user_profile(
     This ensures we always return the latest profile picture and other attributes,
     even if the JWT contains stale claims.
     """
-    # Extract groups from token (Keycloak uses 'groups' field)
+    # The 'groups' claim is not populated in this realm (see keycloak_service),
+    # so this normally falls through to the realm roles below.
     groups = token_payload.get("groups", [])
 
-    # Fallback to roles if groups not available
+    # Fallback to realm roles
     if not groups and "realm_access" in token_payload:
         groups = token_payload["realm_access"].get("roles", [])
 

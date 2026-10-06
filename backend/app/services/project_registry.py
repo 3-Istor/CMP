@@ -141,7 +141,8 @@ async def publish_record(
     created_at: datetime | None = None,
 ) -> None:
     """
-    Create or refresh a project's registry record.
+    Create a project's registry record, or overwrite an existing one with a
+    fresh record: its ``apps`` list and ``createdAt`` are reset.
 
     Raises:
         ImmutableCloudError: If a record already exists on a different cloud.

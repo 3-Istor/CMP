@@ -285,7 +285,7 @@ def _check_user_in_group_realtime(
         return False
 
 
-def _fetch_user_groups(user_id: str) -> list[dict]:
+def _fetch_user_groups_or_raise(user_id: str) -> list[dict]:
     """
     Return every Keycloak group a user belongs to.
 
@@ -294,24 +294,33 @@ def _fetch_user_groups(user_id: str) -> list[dict]:
     would otherwise silently truncate the groups of a user who belongs to
     many projects.
 
-    Returns an empty list — never raises — when Keycloak is unreachable, so a
-    transient outage reads as "no projects" rather than a 500. Callers that
-    must distinguish the two should probe Keycloak themselves.
+    Raises:
+        requests.RequestException: If Keycloak is unreachable.
+    """
+    admin_token = _get_admin_token()
+    url = (
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+        f"/users/{user_id}/groups"
+    )
+    response = requests.get(
+        url,
+        headers={"Authorization": f"Bearer {admin_token}"},
+        params={"briefRepresentation": "true", "max": 500},
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _fetch_user_groups(user_id: str) -> list[dict]:
+    """
+    Like :func:`_fetch_user_groups_or_raise`, but returns an empty list when
+    Keycloak is unreachable, so a transient outage reads as "no projects" in
+    listings rather than a 500. Authorization checks must not use this: an
+    outage would read as "not a member".
     """
     try:
-        admin_token = _get_admin_token()
-        url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
-            f"/users/{user_id}/groups"
-        )
-        response = requests.get(
-            url,
-            headers={"Authorization": f"Bearer {admin_token}"},
-            params={"briefRepresentation": "true", "max": 500},
-            timeout=10,
-        )
-        response.raise_for_status()
-        return response.json()
+        return _fetch_user_groups_or_raise(user_id)
     except requests.RequestException as exc:
         logger.warning("Could not fetch groups from Keycloak: %s", exc)
         return []
@@ -384,8 +393,12 @@ def get_user_project_role(
 
     ``owner`` is never returned: it lives in the database, and the caller
     that has a session resolves it. See ``app.services.authz``.
+
+    Raises:
+        requests.RequestException: If Keycloak is unreachable — callers turn
+            it into a 503 rather than a misleading 403.
     """
-    groups = _fetch_user_groups(user_id)
+    groups = _fetch_user_groups_or_raise(user_id)
     return _project_roles_from_groups(groups).get(project_name)
 
 

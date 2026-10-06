@@ -3,13 +3,16 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.core.config import settings
 
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False},  # needed for SQLite
+    # SQLite only: lets FastAPI's threadpool share connections.
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
 )
 
 # Enable WAL mode for SQLite to prevent database locks from freezing the backend
-if settings.DATABASE_URL.startswith("sqlite"):
+if _is_sqlite:
     from sqlalchemy import event
 
     @event.listens_for(engine, "connect")

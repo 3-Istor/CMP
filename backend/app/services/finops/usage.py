@@ -57,10 +57,11 @@ def simulated_usage_pct(app_id: int, resource: str, day: date) -> float:
 
 def has_spike(app_id: int, resource: str, day: date) -> bool:
     """
-    Deterministic 'anomalous consumption' marker: true on rare days where usage
-    jumps far above the app's recent average (> 150%). Used for spike alerts.
+    Deterministic 'anomalous consumption' marker: true on ~1 day in 20, stable
+    per (app, resource, day). Not derived from the usage signal — the engine
+    then boosts that day's usage ×1.8 so the spike shows on the timeline.
+    Used for spike alerts.
     """
-    # ~1 day in 20, stable per (app, resource, day).
     return _seed(app_id, f"spike:{resource}", day) > 0.95
 
 

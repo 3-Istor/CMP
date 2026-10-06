@@ -314,7 +314,7 @@ def _get_kubernetes_deployment_or_404(
     minimum: ProjectRole,
 ) -> Deployment:
     """
-    Fetch a RUNNING Kubernetes deployment the caller may touch, raising
+    Fetch a Kubernetes deployment the caller may touch, raising
     appropriate HTTP errors if it doesn't exist, they lack the role, it is not
     Kubernetes-type, or it has no GitHub repo linked.
     """

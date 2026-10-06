@@ -66,10 +66,10 @@ interface Props {
     onCreated: (projectName: string) => void;
 }
 
-/** Validates a project name: lowercase, kebab-case, 2–45 chars */
+/** Validates a project name: lowercase, kebab-case, 2–40 chars (backend limit) */
 function validateName(name: string): string | null {
     if (name.length < 2) return "Name must be at least 2 characters.";
-    if (name.length > 45) return "Name must be at most 45 characters.";
+    if (name.length > 40) return "Name must be at most 40 characters.";
     if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name))
         return "Use lowercase letters, numbers, and hyphens only. Must start and end with a letter or number.";
     return null;
@@ -142,7 +142,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                             id="project-name"
                             placeholder="my-team"
                             value={name}
-                            maxLength={45}
+                            maxLength={40}
                             onChange={(e) => {
                                 setName(e.target.value);
                                 setError(null);
@@ -158,8 +158,8 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                                     Lowercase, kebab-case. E.g.{" "}
                                     <span className="font-mono">platform-team</span>
                                 </p>
-                                <p className={`text-xs tabular-nums ${name.length > 40 ? "text-destructive" : "text-muted-foreground"}`}>
-                                    {name.length}/45
+                                <p className={`text-xs tabular-nums ${name.length > 35 ? "text-destructive" : "text-muted-foreground"}`}>
+                                    {name.length}/40
                                 </p>
                             </div>
                         )}

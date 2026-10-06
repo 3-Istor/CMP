@@ -4,7 +4,7 @@ Project Bootstrap Service
 Executes the ``k3s-project-bootstrap`` Terraform module as a background task.
 
 This module creates the Day-0 infrastructure for a new Project:
-  - Keycloak groups: project-<name>-admins / project-<name>-members
+  - Keycloak groups: project-<name>-admins / -members / -guests
   - Vault policy scoped to the project namespace
   - ArgoCD AppProject
 
@@ -66,8 +66,8 @@ def _stage_module(module_path: Path, work_dir: Path) -> Path:
     """
     Copy the Terraform module into the run's working directory.
 
-    The module lives in the shared template clone, which is refreshed on a
-    timer and read by every concurrent bootstrap. Terraform writes into its
+    The module lives in the shared template clone, which is pulled when stale
+    (at most every 24 h, on access) and read by every concurrent bootstrap. Terraform writes into its
     configuration directory (lock file, backend override), so running several
     projects straight out of the clone has them overwriting each other's
     files.
@@ -210,10 +210,10 @@ def run_project_teardown(
 
     Runs ``terraform init`` + ``terraform destroy`` for the
     ``k3s-project-bootstrap`` module, reusing the project's per-project S3 state
-    key. This destroys everything the bootstrap created — Vault policy, ArgoCD
-    AppProject and any GitHub resources. Keycloak groups are already removed
-    synchronously by the delete endpoint; if they no longer exist, Terraform's
-    refresh simply drops them from state and the destroy proceeds.
+    key. This destroys everything the bootstrap created — Keycloak groups,
+    Vault policy, ArgoCD AppProject and any GitHub resources. The delete
+    endpoint only removes the registry record and the ownership row before
+    scheduling this.
 
     Args:
         project_name: Lowercase kebab-case project identifier.

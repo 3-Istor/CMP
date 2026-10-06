@@ -315,7 +315,7 @@ export default function ProjectPage() {
         {/* ── Project quick links ──
             Hidden from guests: these are the observability and secrets
             surfaces, and a guest who is not allowed to read logs has no
-            business in Grafana, Vault or the status page either. */}
+            business in ArgoCD, Vault or the status page either. */}
         {canViewObservability && (
         <Card>
           <CardHeader className="pb-3">

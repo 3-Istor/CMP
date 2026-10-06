@@ -201,7 +201,7 @@ class TerraformExecutor:
             env["TF_VAR_github_registry_token"] = (
                 settings.GITHUB_REGISTRY_TOKEN
             )
-        # GitHub registry username (hardcoded as it's always the same org)
+        # GitHub registry username (from settings)
         env["TF_VAR_github_registry_username"] = (
             settings.GITHUB_REGISTRY_USERNAME
         )
@@ -217,8 +217,6 @@ class TerraformExecutor:
             self._log_message("📺 Streaming Terraform output in real-time...")
             import time
 
-            # Force unbuffered output with PYTHONUNBUFFERED and TF_IN_AUTOMATION
-            env["PYTHONUNBUFFERED"] = "1"
             env["TF_IN_AUTOMATION"] = (
                 "1"  # Makes Terraform output more machine-friendly
             )

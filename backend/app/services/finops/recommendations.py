@@ -167,7 +167,7 @@ def recommendations_for_app(
                 justification="Aucun trafic réseau significatif depuis 7 jours.",
                 current={"replicas": q.replicas, "status": "running"},
                 recommended={"replicas": 0, "status": "hibernated"},
-                monthly_saving_eur=_saving(app, replace(q, replicas=1), ref),
+                monthly_saving_eur=_saving(app, replace(q, replicas=0), ref),
                 confidence=80,
                 effort="low",
                 patch={"replicaCount": 0},

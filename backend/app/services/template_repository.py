@@ -124,9 +124,13 @@ class TemplateRepository:
         return Path(template["_template_path"])
 
     def force_sync(self) -> None:
-        """Force an immediate sync of the repository."""
-        self.last_sync = None
-        self._sync_if_needed()
+        """
+        Force an immediate sync of the repository.
+
+        Raises on failure, unlike the lazy sync, so the caller can report it.
+        """
+        git.Repo(self.repo_path).remotes.origin.pull()
+        self.last_sync = datetime.now()
 
 
 # Global singleton instance

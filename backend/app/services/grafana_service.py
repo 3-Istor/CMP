@@ -12,6 +12,7 @@ Organization naming convention: "Project <TitleCasedProjectName>"
 Role mappings (CMP to Grafana):
   - "admin" or "owner" -> "Admin"
   - "member" -> "Editor"
+  - "guest" -> "Viewer"
 
 All operations are async and use connection pooling via httpx.AsyncClient.
 Errors are logged but do not crash the caller (graceful degradation).
@@ -197,7 +198,7 @@ async def add_user_to_project_org(
     Args:
         project_name: Lowercase project identifier (e.g. "sandbox").
         username: Keycloak username (will be used to fetch email).
-        role: CMP role ("admin", "owner", "member").
+        role: CMP role ("owner", "admin", "member" or "guest").
 
     Returns:
         True if successful, False otherwise.

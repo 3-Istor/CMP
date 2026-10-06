@@ -149,18 +149,19 @@ export default function AppControlCenterPage() {
     }, [fetchDeployment]);
 
     // The deployment row is kept (status=deleted), not removed, once
-    // teardown finishes — polling correctly stops (not in ACTIVE_STATUSES
-    // anymore), but nothing else takes the user off a page for an app that
-    // no longer exists. Bounce back to the project after a beat.
+    // teardown finishes — polling correctly stops, but nothing else takes the
+    // user off a page for an app that no longer exists. Bounce back to the
+    // project after a beat. Watches `current`: after a delete started here,
+    // the final "deleted" status only arrives through polling.
     useEffect(() => {
-        if (deployment?.status !== "deleted") return;
-        toast.info(`"${deployment.name}" has been deleted`);
+        if (current?.status !== "deleted") return;
+        toast.info(`"${current.name}" has been deleted`);
         const timer = setTimeout(
             () => router.push(`/projects/${projectName}`),
             2500,
         );
         return () => clearTimeout(timer);
-    }, [deployment?.status, deployment?.name, projectName, router]);
+    }, [current?.status, current?.name, projectName, router]);
 
     // Show the inline health panel only for running/degraded apps
     const shouldFetchHealth =

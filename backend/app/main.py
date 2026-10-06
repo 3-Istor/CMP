@@ -155,7 +155,8 @@ def custom_openapi():
         }
     }
 
-    # Enforce global security on all non-public endpoints (except /health)
+    # Document the Keycloak scheme on every endpoint except /health. This is
+    # OpenAPI metadata only: enforcement is each router's get_current_user.
     for path_name, path_obj in openapi_schema["paths"].items():
         # Skip health check endpoint
         if path_name == "/health":

@@ -5,7 +5,8 @@ import { budgetStatusColor, formatEUR } from "./format";
 
 /**
  * Barre de progression budget vs consommé avec code couleur dynamique
- * (🟢 <70% · 🟡 70-90% · 🔴 >90%).
+ * selon les seuils du budget (🟢 < attention · 🟡 < critique · 🔴 au-delà ;
+ * 70 % / 90 % par défaut).
  */
 export function BudgetGauge({ budget }: { budget: Budget }) {
   const pct = budget.consumed_pct ?? 0;

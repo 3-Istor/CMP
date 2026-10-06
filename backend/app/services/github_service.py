@@ -2,7 +2,8 @@
 GitHub App Integration Service
 
 Handles JWT generation and Installation Access Token exchange for the CNP GitHub App.
-This allows the CMP to dynamically create repositories on behalf of users.
+This lets the CMP read and commit files in repositories on behalf of users
+(app repositories themselves are created by Terraform).
 
 GitHub App ID: 3836905
 """
@@ -79,7 +80,8 @@ async def get_installation_token(installation_id: str) -> str:
     the permissions defined in the GitHub App configuration.
 
     Args:
-        installation_id: The GitHub App installation ID (stored in Keycloak user profile)
+        installation_id: The GitHub App installation ID (stored in the
+            ``user_github_installations`` table and in the deployment's app_config)
 
     Returns:
         str: The installation access token (valid for 1 hour)

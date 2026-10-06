@@ -11,13 +11,18 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.deployment import Deployment
+from app.services.keycloak_service import get_current_user
 from app.services import monitoring_service
 from app.services.monitoring_service import (
     AppHealthResponse,
     GlobalHealthResponse,
 )
 
-router = APIRouter(prefix="/infra", tags=["Infrastructure"])
+router = APIRouter(
+    prefix="/infra",
+    tags=["Infrastructure"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/health", response_model=GlobalHealthResponse)

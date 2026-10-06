@@ -34,7 +34,7 @@ class Project(Base):
     The owner is a single immutable user — the person who created the project —
     who can never be removed from the project, on top of always being a project
     admin. The rest of the project RBAC lives in Keycloak groups
-    (``project-<name>-admins`` / ``project-<name>-members``).
+    (``project-<name>-admins`` / ``-members`` / ``-guests``).
 
     ``target_cloud`` is a *mirror*: the source of truth for placement is the
     project's record in ``cnp-projects/registry/projects/<name>.yaml`` (D-01).

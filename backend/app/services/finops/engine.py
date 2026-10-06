@@ -26,7 +26,7 @@ class Quota:
     cpu_cores: float  # per replica
     ram_gb: float  # per replica
     storage_gb: float  # total
-    network_gb: float  # baseline monthly egress allowance
+    network_gb: float  # baseline network allocation, billed per GB-hour
 
     def allocated(self, resource: str) -> float:
         if resource == "cpu":
@@ -61,8 +61,9 @@ def quota_from_deployment(deployment) -> Quota:
     """
     Derive a :class:`Quota` from a ``Deployment`` row.
 
-    Explicit values in ``app_config`` win; otherwise deterministic defaults are
-    generated from the deployment id so each app has a distinct, stable size.
+    Explicit values in ``app_config`` win for replicas, CPU, RAM and storage;
+    otherwise (and always for network) deterministic defaults are generated
+    from the deployment id so each app has a distinct, stable size.
     """
     cfg: dict = {}
     if getattr(deployment, "app_config", None):
