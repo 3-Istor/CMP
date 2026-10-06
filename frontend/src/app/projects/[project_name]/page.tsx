@@ -5,6 +5,7 @@ import { DeployModal } from "@/components/catalog/DeployModal";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
 import { MembersPanel } from "@/components/projects/MembersPanel";
+import { SecurityReportPanel } from "@/components/projects/SecurityReportPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   Users,
   Wallet,
@@ -286,6 +288,10 @@ export default function ProjectPage() {
               <Users className="h-4 w-4" />
               Members
             </TabsTrigger>
+            <TabsTrigger value="security" className="gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Security
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Applications tab ── */}
@@ -417,6 +423,10 @@ export default function ProjectPage() {
           {/* ── Members tab ── */}
           <TabsContent value="members" className="mt-6 space-y-6">
             <MembersPanel projectName={projectName} />
+          </TabsContent>
+
+          <TabsContent value="security" className="mt-6 space-y-6">
+            <SecurityReportPanel projectName={projectName} />
           </TabsContent>
         </Tabs>
       </main>

@@ -8,7 +8,10 @@ GitHub App ID: 3836905
 """
 
 import base64
+import io
+import json
 import logging
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -547,4 +550,61 @@ async def delete_file(
     except Exception as exc:
         raise GitHubAppError(
             f"Unexpected error deleting file '{file_path}': {exc}"
+        ) from exc
+
+
+async def get_latest_artifact_json(
+    installation_token: str,
+    repo_full_name: str,
+    artifact_name: str,
+    file_name: str,
+) -> dict | None:
+    """
+    Return the JSON file *file_name* from the newest non-expired artifact named
+    *artifact_name* in the repository, or None when there is none.
+
+    Raises:
+        GitHubAppError: On HTTP errors or an unreadable archive.
+    """
+    headers = {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    list_url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/artifacts"
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(
+                list_url,
+                headers=headers,
+                params={"name": artifact_name, "per_page": 10},
+                timeout=15.0,
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            artifacts = [
+                a
+                for a in response.json().get("artifacts", [])
+                if not a.get("expired")
+            ]
+            if not artifacts:
+                return None
+            newest = max(artifacts, key=lambda a: a.get("created_at", ""))
+            archive = await client.get(
+                newest["archive_download_url"], headers=headers, timeout=30.0
+            )
+            archive.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to fetch artifact '{artifact_name}' of '{repo_full_name}': {exc}"
+        ) from exc
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive.content)) as bundle:
+            return json.loads(bundle.read(file_name))
+    except (zipfile.BadZipFile, KeyError, ValueError) as exc:
+        raise GitHubAppError(
+            f"Artifact '{artifact_name}' of '{repo_full_name}' has no readable '{file_name}': {exc}"
         ) from exc

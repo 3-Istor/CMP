@@ -127,6 +127,11 @@ export const syncCatalog = () =>
   request<{ message: string }>("/catalog/sync", { method: "POST" });
 
 // Deployments
+export const getProjectSecurity = (projectName: string) =>
+  request<import("@/types").ProjectSecurityReport>(
+    `/projects/${encodeURIComponent(projectName)}/security`,
+  );
+
 export const getDeployments = () => request<Deployment[]>("/deployments/");
 
 export const getDeployment = (id: number) =>
