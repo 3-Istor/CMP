@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.services.keycloak_service import get_current_user
 from app.models.user_github import UserGitHubInstallation
 from app.schemas.account import (
     GitHubInstallationRequest,
@@ -25,6 +24,7 @@ from app.schemas.account import (
     PictureUploadResponse,
     UserProfile,
 )
+from app.services.keycloak_service import get_current_user
 
 router = APIRouter(prefix="/account", tags=["Account"])
 security = HTTPBearer(auto_error=True)
