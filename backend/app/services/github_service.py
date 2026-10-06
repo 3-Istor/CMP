@@ -275,94 +275,6 @@ async def get_file_content(
         ) from exc
 
 
-async def update_file_content(
-    installation_token: str,
-    repo_full_name: str,
-    file_path: str,
-    content: str,
-    message: str,
-    sha: str,
-    branch: str = "main",
-) -> dict:
-    """
-    Commit and push updated content for a file in a GitHub repository.
-
-    Uses the GitHub Contents API (PUT). The ``sha`` of the *current* file
-    version is mandatory — GitHub will reject the request with 409 Conflict
-    if it doesn't match.
-
-    Args:
-        installation_token: Short-lived GitHub installation access token.
-        repo_full_name:     ``owner/repo``.
-        file_path:          Path inside the repository.
-        content:            New raw file content (UTF-8 string).
-        message:            Git commit message.
-        sha:                SHA of the file version being replaced (from ``get_file_content``).
-        branch:             Target branch (default: ``"main"``).
-
-    Returns:
-        dict: GitHub API response containing ``commit`` and ``content`` metadata.
-
-    Raises:
-        GitHubAppError: On HTTP errors, including 409 Conflict (stale SHA).
-    """
-    url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/contents/{file_path}"
-    headers = {
-        "Authorization": f"Bearer {installation_token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-
-    encoded_content = base64.b64encode(content.encode("utf-8")).decode("ascii")
-
-    payload = {
-        "message": message,
-        "content": encoded_content,
-        "sha": sha,
-        "branch": branch,
-    }
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.put(
-                url, headers=headers, json=payload, timeout=20.0
-            )
-
-            if response.status_code == 409:
-                raise GitHubAppError(
-                    "Conflict (409): the file SHA is outdated. "
-                    "Another commit may have modified this file — please reload and retry."
-                )
-
-            response.raise_for_status()
-            data = response.json()
-
-            commit_sha = data.get("commit", {}).get("sha", "")
-            logger.info(
-                "Committed '%s' to '%s' on branch '%s' (commit: %.8s)",
-                file_path,
-                repo_full_name,
-                branch,
-                commit_sha,
-            )
-            return data
-
-    except GitHubAppError:
-        raise
-    except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
-        logger.error(
-            "GitHub API error updating '%s': %s", file_path, error_msg
-        )
-        raise GitHubAppError(
-            f"Failed to update file '{file_path}': {error_msg}"
-        ) from exc
-    except Exception as exc:
-        raise GitHubAppError(
-            f"Unexpected error updating file '{file_path}': {exc}"
-        ) from exc
-
-
 async def put_file_content(
     installation_token: str,
     repo_full_name: str,
@@ -375,8 +287,9 @@ async def put_file_content(
     """
     Create or replace a file in a GitHub repository.
 
-    Unlike :func:`update_file_content`, ``sha`` is optional: omit it to create a
-    file that does not exist yet, pass it to replace one that does.
+    ``sha`` is optional: omit it to create a file that does not exist yet,
+    pass it (from ``get_file_content``) to replace one that does — GitHub
+    rejects a stale one with 409 Conflict.
 
     Args:
         installation_token: Short-lived GitHub installation access token.

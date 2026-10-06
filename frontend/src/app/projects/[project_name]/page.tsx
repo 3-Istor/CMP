@@ -25,7 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
 import { useCan, useProjectApps } from "@/lib/hooks";
-import { addPendingDeletion, usePendingDeletions } from "@/lib/pendingDeletions";
+import { addPendingDeletion, usePendingDeletions } from "@/lib/pending";
 import { ROLE_LABEL } from "@/lib/permissions";
 import type { CatalogTemplate } from "@/types";
 import {

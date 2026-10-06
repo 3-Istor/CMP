@@ -21,7 +21,7 @@ from app.services.github_service import (
     GitHubAppError,
     get_file_content,
     get_installation_token,
-    update_file_content,
+    put_file_content,
 )
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
@@ -586,7 +586,7 @@ async def update_deployment_config(
     )
 
     try:
-        result = await update_file_content(
+        result = await put_file_content(
             installation_token=gh_token,
             repo_full_name=repo,
             file_path=_CONFIG_FILE_PATH,

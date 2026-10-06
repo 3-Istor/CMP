@@ -29,3 +29,5 @@ values-secrets.yaml
 
 # Helm releases
 .helm-releases/
+
+.antigravitycli/

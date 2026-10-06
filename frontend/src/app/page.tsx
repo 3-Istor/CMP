@@ -11,14 +11,12 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
 import {
-  prunePendingDeletions,
-  usePendingDeletions,
-} from "@/lib/pendingDeletions";
-import {
   addPendingProject,
+  prunePendingDeletions,
   prunePendingProjects,
+  usePendingDeletions,
   usePendingProjects,
-} from "@/lib/pendingProjects";
+} from "@/lib/pending";
 import { FolderPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";

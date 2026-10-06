@@ -97,29 +97,21 @@ def _user_project_names(token: dict) -> list[str]:
     return [p["name"] for p in fetch_user_projects_from_keycloak(user_id)]
 
 
-def _require_project_access(token: dict, project: str) -> None:
-    """Any role on the project is enough to read its costs."""
-    if is_cnp_admin(token):
-        return
-    if project not in _user_project_names(token):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Access denied: you are not a member of project '{project}'.",
-        )
-
-
-def _require_project_admin(db: Session, token: dict, project: str) -> None:
+def _require_project_role(
+    db: Session,
+    token: dict,
+    project: str,
+    minimum: ProjectRole = ProjectRole.GUEST,
+) -> None:
     """
-    Guard the mutating FinOps endpoints.
+    CNP admins pass; anyone else needs *minimum* on the project.
 
-    Reading costs is open to every role, so the actions on a recommendation
-    need their own check: applying one commits to the app's GitOps repository
-    and ArgoCD then changes what is running. A CNP admin is allowed through,
-    matching the read path.
+    The default (any role, guests included) is enough to read costs. The
+    mutating endpoints pass ADMIN: applying a recommendation commits to the
+    app's GitOps repository and ArgoCD then changes what is running.
     """
-    if is_cnp_admin(token):
-        return
-    assert_project_role(db, token, project, ProjectRole.ADMIN)
+    if not is_cnp_admin(token):
+        assert_project_role(db, token, project, minimum)
 
 
 def _is_owner(db: Session, project: str, username: str) -> bool:
@@ -140,7 +132,7 @@ def _load_deployments(
         .filter(Deployment.project_id.isnot(None))
     )
     if project:
-        _require_project_access(token, project)
+        _require_project_role(db, token, project)
         q = q.filter(Deployment.project_id == project)
     elif not is_cnp_admin(token):
         projects = _user_project_names(token)
@@ -352,10 +344,7 @@ def _find_recommendation(
     if not deployment or deployment.project_id is None:
         raise HTTPException(status_code=404, detail="Application not found.")
 
-    if minimum is ProjectRole.GUEST:
-        _require_project_access(token, deployment.project_id)
-    else:
-        _require_project_admin(db, token, deployment.project_id)
+    _require_project_role(db, token, deployment.project_id, minimum)
 
     provider = get_cost_provider()
     recs = provider.recommendations(provider.specs([deployment]))
@@ -461,7 +450,7 @@ def get_budget(
     token: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    _require_project_access(token, project_name)
+    _require_project_role(db, token, project_name)
     deployments = _load_deployments(db, token, project_name)
     provider = get_cost_provider()
     spent = provider.summary(provider.specs(deployments))["month_to_date_eur"]
@@ -536,7 +525,7 @@ def get_alerts(
 ):
     q = db.query(CostAlert)
     if project:
-        _require_project_access(token, project)
+        _require_project_role(db, token, project)
         q = q.filter(CostAlert.project_name == project)
     elif not is_cnp_admin(token):
         projects = _user_project_names(token)
@@ -569,7 +558,7 @@ async def _apply_patch_to_gitops(
     from app.services.github_service import (
         GitHubAppError,
         get_file_content,
-        update_file_content,
+        put_file_content,
     )
 
     try:
@@ -584,7 +573,7 @@ async def _apply_patch_to_gitops(
         _deep_merge(parsed, patch)
         out = StringIO()
         _yaml.dump(parsed, out)
-        result = await update_file_content(
+        result = await put_file_content(
             installation_token=token,
             repo_full_name=repo,
             file_path=_CONFIG_FILE_PATH,

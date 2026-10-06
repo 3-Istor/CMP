@@ -132,8 +132,8 @@ function ConfigField({
                     min={1}
                     max={10}
                     step={1}
-                    value={[num]}
-                    onValueChange={([v]) => onChange(keyPath, v)}
+                    value={num}
+                    onValueChange={(v) => onChange(keyPath, v as number)}
                     className="w-full"
                     disabled={readOnly}
                 />
