@@ -4,21 +4,12 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { UserNav } from "@/components/layout/UserNav";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
-import { PendingProjectCard } from "@/components/projects/PendingProjectCard";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
-import {
-  prunePendingDeletions,
-  usePendingDeletions,
-} from "@/lib/pendingDeletions";
-import {
-  addPendingProject,
-  prunePendingProjects,
-  usePendingProjects,
-} from "@/lib/pendingProjects";
+import { isProjectInFlight } from "@/types";
 import { FolderPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
@@ -27,54 +18,26 @@ export default function Home() {
   const { data: session } = useSession();
   const [dashboardKey] = useState(0);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
-  // Projects that were just created and are still being bootstrapped — shown
-  // optimistically with a loading bar until they appear in the real list.
-  // Backed by localStorage so the card persists across reloads.
-  const pendingProjects = usePendingProjects();
-  // Projects whose delete was just confirmed and are still tearing down —
-  // the project list is derived from Keycloak group membership, which only
-  // clears once the background Terraform destroy finishes, so the project
-  // stays in `projects` for a while after the delete call returns.
-  const pendingDeletions = usePendingDeletions();
-
   const {
     projects,
     loading: loadingProjects,
     refresh: refreshProjects,
   } = useProjects();
 
-  const handleProjectCreated = useCallback(
-    (projectName: string) => {
-      addPendingProject(projectName);
-      refreshProjects();
-    },
-    [refreshProjects],
-  );
+  // The backend records the project as soon as it accepts the request, then
+  // updates its status at every bootstrap or teardown step, so the list itself
+  // says what is going on.
+  const handleProjectCreated = useCallback(() => {
+    refreshProjects();
+  }, [refreshProjects]);
 
-  // Drop pending entries once they've landed in the real list.
+  const hasProjectInFlight = projects.some(isProjectInFlight);
+
   useEffect(() => {
-    prunePendingProjects(projects);
-  }, [projects]);
-
-  // Drop pending-deletion entries once the project has actually left the
-  // real list.
-  useEffect(() => {
-    prunePendingDeletions(projects);
-  }, [projects]);
-
-  // Only render placeholders that aren't already in the real list. Once a
-  // pending project appears in `projects`, it drops out of this derived list
-  // which both hides its placeholder and stops the polling effect below.
-  const visiblePending = pendingProjects.filter(
-    (p) => !projects.some((real) => real.name === p.name),
-  );
-
-  // Poll the project list while any creation or deletion is still in flight.
-  useEffect(() => {
-    if (visiblePending.length === 0 && pendingDeletions.length === 0) return;
+    if (!hasProjectInFlight) return;
     const interval = setInterval(refreshProjects, 3000);
     return () => clearInterval(interval);
-  }, [visiblePending.length, pendingDeletions.length, refreshProjects]);
+  }, [hasProjectInFlight, refreshProjects]);
 
   const userName =
     session?.user?.name ||
@@ -122,7 +85,7 @@ export default function Home() {
                 <Skeleton key={i} className="h-36 rounded-xl" />
               ))}
             </div>
-          ) : projects.length === 0 && visiblePending.length === 0 ? (
+          ) : projects.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-muted-foreground">
               <span className="text-4xl mb-3">🗂️</span>
               <p className="font-medium">No projects yet</p>
@@ -141,25 +104,9 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visiblePending.map((p) => (
-                <PendingProjectCard
-                  key={`pending-${p.name}`}
-                  name={p.name}
-                  createdAt={p.ts}
-                />
+              {projects.map((p) => (
+                <ProjectCard key={p.name} project={p} />
               ))}
-              {projects.map((p) => {
-                const deletion = pendingDeletions.find(
-                  (d) => d.name === p.name,
-                );
-                return (
-                  <ProjectCard
-                    key={p.name}
-                    project={p}
-                    deletingSince={deletion?.ts}
-                  />
-                );
-              })}
             </div>
           )}
         </section>

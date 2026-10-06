@@ -40,10 +40,28 @@ export type ProjectRole = "owner" | "admin" | "member";
 /** The cloud a project's workloads run on. Immutable after creation. */
 export type TargetCloud = "onprem" | "aws" | "gcp";
 
+export type ProjectStatus =
+  | "provisioning"
+  | "active"
+  | "suspended"
+  | "decommissioning"
+  | "failed";
+
 export interface Project {
   name: string;
   role: ProjectRole;
   target_cloud: TargetCloud;
+  status: ProjectStatus;
+  /** What the bootstrap or teardown is doing now, or why it failed. */
+  step_message: string | null;
+  /** False while the project's Keycloak groups do not exist. */
+  is_accessible: boolean;
+}
+
+export function isProjectInFlight(project: Project): boolean {
+  return (
+    project.status === "provisioning" || project.status === "decommissioning"
+  );
 }
 
 export interface ProjectCreateResponse {
