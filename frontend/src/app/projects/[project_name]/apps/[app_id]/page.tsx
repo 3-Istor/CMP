@@ -3,6 +3,7 @@
 import { Github } from "@/components/icons/Github";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
+import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
@@ -385,7 +386,10 @@ export default function AppControlCenterPage() {
                     {/* ── Right column: Day-2 config ── */}
                     <div className="space-y-6">
                         {isKubernetes && isRunning ? (
-                            <AppConfigPanel deploymentId={appId} />
+                            <>
+                                <SecurityDataPanel deploymentId={appId} />
+                                <AppConfigPanel deploymentId={appId} />
+                            </>
                         ) : isKubernetes && !isRunning ? (
                             <Card>
                                 <CardContent className="pt-6">

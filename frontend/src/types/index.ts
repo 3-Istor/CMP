@@ -114,6 +114,34 @@ export interface DeploymentConfigUpdateResponse {
   changed_keys: string[];
 }
 
+export type ExposurePreset =
+  | "public"
+  | "project_users"
+  | "project_members"
+  | "project_admins";
+
+export interface SecurityData {
+  repo: string;
+  can_edit: boolean;
+  exposure: ExposurePreset | "custom" | null;
+  database: {
+    backup: {
+      enabled: boolean;
+      keep_after_delete: boolean;
+      retention_policy: string | null;
+    };
+  } | null;
+}
+
+export interface SecurityDataUpdate {
+  exposure?: ExposurePreset;
+  backup?: {
+    enabled?: boolean;
+    keep_after_delete?: boolean;
+    retention_policy?: string;
+  };
+}
+
 // ── Terraform / Catalog ───────────────────────────────────────────────────────
 
 export interface TerraformOutputs {

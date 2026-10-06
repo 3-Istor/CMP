@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.routers.finops import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
+from app.services import app_security_data as security_data
 from app.services import terraform_orchestrator
 from app.services.catalog_service import get_template_by_id
 from app.services.github_service import (
@@ -24,6 +25,7 @@ from app.services.github_service import (
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
+    get_project_role,
     require_project_role,
 )
 from app.services.project_registry import (
@@ -559,3 +561,164 @@ async def update_deployment_config(
         "commit_sha": commit_sha,
         "changed_keys": list(payload.keys()),
     }
+
+
+# ── Exposure and database backups ────────────────────────────────────────────
+
+
+def _app_type_of(deployment: Deployment) -> str:
+    app_config: dict = json.loads(deployment.app_config or "{}")
+    return app_config.get("app_type", "static")
+
+
+async def _load_values_file(
+    token: str, repo: str, file_path: str
+) -> tuple[Any, str]:
+    try:
+        raw_content, sha = await get_file_content(
+            installation_token=token,
+            repo_full_name=repo,
+            file_path=file_path,
+        )
+    except GitHubAppError as exc:
+        status_code = 404 if "not found" in str(exc).lower() else 502
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    parsed = _yaml.load(raw_content)
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=500,
+            detail=f"'{file_path}' does not contain a YAML mapping.",
+        )
+    return parsed, sha
+
+
+@router.get(
+    "/{deployment_id}/security-data",
+    response_model=security_data.SecurityDataRead,
+)
+async def get_security_data(
+    deployment_id: int,
+    token_payload: CurrentUser,
+    db: Session = Depends(get_db),
+) -> security_data.SecurityDataRead:
+    deployment = _get_kubernetes_deployment_or_404(
+        deployment_id, db, token_payload
+    )
+    can_edit = is_cnp_admin(token_payload) or (
+        get_project_role(token_payload.get("sub", ""), deployment.project_id)
+        == "admin"
+    )
+
+    token = await _get_github_token_for_deployment(deployment)
+    repo = _extract_repo_full_name(deployment.github_repo_url)
+    exposure_file, database_file = security_data.values_files_for(
+        _app_type_of(deployment)
+    )
+
+    exposure_values, _ = await _load_values_file(token, repo, exposure_file)
+    database_values = exposure_values
+    if database_file != exposure_file:
+        database_values, _ = await _load_values_file(
+            token, repo, database_file
+        )
+
+    return security_data.SecurityDataRead(
+        repo=repo,
+        can_edit=can_edit,
+        exposure=(
+            security_data.read_exposure(exposure_values)
+            if security_data.has_ingress(exposure_values)
+            else None
+        ),
+        database=(
+            security_data.DatabaseState(
+                backup=security_data.read_backup(database_values)
+            )
+            if security_data.has_database(database_values)
+            else None
+        ),
+    )
+
+
+@router.put("/{deployment_id}/security-data")
+async def update_security_data(
+    deployment_id: int,
+    payload: security_data.SecurityDataUpdate,
+    token_payload: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Write the exposure preset and/or the database backup settings into the
+    app repository's values files. Project admins only; only the keys of the
+    panel are ever written.
+    """
+    deployment = _get_kubernetes_deployment_or_404(
+        deployment_id, db, token_payload, require_admin=True
+    )
+
+    token = await _get_github_token_for_deployment(deployment)
+    repo = _extract_repo_full_name(deployment.github_repo_url)
+    exposure_file, database_file = security_data.values_files_for(
+        _app_type_of(deployment)
+    )
+
+    patches: dict[str, dict] = {}
+    labels: dict[str, list[str]] = {}
+    loaded: dict[str, tuple[Any, str]] = {}
+
+    async def load(file_path: str) -> Any:
+        if file_path not in loaded:
+            loaded[file_path] = await _load_values_file(token, repo, file_path)
+        return loaded[file_path][0]
+
+    if payload.exposure is not None:
+        if not security_data.has_ingress(await load(exposure_file)):
+            raise HTTPException(
+                status_code=400,
+                detail="This application has no ingress to configure.",
+            )
+        patches[exposure_file] = security_data.exposure_patch(payload.exposure)
+        labels[exposure_file] = [
+            security_data.exposure_commit_label(payload.exposure)
+        ]
+
+    backup_labels = (
+        security_data.backup_commit_labels(payload.backup)
+        if payload.backup
+        else []
+    )
+    if backup_labels:
+        if not security_data.has_database(await load(database_file)):
+            raise HTTPException(
+                status_code=400,
+                detail="This application has no database.",
+            )
+        _deep_merge(
+            patches.setdefault(database_file, {}),
+            security_data.backup_patch(payload.backup),
+        )
+        labels.setdefault(database_file, []).extend(backup_labels)
+
+    commits: dict[str, str] = {}
+    for file_path, patch in patches.items():
+        parsed, sha = loaded[file_path]
+        _deep_merge(parsed, patch)
+        out = StringIO()
+        _yaml.dump(parsed, out)
+        try:
+            result = await update_file_content(
+                installation_token=token,
+                repo_full_name=repo,
+                file_path=file_path,
+                content=out.getvalue(),
+                message=f"chore(cmp): {', '.join(labels[file_path])}",
+                sha=sha,
+            )
+        except GitHubAppError as exc:
+            status_code = 409 if "conflict" in str(exc).lower() else 502
+            raise HTTPException(
+                status_code=status_code, detail=str(exc)
+            ) from exc
+        commits[file_path] = result.get("commit", {}).get("sha", "")
+
+    return {"repo": repo, "commits": commits}

@@ -259,6 +259,18 @@ export const updateDeploymentConfig = (
     },
   );
 
+export const getSecurityData = (id: number) =>
+  request<import("@/types").SecurityData>(`/deployments/${id}/security-data`);
+
+export const updateSecurityData = (
+  id: number,
+  payload: import("@/types").SecurityDataUpdate,
+) =>
+  request<{ repo: string; commits: Record<string, string> }>(
+    `/deployments/${id}/security-data`,
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+
 export const uploadProfilePicture = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);
