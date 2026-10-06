@@ -29,7 +29,7 @@ let _tokenCache: { token: string | null; at: number } | null = null;
 let _tokenInflight: Promise<string | null> | null = null;
 const TOKEN_TTL_MS = 30_000;
 
-async function getAccessToken(): Promise<string | null> {
+export async function getAccessToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   const now = Date.now();
   if (_tokenCache && now - _tokenCache.at < TOKEN_TTL_MS) {

@@ -462,38 +462,105 @@ def list_project_members(project_name: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+PLATFORM_REALM = "3istor"
+
+# PyJWKClient fetches with urllib, whose default user agent Cloudflare blocks
+# in front of the Keycloak URL.
+_jwks_client = jwt.PyJWKClient(
+    f"{settings.KEYCLOAK_URL}/realms/{PLATFORM_REALM}/protocol/openid-connect/certs",
+    cache_keys=True,
+    lifespan=300,
+    headers={"User-Agent": "cmp-backend/1.0"},
+)
+
+
+def decode_platform_token(token: str) -> dict:
+    """
+    Verify a bearer token issued by the platform realm and return its claims.
+
+    Raises:
+        HTTPException 401: Bad signature, expired, wrong issuer or malformed.
+        HTTPException 503: The realm's signing keys could not be fetched.
+    """
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        return jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=f"{settings.KEYCLOAK_URL}/realms/{PLATFORM_REALM}",
+            options={"verify_aud": False, "require": ["exp", "iss", "sub"]},
+        )
+    except jwt.PyJWKClientConnectionError as exc:
+        logger.error("Could not fetch the platform realm's signing keys: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Token verification is temporarily unavailable.",
+        ) from exc
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+        ) from exc
+
+
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
 ) -> dict:
-    """
-    FastAPI dependency — decodes the Bearer JWT (Envoy already validated it)
-    and returns the payload dict.
+    """FastAPI dependency returning the verified claims of the bearer token."""
+    return decode_platform_token(credentials.credentials)
 
-    Raises HTTPException 401 on malformed tokens.
+
+def get_project_role(user_id: str, project_name: str) -> str | None:
     """
-    token = credentials.credentials
+    Return "admin", "member" or None for the user in the project, from live
+    Keycloak group membership (tokens can be stale).
+
+    Raises:
+        HTTPException 502: Keycloak could not be queried.
+    """
     try:
-        payload = jwt.decode(
-            token,
-            options={
-                "verify_signature": False,
-                "verify_aud": False,
-                "verify_exp": False,
-            },
+        admin_token = _get_admin_token()
+        for suffix, role in (("admins", "admin"), ("members", "member")):
+            group = _find_group_by_name(
+                f"project-{project_name}-{suffix}", admin_token
+            )
+            if group and _check_user_in_group_realtime(
+                user_id, group["id"], admin_token
+            ):
+                return role
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Failed to check access to project '%s': %s", project_name, exc
         )
-
-        # DEBUG: Log what's in the token
-        logger.debug(f"🔑 JWT payload keys: {list(payload.keys())}")
-        logger.debug(
-            f"🔑 sub={payload.get('sub', 'MISSING')}, preferred_username={payload.get('preferred_username', 'MISSING')}"
-        )
-
-        return payload
-    except jwt.DecodeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {exc}",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to verify project access.",
         ) from exc
+    return None
+
+
+def require_project_role(
+    token_payload: dict, project_name: str, require_admin: bool = False
+) -> str:
+    """
+    Raise 403 unless the token's user is a member (or admin, when required)
+    of the project; return the role.
+    """
+    user_id = token_payload.get("sub", "")
+    role = get_project_role(user_id, project_name) if user_id else None
+    if role is None or (require_admin and role != "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Access denied: admin role required for project '{project_name}'."
+                if require_admin
+                else f"Access denied: you are not a member of project '{project_name}'."
+            ),
+        )
+    return role
 
 
 def verify_project_access(project_name: str, require_admin: bool = False):
