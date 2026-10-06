@@ -22,9 +22,11 @@ class TargetCloud(str, enum.Enum):
 
 
 class ProjectStatus(str, enum.Enum):
+    PROVISIONING = "provisioning"
     ACTIVE = "active"
     SUSPENDED = "suspended"
     DECOMMISSIONING = "decommissioning"
+    FAILED = "failed"
 
 
 class Project(Base):
@@ -84,6 +86,12 @@ class Project(Base):
         nullable=False,
         default=ProjectStatus.ACTIVE,
         server_default=ProjectStatus.ACTIVE.value,
+    )
+
+    # What the bootstrap or teardown is doing right now, or why it failed.
+    # Cleared once the project is active.
+    step_message: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(

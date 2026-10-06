@@ -10,51 +10,39 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { Project } from "@/types";
-import { Crown, FolderKanban, Loader2, ShieldCheck, Users } from "lucide-react";
+import { isProjectInFlight } from "@/types";
+import {
+    AlertTriangle,
+    Crown,
+    FolderKanban,
+    Loader2,
+    ShieldCheck,
+    Users,
+} from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 interface Props {
     project: Project;
-    /** Epoch ms when the delete was confirmed, if a teardown is in flight. */
-    deletingSince?: number;
 }
 
-// Same asymptotic-progress trick as PendingProjectCard, so the bar resumes
-// correctly across a reload instead of restarting at zero.
-const START = 8;
-const CEILING = 92;
-const TAU_MS = 20000;
-
-function progressFor(since: number): number {
-    const elapsed = Math.max(0, Date.now() - since);
-    const value = CEILING - (CEILING - START) * Math.exp(-elapsed / TAU_MS);
-    return Math.min(CEILING, Math.round(value));
-}
-
-export function ProjectCard({ project, deletingSince }: Props) {
+export function ProjectCard({ project }: Props) {
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
-    const isDeleting = deletingSince !== undefined;
-
-    const [progress, setProgress] = useState(() =>
-        deletingSince ? progressFor(deletingSince) : 0,
-    );
-
-    useEffect(() => {
-        if (!deletingSince) return;
-        const timer = setInterval(() => {
-            setProgress(progressFor(deletingSince));
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [deletingSince]);
+    const isCreating = project.status === "provisioning";
+    const isDeleting = project.status === "decommissioning";
+    const isFailed = project.status === "failed";
+    const isInFlight = isProjectInFlight(project);
 
     const cardBody = (
         <Card
             className={
                 isDeleting
                     ? "h-full border-destructive/30 opacity-70"
-                    : "h-full transition-shadow group-hover:shadow-md group-hover:border-primary/30"
+                    : isFailed
+                      ? "h-full border-destructive/50"
+                      : isCreating
+                        ? "h-full border-primary/30"
+                        : "h-full transition-shadow group-hover:shadow-md group-hover:border-primary/30"
             }
         >
             <CardHeader className="pb-3">
@@ -62,10 +50,20 @@ export function ProjectCard({ project, deletingSince }: Props) {
                     <div className="rounded-lg bg-primary/10 p-2.5">
                         <FolderKanban className="h-5 w-5 text-primary" />
                     </div>
-                    {isDeleting ? (
+                    {isCreating ? (
+                        <Badge variant="outline" className="shrink-0 gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Creating
+                        </Badge>
+                    ) : isDeleting ? (
                         <Badge variant="destructive" className="shrink-0 gap-1">
                             <Loader2 className="h-3 w-3 animate-spin" />
                             Deleting
+                        </Badge>
+                    ) : isFailed ? (
+                        <Badge variant="destructive" className="shrink-0 gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Failed
                         </Badge>
                     ) : (
                         <Badge
@@ -87,22 +85,24 @@ export function ProjectCard({ project, deletingSince }: Props) {
                     {project.name}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                    {isDeleting
-                        ? "Tearing down project resources…"
-                        : `Kubernetes project · ${isOwner ? "Owner" : isAdmin ? "Full access" : "Read & deploy"}`}
+                    {`Kubernetes project · ${isOwner ? "Owner" : isAdmin ? "Full access" : "Read & deploy"}`}
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-0 space-y-1.5">
-                {isDeleting ? (
+                {isInFlight ? (
                     <>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span className="animate-pulse">
-                                Keycloak · Vault · ArgoCD
-                            </span>
-                            <span className="tabular-nums font-mono">{progress}%</span>
-                        </div>
-                        <Progress value={progress} className="h-1.5 [&>div]:bg-destructive" />
+                        <p className="text-xs text-muted-foreground">
+                            {project.step_message}
+                        </p>
+                        <Progress
+                            value={null}
+                            className={`h-1.5 ${isDeleting ? "[&>div]:bg-destructive" : ""}`}
+                        />
                     </>
+                ) : isFailed ? (
+                    <p className="text-xs text-destructive">
+                        {project.step_message}
+                    </p>
                 ) : (
                     <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
                         project-{project.name}-{isAdmin ? "admins" : "members"}
@@ -112,13 +112,21 @@ export function ProjectCard({ project, deletingSince }: Props) {
         </Card>
     );
 
-    // Not a Link while deleting: the project is on its way out, and its
-    // detail page's admin-group access check can fail mid-teardown anyway.
-    if (isDeleting) {
+    // Not a Link while a bootstrap or teardown runs: the Keycloak groups that
+    // back project access are being created or removed, so the detail page can
+    // fail its access check. The same holds for a failed bootstrap, which never
+    // created them.
+    if (isInFlight || !project.is_accessible) {
         return (
             <div
                 className="block cursor-not-allowed select-none"
-                title="This project is being deleted"
+                title={
+                    isDeleting
+                        ? "This project is being deleted"
+                        : isCreating
+                          ? "This project is still being created"
+                          : "This project could not be created"
+                }
                 aria-disabled="true"
             >
                 {cardBody}
