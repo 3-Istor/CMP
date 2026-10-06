@@ -65,6 +65,7 @@ class Settings(BaseSettings):
 
     # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
+    KEYCLOAK_REALM: str = "3istor"
     KEYCLOAK_CLIENT_ID: str = "3-istor-openid"
     KEYCLOAK_CLIENT_SECRET: str = ""
     # Admin credentials used by Terraform k3s-project-bootstrap module

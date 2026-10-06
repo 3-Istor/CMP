@@ -132,7 +132,7 @@ def search_keycloak_users(
         from app.services.keycloak_service import _get_admin_token
 
         admin_token = _get_admin_token()
-        url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
+        url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
 
         # Keycloak search matches username, email, firstName, lastName
         response = requests.get(

@@ -4,7 +4,7 @@ Keycloak Service
 Provides utilities for:
 - Resolving a user's role on a project from the Keycloak Admin API
 - Managing project group membership (add / remove / list)
-- Decoding the Bearer JWT for FastAPI dependency injection
+- Verifying the Bearer JWT for FastAPI dependency injection
 
 Group naming convention: project-<project_name>-<admins|members|guests>
 Example: project-sandbox-admins, project-sandbox-guests
@@ -19,7 +19,7 @@ Note that group membership is always resolved against the Admin API, never
 from the JWT's ``groups`` claim, which is not populated in this realm.
 
 Performance notes:
-- Admin token is cached for 55 seconds (tokens live 60s by default)
+- Admin token is cached until 30 s before it expires
 - Group IDs are cached for 5 minutes (groups rarely change); misses are not
   cached, so a freshly created group is visible immediately
 - Member lists are fetched in parallel (one request per group)
@@ -74,6 +74,16 @@ class ProjectGroupMissingError(ValueError):
 
 # Admin token cache: (token, expires_at)
 _admin_token_cache: tuple[str, float] | None = None
+
+# Realm signing keys for get_current_user; PyJWKClient caches the key set.
+# Explicit User-Agent: Cloudflare in front of Keycloak answers 403 to
+# urllib's default "Python-urllib/x.y".
+_ISSUER = f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
+_jwks_client = jwt.PyJWKClient(
+    f"{_ISSUER}/protocol/openid-connect/certs",
+    lifespan=3600,
+    headers={"User-Agent": "cnp-backend"},
+)
 
 # Group ID cache: {group_name: (group_dict, expires_at)}
 _group_cache: dict[str, tuple[dict, float]] = {}
@@ -155,7 +165,7 @@ def get_user_id_from_token(token_payload: dict) -> str:
 def _get_admin_token() -> str:
     """
     Obtain a Keycloak admin token via client-credentials grant.
-    Cached for 55 seconds to avoid a round-trip on every request.
+    Cached until 30 s before it expires, so callers never get a stale one.
     """
     global _admin_token_cache
 
@@ -166,7 +176,7 @@ def _get_admin_token() -> str:
             return token
 
     url = (
-        f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
+        f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token"
     )
     response = requests.post(
         url,
@@ -178,10 +188,11 @@ def _get_admin_token() -> str:
         timeout=10,
     )
     response.raise_for_status()
-    token = response.json()["access_token"]
-    # Cache for 55 s (tokens typically live 60 s)
-    _admin_token_cache = (token, now + 55)
-    logger.debug("🔑 Fetched fresh Keycloak admin token (cached 55s)")
+    data = response.json()
+    token = data["access_token"]
+    ttl = max(data.get("expires_in", 60) - 30, 0)
+    _admin_token_cache = (token, now + ttl)
+    logger.debug("🔑 Fetched fresh Keycloak admin token (cached %ss)", ttl)
     return token
 
 
@@ -196,7 +207,7 @@ def _find_user_by_username(username: str, admin_token: str) -> dict | None:
     Returns:
         User dict if found, None otherwise.
     """
-    url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
+    url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
     response = requests.get(
         url,
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -224,7 +235,7 @@ def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
         if now < expires_at:
             return group
 
-    url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/groups"
+    url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/groups"
     response = requests.get(
         url,
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -257,7 +268,7 @@ def _check_user_in_group_realtime(
     Returns:
         True if user is in the group, False otherwise.
     """
-    url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{user_id}/groups"
+    url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_id}/groups"
     try:
         response = requests.get(
             url,
@@ -290,7 +301,7 @@ def _fetch_user_groups(user_id: str) -> list[dict]:
     try:
         admin_token = _get_admin_token()
         url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
+            f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
             f"/users/{user_id}/groups"
         )
         response = requests.get(
@@ -428,7 +439,7 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
 
     # Add user to group
     url = (
-        f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
         f"/users/{user_id}/groups/{group_id}"
     )
     response = requests.put(
@@ -491,7 +502,7 @@ def remove_user_from_project(username: str, project_name: str) -> None:
 
         # Remove user from group
         url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
+            f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
             f"/users/{user_id}/groups/{group_id}"
         )
         response = requests.delete(
@@ -546,7 +557,7 @@ def list_project_members(project_name: str) -> list[dict]:
             return []
 
         url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/3istor"
+            f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
             f"/groups/{group['id']}/members"
         )
         response = requests.get(
@@ -600,35 +611,44 @@ def list_project_members(project_name: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-async def get_current_user(
+def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
 ) -> dict:
     """
-    FastAPI dependency — decodes the Bearer JWT (Envoy already validated it)
-    and returns the payload dict.
+    FastAPI dependency — verifies the Bearer JWT against the realm's signing
+    keys (signature, expiry, issuer) and returns its payload.
 
-    Raises HTTPException 401 on malformed tokens.
+    Verified here even when a gateway already checked it: the backend is also
+    reachable without one (ingress straight to /api, in-cluster calls, local
+    compose), and authorization trusts ``preferred_username`` blindly.
+
+    Sync on purpose: the first call (and a key rotation) fetches the JWKS over
+    HTTP, so FastAPI runs it in its threadpool.
+
+    Raises HTTPException 401 on an invalid or expired token.
     """
     token = credentials.credentials
     try:
-        payload = jwt.decode(
+        signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        return jwt.decode(
             token,
-            options={
-                "verify_signature": False,
-                "verify_aud": False,
-                "verify_exp": False,
-            },
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=_ISSUER,
+            leeway=30,
+            # Keycloak access tokens carry aud="account", not the client id.
+            options={"verify_aud": False},
         )
-
-        # DEBUG: Log what's in the token
-        logger.debug(f"🔑 JWT payload keys: {list(payload.keys())}")
-        logger.debug(
-            f"🔑 sub={payload.get('sub', 'MISSING')}, preferred_username={payload.get('preferred_username', 'MISSING')}"
-        )
-
-        return payload
-    except jwt.DecodeError as exc:
+    except jwt.PyJWKClientConnectionError as exc:
+        logger.error("Could not fetch Keycloak signing keys: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable.",
+        ) from exc
+    except (jwt.PyJWKClientError, jwt.InvalidTokenError) as exc:
+        # PyJWKClientError here = no realm key matches the token's kid.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {exc}",
+            headers={"WWW-Authenticate": "Bearer"},
         ) from exc

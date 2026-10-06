@@ -8,7 +8,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
@@ -112,15 +111,9 @@ logger = logging.getLogger(__name__)
 # OPENAPI OAUTH2 CONFIGURATION (Keycloak OIDC)
 # ══════════════════════════════════════════════════════════════════════════
 
-# Define Keycloak OAuth2 Flow for Swagger UI
-oauth2_scheme = OAuth2AuthorizationCodeBearer(
-    authorizationUrl="https://auth.3istor.com/realms/3istor/protocol/openid-connect/auth",
-    tokenUrl="https://auth.3istor.com/realms/3istor/protocol/openid-connect/token",
-    scopes={
-        "openid": "Required for authentication",
-        "profile": "Access user profile metadata",
-        "groups": "Project boundary mappings",
-    },
+_OIDC_BASE = (
+    f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
+    "/protocol/openid-connect"
 )
 
 
@@ -149,8 +142,8 @@ def custom_openapi():
             "type": "oauth2",
             "flows": {
                 "authorizationCode": {
-                    "authorizationUrl": "https://auth.3istor.com/realms/3istor/protocol/openid-connect/auth",
-                    "tokenUrl": "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token",
+                    "authorizationUrl": f"{_OIDC_BASE}/auth",
+                    "tokenUrl": f"{_OIDC_BASE}/token",
                     "scopes": {
                         "openid": "Required for authentication",
                         "profile": "Access user profile metadata",

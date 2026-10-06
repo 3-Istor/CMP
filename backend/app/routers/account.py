@@ -1,9 +1,7 @@
 import logging
-import time
 from typing import Annotated
 
 import boto3
-import jwt
 import requests
 from botocore.exceptions import ClientError
 from fastapi import (
@@ -11,10 +9,8 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
-    Request,
     UploadFile,
 )
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -26,45 +22,16 @@ from app.schemas.account import (
     PictureUploadResponse,
     UserProfile,
 )
+from app.services.keycloak_service import _get_admin_token, get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/account", tags=["Account"])
-security = HTTPBearer(auto_error=True)
-
-
-async def get_current_user(
-    request: Request,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-) -> dict:
-    """
-    Get current user from JWT token.
-
-    In production, Envoy Gateway injects the JWT in Authorization header.
-    """
-    token = credentials.credentials
-    try:
-        # Decode without verification (Envoy already validated it)
-        payload = jwt.decode(
-            token,
-            options={
-                "verify_signature": False,
-                "verify_aud": False,
-                "verify_exp": False,
-            },
-        )
-        return payload
-    except jwt.DecodeError as e:
-        raise HTTPException(
-            status_code=401, detail=f"Invalid token: {str(e)}"
-        ) from e
 
 
 @router.get("/me", response_model=UserProfile)
 def get_user_profile(
-    request: Request,
     token_payload: Annotated[dict, Depends(get_current_user)],
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     db: Session = Depends(get_db),
 ) -> UserProfile:
     """
@@ -98,46 +65,34 @@ def get_user_profile(
     github_installation_id = None
 
     try:
-        # Get admin token
-        token_url = f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
-        token_response = requests.post(
-            token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": settings.KEYCLOAK_CLIENT_ID,
-                "client_secret": settings.KEYCLOAK_CLIENT_SECRET,
-            },
+        admin_token = _get_admin_token()
+
+        search_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
+        search_response = requests.get(
+            search_url,
+            headers={"Authorization": f"Bearer {admin_token}"},
+            params={"username": user_sub, "exact": "true"},
             timeout=10,
         )
-        if token_response.ok:
-            admin_token = token_response.json()["access_token"]
 
-            search_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
-            search_response = requests.get(
-                search_url,
+        if search_response.ok and search_response.json():
+            user_uuid = search_response.json()[0]["id"]
+
+            user_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_uuid}"
+            user_response = requests.get(
+                user_url,
                 headers={"Authorization": f"Bearer {admin_token}"},
-                params={"username": user_sub, "exact": "true"},
                 timeout=10,
             )
 
-            if search_response.ok and search_response.json():
-                user_uuid = search_response.json()[0]["id"]
+            if user_response.ok:
+                user_data = user_response.json()
+                keycloak_first_name = user_data.get("firstName")
+                keycloak_last_name = user_data.get("lastName")
 
-                user_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{user_uuid}"
-                user_response = requests.get(
-                    user_url,
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                    timeout=10,
-                )
-
-                if user_response.ok:
-                    user_data = user_response.json()
-                    keycloak_first_name = user_data.get("firstName")
-                    keycloak_last_name = user_data.get("lastName")
-
-                    attributes = user_data.get("attributes", {})
-                    if "picture" in attributes and attributes["picture"]:
-                        picture = attributes["picture"][0]
+                attributes = user_data.get("attributes", {})
+                if "picture" in attributes and attributes["picture"]:
+                    picture = attributes["picture"][0]
 
     except Exception as e:
         logger.warning("/me: failed to fetch user data: %s", e)
@@ -253,23 +208,11 @@ async def upload_profile_picture(
 
     # Update Keycloak user profile
     try:
-        # Get admin token
-        token_url = f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
-        token_response = requests.post(
-            token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": settings.KEYCLOAK_CLIENT_ID,
-                "client_secret": settings.KEYCLOAK_CLIENT_SECRET,
-            },
-            timeout=10,
-        )
-        token_response.raise_for_status()
-        admin_token = token_response.json()["access_token"]
+        admin_token = _get_admin_token()
 
         # The 'sub' claim might be a username, not a UUID
         # First, try to find the user by username to get their UUID
-        search_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
+        search_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
         search_response = requests.get(
             search_url,
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -288,7 +231,7 @@ async def upload_profile_picture(
 
         # First, GET the current user data to avoid overwriting other fields
         user_url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{user_uuid}"
+            f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_uuid}"
         )
         get_response = requests.get(
             user_url,
