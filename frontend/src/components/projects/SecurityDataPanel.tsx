@@ -37,8 +37,8 @@ const EXPOSURE_OPTIONS: {
     },
     {
         value: "project_users",
-        label: "Utilisateurs connectés du projet",
-        hint: "Toute personne connectée au royaume du projet.",
+        label: "Tout compte connecté",
+        hint: "Tout compte du realm du projet, y compris n'importe quel utilisateur de la plateforme 3istor via le broker.",
     },
     {
         value: "project_members",
