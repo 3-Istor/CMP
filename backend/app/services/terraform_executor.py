@@ -74,14 +74,8 @@ class TerraformExecutor:
             "-backend-config=key=" + s3_key,
             "-backend-config=region=" + settings.TF_BACKEND_AWS_REGION,
             "-backend-config=encrypt=true",
+            "-backend-config=use_lockfile=true",
         ]
-
-        # Add DynamoDB table only if specified (optional for locking)
-        if settings.TF_BACKEND_S3_DYNAMODB_TABLE:
-            backend_config.append(
-                "-backend-config=dynamodb_table="
-                + settings.TF_BACKEND_S3_DYNAMODB_TABLE
-            )
 
         # Add S3 backend credentials if provided
         if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:

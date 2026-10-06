@@ -166,17 +166,11 @@ def _execute_terraform_kubernetes(
         init_cmd = [
             "terraform",
             "init",
-            f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
+            f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET}",
             f"-backend-config=key={state_key}",
             f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
             "-backend-config=encrypt=true",
-            *(
-                [
-                    f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"
-                ]
-                if settings.TF_BACKEND_S3_DYNAMODB_TABLE
-                else []
-            ),
+            "-backend-config=use_lockfile=true",
             "-reconfigure",
         ]
         _run_terraform_command(
@@ -559,17 +553,11 @@ def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
             init_cmd = [
                 "terraform",
                 "init",
-                f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
+                f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET}",
                 f"-backend-config=key={deployment.terraform_state_path}",
                 f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
                 "-backend-config=encrypt=true",
-                *(
-                    [
-                        f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"
-                    ]
-                    if settings.TF_BACKEND_S3_DYNAMODB_TABLE
-                    else []
-                ),
+                "-backend-config=use_lockfile=true",
                 "-reconfigure",
             ]
             _run_terraform_command(

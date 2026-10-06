@@ -343,25 +343,10 @@ def _terraform_init(
         )
         return
 
-    missing = [
-        name
-        for name, value in (
-            ("TF_BACKEND_S3_BUCKET", settings.TF_BACKEND_S3_BUCKET),
-            (
-                "TF_BACKEND_S3_DYNAMODB_TABLE",
-                settings.TF_BACKEND_S3_DYNAMODB_TABLE,
-            ),
-        )
-        if not value
-    ]
-    if missing:
+    if not settings.TF_BACKEND_S3_BUCKET:
         raise TerraformBackendError(
-            f"TF_BACKEND_S3_ENABLED is true but {', '.join(missing)} "
-            f"{'is' if len(missing) == 1 else 'are'} empty. The S3 backend "
-            "needs a bucket, and a lock table is not optional (D-09): two "
-            "concurrent applies on the same project corrupt state with no "
-            "warning. Set them, or set TF_BACKEND_S3_ENABLED=false to run on "
-            "local state."
+            "TF_BACKEND_S3_ENABLED is true but TF_BACKEND_S3_BUCKET is empty. "
+            "Set it, or set TF_BACKEND_S3_ENABLED=false to run on local state."
         )
 
     _run(
@@ -372,8 +357,7 @@ def _terraform_init(
             f"-backend-config=key={state_key}",
             "-backend-config=region=" + settings.TF_BACKEND_AWS_REGION,
             "-backend-config=encrypt=true",
-            "-backend-config=dynamodb_table="
-            + settings.TF_BACKEND_S3_DYNAMODB_TABLE,
+            "-backend-config=use_lockfile=true",
             "-reconfigure",
         ],
         cwd=module_path,
