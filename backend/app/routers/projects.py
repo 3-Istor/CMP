@@ -95,7 +95,7 @@ def _administers_any_project(db: Session, token_payload: dict) -> bool:
 
 
 @router.get("/users/search")
-async def search_keycloak_users(
+def search_keycloak_users(
     q: str,
     token_payload: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
@@ -166,7 +166,7 @@ async def search_keycloak_users(
 
 
 @router.get("/", response_model=list[ProjectRead])
-async def list_projects(
+def list_projects(
     token_payload: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ) -> list[ProjectRead]:
@@ -452,7 +452,7 @@ async def list_project_apps(
 
 
 @router.get("/{project_name}/members")
-async def get_project_members(
+def get_project_members(
     ctx: RequireMember,
     db: Session = Depends(get_db),
 ) -> dict:

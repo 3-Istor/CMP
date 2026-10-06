@@ -114,7 +114,7 @@ def _get_app_or_404(
 
 
 @router.get("/", response_model=list[DeploymentRead])
-async def list_deployments(
+def list_deployments(
     token: CurrentUser,
     db: Session = Depends(get_db),
 ):
@@ -139,7 +139,7 @@ async def list_deployments(
 
 
 @router.post("/", response_model=DeploymentRead, status_code=202)
-async def create_deployment(
+def create_deployment(
     payload: DeploymentCreate,
     background_tasks: BackgroundTasks,
     token: CurrentUser,

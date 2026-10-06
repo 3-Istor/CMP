@@ -70,9 +70,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           });
           if (response.ok) {
             const userData = await response.json();
+            // Mark as fetched even without a picture: otherwise every auth()
+            // call (proxy.ts runs it on each navigation) re-hits /account/me,
+            // which itself makes several blocking Keycloak Admin API calls.
+            token.pictureFetched = true;
             if (userData.picture) {
               token.picture = userData.picture;
-              token.pictureFetched = true;
               if (trigger === "update") {
                 console.log(
                   "JWT callback - updated token.picture:",

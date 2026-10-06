@@ -28,7 +28,7 @@ the check by hand.
 """
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -153,7 +153,7 @@ def assert_project_role(
 
 def require_project_role(
     minimum: ProjectRole,
-) -> Callable[..., Awaitable[ProjectContext]]:
+) -> Callable[..., ProjectContext]:
     """
     Build a FastAPI dependency enforcing *minimum* on ``{project_name}``.
 
@@ -163,7 +163,7 @@ def require_project_role(
     twice.
     """
 
-    async def _dep(
+    def _dep(
         project_name: str,
         token_payload: Annotated[dict, Depends(get_current_user)],
         db: Annotated[Session, Depends(get_db)],

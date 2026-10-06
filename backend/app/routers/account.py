@@ -61,7 +61,7 @@ async def get_current_user(
 
 
 @router.get("/me", response_model=UserProfile)
-async def get_user_profile(
+def get_user_profile(
     request: Request,
     token_payload: Annotated[dict, Depends(get_current_user)],
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
