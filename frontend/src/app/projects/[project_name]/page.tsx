@@ -18,8 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
-import { useProjectApps } from "@/lib/hooks";
-import { addPendingDeletion, usePendingDeletions } from "@/lib/pendingDeletions";
+import { useProjectApps, useProjects } from "@/lib/hooks";
 import type { CatalogTemplate } from "@/types";
 import {
   ArrowLeft,
@@ -48,8 +47,10 @@ export default function ProjectPage() {
   // tab or the back button after a delete elsewhere), don't render the
   // normal admin UI — the Keycloak groups backing project access can
   // disappear mid-render.
-  const pendingDeletions = usePendingDeletions();
-  const isBeingDeleted = pendingDeletions.some((d) => d.name === projectName);
+  const { projects } = useProjects();
+  const isBeingDeleted = projects.some(
+    (p) => p.name === projectName && p.status === "decommissioning",
+  );
 
   const {
     apps,
@@ -172,11 +173,8 @@ export default function ProjectPage() {
     try {
       await deleteProject(projectName);
 
-      // The call only schedules teardown — Keycloak group removal (which
-      // the project list is derived from) happens in the background and
-      // can take a while, so mark it as deleting rather than claim it's
-      // already gone.
-      addPendingDeletion(projectName);
+      // The call only schedules teardown. The project list reports it as
+      // "deleting" until the background destroy finishes.
       toast.success(`Deletion of "${projectName}" started`);
       router.push("/");
     } catch (err) {

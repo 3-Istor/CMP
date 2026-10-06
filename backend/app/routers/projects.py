@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus
-from app.models.project import Project, TargetCloud
+from app.models.project import Project, ProjectStatus, TargetCloud
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     ProjectCreate,
@@ -237,8 +237,36 @@ async def list_projects(
         # on-prem by definition, which is what the schema default says.
         if row is not None:
             p["target_cloud"] = row.target_cloud
+            p["status"] = row.status
+            p["step_message"] = row.step_message
             if username and row.owner_username == username:
                 p["role"] = "owner"
+
+    # A project whose bootstrap is running or failed has no Keycloak groups (yet),
+    # so the membership query cannot see it. Its owner still has to, otherwise a
+    # failed bootstrap would leave nothing on screen to explain what happened.
+    listed_names = {p["name"] for p in projects}
+    if username:
+        unlisted = (
+            db.query(Project)
+            .filter(
+                Project.owner_username == username,
+                Project.status != ProjectStatus.ACTIVE,
+                Project.project_name.notin_(listed_names),
+            )
+            .all()
+        )
+        projects.extend(
+            {
+                "name": row.project_name,
+                "role": "owner",
+                "target_cloud": row.target_cloud,
+                "status": row.status,
+                "step_message": row.step_message,
+                "is_accessible": False,
+            }
+            for row in unlisted
+        )
 
     return [ProjectRead(**p) for p in projects]
 
@@ -332,18 +360,25 @@ async def create_project(
 
     # Persist the project owner (creator) — immutable, can never be removed —
     # and mirror the cloud choice for the portal.
-    if (
-        not db.query(Project)
+    existing_project = (
+        db.query(Project)
         .filter(Project.project_name == payload.project_name)
         .first()
-    ):
+    )
+    if existing_project is None:
         db.add(
             Project(
                 project_name=payload.project_name,
                 owner_username=username,
                 target_cloud=payload.target_cloud,
+                status=ProjectStatus.PROVISIONING,
+                step_message="Bootstrap queued",
             )
         )
+        db.commit()
+    elif existing_project.status == ProjectStatus.FAILED:
+        existing_project.status = ProjectStatus.PROVISIONING
+        existing_project.step_message = "Bootstrap queued"
         db.commit()
         logger.info(
             "👑 Recorded '%s' as owner of project '%s' on '%s'",
@@ -819,10 +854,11 @@ async def delete_project(
     """
     Delete a project and tear down its Day-0 infrastructure.
 
-    Keycloak groups and the ownership record are removed synchronously so the
-    project disappears from listings immediately; the remaining infrastructure
-    (Vault policy, ArgoCD AppProject, GitHub resources and the per-project
-    Terraform state) is destroyed in the background via ``terraform destroy``.
+    The registry record is removed synchronously and the project is marked
+    ``decommissioning``. Everything else (Keycloak groups, Vault policy, ArgoCD
+    AppProject, GitHub resources and the per-project Terraform state) is
+    destroyed in the background via ``terraform destroy``. The project row goes
+    away once that succeeds, or turns ``failed`` with the reason.
 
     Requirements:
     - User must be project admin
@@ -907,8 +943,10 @@ async def delete_project(
                 detail=f"Could not deregister the project: {exc}",
             ) from exc
 
-        db.query(Project).filter(Project.project_name == project_name).delete()
-        db.commit()
+        if row is not None:
+            row.status = ProjectStatus.DECOMMISSIONING
+            row.step_message = "Teardown queued"
+            db.commit()
 
         background_tasks.add_task(
             run_project_teardown,
