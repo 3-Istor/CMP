@@ -21,6 +21,7 @@ from fastapi import (
     HTTPException,
     status,
 )
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -50,9 +51,15 @@ from app.services.project_bootstrap import (
     run_project_bootstrap,
     run_project_teardown,
 )
+from app.services.project_preflight import (
+    PreflightUnavailableError,
+    find_leftovers,
+)
 from app.services.project_registry import (
     ImmutableCloudError,
+    NameCollisionError,
     RegistryError,
+    ensure_project_names_free,
     publish_record,
     remove_record,
 )
@@ -326,6 +333,46 @@ async def create_project(
     # Get user info
     user_id = get_user_id_from_token(token_payload)
     username = token_payload.get("preferred_username") or user_id
+
+    # Both checks run before anything is written or applied. A project the DB
+    # already knows is a retry: its own resources are expected to exist.
+    is_known_project = (
+        db.query(Project)
+        .filter(Project.project_name == payload.project_name)
+        .first()
+        is not None
+    )
+    if not is_known_project:
+        try:
+            leftovers = await run_in_threadpool(
+                find_leftovers, payload.project_name
+            )
+        except PreflightUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+            ) from exc
+        if leftovers:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Cannot create project '{payload.project_name}': "
+                    "resources from a previous project of the same name "
+                    "still exist and must be cleaned first: "
+                    + "; ".join(leftovers)
+                ),
+            )
+
+    try:
+        await ensure_project_names_free(payload.project_name)
+    except NameCollisionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    except RegistryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not check the project registry: {exc}",
+        ) from exc
 
     # Store creator temporarily (will be removed once added to Keycloak group)
     _project_creators[payload.project_name] = user_id

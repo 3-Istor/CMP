@@ -12,6 +12,7 @@ Consumers of the record: the Argo CD ApplicationSet (WS-3), the per-project add-
 ``cnp-clean`` job (WS-9).
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from io import StringIO
@@ -26,8 +27,10 @@ from app.services.github_service import (
     delete_file,
     get_file_content,
     get_installation_token,
+    list_directory,
     put_file_content,
 )
+from app.services.registry_names import check_app, check_new_project
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,14 @@ class ImmutableCloudError(RegistryError):
     ``targetCloud`` is immutable in v1: changing it does not move a project, it
     orphans everything already provisioned on the old cloud.
     """
+
+
+class NameCollisionError(RegistryError):
+    """Raised when a record's derived names collide with another record's."""
+
+    def __init__(self, problems: list[str]) -> None:
+        self.problems = problems
+        super().__init__("; ".join(problems))
 
 
 def record_path(project_name: str) -> str:
@@ -132,6 +143,90 @@ async def read_record(project_name: str) -> tuple[dict, str] | None:
             f"Registry record for '{project_name}' is not a YAML mapping"
         )
     return parsed, sha
+
+
+async def list_records() -> list[dict]:
+    """
+    Read every project record in the registry.
+
+    Records that are not a YAML mapping are skipped: one malformed file must
+    not block every other project from being created.
+
+    Raises:
+        RegistryError: If the registry is unreachable.
+    """
+    token = await _installation_token()
+    try:
+        names = await list_directory(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            settings.CNP_REGISTRY_PATH_PREFIX,
+            ref=settings.CNP_REGISTRY_BRANCH,
+        )
+        contents = await asyncio.gather(
+            *(
+                get_file_content(
+                    token,
+                    settings.CNP_REGISTRY_REPO,
+                    f"{settings.CNP_REGISTRY_PATH_PREFIX}/{name}",
+                    ref=settings.CNP_REGISTRY_BRANCH,
+                )
+                for name in names
+                if name.endswith(".yaml")
+            )
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not list the registry records: {exc}"
+        ) from exc
+
+    records: list[dict] = []
+    for raw, _ in contents:
+        parsed = _yaml.load(raw)
+        if isinstance(parsed, dict):
+            records.append(parsed)
+        else:
+            logger.warning("Skipping a registry record that is not a mapping")
+    return records
+
+
+async def ensure_project_names_free(project_name: str) -> None:
+    """
+    Raises:
+        NameCollisionError: If a name derived from the project collides with
+            one derived from another project's record.
+        RegistryError: If the registry cannot be read.
+    """
+    problems = check_new_project(project_name, await list_records())
+    if problems:
+        raise NameCollisionError(
+            [f"Project '{project_name}': {p}" for p in problems]
+        )
+
+
+async def ensure_app_names_free(
+    project_name: str,
+    app_name: str,
+    app_type: str,
+    hostname: str | None = None,
+) -> None:
+    """
+    Raises:
+        NameCollisionError: If the app's name is reserved or invalid, or a
+            name derived from it collides with another project's or app's.
+        RegistryError: If the registry cannot be read.
+    """
+    app: dict = {"name": app_name, "type": app_type}
+    if hostname:
+        app["hostnames"] = {"prod": hostname}
+    problems = check_app(project_name, app, await list_records())
+    if problems:
+        raise NameCollisionError(
+            [
+                f"App '{app_name}' of project '{project_name}': {p}"
+                for p in problems
+            ]
+        )
 
 
 async def publish_record(
@@ -220,6 +315,8 @@ async def register_app(
             f"Cannot register app '{app_name}': project '{project_name}' "
             "has no registry record."
         )
+
+    await ensure_app_names_free(project_name, app_name, app_type, hostname)
 
     record, sha = existing
     apps: list[dict] = record.setdefault("spec", {}).setdefault("apps", [])
