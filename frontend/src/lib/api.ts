@@ -1,5 +1,5 @@
 import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
-import { getSession } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 
 // Declare runtime config type
 declare global {
@@ -42,6 +42,12 @@ export async function getAccessToken(): Promise<string | null> {
   _tokenInflight = (async () => {
     try {
       const session = await getSession();
+      // The refresh token itself expired (session max reached): only a new
+      // login can produce a usable token.
+      if (session?.error === "RefreshAccessTokenError") {
+        await signIn("keycloak");
+        return null;
+      }
       _tokenCache = { token: session?.accessToken ?? null, at: Date.now() };
       return _tokenCache.token;
     } catch {
