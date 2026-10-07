@@ -29,6 +29,15 @@ class GitHubAppError(Exception):
     """Raised when GitHub App operations fail."""
 
 
+def _github_error_message(response: httpx.Response) -> str:
+    # Gateway errors (502/503/504) and some 403s come back with an empty or HTML body.
+    try:
+        message = response.json().get("message")
+    except ValueError:
+        message = None
+    return f"HTTP {response.status_code}: {message or response.text[:200] or response.reason_phrase}"
+
+
 class FileNotInRepoError(GitHubAppError):
     """Raised when a requested file does not exist in the repository.
 
@@ -186,7 +195,7 @@ async def create_repository(
             return repo_data
 
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         logger.error(
             "Failed to create repository %s: %s", repo_name, error_msg
         )
@@ -265,7 +274,7 @@ async def get_file_content(
     except GitHubAppError:
         raise
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         logger.error(
             "GitHub API error fetching '%s': %s", file_path, error_msg
         )
@@ -395,7 +404,7 @@ async def update_file_content(
     except GitHubAppError:
         raise
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         logger.error(
             "GitHub API error updating '%s': %s", file_path, error_msg
         )
@@ -480,7 +489,7 @@ async def put_file_content(
     except GitHubAppError:
         raise
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         raise GitHubAppError(
             f"Failed to write file '{file_path}': {error_msg}"
         ) from exc
@@ -543,7 +552,7 @@ async def delete_file(
             return data
 
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         raise GitHubAppError(
             f"Failed to delete file '{file_path}': {error_msg}"
         ) from exc
