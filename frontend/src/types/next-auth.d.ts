@@ -4,6 +4,7 @@ declare module "next-auth" {
   interface Session {
     accessToken?: string;
     idToken?: string;
+    error?: string;
     user: {
       id: string;
       roles: string[];
@@ -21,5 +22,6 @@ declare module "next-auth" {
     given_name?: string;
     family_name?: string;
     pictureFetched?: boolean;
+    error?: string;
   }
 }
