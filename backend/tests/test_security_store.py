@@ -18,7 +18,7 @@ TODAY = NOW.date()
 def db():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
+    session = sessionmaker(autoflush=False, bind=engine)()
     yield session
     session.close()
 

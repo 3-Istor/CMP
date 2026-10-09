@@ -93,6 +93,7 @@ def upsert_findings(
             continue
         row.resolved_at = now
     db.commit()
+    db.flush()
     return fresh
 
 
@@ -107,6 +108,9 @@ def scan_state(
     if row is None:
         row = SecurityScan(project=project, app=app or "", source=source.value)
         db.add(row)
+        # SessionLocal does not autoflush: without this, the next lookup in
+        # the same pass misses the row and inserts a duplicate.
+        db.flush()
     return row
 
 

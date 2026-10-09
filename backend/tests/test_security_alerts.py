@@ -17,7 +17,7 @@ WEBHOOK = "https://discord.com/api/webhooks/1234567890/abc-DEF_123"
 def db():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
+    session = sessionmaker(autoflush=False, bind=engine)()
     yield session
     session.close()
 
