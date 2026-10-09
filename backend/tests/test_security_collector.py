@@ -238,10 +238,11 @@ def test_a_core_finding_seen_after_the_first_pass_is_sent(db, entry):
     db.add(
         store.SecurityScan(
             project=entry.project,
-            app="",
-            source="kyverno",
+            app="api",
+            source="ci",
             status="ok",
             message="",
+            last_run_at=datetime(2026, 10, 1),
         )
     )
     db.commit()

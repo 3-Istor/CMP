@@ -24,7 +24,6 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
-from app.models.security import SecurityScan
 from app.services import app_security_data as security_data
 from app.services.github_service import (
     FileNotInRepoError,
@@ -439,14 +438,7 @@ async def collect_github_app(
 async def collect_project(
     db: Session, entry: ProjectApps, cluster: bool, github: bool
 ) -> None:
-    # A project's first pass stores what was already there: alerting on all
-    # of it would flood the channel with old news.
-    first_pass = (
-        db.query(SecurityScan.id)
-        .filter(SecurityScan.project == entry.project)
-        .first()
-        is None
-    )
+    known = alerts.known_scans(db, entry.project)
     trivy_requested = any(
         store.scan_state(
             db, entry.project, app.name, Source.TRIVY_OPERATOR
@@ -464,9 +456,9 @@ async def collect_project(
     store.write_snapshots(
         db, entry.project, [a.name for a in entry.apps], utcnow().date()
     )
-    notify = alerts.to_notify(db, entry.project, fresh, utcnow())
+    notify = alerts.to_notify(db, entry.project, fresh, utcnow(), known)
     db.commit()
-    if not first_pass:
+    if notify:
         await alerts.send(entry.project, notify)
 
 
