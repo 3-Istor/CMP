@@ -4,8 +4,10 @@ import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
+import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
 import { MembersPanel } from "@/components/projects/MembersPanel";
-import { SecurityReportPanel } from "@/components/projects/SecurityReportPanel";
+import { SecurityAlert } from "@/components/security/SecurityAlert";
+import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +45,7 @@ export default function ProjectPage() {
   const projectName = params.project_name as string;
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [tab, setTab] = useState("apps");
   const [deleting, setDeleting] = useState(false);
 
   // If this project is already being torn down (e.g. reached via a stale
@@ -256,18 +259,6 @@ export default function ProjectPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  router.push(
-                    `/finops?project=${encodeURIComponent(projectName)}`,
-                  )
-                }
-              >
-                <Wallet className="mr-2 h-4 w-4" />
-                Voir détails FinOps
-              </Button>
               <Badge variant="outline" className="font-mono text-xs">
                 {apps.length} app{apps.length !== 1 ? "s" : ""}
               </Badge>
@@ -275,10 +266,12 @@ export default function ProjectPage() {
           </div>
         </div>
 
+        <SecurityAlert project={projectName} onOpen={() => setTab("security")} />
+
         <Separator />
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue="apps">
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList>
             <TabsTrigger value="apps" className="gap-2">
               <LayoutGrid className="h-4 w-4" />
@@ -291,6 +284,10 @@ export default function ProjectPage() {
             <TabsTrigger value="security" className="gap-2">
               <ShieldCheck className="h-4 w-4" />
               Security
+            </TabsTrigger>
+            <TabsTrigger value="finops" className="gap-2">
+              <Wallet className="h-4 w-4" />
+              FinOps
             </TabsTrigger>
           </TabsList>
 
@@ -426,7 +423,11 @@ export default function ProjectPage() {
           </TabsContent>
 
           <TabsContent value="security" className="mt-6 space-y-6">
-            <SecurityReportPanel projectName={projectName} />
+            <SecurityDashboard project={projectName} fullPageLink />
+          </TabsContent>
+
+          <TabsContent value="finops" className="mt-6 space-y-6">
+            <ProjectFinopsPanel project={projectName} />
           </TabsContent>
         </Tabs>
       </main>

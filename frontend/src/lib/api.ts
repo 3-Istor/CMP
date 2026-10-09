@@ -133,10 +133,86 @@ export const syncCatalog = () =>
   request<{ message: string }>("/catalog/sync", { method: "POST" });
 
 // Deployments
-export const getProjectSecurity = (projectName: string) =>
-  request<import("@/types").ProjectSecurityReport>(
-    `/projects/${encodeURIComponent(projectName)}/security`,
+function securityQuery(params: Record<string, string | undefined | null>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value);
+  }
+  return query.toString();
+}
+
+export const getSecurityOverview = () =>
+  request<import("@/types").SecurityProjectOverview[]>("/security/overview");
+
+export const getSecuritySummary = (
+  project: string,
+  app?: string | null,
+  view: import("@/types").SecurityView = "developer",
+) =>
+  request<import("@/types").SecuritySummary>(
+    `/security/summary?${securityQuery({ project, app, view })}`,
   );
+
+export const getSecurityFindings = (
+  project: string,
+  app?: string | null,
+  view: import("@/types").SecurityView = "developer",
+  state: "open" | "excepted" | "resolved" = "open",
+) =>
+  request<import("@/types").SecurityFinding[]>(
+    `/security/findings?${securityQuery({ project, app, view, state })}`,
+  );
+
+export const getSecurityTrend = (project: string, app?: string | null) =>
+  request<import("@/types").SecurityTrendPoint[]>(
+    `/security/trend?${securityQuery({ project, app, days: "90" })}`,
+  );
+
+export const getSecurityExceptions = (project: string, app?: string | null) =>
+  request<import("@/types").SecurityException[]>(
+    `/security/exceptions?${securityQuery({ project, app })}`,
+  );
+
+export const getSecurityRole = (project: string) =>
+  request<{ role: "admin" | "member" | null; cnp_admin: boolean; username: string }>(
+    `/security/me?${securityQuery({ project })}`,
+  );
+
+export const requestSecurityScan = (
+  project: string,
+  app: string,
+  source: "ci" | "trivy-operator",
+) =>
+  request<import("@/types").SecurityScan>("/security/scans", {
+    method: "POST",
+    body: JSON.stringify({ project, app, source }),
+  });
+
+export const requestSecurityBackup = (project: string, app: string) =>
+  request<{ backups: string[] }>("/security/backups", {
+    method: "POST",
+    body: JSON.stringify({ project, app }),
+  });
+
+export const createSecurityException = (
+  fingerprint: string,
+  payload: import("@/types").SecurityExceptionRequest,
+) =>
+  request<import("@/types").SecurityException>(
+    `/security/findings/${encodeURIComponent(fingerprint)}/exception`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+
+export const approveSecurityException = (id: number) =>
+  request<import("@/types").SecurityException>(
+    `/security/exceptions/${id}/approve`,
+    { method: "POST" },
+  );
+
+export const revokeSecurityException = (id: number) =>
+  request<import("@/types").SecurityException>(`/security/exceptions/${id}`, {
+    method: "DELETE",
+  });
 
 export const getDeployments = () => request<Deployment[]>("/deployments/");
 
