@@ -7,7 +7,6 @@ the next generation of the database from the chosen backup.
 """
 
 import difflib
-import json
 import logging
 from datetime import datetime, timezone
 from io import StringIO
@@ -243,8 +242,8 @@ async def request_restore(
     except restores.RestoreError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    app_type = json.loads(deployment.app_config or "{}").get(
-        "app_type", "static"
+    app_type = security_data.app_type_of(
+        deployment.app_config, deployment.terraform_outputs
     )
     _, values_file = security_data.values_files_for(app_type)
     installation_token, repo = await _github_token(deployment)

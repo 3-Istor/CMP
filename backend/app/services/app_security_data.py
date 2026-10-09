@@ -1,3 +1,4 @@
+import json
 from enum import Enum
 from typing import Any, Literal
 
@@ -84,6 +85,21 @@ class SecurityDataRead(BaseModel):
     can_edit: bool
     exposure: ExposureState | None
     database: DatabaseState | None
+
+
+def app_type_of(app_config: str | None, terraform_outputs: str | None) -> str:
+    """
+    The k3s-gitops-app module decides the type and outputs it; the create
+    payload never carries it, so app_config alone says "static" for all.
+    """
+    for raw in (terraform_outputs, app_config):
+        try:
+            app_type = json.loads(raw or "{}").get("app_type")
+        except ValueError:
+            continue
+        if app_type in ("static", "fullstack"):
+            return app_type
+    return "static"
 
 
 def values_files_for(app_type: str) -> tuple[str, str]:
