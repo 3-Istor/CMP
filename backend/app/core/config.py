@@ -78,6 +78,10 @@ class Settings(BaseSettings):
 
     # Discord Alerting (optional - for health monitoring alerts)
     DISCORD_WEBHOOK_URL: str = ""
+    # Default target of security alerts; a project or an app can set its own.
+    # Falls back to DISCORD_WEBHOOK_URL when empty.
+    SECURITY_DISCORD_WEBHOOK_URL: str = ""
+    CMP_PUBLIC_URL: str = "https://cmp.3istor.com"
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key

@@ -459,3 +459,35 @@ async def _installation_token() -> str:
         raise RegistryError(
             f"Could not obtain a GitHub installation token: {exc}"
         ) from exc
+
+
+async def write_security_policy(
+    project_name: str, record: dict, sha: str, author: str
+) -> None:
+    """
+    Write *record*, whose ``spec.securityPolicy`` was changed by a CNP admin.
+
+    Raises:
+        RegistryError: If the registry cannot be written, including when the
+            record changed since it was read.
+    """
+    buffer = StringIO()
+    _yaml.dump(record, buffer)
+    token = await _installation_token()
+    try:
+        await put_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            record_path(project_name),
+            buffer.getvalue(),
+            message=(
+                f"feat(registry): security policy of {project_name} "
+                f"by {author} [skip ci]"
+            ),
+            sha=sha,
+            branch=settings.CNP_REGISTRY_BRANCH,
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not write the security policy of '{project_name}': {exc}"
+        ) from exc

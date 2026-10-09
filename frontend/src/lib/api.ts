@@ -133,10 +133,86 @@ export const syncCatalog = () =>
   request<{ message: string }>("/catalog/sync", { method: "POST" });
 
 // Deployments
-export const getProjectSecurity = (projectName: string) =>
-  request<import("@/types").ProjectSecurityReport>(
-    `/projects/${encodeURIComponent(projectName)}/security`,
+function securityQuery(params: Record<string, string | undefined | null>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value);
+  }
+  return query.toString();
+}
+
+export const getSecurityOverview = () =>
+  request<import("@/types").SecurityProjectOverview[]>("/security/overview");
+
+export const getSecuritySummary = (
+  project: string,
+  app?: string | null,
+  view: import("@/types").SecurityView = "developer",
+) =>
+  request<import("@/types").SecuritySummary>(
+    `/security/summary?${securityQuery({ project, app, view })}`,
   );
+
+export const getSecurityFindings = (
+  project: string,
+  app?: string | null,
+  view: import("@/types").SecurityView = "developer",
+  state: "open" | "excepted" | "resolved" = "open",
+) =>
+  request<import("@/types").SecurityFinding[]>(
+    `/security/findings?${securityQuery({ project, app, view, state })}`,
+  );
+
+export const getSecurityTrend = (project: string, app?: string | null) =>
+  request<import("@/types").SecurityTrendPoint[]>(
+    `/security/trend?${securityQuery({ project, app, days: "90" })}`,
+  );
+
+export const getSecurityExceptions = (project: string, app?: string | null) =>
+  request<import("@/types").SecurityException[]>(
+    `/security/exceptions?${securityQuery({ project, app })}`,
+  );
+
+export const getSecurityRole = (project: string) =>
+  request<{ role: "admin" | "member" | null; cnp_admin: boolean; username: string }>(
+    `/security/me?${securityQuery({ project })}`,
+  );
+
+export const requestSecurityScan = (
+  project: string,
+  app: string,
+  source: "ci" | "trivy-operator",
+) =>
+  request<import("@/types").SecurityScan>("/security/scans", {
+    method: "POST",
+    body: JSON.stringify({ project, app, source }),
+  });
+
+export const requestSecurityBackup = (project: string, app: string) =>
+  request<{ backups: string[] }>("/security/backups", {
+    method: "POST",
+    body: JSON.stringify({ project, app }),
+  });
+
+export const createSecurityException = (
+  fingerprint: string,
+  payload: import("@/types").SecurityExceptionRequest,
+) =>
+  request<import("@/types").SecurityException>(
+    `/security/findings/${encodeURIComponent(fingerprint)}/exception`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+
+export const approveSecurityException = (id: number) =>
+  request<import("@/types").SecurityException>(
+    `/security/exceptions/${id}/approve`,
+    { method: "POST" },
+  );
+
+export const revokeSecurityException = (id: number) =>
+  request<import("@/types").SecurityException>(`/security/exceptions/${id}`, {
+    method: "DELETE",
+  });
 
 export const getDeployments = () => request<Deployment[]>("/deployments/");
 
@@ -282,6 +358,19 @@ export const updateSecurityData = (
     { method: "PUT", body: JSON.stringify(payload) },
   );
 
+/** What saving would commit, file by file, without writing anything. */
+export const previewSecurityData = (
+  id: number,
+  payload: import("@/types").SecurityDataUpdate,
+) =>
+  request<{
+    repo: string;
+    previews: Record<string, { message: string; diff: string }>;
+  }>(`/deployments/${id}/security-data?dry_run=true`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
 export const uploadProfilePicture = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);
@@ -400,3 +489,109 @@ export const getFinopsAlerts = (project?: string) =>
   request<import("@/types").CostAlert[]>(
     `/finops/alerts${finopsQuery({ project })}`,
   );
+
+export interface SecurityPolicy {
+  ci_fail_on: { value: "none" | "critical"; locked: boolean } | null;
+}
+
+export const getSecuritySettings = (project: string, app: string) =>
+  request<{
+    ci_fail_on: { value: "none" | "critical"; source: string; locked: boolean };
+    policy: SecurityPolicy;
+  }>(`/security/settings?${securityQuery({ project, app })}`);
+
+export const updateSecuritySettings = (
+  project: string,
+  app: string,
+  ciFailOn: "none" | "critical",
+  dryRun: boolean,
+) =>
+  request<{ message: string; diff?: string; commit?: string }>(
+    `/security/settings${dryRun ? "?dry_run=true" : ""}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ project, app, ci_fail_on: ciFailOn }),
+    },
+  );
+
+export const getSecurityPolicy = (project: string) =>
+  request<SecurityPolicy>(`/security/policy?${securityQuery({ project })}`);
+
+export const updateSecurityPolicy = (project: string, policy: SecurityPolicy) =>
+  request<{ updated: string[]; failed: string[] }>("/security/policy", {
+    method: "PUT",
+    body: JSON.stringify({ project, policy }),
+  });
+
+export interface SecurityBackup {
+  name: string;
+  database: string;
+  phase: string;
+  method: string;
+  started_at: string | null;
+  stopped_at: string | null;
+  error: string | null;
+  manual: boolean;
+  backup_id: string | null;
+  restorable: boolean;
+}
+
+export interface SecurityDatabase {
+  name: string;
+  phase: string;
+  healthy: boolean;
+  instances: number;
+  ready_instances: number;
+  backups_enabled: boolean;
+  restored_from: string | null;
+  restored_backup: string | null;
+  restored_to: string | null;
+}
+
+export const getSecurityDatabases = (project: string, app: string) =>
+  request<SecurityDatabase[]>(`/security/databases?${securityQuery({ project, app })}`);
+
+export const requestSecurityRestore = (
+  payload: { project: string; app: string; backup: string; target_time?: string },
+  dryRun: boolean,
+) =>
+  request<{ message: string; diff?: string; commit?: string }>(
+    `/security/restores${dryRun ? "?dry_run=true" : ""}`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+
+export const getSecurityBackups = (project: string, app: string) =>
+  request<SecurityBackup[]>(`/security/backups?${securityQuery({ project, app })}`);
+
+export interface SecurityWebhook {
+  configured: boolean;
+  hint: string | null;
+}
+
+export interface SecurityAlertTargets {
+  project: SecurityWebhook;
+  app: SecurityWebhook | null;
+  platform: SecurityWebhook;
+  effective: "app" | "project" | "platform" | null;
+}
+
+export const getSecurityAlertTargets = (project: string, app: string | null) =>
+  request<SecurityAlertTargets>(
+    `/security/alerts?${securityQuery(app ? { project, app } : { project })}`,
+  );
+
+export const setSecurityAlertTarget = (
+  project: string,
+  app: string | null,
+  webhookUrl: string | null,
+) =>
+  request<SecurityAlertTargets>("/security/alerts", {
+    method: "PUT",
+    body: JSON.stringify({ project, app, webhook_url: webhookUrl }),
+  });
+
+export const testSecurityAlertTarget = (project: string, app: string | null) =>
+  request<void>("/security/alerts/test", {
+    method: "POST",
+    body: JSON.stringify({ project, app }),
+  });

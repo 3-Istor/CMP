@@ -356,27 +356,120 @@ export interface FinopsActionResponse {
   commit_sha: string | null;
 }
 
-export type SecurityStatus = "ok" | "warn" | "fail" | "unknown";
+export type SecurityTier = "core" | "important" | "recommended" | "info";
+export type SecurityCategory =
+  | "leaks"
+  | "dependencies"
+  | "container"
+  | "access"
+  | "data"
+  | "journal";
+export type SecurityView = "developer" | "platform";
+
+export interface SecurityException {
+  id: number;
+  app: string | null;
+  fingerprint: string;
+  rule: string;
+  kind: "vulnerability" | "secret" | "other";
+  status: "not_affected" | "false_positive" | "accepted_risk" | "revoked";
+  justification: string | null;
+  statement: string;
+  expires_on: string;
+  author: string;
+  created_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  revoked_by: string | null;
+  revoked_at: string | null;
+  pending_approval: boolean;
+}
 
 export interface SecurityFinding {
-  subject: string;
-  status: SecurityStatus;
-  detail: string;
-}
-
-export interface SecurityControl {
-  id: string;
+  fingerprint: string;
+  app: string | null;
+  category: SecurityCategory;
+  tier: SecurityTier;
+  audience: "developer" | "platform";
+  rule: string;
   title: string;
-  description: string;
-  status: SecurityStatus;
-  summary: string;
-  findings: SecurityFinding[];
+  detail: string;
+  fix: string;
+  location: string;
+  link: string | null;
+  raw: string;
+  sources: string[];
+  first_seen: string;
+  last_seen: string;
+  resolved_at: string | null;
+  exception: SecurityException | null;
 }
 
-export interface ProjectSecurityReport {
+export interface SecuritySegment {
+  category: SecurityCategory;
+  label: string;
+  worst: SecurityTier | null;
+  counts: Partial<Record<SecurityTier, number>>;
+  points_lost: number;
+}
+
+export interface SecurityScan {
+  app: string | null;
+  source: "kyverno" | "trivy-operator" | "ci" | "cnpg" | "exposure" | "cilium";
+  status: "ok" | "error" | "missing" | "unavailable";
+  message: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  collected_at: string | null;
+  requested_at: string | null;
+}
+
+export interface SecurityAppSummary {
+  app: string;
+  deployment_id: number | null;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+}
+
+export interface SecuritySummary {
   project: string;
-  generated_at: string;
-  score: number | null;
-  controls: SecurityControl[];
-  platform_controls: SecurityControl[];
+  app: string | null;
+  view: SecurityView;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+  excepted: number;
+  segments: SecuritySegment[];
+  apps: SecurityAppSummary[];
+  scans: SecurityScan[];
+  guarantees: { label: string; ok: boolean }[];
+}
+
+export interface SecurityTrendPoint {
+  day: string;
+  score: number;
+  grade: string;
+  core: number;
+  important: number;
+  recommended: number;
+  new_major: number;
+}
+
+export interface SecurityProjectOverview {
+  project: string;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+}
+
+export interface SecurityExceptionRequest {
+  project: string;
+  status: SecurityException["status"];
+  justification: string | null;
+  statement: string;
+  expires_on: string | null;
 }

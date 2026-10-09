@@ -385,3 +385,23 @@ def test_get_rejects_users_outside_the_project(client_factory):
     response = client.get(f"/api/deployments/{deployment_id}/security-data")
 
     assert response.status_code == 403
+
+
+def test_put_dry_run_returns_the_diff_without_committing(client_factory):
+    # Arrange
+    client, repo, deployment_id = client_factory(
+        {"deploy/values.yaml": SINGLE_YAML}, "admin", "static"
+    )
+
+    # Act
+    response = client.put(
+        f"/api/deployments/{deployment_id}/security-data?dry_run=true",
+        json={"exposure": "public"},
+    )
+
+    # Assert
+    preview = response.json()["previews"]["deploy/values.yaml"]
+    assert (repo.commits, "+  sso_protected: false" in preview["diff"]) == (
+        [],
+        True,
+    )
