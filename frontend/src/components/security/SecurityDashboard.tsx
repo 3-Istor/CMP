@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ExceptionDialog } from "./ExceptionDialog";
 import { ExceptionsList } from "./ExceptionsList";
 import { FindingCard } from "./FindingCard";
+import { AlertsCard } from "./AlertsCard";
 import { BackupsCard } from "./BackupsCard";
 import { CATEGORY_META, errorMessage, TABS, type SecurityTab } from "./labels";
 import { ScansCard } from "./ScansCard";
@@ -336,6 +337,9 @@ export function SecurityDashboard({
                 <AppSettingsCard project={project} app={app} canAdmin={canAdmin} />
               )}
               {!app && role.cnp_admin && <ProjectPolicyCard project={project} />}
+              {view === "developer" && (
+                <AlertsCard project={project} app={app} canAdmin={canAdmin} />
+              )}
               {view === "developer" && (
                 <Card className="bg-muted/40">
                   <CardHeader>

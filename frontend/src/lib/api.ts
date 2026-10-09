@@ -562,3 +562,36 @@ export const requestSecurityRestore = (
 
 export const getSecurityBackups = (project: string, app: string) =>
   request<SecurityBackup[]>(`/security/backups?${securityQuery({ project, app })}`);
+
+export interface SecurityWebhook {
+  configured: boolean;
+  hint: string | null;
+}
+
+export interface SecurityAlertTargets {
+  project: SecurityWebhook;
+  app: SecurityWebhook | null;
+  platform: SecurityWebhook;
+  effective: "app" | "project" | "platform" | null;
+}
+
+export const getSecurityAlertTargets = (project: string, app: string | null) =>
+  request<SecurityAlertTargets>(
+    `/security/alerts?${securityQuery(app ? { project, app } : { project })}`,
+  );
+
+export const setSecurityAlertTarget = (
+  project: string,
+  app: string | null,
+  webhookUrl: string | null,
+) =>
+  request<SecurityAlertTargets>("/security/alerts", {
+    method: "PUT",
+    body: JSON.stringify({ project, app, webhook_url: webhookUrl }),
+  });
+
+export const testSecurityAlertTarget = (project: string, app: string | null) =>
+  request<void>("/security/alerts/test", {
+    method: "POST",
+    body: JSON.stringify({ project, app }),
+  });

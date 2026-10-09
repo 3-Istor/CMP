@@ -41,6 +41,7 @@ def upgrade() -> None:
         sa.Column("first_seen", sa.DateTime(), nullable=False),
         sa.Column("last_seen", sa.DateTime(), nullable=False),
         sa.Column("resolved_at", sa.DateTime(), nullable=True),
+        sa.Column("notified_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("project", "fingerprint", "source"),
     )

@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
+from app.models.security import SecurityScan
 from app.services import app_security_data as security_data
 from app.services.github_service import (
     FileNotInRepoError,
@@ -35,6 +36,7 @@ from app.services.github_service import (
 )
 from app.services.kube_client import KubeUnavailableError, kube_get, kube_list
 from app.services.project_registry import RegistryError, read_record
+from app.services.security import alerts
 from app.services.security import settings as app_settings
 from app.services.security import sources, store
 from app.services.security.model import CLUSTER_SOURCES, Source
@@ -437,22 +439,35 @@ async def collect_github_app(
 async def collect_project(
     db: Session, entry: ProjectApps, cluster: bool, github: bool
 ) -> None:
+    # A project's first pass stores what was already there: alerting on all
+    # of it would flood the channel with old news.
+    first_pass = (
+        db.query(SecurityScan.id)
+        .filter(SecurityScan.project == entry.project)
+        .first()
+        is None
+    )
     trivy_requested = any(
         store.scan_state(
             db, entry.project, app.name, Source.TRIVY_OPERATOR
         ).requested_at
         for app in entry.apps
     )
+    fresh = []
     if cluster or trivy_requested:
-        await collect_cluster(db, entry)
+        fresh += await collect_cluster(db, entry)
     policy = await project_policy(entry.project) if github else None
     for app in entry.apps:
         requested = store.scan_state(db, entry.project, app.name, Source.CI)
         if github or requested.requested_at is not None:
-            await collect_github_app(db, entry, app, policy)
+            fresh += await collect_github_app(db, entry, app, policy)
     store.write_snapshots(
         db, entry.project, [a.name for a in entry.apps], utcnow().date()
     )
+    notify = alerts.to_notify(db, entry.project, fresh, utcnow())
+    db.commit()
+    if not first_pass:
+        await alerts.send(entry.project, notify)
 
 
 async def collect_once(cluster: bool, github: bool) -> None:

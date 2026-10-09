@@ -181,3 +181,71 @@ def test_a_locked_value_changed_in_the_repo_is_a_core_finding(db, entry):
 
     # Assert
     assert _titles(db) == ["Réglage imposé par l'admin modifié dans le repo"]
+
+
+def _core_draft():
+    from app.services.security.model import (  # pylint: disable=import-outside-toplevel
+        Audience,
+        Category,
+        Draft,
+        Source,
+        Tier,
+    )
+
+    return Draft(
+        fingerprint="leak",
+        app="api",
+        source=Source.CI,
+        category=Category.LEAKS,
+        tier=Tier.CORE,
+        audience=Audience.DEVELOPER,
+        rule="aws-key",
+        title="Clé AWS dans le code",
+    )
+
+
+def _run_project_pass(db, entry):
+    async def fake_github_app(db, entry, app, policy=None):
+        store.scan_state(db, entry.project, app.name, collector.Source.CI)
+        return store.upsert_findings(
+            db,
+            entry.project,
+            [_core_draft()],
+            (collector.Source.CI,),
+            {app.name},
+            collector.utcnow(),
+        )
+
+    send = mock.AsyncMock()
+    with mock.patch.object(
+        collector, "collect_github_app", fake_github_app
+    ), mock.patch.object(
+        collector, "project_policy", mock.AsyncMock(return_value=None)
+    ), mock.patch.object(
+        collector.alerts, "send", send
+    ):
+        asyncio.run(collector.collect_project(db, entry, False, True))
+    return send
+
+
+def test_the_first_pass_of_a_project_sends_no_alert(db, entry):
+    send = _run_project_pass(db, entry)
+
+    send.assert_not_called()
+
+
+def test_a_core_finding_seen_after_the_first_pass_is_sent(db, entry):
+    db.add(
+        store.SecurityScan(
+            project=entry.project,
+            app="",
+            source="kyverno",
+            status="ok",
+            message="",
+        )
+    )
+    db.commit()
+
+    send = _run_project_pass(db, entry)
+
+    assert [f.fingerprint for f in send.call_args.args[1]] == ["leak"]

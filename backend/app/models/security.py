@@ -41,6 +41,7 @@ class SecurityFinding(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime)
     last_seen: Mapped[datetime] = mapped_column(DateTime)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class SecurityScan(Base):
