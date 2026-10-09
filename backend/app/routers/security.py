@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
-from app.models.deployment import Deployment
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names, is_cnp_admin
 from app.services.github_service import (
@@ -161,6 +161,7 @@ class ScanRead(BaseModel):
 
 class AppSummary(BaseModel):
     app: str
+    deployment_id: int | None
     score: int
     grade: str
     actions: int
@@ -290,16 +291,17 @@ def _summary(
     scoped = [m for m in items if app is None or m.app == app]
     scored = [m.scored() for m in scoped]
 
-    app_names = sorted(
-        {
-            d.name
-            for d in db.query(Deployment).filter(
-                Deployment.project_id == project,
-                Deployment.template_id == K8S_TEMPLATE,
-            )
-        }
-        | {m.app for m in items if m.app}
-    )
+    deployment_ids = {
+        d.name: d.id
+        for d in db.query(Deployment)
+        .filter(
+            Deployment.project_id == project,
+            Deployment.template_id == K8S_TEMPLATE,
+            Deployment.status != DeploymentStatus.DELETED,
+        )
+        .order_by(Deployment.id)
+    }
+    app_names = sorted(set(deployment_ids) | {m.app for m in items if m.app})
     apps = []
     app_scores = []
     for name in app_names:
@@ -309,6 +311,7 @@ def _summary(
         apps.append(
             AppSummary(
                 app=name,
+                deployment_id=deployment_ids.get(name),
                 score=value,
                 grade=scoring.grade(value, scoring.has_core(subset)),
                 actions=len(scoring.actionable(subset)),
