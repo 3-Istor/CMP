@@ -522,3 +522,17 @@ export const updateSecurityPolicy = (project: string, policy: SecurityPolicy) =>
     method: "PUT",
     body: JSON.stringify({ project, policy }),
   });
+
+export interface SecurityBackup {
+  name: string;
+  database: string;
+  phase: string;
+  method: string;
+  started_at: string | null;
+  stopped_at: string | null;
+  error: string | null;
+  manual: boolean;
+}
+
+export const getSecurityBackups = (project: string, app: string) =>
+  request<SecurityBackup[]>(`/security/backups?${securityQuery({ project, app })}`);

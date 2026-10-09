@@ -968,3 +968,64 @@ async def update_policy(
                 )
                 failed.append(deployment.name)
     return {"updated": updated, "failed": failed}
+
+
+class BackupRead(BaseModel):
+    name: str
+    database: str
+    phase: str
+    method: str
+    started_at: datetime | None
+    stopped_at: datetime | None
+    error: str | None
+    manual: bool
+
+
+def _k8s_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(
+        tzinfo=None
+    )
+
+
+@router.get("/backups", response_model=list[BackupRead])
+async def list_backups(
+    token: CurrentUser,
+    project: str,
+    app: str,
+    db: Session = Depends(get_db),
+) -> list[BackupRead]:
+    """The app's database backups, newest first, read live from the cluster."""
+    await _require_member(token, project, "developer")
+    _app_deployment(db, project, app)
+    try:
+        backups = await run_in_threadpool(
+            kube_list,
+            f"/apis/postgresql.cnpg.io/v1/namespaces/{project}-{app}/backups",
+        )
+    except KubeUnavailableError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    rows = [
+        BackupRead(
+            name=b["metadata"]["name"],
+            database=((b.get("spec") or {}).get("cluster") or {}).get(
+                "name", ""
+            ),
+            phase=(b.get("status") or {}).get("phase", "pending"),
+            method=(b.get("spec") or {}).get("method", ""),
+            started_at=_k8s_time((b.get("status") or {}).get("startedAt")),
+            stopped_at=_k8s_time((b.get("status") or {}).get("stoppedAt")),
+            error=(b.get("status") or {}).get("error"),
+            manual=(b["metadata"].get("labels") or {}).get(
+                "cnp.3istor.com/requested-by"
+            )
+            == "cmp",
+        )
+        for b in backups
+    ]
+    return sorted(
+        rows,
+        key=lambda r: r.started_at or datetime.min,
+        reverse=True,
+    )

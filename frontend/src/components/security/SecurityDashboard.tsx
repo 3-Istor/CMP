@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ExceptionDialog } from "./ExceptionDialog";
 import { ExceptionsList } from "./ExceptionsList";
 import { FindingCard } from "./FindingCard";
+import { BackupsCard } from "./BackupsCard";
 import { CATEGORY_META, errorMessage, TABS, type SecurityTab } from "./labels";
 import { ScansCard } from "./ScansCard";
 import { ScoreRing } from "./ScoreRing";
@@ -433,6 +434,9 @@ export function SecurityDashboard({
               render={card}
             />
           ))}
+          {tab === "data" && app && (
+            <BackupsCard project={project} app={app} canAdmin={canAdmin} />
+          )}
         </div>
       )}
 
