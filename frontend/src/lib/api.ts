@@ -358,6 +358,19 @@ export const updateSecurityData = (
     { method: "PUT", body: JSON.stringify(payload) },
   );
 
+/** What saving would commit, file by file, without writing anything. */
+export const previewSecurityData = (
+  id: number,
+  payload: import("@/types").SecurityDataUpdate,
+) =>
+  request<{
+    repo: string;
+    previews: Record<string, { message: string; diff: string }>;
+  }>(`/deployments/${id}/security-data?dry_run=true`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
 export const uploadProfilePicture = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);

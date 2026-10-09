@@ -1,4 +1,5 @@
 import asyncio
+import difflib
 import json
 from io import StringIO
 from pathlib import Path
@@ -650,12 +651,14 @@ async def update_security_data(
     deployment_id: int,
     payload: security_data.SecurityDataUpdate,
     token_payload: CurrentUser,
+    dry_run: bool = False,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Write the exposure preset and/or the database backup settings into the
     app repository's values files. Project admins only; only the keys of the
-    panel are ever written.
+    panel are ever written. With ``dry_run``, return the diff and commit
+    message of each file instead, for the confirmation dialog.
     """
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token_payload, require_admin=True
@@ -705,18 +708,35 @@ async def update_security_data(
         labels.setdefault(database_file, []).extend(backup_labels)
 
     commits: dict[str, str] = {}
+    previews: dict[str, dict[str, str]] = {}
     for file_path, patch in patches.items():
         parsed, sha = loaded[file_path]
+        before = StringIO()
+        _yaml.dump(parsed, before)
         _deep_merge(parsed, patch)
         out = StringIO()
         _yaml.dump(parsed, out)
+        message = f"chore(cmp): {', '.join(labels[file_path])}"
+        if dry_run:
+            previews[file_path] = {
+                "message": message,
+                "diff": "".join(
+                    difflib.unified_diff(
+                        before.getvalue().splitlines(keepends=True),
+                        out.getvalue().splitlines(keepends=True),
+                        fromfile=f"a/{file_path}",
+                        tofile=f"b/{file_path}",
+                    )
+                ),
+            }
+            continue
         try:
             result = await update_file_content(
                 installation_token=token,
                 repo_full_name=repo,
                 file_path=file_path,
                 content=out.getvalue(),
-                message=f"chore(cmp): {', '.join(labels[file_path])}",
+                message=message,
                 sha=sha,
             )
         except GitHubAppError as exc:
@@ -726,4 +746,6 @@ async def update_security_data(
             ) from exc
         commits[file_path] = result.get("commit", {}).get("sha", "")
 
+    if dry_run:
+        return {"repo": repo, "previews": previews}
     return {"repo": repo, "commits": commits}

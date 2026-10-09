@@ -9,11 +9,23 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { getSecurityData, updateSecurityData } from "@/lib/api";
+import {
+    getSecurityData,
+    previewSecurityData,
+    updateSecurityData,
+} from "@/lib/api";
 import type { ExposurePreset, SecurityData } from "@/types";
 import { Loader2, RefreshCw, Save, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -60,6 +72,10 @@ export function SecurityDataPanel({ deploymentId }: Props) {
     const [retention, setRetention] = useState("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [preview, setPreview] = useState<{
+        repo: string;
+        previews: Record<string, { message: string; diff: string }>;
+    } | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const fetchData = useCallback(async () => {
@@ -118,10 +134,23 @@ export function SecurityDataPanel({ deploymentId }: Props) {
     const update = buildUpdate();
     const isDirty = Object.keys(update).length > 0;
 
+    const handlePreview = async () => {
+        setSaving(true);
+        try {
+            setPreview(await previewSecurityData(deploymentId, update));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            toast.error(`Impossible de préparer la modification : ${msg}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
             await updateSecurityData(deploymentId, update);
+            setPreview(null);
             toast.success(
                 "Paramètres enregistrés. ArgoCD les appliquera dans quelques instants.",
                 { duration: 7000 },
@@ -305,7 +334,7 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                         {canEdit && isDirty && (
                             <div className="pt-2 border-t border-border">
                                 <Button
-                                    onClick={handleSave}
+                                    onClick={handlePreview}
                                     disabled={saving || !retentionValid}
                                     className="w-full"
                                 >
@@ -326,6 +355,56 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                     </div>
                 )}
             </CardContent>
+
+            {preview && (
+                <Dialog open onOpenChange={(open) => !open && setPreview(null)}>
+                    <DialogContent className="sm:max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Confirmer la modification</DialogTitle>
+                            <DialogDescription>
+                                Un commit sera poussé sur {preview.repo}, puis
+                                Argo CD l&apos;appliquera.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="max-h-[60vh] space-y-4 overflow-y-auto">
+                            {Object.entries(preview.previews).map(([file, p]) => (
+                                <div key={file} className="space-y-1.5">
+                                    <p className="font-mono text-xs">{p.message}</p>
+                                    <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-[11px] leading-relaxed">
+                                        {p.diff.split("\n").map((line, i) => (
+                                            <span
+                                                key={i}
+                                                className={
+                                                    line.startsWith("+") && !line.startsWith("+++")
+                                                        ? "block text-green-700 dark:text-green-400"
+                                                        : line.startsWith("-") && !line.startsWith("---")
+                                                          ? "block text-red-700 dark:text-red-400"
+                                                          : "block text-muted-foreground"
+                                                }
+                                            >
+                                                {line || " "}
+                                            </span>
+                                        ))}
+                                    </pre>
+                                </div>
+                            ))}
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setPreview(null)}
+                                disabled={saving}
+                            >
+                                Annuler
+                            </Button>
+                            <Button onClick={handleSave} disabled={saving}>
+                                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Confirmer et commiter
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </Card>
     );
 }
