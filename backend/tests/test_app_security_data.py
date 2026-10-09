@@ -405,3 +405,16 @@ def test_put_dry_run_returns_the_diff_without_committing(client_factory):
         [],
         True,
     )
+
+
+def test_app_type_comes_from_the_terraform_outputs():
+    app_type = sd.app_type_of(
+        '{"template_repo_name": "template-app-webapp-python-fastapi-react"}',
+        '{"app_type": "fullstack", "components": ["frontend", "backend"]}',
+    )
+
+    assert app_type == "fullstack"
+
+
+def test_app_type_defaults_to_static_without_outputs():
+    assert sd.app_type_of("{}", None) == "static"

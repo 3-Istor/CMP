@@ -292,8 +292,8 @@ async def collect_cluster(db: Session, entry: ProjectApps) -> list:
 async def _read_exposure(
     token: str, repo: str, deployment: Deployment, branch: str
 ) -> str | None:
-    app_type = json.loads(deployment.app_config or "{}").get(
-        "app_type", "static"
+    app_type = security_data.app_type_of(
+        deployment.app_config, deployment.terraform_outputs
     )
     exposure_file, _ = security_data.values_files_for(app_type)
     raw, _ = await get_file_content(

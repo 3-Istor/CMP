@@ -573,8 +573,9 @@ async def update_deployment_config(
 
 
 def _app_type_of(deployment: Deployment) -> str:
-    app_config: dict = json.loads(deployment.app_config or "{}")
-    return app_config.get("app_type", "static")
+    return security_data.app_type_of(
+        deployment.app_config, deployment.terraform_outputs
+    )
 
 
 async def _load_values_file(
