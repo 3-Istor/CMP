@@ -143,7 +143,12 @@ async def create_deployment(
         template_name=template.name,
         template_icon=template.icon,
         template_category=template.category,
-        provider_type=payload.provider_type,
+        # The portal never sends provider_type: the template decides.
+        provider_type=(
+            ProviderType.KUBERNETES
+            if payload.template_id == "k3s-gitops-app"
+            else payload.provider_type
+        ),
         project_id=payload.project_id,
         app_config=json.dumps(payload.app_config),
         status=DeploymentStatus.PENDING,

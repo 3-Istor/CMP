@@ -35,8 +35,6 @@ from app.schemas.project import (
     ProjectCreateResponse,
     ProjectRead,
 )
-from app.services import app_security_data as security_data
-from app.services.github_service import get_latest_artifact_json
 from app.services.grafana_service import (
     add_user_to_project_org,
     remove_user_from_project_org,
@@ -67,7 +65,6 @@ from app.services.project_registry import (
     publish_record,
     remove_record,
 )
-from app.services.project_security import SecurityReport, cached_report
 
 logger = logging.getLogger(__name__)
 
@@ -1032,70 +1029,3 @@ async def delete_project(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to delete project: {exc}",
         ) from exc
-
-
-@router.get("/{project_name}/security", response_model=SecurityReport)
-async def get_project_security(
-    project_name: str,
-    token_payload: Annotated[dict, Depends(get_current_user)],
-    db: Session = Depends(get_db),
-) -> SecurityReport:
-    """
-    Security report of the project: Kyverno results, network isolation,
-    backups, app exposure and CI scans. Project members and CNP admins.
-    """
-    # pylint: disable=import-outside-toplevel
-    from app.routers.deployments import (
-        _extract_repo_full_name,
-        _get_github_token_for_deployment,
-        _load_values_file,
-    )
-    from app.routers.finops import is_cnp_admin
-
-    if not is_cnp_admin(token_payload):
-        await run_in_threadpool(
-            require_project_role, token_payload, project_name
-        )
-
-    deployments = (
-        db.query(Deployment)
-        .filter(
-            Deployment.project_id == project_name,
-            Deployment.status == DeploymentStatus.RUNNING,
-            Deployment.provider_type == ProviderType.KUBERNETES,
-            Deployment.github_repo_url.isnot(None),
-        )
-        .all()
-    )
-    tokens: dict[int, str] = {}
-
-    async def repo_and_token(deployment: Deployment) -> tuple[str, str]:
-        if deployment.id not in tokens:
-            tokens[deployment.id] = await _get_github_token_for_deployment(
-                deployment
-            )
-        return (
-            _extract_repo_full_name(deployment.github_repo_url),
-            tokens[deployment.id],
-        )
-
-    async def load_exposure(deployment: Deployment) -> tuple[str | None, bool]:
-        repo, token = await repo_and_token(deployment)
-        app_type = json.loads(deployment.app_config or "{}").get(
-            "app_type", "static"
-        )
-        exposure_file, _ = security_data.values_files_for(app_type)
-        values, _ = await _load_values_file(token, repo, exposure_file)
-        if not security_data.has_ingress(values):
-            return None, True
-        return security_data.read_exposure(values), True
-
-    async def load_ci_report(deployment: Deployment) -> dict | None:
-        repo, token = await repo_and_token(deployment)
-        return await get_latest_artifact_json(
-            token, repo, "cnp-security-report", "cnp-security-report.json"
-        )
-
-    return await cached_report(
-        project_name, deployments, load_exposure, load_ci_report
-    )

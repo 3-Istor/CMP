@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -562,24 +563,62 @@ async def delete_file(
         ) from exc
 
 
-async def get_latest_artifact_json(
-    installation_token: str,
-    repo_full_name: str,
-    artifact_name: str,
-    file_name: str,
-) -> dict | None:
-    """
-    Return the JSON file *file_name* from the newest non-expired artifact named
-    *artifact_name* in the repository, or None when there is none.
+@dataclass(frozen=True)
+class Artifact:
+    id: str
+    created_at: datetime
+    content: dict | None
 
-    Raises:
-        GitHubAppError: On HTTP errors or an unreadable archive.
-    """
-    headers = {
+
+def _api_headers(installation_token: str) -> dict[str, str]:
+    return {
         "Authorization": f"Bearer {installation_token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
+
+
+async def get_default_branch(
+    installation_token: str, repo_full_name: str
+) -> str:
+    """
+    Raises:
+        GitHubAppError: On HTTP errors.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}",
+                headers=_api_headers(installation_token),
+                timeout=15.0,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to read repository '{repo_full_name}': {exc}"
+        ) from exc
+    return response.json().get("default_branch", "main")
+
+
+async def get_latest_artifact(
+    installation_token: str,
+    repo_full_name: str,
+    artifact_name: str,
+    file_name: str,
+    branch: str,
+    known_id: str | None = None,
+) -> Artifact | None:
+    """
+    The newest non-expired artifact named *artifact_name* produced on
+    *branch*, with *file_name* parsed as JSON. The archive is not downloaded
+    when the artifact is *known_id*: its content is then None.
+
+    Returns None when there is no such artifact.
+
+    Raises:
+        GitHubAppError: On HTTP errors or an unreadable archive.
+    """
+    headers = _api_headers(installation_token)
     list_url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/artifacts"
 
     try:
@@ -587,7 +626,7 @@ async def get_latest_artifact_json(
             response = await client.get(
                 list_url,
                 headers=headers,
-                params={"name": artifact_name, "per_page": 10},
+                params={"name": artifact_name, "per_page": 30},
                 timeout=15.0,
             )
             if response.status_code == 404:
@@ -597,10 +636,17 @@ async def get_latest_artifact_json(
                 a
                 for a in response.json().get("artifacts", [])
                 if not a.get("expired")
+                and (a.get("workflow_run") or {}).get("head_branch") == branch
             ]
             if not artifacts:
                 return None
             newest = max(artifacts, key=lambda a: a.get("created_at", ""))
+            artifact_id = str(newest["id"])
+            created_at = datetime.fromisoformat(
+                newest["created_at"].replace("Z", "+00:00")
+            )
+            if artifact_id == known_id:
+                return Artifact(artifact_id, created_at, None)
             archive = await client.get(
                 newest["archive_download_url"], headers=headers, timeout=30.0
             )
@@ -612,8 +658,36 @@ async def get_latest_artifact_json(
 
     try:
         with zipfile.ZipFile(io.BytesIO(archive.content)) as bundle:
-            return json.loads(bundle.read(file_name))
+            content = json.loads(bundle.read(file_name))
     except (zipfile.BadZipFile, KeyError, ValueError) as exc:
         raise GitHubAppError(
             f"Artifact '{artifact_name}' of '{repo_full_name}' has no readable '{file_name}': {exc}"
         ) from exc
+    return Artifact(artifact_id, created_at, content)
+
+
+async def dispatch_workflow(
+    installation_token: str, repo_full_name: str, workflow: str, ref: str
+) -> None:
+    """
+    Raises:
+        GitHubAppError: On HTTP errors, including a workflow without a
+            ``workflow_dispatch`` trigger (HTTP 422).
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/workflows/{workflow}/dispatches",
+                headers=_api_headers(installation_token),
+                json={"ref": ref},
+                timeout=15.0,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to start '{workflow}' on '{repo_full_name}': {exc}"
+        ) from exc
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to start '{workflow}' on '{repo_full_name}': "
+            f"{_github_error_message(response)}"
+        )
