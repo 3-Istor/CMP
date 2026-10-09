@@ -5,13 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getSecurityBackups,
+  getSecurityDatabases,
   requestSecurityBackup,
   type SecurityBackup,
+  type SecurityDatabase,
 } from "@/lib/api";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage, relativeTime } from "./labels";
+import { RestoreDialog } from "./RestoreDialog";
+
+const POLL_WHILE_BUSY_MS = 15_000;
 
 const PHASES: Record<string, string> = {
   completed: "Réussie",
@@ -21,7 +26,7 @@ const PHASES: Record<string, string> = {
   pending: "En attente",
 };
 
-/** Backups of one app's databases, with an on-demand backup. */
+/** One app's databases and their backups: back up now, or restore one. */
 export function BackupsCard({
   project,
   app,
@@ -32,14 +37,17 @@ export function BackupsCard({
   canAdmin: boolean;
 }) {
   const [backups, setBackups] = useState<SecurityBackup[] | null>(null);
+  const [databases, setDatabases] = useState<SecurityDatabase[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [restoring, setRestoring] = useState<SecurityBackup | null>(null);
 
   const load = useCallback(
     () =>
-      getSecurityBackups(project, app).then(
-        (rows) => {
+      Promise.all([getSecurityBackups(project, app), getSecurityDatabases(project, app)]).then(
+        ([rows, clusters]) => {
           setBackups(rows);
+          setDatabases(clusters);
           setError(null);
         },
         (e) => setError(errorMessage(e)),
@@ -47,10 +55,16 @@ export function BackupsCard({
     [project, app],
   );
 
+  const settling = databases.some((d) => !d.healthy);
+
   useEffect(() => {
     const first = setTimeout(load, 0);
-    return () => clearTimeout(first);
-  }, [load]);
+    const poll = settling ? setInterval(load, POLL_WHILE_BUSY_MS) : undefined;
+    return () => {
+      clearTimeout(first);
+      clearInterval(poll);
+    };
+  }, [load, settling]);
 
   async function backupNow() {
     setBusy(true);
@@ -81,7 +95,29 @@ export function BackupsCard({
           )}
         </div>
       </CardHeader>
-      <CardContent className="text-sm">
+      <CardContent className="space-y-4 text-sm">
+        {databases.length > 0 && (
+          <ul className="space-y-1.5">
+            {databases.map((d) => (
+              <li key={d.name} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium">{d.name}</span>
+                <span className={d.healthy ? "text-muted-foreground" : "text-amber-600"}>
+                  {d.healthy
+                    ? `${d.ready_instances}/${d.instances} instance${d.instances > 1 ? "s" : ""} prête${d.instances > 1 ? "s" : ""}`
+                    : `${d.restored_from ? "Restauration en cours" : "En préparation"} : ${d.phase}`}
+                </span>
+                {d.restored_from && (
+                  <span className="text-xs text-muted-foreground">
+                    restaurée depuis {d.restored_from}
+                    {d.restored_to
+                      ? `, jusqu'au ${new Date(d.restored_to).toLocaleString("fr-FR")}`
+                      : `, sauvegarde ${d.restored_backup}`}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
         {error ? (
           <p className="text-destructive">{error}</p>
         ) : backups === null ? (
@@ -98,6 +134,7 @@ export function BackupsCard({
                 <th className="pb-2 font-medium">Base</th>
                 <th className="pb-2 font-medium">Quand</th>
                 <th className="pb-2 font-medium">État</th>
+                {canAdmin && <th />}
               </tr>
             </thead>
             <tbody>
@@ -122,16 +159,35 @@ export function BackupsCard({
                       <span className="block text-xs text-muted-foreground">{b.error}</span>
                     )}
                   </td>
+                  {canAdmin && (
+                    <td className="py-2 text-right">
+                      {b.restorable && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={settling}
+                          onClick={() => setRestoring(b)}
+                        >
+                          Restaurer
+                        </Button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        <p className="pt-3 text-xs text-muted-foreground">
-          La restauration arrive dans une prochaine version : elle se fera dans une
-          base à côté, puis par une bascule confirmée.
-        </p>
       </CardContent>
+      {restoring && (
+        <RestoreDialog
+          project={project}
+          app={app}
+          backup={restoring}
+          onClose={() => setRestoring(null)}
+          onRestored={load}
+        />
+      )}
     </Card>
   );
 }

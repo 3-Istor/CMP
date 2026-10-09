@@ -532,7 +532,33 @@ export interface SecurityBackup {
   stopped_at: string | null;
   error: string | null;
   manual: boolean;
+  backup_id: string | null;
+  restorable: boolean;
 }
+
+export interface SecurityDatabase {
+  name: string;
+  phase: string;
+  healthy: boolean;
+  instances: number;
+  ready_instances: number;
+  backups_enabled: boolean;
+  restored_from: string | null;
+  restored_backup: string | null;
+  restored_to: string | null;
+}
+
+export const getSecurityDatabases = (project: string, app: string) =>
+  request<SecurityDatabase[]>(`/security/databases?${securityQuery({ project, app })}`);
+
+export const requestSecurityRestore = (
+  payload: { project: string; app: string; backup: string; target_time?: string },
+  dryRun: boolean,
+) =>
+  request<{ message: string; diff?: string; commit?: string }>(
+    `/security/restores${dryRun ? "?dry_run=true" : ""}`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
 
 export const getSecurityBackups = (project: string, app: string) =>
   request<SecurityBackup[]>(`/security/backups?${securityQuery({ project, app })}`);

@@ -21,6 +21,7 @@ from app.routers import (
     infra,
     projects,
     security,
+    security_databases,
 )
 from app.services import health_poller
 from app.services.finops import alert_poller
@@ -295,6 +296,7 @@ app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(finops.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
+app.include_router(security_databases.router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])

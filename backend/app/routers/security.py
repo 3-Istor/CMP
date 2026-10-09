@@ -37,9 +37,7 @@ from app.services.keycloak_service import (
 )
 from app.services.kube_client import (
     KubeUnavailableError,
-    kube_create,
     kube_delete_collection,
-    kube_list,
 )
 from app.services.project_registry import (
     RegistryError,
@@ -458,7 +456,7 @@ async def get_trend(
     ]
 
 
-# ── Manual scans and backups ─────────────────────────────────────────────────
+# ── Manual scans ─────────────────────────────────────────────────
 
 
 class ScanRequest(BaseModel):
@@ -521,63 +519,6 @@ async def request_scan(
     state.requested_at = now
     db.commit()
     return _scan_read(state)
-
-
-class BackupRequest(BaseModel):
-    project: str
-    app: str
-
-
-@router.post("/backups", status_code=202)
-async def request_backup(
-    payload: BackupRequest, token: CurrentUser, db: Session = Depends(get_db)
-) -> dict[str, list[str]]:
-    """On-demand backup of every database of the app that has backups enabled."""
-    await _require_admin(token, payload.project)
-    _app_deployment(db, payload.project, payload.app)
-    namespace = f"{payload.project}-{payload.app}"
-    try:
-        clusters = await run_in_threadpool(
-            kube_list,
-            f"/apis/postgresql.cnpg.io/v1/namespaces/{namespace}/clusters",
-        )
-        enabled = [
-            c["metadata"]["name"]
-            for c in clusters
-            if any(
-                p.get("name") == "barman-cloud.cloudnative-pg.io"
-                for p in (c.get("spec") or {}).get("plugins") or []
-            )
-        ]
-        if not enabled:
-            raise HTTPException(
-                status_code=409,
-                detail="Aucune base de cette app n'a la sauvegarde activée.",
-            )
-        stamp = utcnow().strftime("%Y%m%d%H%M%S")
-        for name in enabled:
-            await run_in_threadpool(
-                kube_create,
-                f"/apis/postgresql.cnpg.io/v1/namespaces/{namespace}/backups",
-                {
-                    "apiVersion": "postgresql.cnpg.io/v1",
-                    "kind": "Backup",
-                    "metadata": {
-                        "name": f"{name}-manual-{stamp}",
-                        "labels": {"cnp.3istor.com/requested-by": "cmp"},
-                    },
-                    "spec": {
-                        "cluster": {"name": name},
-                        "method": "plugin",
-                        "pluginConfiguration": {
-                            "name": "barman-cloud.cloudnative-pg.io"
-                        },
-                    },
-                },
-            )
-    except KubeUnavailableError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"backups": [f"{n}-manual-{stamp}" for n in enabled]}
 
 
 # ── Exceptions ───────────────────────────────────────────────────────────────
@@ -968,64 +909,3 @@ async def update_policy(
                 )
                 failed.append(deployment.name)
     return {"updated": updated, "failed": failed}
-
-
-class BackupRead(BaseModel):
-    name: str
-    database: str
-    phase: str
-    method: str
-    started_at: datetime | None
-    stopped_at: datetime | None
-    error: str | None
-    manual: bool
-
-
-def _k8s_time(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(
-        tzinfo=None
-    )
-
-
-@router.get("/backups", response_model=list[BackupRead])
-async def list_backups(
-    token: CurrentUser,
-    project: str,
-    app: str,
-    db: Session = Depends(get_db),
-) -> list[BackupRead]:
-    """The app's database backups, newest first, read live from the cluster."""
-    await _require_member(token, project, "developer")
-    _app_deployment(db, project, app)
-    try:
-        backups = await run_in_threadpool(
-            kube_list,
-            f"/apis/postgresql.cnpg.io/v1/namespaces/{project}-{app}/backups",
-        )
-    except KubeUnavailableError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    rows = [
-        BackupRead(
-            name=b["metadata"]["name"],
-            database=((b.get("spec") or {}).get("cluster") or {}).get(
-                "name", ""
-            ),
-            phase=(b.get("status") or {}).get("phase", "pending"),
-            method=(b.get("spec") or {}).get("method", ""),
-            started_at=_k8s_time((b.get("status") or {}).get("startedAt")),
-            stopped_at=_k8s_time((b.get("status") or {}).get("stoppedAt")),
-            error=(b.get("status") or {}).get("error"),
-            manual=(b["metadata"].get("labels") or {}).get(
-                "cnp.3istor.com/requested-by"
-            )
-            == "cmp",
-        )
-        for b in backups
-    ]
-    return sorted(
-        rows,
-        key=lambda r: r.started_at or datetime.min,
-        reverse=True,
-    )
