@@ -21,12 +21,13 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.security import SecurityFinding
+from app.models.security import SecurityFinding, SecurityScan
 from app.services.security import store
 from app.services.security.model import (
     CATEGORY_LABELS,
     Audience,
     Category,
+    Source,
     Tier,
 )
 from app.services.vault_client import read_kv, write_kv
@@ -95,17 +96,58 @@ def resolve(
     return (default, "platform") if default else None
 
 
+PER_APP_SCANS = (Source.CI, Source.TRIVY_OPERATOR, Source.CNPG)
+LAST_RUN_SCANS = (Source.CI, Source.TRIVY_OPERATOR)
+
+
+def known_scans(db: Session, project: str) -> set[tuple[str, str]]:
+    """
+    The (app, source) pairs that had already reported before this pass. A
+    source's first report on an app is its baseline, not news: alerting on
+    it would flood the channel each time a scanner or an app is added.
+    """
+    known = set()
+    for scan in db.query(SecurityScan).filter(SecurityScan.project == project):
+        seen = (
+            scan.last_run_at
+            if scan.source in {s.value for s in LAST_RUN_SCANS}
+            else scan.collected_at
+        )
+        if seen is not None:
+            known.add((scan.app, scan.source))
+    return known
+
+
+def _is_news(row: SecurityFinding, known: set[tuple[str, str]]) -> bool:
+    if row.source in {s.value for s in PER_APP_SCANS}:
+        return (row.app or "", row.source) in known
+    if row.source == Source.KYVERNO.value:
+        return ("", row.source) in known
+    return bool(known)
+
+
+def _alert_key(row: SecurityFinding) -> tuple[str | None, str]:
+    """Platform findings repeat across packages and apps: one alert per rule."""
+    if row.audience == Audience.PLATFORM.value:
+        return (None, row.rule)
+    return (row.app, row.fingerprint)
+
+
 def to_notify(
-    db: Session, project: str, fresh: list[SecurityFinding], now: datetime
+    db: Session,
+    project: str,
+    fresh: list[SecurityFinding],
+    now: datetime,
+    known: set[tuple[str, str]],
 ) -> list[SecurityFinding]:
     """
-    The fresh findings worth a message, one per app and fingerprint. Every
-    row of a sent finding is marked, so a second source does not resend it.
+    The fresh findings worth a message. Every row of a sent alert is marked,
+    so a second source or package does not resend it.
     """
     exceptions = store.active_exceptions(db, project)
     picked: dict[tuple[str | None, str], SecurityFinding] = {}
     for row in fresh:
-        if row.tier != Tier.CORE.value:
+        if row.tier != Tier.CORE.value or not _is_news(row, known):
             continue
         if row.notified_at and now - row.notified_at < RENOTIFY_AFTER:
             continue
@@ -114,9 +156,9 @@ def to_notify(
             exception, Tier.CORE, now.date()
         ):
             continue
-        picked.setdefault((row.app, row.fingerprint), row)
+        picked.setdefault(_alert_key(row), row)
     for row in fresh:
-        if (row.app, row.fingerprint) in picked:
+        if _alert_key(row) in picked:
             row.notified_at = now
     return list(picked.values())
 

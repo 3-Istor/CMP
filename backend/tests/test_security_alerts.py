@@ -10,6 +10,7 @@ from app.services.security import alerts, store
 from app.services.security.model import Audience, Category, Draft, Source, Tier
 
 NOW = datetime(2026, 10, 9, 12, 0)
+KNOWN = {("api", "ci"), ("api", "trivy-operator")}
 WEBHOOK = "https://discord.com/api/webhooks/1234567890/abc-DEF_123"
 
 
@@ -28,18 +29,26 @@ def no_platform_default(monkeypatch):
     monkeypatch.setattr(alerts.settings, "DISCORD_WEBHOOK_URL", "")
 
 
-def _fresh(db, tier=Tier.CORE, fp="f1", source=Source.CI, now=NOW):
+def _fresh(
+    db,
+    tier=Tier.CORE,
+    fp="f1",
+    source=Source.CI,
+    now=NOW,
+    app="api",
+    audience=Audience.DEVELOPER,
+):
     draft = Draft(
         fingerprint=fp,
-        app="api",
+        app=app,
         source=source,
         category=Category.DEPENDENCIES,
         tier=tier,
-        audience=Audience.DEVELOPER,
+        audience=audience,
         rule="CVE-2026-1",
         title="t",
     )
-    return store.upsert_findings(db, "shop", [draft], (source,), {"api"}, now)
+    return store.upsert_findings(db, "shop", [draft], (source,), {app}, now)
 
 
 @pytest.mark.parametrize(
@@ -101,23 +110,23 @@ def test_nothing_is_sent_without_any_webhook(no_platform_default):
 def test_only_core_findings_are_notified(db):
     fresh = _fresh(db, tier=Tier.IMPORTANT)
 
-    assert alerts.to_notify(db, "shop", fresh, NOW) == []
+    assert alerts.to_notify(db, "shop", fresh, NOW, KNOWN) == []
 
 
 def test_a_finding_seen_by_two_sources_is_notified_once(db):
     fresh = _fresh(db) + _fresh(db, source=Source.TRIVY_OPERATOR)
 
-    notified = alerts.to_notify(db, "shop", fresh, NOW)
+    notified = alerts.to_notify(db, "shop", fresh, NOW, KNOWN)
 
     assert len(notified) == 1
 
 
 def test_a_finding_back_after_a_rescan_is_not_notified_again(db):
-    alerts.to_notify(db, "shop", _fresh(db), NOW)
+    alerts.to_notify(db, "shop", _fresh(db), NOW, KNOWN)
     store.upsert_findings(db, "shop", [], (Source.CI,), {"api"}, NOW)
 
     later = NOW + timedelta(hours=1)
-    again = alerts.to_notify(db, "shop", _fresh(db, now=later), later)
+    again = alerts.to_notify(db, "shop", _fresh(db, now=later), later, KNOWN)
 
     assert again == []
 
@@ -140,4 +149,41 @@ def test_an_ignored_finding_is_not_notified(db):
     )
     db.commit()
 
-    assert alerts.to_notify(db, "shop", _fresh(db), NOW) == []
+    assert alerts.to_notify(db, "shop", _fresh(db), NOW, KNOWN) == []
+
+
+def test_a_scanner_first_report_on_an_app_is_not_notified(db):
+    fresh = _fresh(db, source=Source.TRIVY_OPERATOR)
+
+    notified = alerts.to_notify(db, "shop", fresh, NOW, {("api", "ci")})
+
+    assert notified == []
+
+
+def test_a_platform_cve_is_notified_once_across_packages_and_apps(db):
+    known = KNOWN | {("web", "trivy-operator")}
+    fresh = [
+        *_fresh(
+            db,
+            fp="pkg-a",
+            source=Source.TRIVY_OPERATOR,
+            audience=Audience.PLATFORM,
+        ),
+        *_fresh(
+            db,
+            fp="pkg-b",
+            source=Source.TRIVY_OPERATOR,
+            audience=Audience.PLATFORM,
+        ),
+        *_fresh(
+            db,
+            fp="pkg-a",
+            source=Source.TRIVY_OPERATOR,
+            audience=Audience.PLATFORM,
+            app="web",
+        ),
+    ]
+
+    notified = alerts.to_notify(db, "shop", fresh, NOW, known)
+
+    assert len(notified) == 1 and all(row.notified_at for row in fresh)
