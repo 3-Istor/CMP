@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.database import Base
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services.github_service import Artifact, GitHubAppError
-from app.services.security import collector, sources, store
+from app.services.security import collector, settings, sources, store
 
 REPORT = {
     "scanners": {
@@ -52,7 +52,9 @@ def entry(db):
     return collector.kubernetes_projects(db)[0]
 
 
-def _github(artifact=None, error=None):
+def _github(artifact=None, error=None, files=None):
+    if files is None:
+        files = {settings.WORKFLOW_FILE: "name: Security Scans"}
     patches = {
         "get_installation_token": mock.AsyncMock(return_value="t"),
         "get_default_branch": mock.AsyncMock(return_value="main"),
@@ -60,6 +62,9 @@ def _github(artifact=None, error=None):
             return_value=artifact, side_effect=error
         ),
         "_read_exposure": mock.AsyncMock(return_value="project_members"),
+        "_read_optional": mock.AsyncMock(
+            side_effect=lambda token, repo, path, branch: files.get(path)
+        ),
     }
     return mock.patch.multiple(collector, **patches)
 
@@ -138,3 +143,41 @@ def test_an_unchanged_report_is_not_downloaded_again_nor_resolved(db, entry):
         len(store.merged_findings(db, "shop", datetime(2026, 10, 9).date()))
         == 1
     )
+
+
+def _titles(db):
+    return [
+        m.title
+        for m in store.merged_findings(
+            db, "shop", datetime(2026, 10, 9).date()
+        )
+    ]
+
+
+def test_a_deleted_security_workflow_is_a_core_finding(db, entry):
+    # Act
+    with _github(files={}):
+        asyncio.run(collector.collect_github_app(db, entry, entry.apps[0]))
+
+    # Assert
+    assert _titles(db) == ["Workflow de sécurité absent du repo"]
+
+
+def test_a_locked_value_changed_in_the_repo_is_a_core_finding(db, entry):
+    # Arrange
+    policy = settings.ProjectPolicy(
+        ci_fail_on=settings.PolicyValue(value="critical", locked=True)
+    )
+    files = {
+        settings.WORKFLOW_FILE: "name: Security Scans",
+        settings.SETTINGS_FILE: "ci:\n  failOn: none\n",
+    }
+
+    # Act
+    with _github(files=files):
+        asyncio.run(
+            collector.collect_github_app(db, entry, entry.apps[0], policy)
+        )
+
+    # Assert
+    assert _titles(db) == ["Réglage imposé par l'admin modifié dans le repo"]

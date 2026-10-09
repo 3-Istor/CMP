@@ -26,6 +26,7 @@ from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services import app_security_data as security_data
 from app.services.github_service import (
+    FileNotInRepoError,
     GitHubAppError,
     get_default_branch,
     get_file_content,
@@ -33,6 +34,8 @@ from app.services.github_service import (
     get_latest_artifact,
 )
 from app.services.kube_client import KubeUnavailableError, kube_get, kube_list
+from app.services.project_registry import RegistryError, read_record
+from app.services.security import settings as app_settings
 from app.services.security import sources, store
 from app.services.security.model import CLUSTER_SOURCES, Source
 
@@ -303,8 +306,36 @@ async def _read_exposure(
     return security_data.read_exposure(values)
 
 
+async def _read_optional(
+    token: str, repo: str, path: str, branch: str
+) -> str | None:
+    try:
+        raw, _ = await get_file_content(
+            installation_token=token,
+            repo_full_name=repo,
+            file_path=path,
+            ref=branch,
+        )
+    except FileNotInRepoError:
+        return None
+    return raw
+
+
+async def project_policy(project: str) -> app_settings.ProjectPolicy | None:
+    """None when the registry cannot be read: lock checks are then skipped."""
+    try:
+        existing = await read_record(project)
+    except RegistryError as exc:
+        logger.warning("Security: policy of '%s' unreadable: %s", project, exc)
+        return None
+    return app_settings.policy_from_record(existing[0] if existing else {})
+
+
 async def collect_github_app(
-    db: Session, entry: ProjectApps, app: sources.AppRef
+    db: Session,
+    entry: ProjectApps,
+    app: sources.AppRef,
+    policy: app_settings.ProjectPolicy | None = None,
 ) -> list:
     """Collect one app's CI report and exposure; errors leave its findings open."""
     now = utcnow()
@@ -331,6 +362,12 @@ async def collect_github_app(
             scan.artifact_id,
         )
         preset = await _read_exposure(token, app.repo, deployment, branch)
+        workflow = await _read_optional(
+            token, app.repo, app_settings.WORKFLOW_FILE, branch
+        )
+        settings_raw = await _read_optional(
+            token, app.repo, app_settings.SETTINGS_FILE, branch
+        )
     except GitHubAppError as exc:
         logger.warning(
             "Security: GitHub data of '%s' unavailable: %s", app.repo, exc
@@ -344,6 +381,22 @@ async def collect_github_app(
         entry.project,
         sources.exposure_drafts(entry.project, app, preset),
         (Source.EXPOSURE,),
+        {app.name},
+        now,
+    )
+    fresh += store.upsert_findings(
+        db,
+        entry.project,
+        sources.repository_drafts(
+            entry.project,
+            app,
+            workflow_present=workflow is not None,
+            locked_drift=policy is not None
+            and app_settings.locked_drift(
+                policy, app_settings.parse_settings(settings_raw)
+            ),
+        ),
+        (Source.REPOSITORY,),
         {app.name},
         now,
     )
@@ -392,10 +445,11 @@ async def collect_project(
     )
     if cluster or trivy_requested:
         await collect_cluster(db, entry)
+    policy = await project_policy(entry.project) if github else None
     for app in entry.apps:
         requested = store.scan_state(db, entry.project, app.name, Source.CI)
         if github or requested.requested_at is not None:
-            await collect_github_app(db, entry, app)
+            await collect_github_app(db, entry, app, policy)
     store.write_snapshots(
         db, entry.project, [a.name for a in entry.apps], utcnow().date()
     )

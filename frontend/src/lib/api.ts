@@ -489,3 +489,36 @@ export const getFinopsAlerts = (project?: string) =>
   request<import("@/types").CostAlert[]>(
     `/finops/alerts${finopsQuery({ project })}`,
   );
+
+export interface SecurityPolicy {
+  ci_fail_on: { value: "none" | "critical"; locked: boolean } | null;
+}
+
+export const getSecuritySettings = (project: string, app: string) =>
+  request<{
+    ci_fail_on: { value: "none" | "critical"; source: string; locked: boolean };
+    policy: SecurityPolicy;
+  }>(`/security/settings?${securityQuery({ project, app })}`);
+
+export const updateSecuritySettings = (
+  project: string,
+  app: string,
+  ciFailOn: "none" | "critical",
+  dryRun: boolean,
+) =>
+  request<{ message: string; diff?: string; commit?: string }>(
+    `/security/settings${dryRun ? "?dry_run=true" : ""}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ project, app, ci_fail_on: ciFailOn }),
+    },
+  );
+
+export const getSecurityPolicy = (project: string) =>
+  request<SecurityPolicy>(`/security/policy?${securityQuery({ project })}`);
+
+export const updateSecurityPolicy = (project: string, policy: SecurityPolicy) =>
+  request<{ updated: string[]; failed: string[] }>("/security/policy", {
+    method: "PUT",
+    body: JSON.stringify({ project, policy }),
+  });

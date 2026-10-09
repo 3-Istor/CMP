@@ -6,6 +6,7 @@ never calls GitHub or the cluster. Writes are the page's buttons: start a
 scan or a backup, and ignore or reactivate a finding.
 """
 
+import difflib
 import json
 import logging
 from datetime import date, datetime, timedelta
@@ -40,8 +41,15 @@ from app.services.kube_client import (
     kube_delete_collection,
     kube_list,
 )
+from app.services.project_registry import (
+    RegistryError,
+    read_record,
+    write_security_policy,
+)
 from app.services.security import exceptions as rules
-from app.services.security import scoring, store
+from app.services.security import scoring
+from app.services.security import settings as app_settings
+from app.services.security import store
 from app.services.security.collector import (
     K8S_TEMPLATE,
     SECURITY_WORKFLOW,
@@ -768,3 +776,195 @@ async def get_my_role(
         )
     )
     return {"role": role, "cnp_admin": admin, "username": _username(token)}
+
+
+# ── Settings and project policy ──────────────────────────────────────────────
+
+
+class SettingsRead(BaseModel):
+    ci_fail_on: app_settings.EffectiveSetting
+    policy: app_settings.ProjectPolicy
+
+
+class SettingsUpdate(BaseModel):
+    project: str
+    app: str
+    ci_fail_on: app_settings.FailOn
+
+
+class PolicyUpdate(BaseModel):
+    project: str
+    policy: app_settings.ProjectPolicy
+
+
+async def _policy(
+    project: str,
+) -> tuple[app_settings.ProjectPolicy, dict, str | None]:
+    try:
+        existing = await read_record(project)
+    except RegistryError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if existing is None:
+        return app_settings.ProjectPolicy(), {}, None
+    record, sha = existing
+    return app_settings.policy_from_record(record), record, sha
+
+
+async def _write_app_settings(
+    deployment: Deployment, fail_on: str, author: str, dry_run: bool
+) -> dict[str, str]:
+    installation_token, repo = await _github_token(deployment)
+    content = app_settings.render_settings(fail_on)
+    message = f"chore(cmp): set CI blocking to {fail_on} ({author})"
+    try:
+        branch = await get_default_branch(installation_token, repo)
+        try:
+            current, sha = await get_file_content(
+                installation_token, repo, app_settings.SETTINGS_FILE, branch
+            )
+        except FileNotInRepoError:
+            current, sha = "", None
+        if dry_run:
+            return {
+                "message": message,
+                "diff": "".join(
+                    difflib.unified_diff(
+                        current.splitlines(keepends=True),
+                        content.splitlines(keepends=True),
+                        fromfile=f"a/{app_settings.SETTINGS_FILE}",
+                        tofile=f"b/{app_settings.SETTINGS_FILE}",
+                    )
+                ),
+            }
+        if current == content:
+            return {"message": message, "commit": ""}
+        result = await put_file_content(
+            installation_token,
+            repo,
+            app_settings.SETTINGS_FILE,
+            content,
+            message,
+            sha,
+            branch,
+        )
+    except GitHubAppError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "message": message,
+        "commit": (result.get("commit") or {}).get("sha", ""),
+    }
+
+
+@router.get("/settings", response_model=SettingsRead)
+async def get_settings(
+    token: CurrentUser,
+    project: str,
+    app: str,
+    db: Session = Depends(get_db),
+) -> SettingsRead:
+    await _require_member(token, project, "developer")
+    deployment = _app_deployment(db, project, app)
+    policy, _, _ = await _policy(project)
+    installation_token, repo = await _github_token(deployment)
+    try:
+        branch = await get_default_branch(installation_token, repo)
+        try:
+            raw, _ = await get_file_content(
+                installation_token, repo, app_settings.SETTINGS_FILE, branch
+            )
+        except FileNotInRepoError:
+            raw = None
+    except GitHubAppError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return SettingsRead(
+        ci_fail_on=app_settings.effective_fail_on(
+            policy, app_settings.parse_settings(raw)
+        ),
+        policy=policy,
+    )
+
+
+@router.put("/settings")
+async def update_settings(
+    payload: SettingsUpdate,
+    token: CurrentUser,
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Commit the app's ``deploy/security.yaml``; refused on a locked value."""
+    await _require_admin(token, payload.project)
+    deployment = _app_deployment(db, payload.project, payload.app)
+    policy, _, _ = await _policy(payload.project)
+    if policy.ci_fail_on and policy.ci_fail_on.locked:
+        raise HTTPException(
+            status_code=403,
+            detail="Ce réglage est imposé par l'admin du projet.",
+        )
+    return await _write_app_settings(
+        deployment, payload.ci_fail_on.value, _username(token), dry_run
+    )
+
+
+@router.get("/policy", response_model=app_settings.ProjectPolicy)
+async def get_policy(
+    token: CurrentUser, project: str
+) -> app_settings.ProjectPolicy:
+    await _require_member(token, project, "developer")
+    policy, _, _ = await _policy(project)
+    return policy
+
+
+@router.put("/policy")
+async def update_policy(
+    payload: PolicyUpdate, token: CurrentUser, db: Session = Depends(get_db)
+) -> dict[str, list[str]]:
+    """
+    Set the project's security policy (CNP admins). A locked value is also
+    written to every app's settings file, so the CI applies it at once.
+    """
+    if not is_cnp_admin(token):
+        raise HTTPException(
+            status_code=403, detail="The project policy is for CNP admins."
+        )
+    _, record, sha = await _policy(payload.project)
+    if sha is None:
+        raise HTTPException(
+            status_code=404, detail="This project has no registry record."
+        )
+    author = _username(token)
+    try:
+        await write_security_policy(
+            payload.project,
+            app_settings.policy_to_record(record, payload.policy),
+            sha,
+            author,
+        )
+    except RegistryError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    updated, failed = [], []
+    locked = payload.policy.ci_fail_on
+    if locked and locked.locked:
+        deployments = (
+            db.query(Deployment)
+            .filter(
+                Deployment.project_id == payload.project,
+                Deployment.template_id == K8S_TEMPLATE,
+                Deployment.status == DeploymentStatus.RUNNING,
+            )
+            .all()
+        )
+        for deployment in deployments:
+            try:
+                await _write_app_settings(
+                    deployment, locked.value.value, author, dry_run=False
+                )
+                updated.append(deployment.name)
+            except HTTPException as exc:
+                logger.warning(
+                    "Security: policy not written to '%s': %s",
+                    deployment.name,
+                    exc.detail,
+                )
+                failed.append(deployment.name)
+    return {"updated": updated, "failed": failed}

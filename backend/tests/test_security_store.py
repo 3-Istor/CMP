@@ -336,3 +336,64 @@ def test_repository_copy_lists_only_vulnerabilities_and_secrets_in_force():
         False,
         False,
     )
+
+
+# ── Settings and project policy ──────────────────────────────────────────────
+
+
+def test_a_locked_project_value_wins_over_the_app():
+    # Arrange
+    from app.services.security import settings
+
+    policy = settings.ProjectPolicy(
+        ci_fail_on=settings.PolicyValue(value="critical", locked=True)
+    )
+
+    # Act
+    effective = settings.effective_fail_on(policy, {"ci": {"failOn": "none"}})
+
+    # Assert
+    assert (effective.value, effective.source, effective.locked) == (
+        "critical",
+        "project",
+        True,
+    )
+
+
+def test_an_unlocked_project_value_is_only_a_default():
+    # Arrange
+    from app.services.security import settings
+
+    policy = settings.ProjectPolicy(
+        ci_fail_on=settings.PolicyValue(value="critical", locked=False)
+    )
+
+    # Act
+    effective = settings.effective_fail_on(policy, {"ci": {"failOn": "none"}})
+
+    # Assert
+    assert (effective.value, effective.source) == ("none", "app")
+
+
+def test_ci_never_blocks_by_default():
+    from app.services.security import settings
+
+    assert (
+        settings.effective_fail_on(settings.ProjectPolicy(), None).value
+        == "none"
+    )
+
+
+def test_policy_round_trips_through_the_registry_record():
+    # Arrange
+    from app.services.security import settings
+
+    policy = settings.ProjectPolicy(
+        ci_fail_on=settings.PolicyValue(value="critical", locked=True)
+    )
+
+    # Act
+    record = settings.policy_to_record({"spec": {"apps": []}}, policy)
+
+    # Assert
+    assert settings.policy_from_record(record) == policy

@@ -46,6 +46,7 @@ class Source(str, Enum):
     CNPG = "cnpg"
     EXPOSURE = "exposure"
     CILIUM = "cilium"
+    REPOSITORY = "repository"
 
 
 CLUSTER_SOURCES = (
@@ -54,7 +55,7 @@ CLUSTER_SOURCES = (
     Source.CNPG,
     Source.CILIUM,
 )
-GITHUB_SOURCES = (Source.CI, Source.EXPOSURE)
+GITHUB_SOURCES = (Source.CI, Source.EXPOSURE, Source.REPOSITORY)
 
 PENALTY = {
     Tier.CORE: 25,

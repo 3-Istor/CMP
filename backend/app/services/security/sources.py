@@ -441,6 +441,31 @@ def ci_drafts(project: str, app: AppRef, report: dict) -> list[Draft]:
 # ── Backups ──────────────────────────────────────────────────────────────────
 
 
+def _backup_draft(
+    project: str,
+    app: AppRef,
+    cluster: str,
+    rule: str,
+    tier: Tier,
+    title: str,
+    detail: str,
+    fix: str,
+) -> Draft:
+    return Draft(
+        fingerprint=fingerprint(project, app.name, "backup", cluster),
+        app=app.name,
+        source=Source.CNPG,
+        category=Category.DATA,
+        tier=tier,
+        audience=Audience.DEVELOPER,
+        rule=rule,
+        title=title,
+        detail=detail,
+        fix=fix,
+        location=cluster,
+    )
+
+
 def backup_drafts(
     project: str,
     apps: list[AppRef],
@@ -468,25 +493,13 @@ def backup_drafts(
         if app is None:
             continue
 
-        def draft(rule: str, tier: Tier, title: str, detail: str, fix: str):
-            return Draft(
-                fingerprint=fingerprint(project, app.name, "backup", name),
-                app=app.name,
-                source=Source.CNPG,
-                category=Category.DATA,
-                tier=tier,
-                audience=Audience.DEVELOPER,
-                rule=rule,
-                title=title,
-                detail=detail,
-                fix=fix,
-                location=name,
-            )
-
         plugins = (cluster.get("spec") or {}).get("plugins") or []
         if not any(p.get("name") == BARMAN_PLUGIN for p in plugins):
             drafts.append(
-                draft(
+                _backup_draft(
+                    project,
+                    app,
+                    name,
                     "backup-disabled",
                     Tier.IMPORTANT,
                     "Base sans sauvegarde",
@@ -503,7 +516,10 @@ def backup_drafts(
         )
         if archiving and archiving.get("status") == "False":
             drafts.append(
-                draft(
+                _backup_draft(
+                    project,
+                    app,
+                    name,
                     "backup-failing",
                     Tier.CORE,
                     "Sauvegarde activée mais en échec",
@@ -520,7 +536,10 @@ def backup_drafts(
         last = max(completed.get((namespace, name), []), default=None)
         if last is None and now - created > BACKUP_MAX_AGE:
             drafts.append(
-                draft(
+                _backup_draft(
+                    project,
+                    app,
+                    name,
                     "backup-missing",
                     Tier.CORE,
                     "Sauvegarde activée mais jamais réussie",
@@ -531,7 +550,10 @@ def backup_drafts(
             )
         elif last is not None and now - last > BACKUP_MAX_AGE:
             drafts.append(
-                draft(
+                _backup_draft(
+                    project,
+                    app,
+                    name,
                     "backup-stale",
                     Tier.CORE,
                     "Sauvegarde en retard",
@@ -598,3 +620,43 @@ def isolation_drafts(project: str, policy: dict | None) -> list[Draft]:
             fix="Vérifier le rendu de cnp-project-base pour ce projet.",
         )
     ]
+
+
+# ── Repository guard rails ───────────────────────────────────────────────────
+
+
+def repository_drafts(
+    project: str, app: AppRef, workflow_present: bool, locked_drift: bool
+) -> list[Draft]:
+    drafts = []
+    if not workflow_present:
+        drafts.append(
+            Draft(
+                fingerprint=fingerprint(project, app.name, "workflow-missing"),
+                app=app.name,
+                source=Source.REPOSITORY,
+                category=Category.LEAKS,
+                tier=Tier.CORE,
+                audience=Audience.DEVELOPER,
+                rule="workflow-missing",
+                title="Workflow de sécurité absent du repo",
+                detail="Plus aucun scan des secrets ni des dépendances ne tourne.",
+                fix="Restaure .github/workflows/security.yml depuis le modèle.",
+            )
+        )
+    if locked_drift:
+        drafts.append(
+            Draft(
+                fingerprint=fingerprint(project, app.name, "locked-drift"),
+                app=app.name,
+                source=Source.REPOSITORY,
+                category=Category.LEAKS,
+                tier=Tier.CORE,
+                audience=Audience.DEVELOPER,
+                rule="locked-setting-changed",
+                title="Réglage imposé par l'admin modifié dans le repo",
+                detail="deploy/security.yaml ne suit plus la politique du projet.",
+                fix="Remets la valeur imposée, ou demande à l'admin du projet de lever le verrou.",
+            )
+        )
+    return drafts

@@ -28,6 +28,7 @@ import { FindingCard } from "./FindingCard";
 import { CATEGORY_META, errorMessage, TABS, type SecurityTab } from "./labels";
 import { ScansCard } from "./ScansCard";
 import { ScoreRing } from "./ScoreRing";
+import { AppSettingsCard, ProjectPolicyCard } from "./SettingsCard";
 import { NewMajorChart, ScoreTrendChart } from "./TrendCharts";
 
 const REFRESH_MS = 60_000;
@@ -330,6 +331,10 @@ export function SecurityDashboard({
                   <NewMajorChart points={trend} />
                 </CardContent>
               </Card>
+              {app && view === "developer" && (
+                <AppSettingsCard project={project} app={app} canAdmin={canAdmin} />
+              )}
+              {!app && role.cnp_admin && <ProjectPolicyCard project={project} />}
               {view === "developer" && (
                 <Card className="bg-muted/40">
                   <CardHeader>
