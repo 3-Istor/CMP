@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     LOKI_USERNAME: str = "cmp"
     LOKI_PASSWORD: str = ""
     LOKI_TENANT: str = "default"
+    # Days of audit history read from Loki the first time the collector runs.
+    ACTIVITY_BACKFILL_DAYS: int = 7
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key

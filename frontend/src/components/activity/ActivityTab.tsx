@@ -35,7 +35,9 @@ export function ActivityTab({ project }: { project: string }) {
               onClick={() => setView(v)}
               className={cn(
                 "rounded-full px-4 py-1 text-sm transition-colors",
-                view === v ? "bg-primary/15 font-medium" : "text-muted-foreground",
+                view === v
+                  ? "bg-primary/15 font-medium"
+                  : "text-muted-foreground",
               )}
             >
               {v === "audit" ? "Audit" : "Logs"}
@@ -45,7 +47,11 @@ export function ActivityTab({ project }: { project: string }) {
       </div>
       {view === "audit" ? (
         role && (
-          <AuditView project={project} canExport={role.admin} showLogins={role.admin} />
+          <AuditView
+            project={project}
+            canExport={role.admin}
+            showLogins={role.admin}
+          />
         )
       ) : (
         <LogsView project={project} />

@@ -26,6 +26,7 @@ from app.routers import (
     security_databases,
 )
 from app.services import health_poller
+from app.services.activity_collector import activity_collector_loop
 from app.services.audit import audit_middleware, audit_retention_loop
 from app.services.finops import alert_poller
 from app.services.security.collector import security_collector_loop
@@ -238,6 +239,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting security collector...")
     security_collector_task = asyncio.create_task(security_collector_loop())
     audit_retention_task = asyncio.create_task(audit_retention_loop())
+    activity_collector_task = asyncio.create_task(activity_collector_loop())
 
     logger.info("✅ Application startup complete")
 
@@ -249,11 +251,13 @@ async def lifespan(app: FastAPI):
     finops_poller_task.cancel()
     security_collector_task.cancel()
     audit_retention_task.cancel()
+    activity_collector_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
         security_collector_task,
         audit_retention_task,
+        activity_collector_task,
     ):
         try:
             await task

@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
-from app.models.audit import AuditEvent
+from app.models.audit import ActivityRecord, AuditEvent
 from app.routers.finops import is_cnp_admin
 from app.services import activity_sources as sources
 from app.services.audit import NOTABLE
@@ -31,7 +31,6 @@ from app.services.keycloak_service import (
     get_current_user,
     require_project_role,
 )
-from app.services.kube_client import KubeUnavailableError
 
 router = APIRouter(prefix="/activity", tags=["Activity"])
 
@@ -171,8 +170,47 @@ def _from_row(row: AuditEvent) -> ActivityEvent:
     )
 
 
-def _from_source(event: sources.Event) -> ActivityEvent:
-    return ActivityEvent(**event.__dict__)
+def _from_record(row: ActivityRecord) -> ActivityEvent:
+    when = (
+        row.time if row.time.tzinfo else row.time.replace(tzinfo=timezone.utc)
+    )
+    return ActivityEvent(
+        id=row.external_id,
+        time=when,
+        source=row.source,
+        actor=row.actor,
+        action=row.action,
+        notable=row.notable,
+        project=row.project,
+        app=row.app,
+        target=row.target,
+        outcome=row.outcome,
+        status_code=row.status_code,
+        source_ip=row.source_ip,
+        details=json.loads(row.details or "{}"),
+    )
+
+
+def _collected_rows(
+    db: Session,
+    project: str | None,
+    wanted: set[str],
+    since: datetime,
+    until: datetime,
+    limit: int,
+    include_reads: bool,
+) -> list[ActivityRecord]:
+    stmt = select(ActivityRecord).where(
+        ActivityRecord.source.in_(wanted),
+        ActivityRecord.time >= since,
+        ActivityRecord.time < until,
+    )
+    if project:
+        stmt = stmt.where(ActivityRecord.project == project)
+    if not include_reads:
+        stmt = stmt.where(ActivityRecord.is_read.is_(False))
+    stmt = stmt.order_by(ActivityRecord.time.desc()).limit(limit)
+    return list(db.scalars(stmt))
 
 
 async def _collect(
@@ -184,47 +222,18 @@ async def _collect(
     limit: int,
     include_reads: bool,
 ) -> tuple[list[ActivityEvent], list[str]]:
+    """The CMP journal and the collected sources, read from the database."""
     events: list[ActivityEvent] = []
-    unavailable: list[str] = []
     if "cmp" in wanted:
         rows = _cmp_rows(db, project, since, until, limit)
         events += [_from_row(r) for r in rows]
-    if not project:
-        return events, unavailable
-
-    loki_calls = {
-        "kubernetes": sources.kubernetes_events(
-            project, since, until, limit, include_reads
-        ),
-        "vault": sources.vault_events(project, since, until, limit),
-        "keycloak": sources.keycloak_events(project, since, until, limit),
-    }
-    names = [n for n in loki_calls if n in wanted]
-    results = await asyncio.gather(
-        *(loki_calls[n] for n in names), return_exceptions=True
-    )
-    for name in loki_calls:
-        if name not in names:
-            loki_calls[name].close()
-    for name, result in zip(names, results):
-        if isinstance(
-            result, (sources.LokiUnavailableError, KubeUnavailableError)
-        ):
-            unavailable.append(name)
-        elif isinstance(result, BaseException):
-            raise result
-        else:
-            events += [_from_source(e) for e in result]
-
-    if "deployment" in wanted:
-        try:
-            deploys = await run_in_threadpool(
-                sources.deployment_events, project, since, until
-            )
-            events += [_from_source(e) for e in deploys]
-        except KubeUnavailableError:
-            unavailable.append("deployment")
-    return events, unavailable
+    collected = wanted - {"cmp"}
+    if collected:
+        records = _collected_rows(
+            db, project, collected, since, until, limit, include_reads
+        )
+        events += [_from_record(r) for r in records]
+    return events, []
 
 
 def _window(
