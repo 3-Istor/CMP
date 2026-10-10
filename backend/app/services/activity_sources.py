@@ -436,3 +436,41 @@ async def log_label_values(
     if response.status_code != 200:
         raise LokiUnavailableError(f"Loki answered {response.status_code}")
     return sorted(response.json().get("data") or [])
+
+
+async def loki_matrix(
+    query: str, start: datetime, end: datetime, step: int
+) -> list[tuple[dict[str, str], list[tuple[datetime, float]]]]:
+    """A metric query's series."""
+    try:
+        async with _client() as client:
+            response = await client.get(
+                "/loki/api/v1/query_range",
+                params={
+                    "query": query,
+                    "start": _ns(start),
+                    "end": _ns(end),
+                    "step": step,
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise LokiUnavailableError(str(exc)) from exc
+    if response.status_code != 200:
+        raise LokiUnavailableError(f"Loki answered {response.status_code}")
+    return [
+        (
+            series["metric"],
+            [
+                (datetime.fromtimestamp(float(ts), tz=timezone.utc), float(v))
+                for ts, v in series["values"]
+            ],
+        )
+        for series in response.json()["data"]["result"]
+    ]
+
+
+def volume_selector(project: str, namespace: str | None) -> str:
+    selector = f'project="{project}"'
+    if namespace:
+        selector += f', namespace="{namespace}"'
+    return "{" + selector + "}"

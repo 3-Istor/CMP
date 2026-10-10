@@ -262,12 +262,18 @@ export function AuditView({
   project,
   canExport,
   showLogins,
+  app,
 }: {
   project: string | null;
   canExport: boolean;
   showLogins: boolean;
+  /** Pins the feed to one app (the app page). */
+  app?: string;
 }) {
-  const [filters, setFilters] = useState<ActivityFilters>({ days: 7 });
+  const [filters, setFilters] = useState<ActivityFilters>({
+    days: 7,
+    app: app ?? null,
+  });
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
   const [unavailable, setUnavailable] = useState<ActivitySource[]>([]);
@@ -450,18 +456,20 @@ export function AuditView({
                 </option>
               ))}
             </NativeSelect>
-            <NativeSelect
-              aria-label="App"
-              value={filters.app ?? ""}
-              onChange={(v) => set({ app: v || null })}
-            >
-              <option value="">Toutes les apps</option>
-              {apps.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </NativeSelect>
+            {!app && (
+              <NativeSelect
+                aria-label="App"
+                value={filters.app ?? ""}
+                onChange={(v) => set({ app: v || null })}
+              >
+                <option value="">Toutes les apps</option>
+                {apps.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
             <NativeSelect
               aria-label="Période"
               value={String(filters.days ?? 7)}

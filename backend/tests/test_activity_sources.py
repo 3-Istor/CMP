@@ -435,3 +435,40 @@ def test_platform_status_is_for_cnp_admins_only(client_for):
     response = client.get("/api/activity/platform")
 
     assert response.status_code == 403
+
+
+def test_log_volume_sums_each_namespace_and_finds_the_peak(client_for):
+    client = client_for("member", [])
+    t1 = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+    t2 = t1 + timedelta(hours=1)
+
+    async def matrix(query, start, end, step):
+        value = 600.0 if "count_over_time" in query else 6000.0
+        return [({"namespace": "shop-web"}, [(t1, value), (t2, value / 2)])]
+
+    with mock.patch.object(src, "loki_matrix", matrix):
+        body = client.get(
+            "/api/activity/logs/volume?project=shop&hours=24"
+        ).json()
+
+    [series] = body["series"]
+    assert (
+        series["total_lines"],
+        series["total_bytes"],
+        series["peak_per_minute"],
+    ) == (
+        900,
+        9000,
+        600 / (body["step_seconds"] / 60),
+    )
+
+
+def test_log_volume_refuses_a_foreign_label_value(client_for):
+    client = client_for("member", [])
+
+    response = client.get(
+        "/api/activity/logs/volume",
+        params={"project": "shop", "namespace": 'x"}'},
+    )
+
+    assert response.status_code == 400

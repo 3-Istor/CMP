@@ -22,6 +22,8 @@ import { FilterBar } from "./FilterBar";
 import { errorMessage } from "./labels";
 import { NativeSelect } from "./NativeSelect";
 import { NetworkPanel } from "./NetworkPanel";
+import { VolumeCard } from "./VolumeCard";
+import { severityOf, TOKEN_CLASS, tokenize } from "./logHighlight";
 
 const LIVE_MS = 3000;
 const CONTEXT_MS = 60_000;
@@ -68,14 +70,6 @@ function colourOf(stream: string): string {
   return PALETTE[Math.abs(hash) % PALETTE.length];
 }
 
-function levelClass(line: string): string {
-  if (/\b(error|err|fatal|panic|exception)\b/i.test(line))
-    return "text-red-700 dark:text-red-400";
-  if (/\b(warn|warning)\b/i.test(line))
-    return "text-amber-700 dark:text-amber-300";
-  return "";
-}
-
 function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString("fr-FR", {
     hour: "2-digit",
@@ -88,7 +82,7 @@ function key(l: LogLine): string {
   return `${l.time}|${l.pod}|${l.container}|${l.line}`;
 }
 
-function Highlighted({
+function Marked({
   text,
   term,
 }: {
@@ -117,15 +111,43 @@ function Highlighted({
   );
 }
 
+/** A line with its tokens coloured and the search term marked. */
+function Colourised({
+  text,
+  term,
+}: {
+  text: string;
+  term: string | null | undefined;
+}) {
+  return (
+    <>
+      {tokenize(text).map((t, i) =>
+        t.kind ? (
+          <span key={i} className={TOKEN_CLASS[t.kind]}>
+            <Marked text={t.text} term={term} />
+          </span>
+        ) : (
+          <Marked key={i} text={t.text} term={term} />
+        ),
+      )}
+    </>
+  );
+}
+
 export function LogsView({
   project,
+  namespace,
   fullPage = false,
 }: {
   project: string;
+  /** Pins the view to one app's namespace (the app page). */
+  namespace?: string;
   fullPage?: boolean;
 }) {
   const [targets, setTargets] = useState<LogTargets | null>(null);
-  const [filters, setFilters] = useState<LogFilters>({});
+  const [filters, setFilters] = useState<LogFilters>({
+    namespace: namespace ?? null,
+  });
   const [searchInput, setSearchInput] = useState("");
   const [period, setPeriod] = useState("1h");
   const [lines, setLines] = useState<LogLine[] | null>(null);
@@ -283,18 +305,20 @@ export function LogsView({
       <FilterBar
         selects={
           <>
-            <NativeSelect
-              aria-label="Namespace"
-              value={filters.namespace ?? ""}
-              onChange={(v) => set({ namespace: v || null, pod: null })}
-            >
-              <option value="">Tous les namespaces</option>
-              {targets?.namespaces.map((n) => (
-                <option key={n} value={n}>
-                  {n.replace(`${project}-`, "")}
-                </option>
-              ))}
-            </NativeSelect>
+            {!namespace && (
+              <NativeSelect
+                aria-label="Namespace"
+                value={filters.namespace ?? ""}
+                onChange={(v) => set({ namespace: v || null, pod: null })}
+              >
+                <option value="">Tous les namespaces</option>
+                {targets?.namespaces.map((n) => (
+                  <option key={n} value={n}>
+                    {n.replace(`${project}-`, "")}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
             <NativeSelect
               aria-label="Pod"
               value={filters.pod ?? ""}
@@ -452,6 +476,7 @@ export function LogsView({
         }
       />
 
+      {!fullscreen && <VolumeCard project={project} namespace={namespace} />}
       {!fullscreen && <NetworkPanel project={project} />}
 
       {streams.length > 1 && (
@@ -511,15 +536,22 @@ export function LogsView({
             Aucune ligne pour ces filtres.
           </p>
         ) : (
-          shown.map((l) => {
+          shown.map((l, i) => {
             const s = streamOf(l, project);
+            // A new block starts when the process changes: a hairline and a
+            // little air, and the name only at the top of the block.
+            const first = i === 0 || streamOf(shown[i - 1], project) !== s;
+            const severity = severityOf(l.line);
             return (
               <div
                 key={key(l)}
                 onClick={() => !context && showContext(l)}
                 title={context ? undefined : "Voir le contexte"}
                 className={cn(
-                  "flex cursor-pointer gap-3 px-3 hover:bg-muted/60",
+                  "flex cursor-pointer gap-3 border-l-2 border-transparent px-3 hover:bg-muted/60",
+                  first && i > 0 && "mt-1 border-t border-t-border/70 pt-1",
+                  severity === "error" && "border-l-red-500 bg-red-500/5",
+                  severity === "warn" && "border-l-amber-500",
                   context?.anchor === key(l) && "bg-primary/10",
                 )}
               >
@@ -532,6 +564,7 @@ export function LogsView({
                   className={cn(
                     "shrink-0 truncate text-right font-semibold",
                     colourOf(s),
+                    !first && "opacity-35",
                   )}
                   style={{ width: `${width}ch` }}
                   title={`${l.pod} / ${l.container}`}
@@ -543,10 +576,9 @@ export function LogsView({
                   className={cn(
                     "min-w-0 flex-1",
                     wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre",
-                    levelClass(l.line),
                   )}
                 >
-                  <Highlighted text={l.line} term={filters.search} />
+                  <Colourised text={l.line} term={filters.search} />
                 </span>
               </div>
             );

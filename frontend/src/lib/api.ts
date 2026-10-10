@@ -692,3 +692,12 @@ export const getLogTargets = (project: string) =>
   request<import("@/types").LogTargets>(
     `/activity/logs/targets?${new URLSearchParams({ project })}`,
   );
+
+export const getLogVolume = (project: string, hours: number, namespace?: string) =>
+  request<import("@/types").LogVolume>(
+    `/activity/logs/volume?${new URLSearchParams({
+      project,
+      hours: String(hours),
+      ...(namespace ? { namespace } : {}),
+    })}`,
+  );

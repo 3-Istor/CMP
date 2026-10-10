@@ -121,6 +121,26 @@ class LogLine(BaseModel):
     line: str
 
 
+class VolumePoint(BaseModel):
+    time: datetime
+    lines: int
+    bytes: int
+
+
+class VolumeSeries(BaseModel):
+    namespace: str
+    points: list[VolumePoint]
+    total_lines: int
+    total_bytes: int
+    # Busiest step, in lines per minute.
+    peak_per_minute: float
+
+
+class LogVolume(BaseModel):
+    step_seconds: int
+    series: list[VolumeSeries]
+
+
 class LogTargets(BaseModel):
     namespaces: list[str]
     pods: list[str]
@@ -708,3 +728,65 @@ async def platform_status(
         archive_last_schedule=last_schedule,
         collected_until=cursors,
     )
+
+
+@router.get("/logs/volume", response_model=LogVolume)
+async def log_volume(
+    token: CurrentUser,
+    project: str,
+    namespace: str | None = None,
+    hours: Annotated[int, Query(ge=1, le=168)] = 24,
+) -> LogVolume:
+    """Lines and bytes of logs per namespace over time, about 60 points."""
+    await _role(token, project)
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(hours=hours)
+    step = max(60, hours * 60)
+    selector = sources.volume_selector(project, _label(namespace, "namespace"))
+    try:
+        counts, sizes = await asyncio.gather(
+            sources.loki_matrix(
+                f"sum by (namespace) (count_over_time({selector}[{step}s]))",
+                start,
+                end,
+                step,
+            ),
+            sources.loki_matrix(
+                f"sum by (namespace) (bytes_over_time({selector}[{step}s]))",
+                start,
+                end,
+                step,
+            ),
+        )
+    except sources.LokiUnavailableError as exc:
+        raise HTTPException(
+            status_code=502, detail="Logs are unavailable."
+        ) from exc
+    by_ns: dict[str, dict[datetime, list[float]]] = defaultdict(
+        lambda: defaultdict(lambda: [0.0, 0.0])
+    )
+    for metric, values in counts:
+        for when, v in values:
+            by_ns[metric.get("namespace", "")][when][0] = v
+    for metric, values in sizes:
+        for when, v in values:
+            by_ns[metric.get("namespace", "")][when][1] = v
+    series = []
+    for ns, points in by_ns.items():
+        ordered = sorted(points.items())
+        series.append(
+            VolumeSeries(
+                namespace=ns,
+                points=[
+                    VolumePoint(time=t, lines=int(c), bytes=int(b))
+                    for t, (c, b) in ordered
+                ],
+                total_lines=int(sum(c for _, (c, _) in ordered)),
+                total_bytes=int(sum(b for _, (_, b) in ordered)),
+                peak_per_minute=max(
+                    (c / (step / 60) for _, (c, _) in ordered), default=0.0
+                ),
+            )
+        )
+    series.sort(key=lambda s: s.total_bytes, reverse=True)
+    return LogVolume(step_seconds=step, series=series)
