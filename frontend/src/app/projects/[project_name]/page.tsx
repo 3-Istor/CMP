@@ -9,6 +9,7 @@ import { MembersPanel } from "@/components/projects/MembersPanel";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { ActivityTab } from "@/components/activity/ActivityTab";
+import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ import {
   ShieldCheck,
   Trash2,
   Users,
+  BellRing,
   History,
   Wallet,
 } from "lucide-react";
@@ -295,6 +297,10 @@ export default function ProjectPage() {
               <History className="h-4 w-4" />
               Activity
             </TabsTrigger>
+            <TabsTrigger value="alerts" className="gap-2">
+              <BellRing className="h-4 w-4" />
+              Alerts
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Applications tab ── */}
@@ -430,6 +436,10 @@ export default function ProjectPage() {
 
           <TabsContent value="activity" className="mt-6">
             <ActivityTab project={projectName} />
+          </TabsContent>
+
+          <TabsContent value="alerts" className="mt-6">
+            <AlertsPanel project={projectName} />
           </TabsContent>
 
           <TabsContent value="security" className="mt-6 space-y-6">

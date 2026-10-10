@@ -701,3 +701,24 @@ export const getLogVolume = (project: string, hours: number, namespace?: string)
       ...(namespace ? { namespace } : {}),
     })}`,
   );
+
+// ── Alerts tab ────────────────────────────────────────────────────────────────
+
+function alertingQuery(project: string, app?: string | null) {
+  return new URLSearchParams({ project, ...(app ? { app } : {}) }).toString();
+}
+
+export const getAlertCatalog = (project: string, app?: string | null) =>
+  request<import("@/types").AlertCatalog>(`/alerting?${alertingQuery(project, app)}`);
+
+export const updateCatalogAlert = (
+  project: string,
+  app: string | null | undefined,
+  alertId: string,
+  enabled: boolean,
+  params: Record<string, number>,
+) =>
+  request<import("@/types").CatalogAlert>(
+    `/alerting/${alertId}?${alertingQuery(project, app)}`,
+    { method: "PUT", body: JSON.stringify({ enabled, params }) },
+  );
