@@ -1,7 +1,11 @@
 """
-Audit sources of the Activity tab that live in Loki: the Kubernetes API audit,
-Vault and Keycloak. Every query is built here, scoped to one project; the
-browser never sends LogQL, or a member could read another project's logs.
+Sources of the Activity tab.
+
+The audit sources (Kubernetes API, Vault, Keycloak, Argo CD syncs) are read
+across all projects by the activity collector, a minute at a time, and kept in
+the CMP database: querying Loki over days on every page load took longer than
+the gateway's timeout. Pod logs are still read live, one project at a time.
+Every LogQL query is built here; the browser never sends one.
 """
 
 import hashlib
@@ -12,7 +16,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.services.kube_client import kube_list
@@ -24,6 +27,19 @@ _READS = {"get", "list", "watch"}
 _RBAC = "rbac.authorization.k8s.io"
 # The operator syncing VaultSecrets reads project secrets all day.
 _VAULT_MACHINES = ("kubernetes-vault-secrets-operator",)
+
+KUBERNETES_QUERY = (
+    '{job="k8s-audit"} '
+    '| json user="user.username", sub="objectRef.subresource" '
+    # system:admin is the admin kubeconfig: a person, not a controller.
+    '| user !~ "system:.*" or user = "system:admin" '
+    'or sub =~ "exec|attach|portforward"'
+)
+VAULT_QUERY = (
+    '{namespace="vault", container="vault"} |= `"type":"response"`'
+    + "".join(f" != `{m}`" for m in _VAULT_MACHINES)
+)
+KEYCLOAK_QUERY = '{namespace=~"keycloak|.+-system"} |= `org.keycloak.events`'
 
 
 class LokiUnavailableError(Exception):
@@ -38,30 +54,39 @@ class Event:
     actor: str
     action: str
     notable: bool
-    project: str
+    project: str | None
     app: str | None
     target: str
     outcome: str
     status_code: int | None
     source_ip: str | None
     details: dict[str, Any] = field(default_factory=dict)
+    is_read: bool = False
 
 
 def _ns(when: datetime) -> str:
     return str(int(when.timestamp() * 1e9))
 
 
+def _client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        base_url=settings.LOKI_URL,
+        auth=(settings.LOKI_USERNAME, settings.LOKI_PASSWORD),
+        headers={"X-Scope-OrgID": settings.LOKI_TENANT},
+        timeout=30,
+    )
+
+
 async def loki_lines(
-    query: str, start: datetime, end: datetime, limit: int
+    query: str,
+    start: datetime,
+    end: datetime,
+    limit: int,
+    direction: str = "backward",
 ) -> list[tuple[datetime, dict[str, str], str]]:
     """Log lines matching ``query``, newest first."""
     try:
-        async with httpx.AsyncClient(
-            base_url=settings.LOKI_URL,
-            auth=(settings.LOKI_USERNAME, settings.LOKI_PASSWORD),
-            headers={"X-Scope-OrgID": settings.LOKI_TENANT},
-            timeout=30,
-        ) as client:
+        async with _client() as client:
             response = await client.get(
                 "/loki/api/v1/query_range",
                 params={
@@ -69,7 +94,7 @@ async def loki_lines(
                     "start": _ns(start),
                     "end": _ns(end),
                     "limit": limit,
-                    "direction": "backward",
+                    "direction": direction,
                 },
             )
     except httpx.HTTPError as exc:
@@ -87,12 +112,17 @@ async def loki_lines(
     return lines[:limit]
 
 
-def project_namespaces(project: str) -> set[str]:
+def namespace_projects() -> dict[str, str]:
+    """Every project namespace and the project it belongs to."""
     items = kube_list(
-        "/api/v1/namespaces",
-        {"labelSelector": f"cnp.3istor.com/project={project}"},
+        "/api/v1/namespaces", {"labelSelector": "cnp.3istor.com/project"}
     )
-    return {item["metadata"]["name"] for item in items}
+    return {
+        item["metadata"]["name"]: item["metadata"]["labels"][
+            "cnp.3istor.com/project"
+        ]
+        for item in items
+    }
 
 
 def _event_id(source: str, when: datetime, line: str) -> str:
@@ -100,17 +130,15 @@ def _event_id(source: str, when: datetime, line: str) -> str:
     return f"{source}-{digest[:16]}"
 
 
-def _app_of(namespace: str, project: str) -> str | None:
+def _app_of(namespace: str, project: str | None) -> str | None:
+    if not project:
+        return None
     rest = namespace.removeprefix(f"{project}-")
     return None if rest == "system" else rest
 
 
 def kubernetes_event(
-    project: str,
-    namespaces: set[str],
-    when: datetime,
-    line: str,
-    include_reads: bool,
+    ns_projects: dict[str, str], when: datetime, line: str
 ) -> Event | None:
     try:
         raw = json.loads(line)
@@ -122,16 +150,12 @@ def kubernetes_event(
     verb = raw.get("verb", "")
     sub = ref.get("subresource") or ""
     resource = ref.get("resource", "")
-    if namespace not in namespaces:
-        return None
     shell = sub in _SHELL
-    # system:admin is the admin kubeconfig: a person, not a controller.
     machine = user.startswith("system:") and user != "system:admin"
-    if machine and not shell:
+    if not user or machine and not shell:
         return None
     secret = resource == "secrets"
-    if verb in _READS and not (shell or secret or include_reads):
-        return None
+    project = ns_projects.get(namespace)
     code = (raw.get("responseStatus") or {}).get("code")
     name = ref.get("name") or ""
     return Event(
@@ -156,45 +180,61 @@ def kubernetes_event(
             "groups": (raw.get("user") or {}).get("groups"),
             "namespace": namespace,
         },
+        is_read=verb in _READS and not (shell or secret),
     )
 
 
-def vault_event(project: str, when: datetime, line: str) -> Event | None:
+def _project_of_path(path: str, projects: set[str]) -> str | None:
+    if not path.startswith("project-"):
+        return None
+    head = path.removeprefix("project-").split("/", 1)[0]
+    return head if head in projects else None
+
+
+def vault_event(projects: set[str], when: datetime, line: str) -> Event | None:
     try:
         raw = json.loads(line)
     except ValueError:
         return None
     request = raw.get("request") or {}
     path = request.get("path", "")
-    if not path.startswith(f"project-{project}/"):
-        return None
     actor = (raw.get("auth") or {}).get("display_name", "")
     if actor.startswith(_VAULT_MACHINES):
         return None
+    project = _project_of_path(path, projects)
     operation = request.get("operation", "")
     error = raw.get("error")
-    secret = path.removeprefix(f"project-{project}/").removeprefix("data/")
+    secret = (
+        path.removeprefix(f"project-{project}/").removeprefix("data/")
+        if project
+        else path
+    )
     return Event(
         id=_event_id("vault", when, line),
         time=when,
         source="vault",
         actor=actor,
         action=f"vault.{operation}",
-        notable=True,
+        notable=bool(project)
+        and operation in ("read", "create", "update", "delete"),
         project=project,
-        app=secret.split("/", 1)[0] or None,
+        app=(secret.split("/", 1)[0] or None) if project else None,
         target=secret,
         outcome="failure" if error else "success",
         status_code=None,
         source_ip=request.get("remote_address"),
         details={"path": path, "error": error},
+        is_read=operation == "list",
     )
 
 
-def keycloak_event(project: str, when: datetime, line: str) -> Event | None:
+def keycloak_event(
+    projects: set[str], when: datetime, line: str
+) -> Event | None:
     pairs = dict(_KEYCLOAK_PAIR.findall(line))
-    if pairs.get("realmName") != project or "type" not in pairs:
+    if "type" not in pairs:
         return None
+    realm = pairs.get("realmName", "")
     kind = pairs["type"]
     failed = kind.endswith("_ERROR")
     return Event(
@@ -204,106 +244,47 @@ def keycloak_event(project: str, when: datetime, line: str) -> Event | None:
         actor=pairs.get("username") or pairs.get("userId", ""),
         action=f"keycloak.{kind.lower()}",
         notable=False,
-        project=project,
+        project=realm if realm in projects else None,
         app=None,
         target=pairs.get("clientId", ""),
         outcome="failure" if failed else "success",
         status_code=None,
         source_ip=pairs.get("ipAddress"),
-        details={"error": pairs.get("error"), "type": kind},
+        details={"error": pairs.get("error"), "type": kind, "realm": realm},
     )
 
 
-async def kubernetes_events(
-    project: str,
-    start: datetime,
-    end: datetime,
-    limit: int,
-    include_reads: bool,
-) -> list[Event]:
-    namespaces = await run_in_threadpool(project_namespaces, project)
-    if not namespaces:
-        return []
-    alternatives = "|".join(sorted(re.escape(n) for n in namespaces))
-    # Controllers would fill the window before a person's line shows: drop
-    # them in Loki, keeping their shells.
-    query = (
-        f'{{job="k8s-audit"}} |~ `"namespace":"({alternatives})"` '
-        '| json user="user.username", sub="objectRef.subresource" '
-        '| user !~ "system:.*" or user = "system:admin" '
-        'or sub =~ "exec|attach|portforward"'
-    )
-    lines = await loki_lines(query, start, end, min(limit * 10, 5000))
-    events = (
-        kubernetes_event(project, namespaces, when, line, include_reads)
-        for when, _, line in lines
-    )
-    return [e for e in events if e][:limit]
-
-
-async def vault_events(
-    project: str, start: datetime, end: datetime, limit: int
-) -> list[Event]:
-    query = (
-        '{namespace="vault", container="vault"} '
-        f'|= `"type":"response"` |= `"path":"project-{project}/`'
-        + "".join(f" != `{m}`" for m in _VAULT_MACHINES)
-    )
-    lines = await loki_lines(query, start, end, min(limit * 10, 5000))
-    events = (vault_event(project, when, line) for when, _, line in lines)
-    return [e for e in events if e][:limit]
-
-
-async def keycloak_events(
-    project: str, start: datetime, end: datetime, limit: int
-) -> list[Event]:
-    query = (
-        '{namespace="keycloak"} |= `org.keycloak.events` '
-        f'|= `realmName="{project}",`'
-    )
-    lines = await loki_lines(query, start, end, limit)
-    events = (keycloak_event(project, when, line) for when, _, line in lines)
-    return [e for e in events if e]
-
-
-def deployment_events(
-    project: str, start: datetime, end: datetime
-) -> list[Event]:
-    """Argo CD syncs of the project's apps, from each Application's history."""
+def deployment_events() -> list[Event]:
+    """Argo CD syncs of every project app, from each Application's history."""
     apps = kube_list(
         "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications",
-        {"labelSelector": f"cnp.3istor.com/project={project}"},
+        {"labelSelector": "cnp.3istor.com/project"},
     )
     events = []
     for application in apps:
-        name = application["metadata"]["name"]
-        app = (
-            application["metadata"].get("labels", {}).get("cnp.3istor.com/app")
-        )
+        meta = application["metadata"]
+        labels = meta.get("labels", {})
         spec = application.get("spec", {})
         repos = [
             s.get("repoURL")
             for s in spec.get("sources") or [spec.get("source", {})]
         ]
         for item in application.get("status", {}).get("history", []):
-            when = datetime.fromisoformat(
-                item["deployedAt"].replace("Z", "+00:00")
-            )
-            if not start <= when < end:
-                continue
             initiated = item.get("initiatedBy") or {}
             revisions = item.get("revisions") or [item.get("revision")]
             events.append(
                 Event(
-                    id=f"deploy-{name}-{item.get('id')}",
-                    time=when,
+                    id=f"deploy-{meta['name']}-{item.get('id')}",
+                    time=datetime.fromisoformat(
+                        item["deployedAt"].replace("Z", "+00:00")
+                    ),
                     source="deployment",
                     actor=initiated.get("username") or "Argo CD",
                     action="deployment.sync",
                     notable=False,
-                    project=project,
-                    app=app,
-                    target=name,
+                    project=labels.get("cnp.3istor.com/project"),
+                    app=labels.get("cnp.3istor.com/app"),
+                    target=meta["name"],
                     outcome="success",
                     status_code=None,
                     source_ip=None,
@@ -314,6 +295,9 @@ def deployment_events(
                 )
             )
     return events
+
+
+# ── Pod logs, read live ──────────────────────────────────────────────────────
 
 
 @dataclass
@@ -384,12 +368,7 @@ async def log_label_values(
     project: str, label: str, start: datetime, end: datetime
 ) -> list[str]:
     try:
-        async with httpx.AsyncClient(
-            base_url=settings.LOKI_URL,
-            auth=(settings.LOKI_USERNAME, settings.LOKI_PASSWORD),
-            headers={"X-Scope-OrgID": settings.LOKI_TENANT},
-            timeout=30,
-        ) as client:
+        async with _client() as client:
             response = await client.get(
                 f"/loki/api/v1/label/{label}/values",
                 params={

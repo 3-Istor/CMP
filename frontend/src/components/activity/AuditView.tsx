@@ -33,6 +33,7 @@ import {
   SOURCE_ORDER,
   timeLabel,
 } from "./labels";
+import { FilterBar } from "./FilterBar";
 import { NativeSelect } from "./NativeSelect";
 
 const TOOLTIP_STYLE = {
@@ -102,10 +103,17 @@ function ActivityChart({ summary }: { summary: ActivitySummary }) {
   return (
     <div className="h-48">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+        <BarChart
+          data={data}
+          margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
+        >
           <CartesianGrid vertical={false} strokeOpacity={0.15} />
           <XAxis dataKey="day" tick={{ fontSize: 11 }} tickLine={false} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickLine={false} />
+          <YAxis
+            allowDecimals={false}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+          />
           <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
           {used.map((s) => (
@@ -138,7 +146,9 @@ function EventRow({
       onClick={onSelect}
       className={cn(
         "flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-        selected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+        selected
+          ? "border-primary bg-primary/5"
+          : "border-border hover:bg-muted/50",
       )}
     >
       <span
@@ -168,7 +178,13 @@ function EventRow({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="grid grid-cols-[5.5rem_1fr] gap-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
@@ -200,7 +216,9 @@ function EventDetail({
         <Field label="Qui">{event.actor}</Field>
         <Field label="Quoi">{describe(event)}</Field>
         <Field label="Source">{SOURCE_META[event.source].label}</Field>
-        <Field label="Quand">{new Date(event.time).toLocaleString("fr-FR")}</Field>
+        <Field label="Quand">
+          {new Date(event.time).toLocaleString("fr-FR")}
+        </Field>
         {event.app && <Field label="App">{event.app}</Field>}
         {event.target && <Field label="Cible">{event.target}</Field>}
         {event.source_ip && <Field label="Depuis">{event.source_ip}</Field>}
@@ -307,7 +325,10 @@ export function AuditView({
   }, [summary, events, filters.actor]);
 
   const apps = useMemo(
-    () => [...new Set(events?.map((e) => e.app).filter(Boolean) as string[])].sort(),
+    () =>
+      [
+        ...new Set(events?.map((e) => e.app).filter(Boolean) as string[]),
+      ].sort(),
     [events],
   );
 
@@ -323,7 +344,10 @@ export function AuditView({
     <div className="space-y-6">
       {summary ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiTile label={`Actions · ${filters.days ?? 7} j`} kpi={summary.actions} />
+          <KpiTile
+            label={`Actions · ${filters.days ?? 7} j`}
+            kpi={summary.actions}
+          />
           <KpiTile label="Personnes actives" kpi={summary.people} />
           <KpiTile
             label="Événements notables"
@@ -336,7 +360,9 @@ export function AuditView({
               label="Échecs de connexion"
               kpi={summary.login_failures}
               warn
-              onClick={() => set({ action: "keycloak.login_error", source: null })}
+              onClick={() =>
+                set({ action: "keycloak.login_error", source: null })
+              }
             />
           )}
         </div>
@@ -350,10 +376,16 @@ export function AuditView({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Activité par jour et par source</CardTitle>
+          <CardTitle className="text-base">
+            Activité par jour et par source
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {summary ? <ActivityChart summary={summary} /> : <Skeleton className="h-48" />}
+          {summary ? (
+            <ActivityChart summary={summary} />
+          ) : (
+            <Skeleton className="h-48" />
+          )}
         </CardContent>
       </Card>
 
@@ -365,113 +397,133 @@ export function AuditView({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/30 p-2">
-        <NativeSelect
-          aria-label="Source"
-          value={filters.source ?? ""}
-          onChange={(v) => set({ source: (v || null) as ActivitySource | null })}
-        >
-          <option value="">Toutes les sources</option>
-          {SOURCE_ORDER.filter((s) => showLogins || s !== "keycloak").map((s) => (
-            <option key={s} value={s}>
-              {SOURCE_META[s].label}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          aria-label="Personne"
-          value={filters.actor ?? ""}
-          onChange={(v) => set({ actor: v || null })}
-        >
-          <option value="">Toutes les personnes</option>
-          {actors.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          aria-label="Action"
-          value={filters.action ?? ""}
-          onChange={(v) => set({ action: v || null })}
-        >
-          <option value="">Toutes les actions</option>
-          {ACTION_GROUPS.map((g) => (
-            <option key={g.value} value={g.value}>
-              {g.label}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          aria-label="App"
-          value={filters.app ?? ""}
-          onChange={(v) => set({ app: v || null })}
-        >
-          <option value="">Toutes les apps</option>
-          {apps.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          aria-label="Période"
-          value={String(filters.days ?? 7)}
-          onChange={(v) => set({ days: Number(v) })}
-        >
-          <option value="1">24 heures</option>
-          <option value="7">7 jours</option>
-          <option value="14">14 jours</option>
-          <option value="30">30 jours</option>
-        </NativeSelect>
-        <label className="flex items-center gap-1.5 px-1 text-sm">
-          <input
-            type="checkbox"
-            checked={!!filters.include_reads}
-            onChange={(e) => set({ include_reads: e.target.checked })}
-          />
-          Lectures
-        </label>
-        <label className="flex items-center gap-1.5 px-1 text-sm">
-          <input
-            type="checkbox"
-            checked={!!filters.notable_only}
-            onChange={(e) => set({ notable_only: e.target.checked })}
-          />
-          Notables seulement
-        </label>
-        <div className="ml-auto flex gap-2">
-          <Button variant="ghost" size="sm" onClick={load} disabled={loading} title="Rafraîchir">
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          </Button>
-          {canExport && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  downloadActivity(project, filters, "csv").catch((e) =>
-                    setError(errorMessage(e)),
-                  )
-                }
-              >
-                <Download className="mr-1.5 h-4 w-4" /> CSV
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  downloadActivity(project, filters, "json").catch((e) =>
-                    setError(errorMessage(e)),
-                  )
-                }
-              >
-                <Download className="mr-1.5 h-4 w-4" /> JSON
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      <FilterBar
+        selects={
+          <>
+            <NativeSelect
+              aria-label="Source"
+              value={filters.source ?? ""}
+              onChange={(v) =>
+                set({ source: (v || null) as ActivitySource | null })
+              }
+            >
+              <option value="">Toutes les sources</option>
+              {SOURCE_ORDER.filter((s) => showLogins || s !== "keycloak").map(
+                (s) => (
+                  <option key={s} value={s}>
+                    {SOURCE_META[s].label}
+                  </option>
+                ),
+              )}
+            </NativeSelect>
+            <NativeSelect
+              aria-label="Personne"
+              value={filters.actor ?? ""}
+              onChange={(v) => set({ actor: v || null })}
+            >
+              <option value="">Toutes les personnes</option>
+              {actors.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              aria-label="Action"
+              value={filters.action ?? ""}
+              onChange={(v) => set({ action: v || null })}
+            >
+              <option value="">Toutes les actions</option>
+              {ACTION_GROUPS.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              aria-label="App"
+              value={filters.app ?? ""}
+              onChange={(v) => set({ app: v || null })}
+            >
+              <option value="">Toutes les apps</option>
+              {apps.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              aria-label="Période"
+              value={String(filters.days ?? 7)}
+              onChange={(v) => set({ days: Number(v) })}
+            >
+              <option value="1">24 heures</option>
+              <option value="7">7 jours</option>
+              <option value="14">14 jours</option>
+              <option value="30">30 jours</option>
+            </NativeSelect>
+          </>
+        }
+        toggles={
+          <>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={!!filters.include_reads}
+                onChange={(e) => set({ include_reads: e.target.checked })}
+              />
+              Lectures
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={!!filters.notable_only}
+                onChange={(e) => set({ notable_only: e.target.checked })}
+              />
+              Notables seulement
+            </label>
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={load}
+              disabled={loading}
+              title="Rafraîchir"
+            >
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            </Button>
+            {canExport && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadActivity(project, filters, "csv").catch((e) =>
+                      setError(errorMessage(e)),
+                    )
+                  }
+                >
+                  <Download className="mr-1.5 h-4 w-4" /> CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadActivity(project, filters, "json").catch((e) =>
+                      setError(errorMessage(e)),
+                    )
+                  }
+                >
+                  <Download className="mr-1.5 h-4 w-4" /> JSON
+                </Button>
+              </>
+            )}
+          </>
+        }
+      />
 
       <div className={cn("grid gap-4", selected && "lg:grid-cols-[1fr_22rem]")}>
         <div className="space-y-2">
@@ -492,7 +544,12 @@ export function AuditView({
             ))
           )}
           {events && events.length > 0 && more && (
-            <Button variant="outline" className="w-full" onClick={loadMore} disabled={loading}>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={loadMore}
+              disabled={loading}
+            >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Charger plus
             </Button>

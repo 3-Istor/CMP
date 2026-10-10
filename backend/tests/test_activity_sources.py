@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -8,13 +9,15 @@ from fastapi.testclient import TestClient
 
 from app.core.database import get_db
 from app.routers import activity as activity_router
+from app.services import activity_collector as collector
 from app.services import activity_sources as src
 from app.services import keycloak_service
 from app.services.keycloak_service import get_current_user
 from tests.test_app_security_data import session_factory  # noqa: F401
 
 NOW = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
-NAMESPACES = {"shop-system", "shop-web"}
+NS_PROJECTS = {"shop-system": "shop", "shop-web": "shop"}
+PROJECTS = {"shop"}
 
 
 def audit_line(**overrides) -> str:
@@ -36,25 +39,22 @@ def audit_line(**overrides) -> str:
 
 
 def test_a_shell_in_a_project_pod_is_a_notable_event():
-    event = src.kubernetes_event("shop", NAMESPACES, NOW, audit_line(), False)
+    event = src.kubernetes_event(NS_PROJECTS, NOW, audit_line())
 
-    assert (event.action, event.notable, event.app) == (
+    assert (event.action, event.notable, event.project, event.app) == (
         "kubernetes.exec",
         True,
+        "shop",
         "web",
     )
 
 
-def test_another_projects_namespace_is_ignored():
+def test_a_namespace_outside_projects_belongs_to_the_platform():
     line = audit_line(
-        objectRef={
-            "resource": "pods",
-            "namespace": "shopping-web",
-            "name": "x",
-        }
+        objectRef={"resource": "pods", "namespace": "kube-system", "name": "x"}
     )
 
-    assert src.kubernetes_event("shop", NAMESPACES, NOW, line, False) is None
+    assert src.kubernetes_event(NS_PROJECTS, NOW, line).project is None
 
 
 def test_service_account_writes_are_left_to_gitops():
@@ -68,7 +68,7 @@ def test_service_account_writes_are_left_to_gitops():
         verb="patch",
     )
 
-    assert src.kubernetes_event("shop", NAMESPACES, NOW, line, False) is None
+    assert src.kubernetes_event(NS_PROJECTS, NOW, line) is None
 
 
 def test_the_admin_kubeconfig_counts_as_a_person():
@@ -82,21 +82,19 @@ def test_the_admin_kubeconfig_counts_as_a_person():
         verb="delete",
     )
 
-    assert src.kubernetes_event(
-        "shop", NAMESPACES, NOW, line, False
-    ).actor == ("system:admin")
+    assert src.kubernetes_event(NS_PROJECTS, NOW, line).actor == "system:admin"
 
 
-def test_reads_are_hidden_unless_asked():
+def test_plain_reads_are_flagged_as_reads():
     line = audit_line(
         verb="get",
         objectRef={"resource": "pods", "namespace": "shop-web", "name": "w"},
     )
 
-    assert src.kubernetes_event("shop", NAMESPACES, NOW, line, False) is None
+    assert src.kubernetes_event(NS_PROJECTS, NOW, line).is_read
 
 
-def test_secret_reads_by_a_person_always_show():
+def test_secret_reads_by_a_person_are_notable_not_hidden():
     line = audit_line(
         verb="get",
         objectRef={
@@ -106,10 +104,32 @@ def test_secret_reads_by_a_person_always_show():
         },
     )
 
-    assert src.kubernetes_event("shop", NAMESPACES, NOW, line, False).notable
+    event = src.kubernetes_event(NS_PROJECTS, NOW, line)
+
+    assert (event.notable, event.is_read) == (True, False)
 
 
-def test_vault_path_must_belong_to_the_project():
+def test_vault_path_gives_the_project():
+    line = json.dumps(
+        {
+            "auth": {"display_name": "oidc-alice"},
+            "request": {
+                "path": "project-shop/data/web/db",
+                "operation": "read",
+            },
+        }
+    )
+
+    event = src.vault_event(PROJECTS, NOW, line)
+
+    assert (event.project, event.app, event.target) == (
+        "shop",
+        "web",
+        "web/db",
+    )
+
+
+def test_vault_path_of_an_unknown_project_is_not_attributed():
     line = json.dumps(
         {
             "auth": {"display_name": "oidc-alice"},
@@ -120,7 +140,7 @@ def test_vault_path_must_belong_to_the_project():
         }
     )
 
-    assert src.vault_event("shop", NOW, line) is None
+    assert src.vault_event(PROJECTS, NOW, line).project is None
 
 
 def test_vault_reads_by_the_secrets_operator_are_skipped():
@@ -133,29 +153,23 @@ def test_vault_reads_by_the_secrets_operator_are_skipped():
         }
     )
 
-    assert src.vault_event("shop", NOW, line) is None
+    assert src.vault_event(PROJECTS, NOW, line) is None
 
 
-def test_keycloak_login_error_is_a_failure():
+def test_keycloak_login_error_is_a_failure_of_the_project_realm():
     line = (
         '2026-10-10 WARN [org.keycloak.events] type="LOGIN_ERROR", realmId="1", '
         'realmName="shop", clientId="web", username="bob", ipAddress="1.2.3.4", '
         'error="invalid_user_credentials"'
     )
 
-    event = src.keycloak_event("shop", NOW, line)
+    event = src.keycloak_event(PROJECTS, NOW, line)
 
-    assert (event.action, event.outcome, event.actor) == (
+    assert (event.action, event.outcome, event.project) == (
         "keycloak.login_error",
         "failure",
-        "bob",
+        "shop",
     )
-
-
-def test_keycloak_events_of_another_realm_are_ignored():
-    line = 'type="LOGIN", realmName="shopping", username="bob"'
-
-    assert src.keycloak_event("shop", NOW, line) is None
 
 
 def test_logs_query_is_pinned_to_the_project():
@@ -164,6 +178,49 @@ def test_logs_query_is_pinned_to_the_project():
     assert query.startswith(
         '{project="shop", namespace="shop-web"} |= `timeout`'
     )
+
+
+def test_collector_resumes_after_a_full_page(session_factory):
+    calls = []
+
+    async def fake_lines(query, start, end, limit, direction="backward"):
+        calls.append((start, end))
+        if len(calls) == 1:
+            return [
+                (
+                    start + timedelta(seconds=i),
+                    {},
+                    audit_line(requestURI=f"/{i}"),
+                )
+                for i in range(limit)
+            ][::-1]
+        return []
+
+    start = datetime.now(timezone.utc) - timedelta(minutes=30)
+    with (
+        mock.patch.object(collector, "SessionLocal", session_factory),
+        mock.patch.object(src, "loki_lines", fake_lines),
+        mock.patch.object(collector, "PAGE", 3),
+        mock.patch.object(collector, "_cursor", lambda s: start),
+    ):
+        added = asyncio.run(
+            collector.collect_source("kubernetes", NS_PROJECTS)
+        )
+
+    assert (added, calls[1][0]) == (
+        3,
+        start + timedelta(seconds=2, microseconds=1),
+    )
+
+
+def test_collector_stores_each_event_once(session_factory):
+    event = src.kubernetes_event(NS_PROJECTS, NOW, audit_line())
+
+    with mock.patch.object(collector, "SessionLocal", session_factory):
+        collector.store([event])
+        added = collector.store([event])
+
+    assert added == 0
 
 
 @pytest.fixture
@@ -184,28 +241,13 @@ def client_for(session_factory):
             "preferred_username": "alice",
             "email": "alice@3istor.com",
         }
-
-        async def kubernetes_events(project, start, end, limit, include_reads):
-            return [e for e in events if e.source == "kubernetes"]
-
-        async def keycloak_events(project, start, end, limit):
-            return [e for e in events if e.source == "keycloak"]
-
-        async def nothing(*args, **kwargs):
-            return []
-
-        patches = [
-            mock.patch.object(
-                keycloak_service, "get_project_role", lambda u, p: role
-            ),
-            mock.patch.object(src, "kubernetes_events", kubernetes_events),
-            mock.patch.object(src, "keycloak_events", keycloak_events),
-            mock.patch.object(src, "vault_events", nothing),
-            mock.patch.object(src, "deployment_events", lambda p, s, e: []),
-        ]
-        for patch in patches:
-            patch.start()
-        started.extend(patches)
+        with mock.patch.object(collector, "SessionLocal", session_factory):
+            collector.store(events)
+        patch = mock.patch.object(
+            keycloak_service, "get_project_role", lambda u, p: role
+        )
+        patch.start()
+        started.append(patch)
         return TestClient(app)
 
     yield make
@@ -264,18 +306,6 @@ def test_admins_see_everyone(client_for):
     feed = client.get("/api/activity?project=shop").json()
 
     assert len(feed["events"]) == 2
-
-
-def test_an_unreachable_source_is_reported_not_fatal(client_for):
-    client = client_for("admin", [])
-
-    async def down(*args, **kwargs):
-        raise src.LokiUnavailableError("down")
-
-    with mock.patch.object(src, "kubernetes_events", down):
-        feed = client.get("/api/activity?project=shop").json()
-
-    assert feed["unavailable"] == ["kubernetes"]
 
 
 def test_summary_compares_with_the_previous_period(client_for):

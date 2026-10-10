@@ -1,6 +1,9 @@
 import type { ActivityEvent, ActivitySource } from "@/types";
 
-export const SOURCE_META: Record<ActivitySource, { label: string; color: string }> = {
+export const SOURCE_META: Record<
+  ActivitySource,
+  { label: string; color: string }
+> = {
   cmp: { label: "CMP", color: "#2563eb" },
   kubernetes: { label: "kubectl", color: "#ea580c" },
   vault: { label: "Vault", color: "#059669" },
@@ -41,13 +44,17 @@ function str(value: unknown): string {
 }
 
 function configChanges(details: Record<string, unknown>): string {
-  const changes = (details.changes as { path: string; before: unknown; after: unknown }[]) ?? [];
+  const changes =
+    (details.changes as { path: string; before: unknown; after: unknown }[]) ??
+    [];
   if (changes.length === 0) return "";
   const shown = changes
     .slice(0, 2)
     .map((c) => `${c.path} ${str(c.before) || "∅"} → ${str(c.after)}`)
     .join(", ");
-  return changes.length > 2 ? ` (${shown}, +${changes.length - 2})` : ` (${shown})`;
+  return changes.length > 2
+    ? ` (${shown}, +${changes.length - 2})`
+    : ` (${shown})`;
 }
 
 function kubernetesWhat(e: ActivityEvent): string {
@@ -91,7 +98,8 @@ export function describe(e: ActivityEvent): string {
     case "app.exposure.update": {
       const before = EXPOSURE[str(d.exposure_before)] ?? str(d.exposure_before);
       const after = EXPOSURE[str(d.exposure)] ?? str(d.exposure);
-      if (after) return `a passé l'exposition de ${app} de ${before || "?"} à ${after}`;
+      if (after)
+        return `a passé l'exposition de ${app} de ${before || "?"} à ${after}`;
       return `a modifié les sauvegardes de ${app}`;
     }
     case "security.scan.request":
@@ -146,7 +154,10 @@ export function timeLabel(iso: string): string {
   const when = new Date(iso);
   const today = new Date();
   const sameDay = when.toDateString() === today.toDateString();
-  const hm = when.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const hm = when.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   if (sameDay) return `aujourd'hui ${hm}`;
   return `${when.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} ${hm}`;
 }

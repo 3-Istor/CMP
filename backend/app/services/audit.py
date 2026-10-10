@@ -18,7 +18,7 @@ from sqlalchemy import delete
 
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models.audit import AuditEvent
+from app.models.audit import ActivityRecord, AuditEvent
 from app.models.deployment import Deployment
 from app.services.keycloak_service import decode_platform_token
 
@@ -289,8 +289,11 @@ def purge_expired() -> int:
         result = db.execute(
             delete(AuditEvent).where(AuditEvent.created_at < cutoff)
         )
+        collected = db.execute(
+            delete(ActivityRecord).where(ActivityRecord.time < cutoff)
+        )
         db.commit()
-        return result.rowcount or 0
+        return (result.rowcount or 0) + (collected.rowcount or 0)
 
 
 async def audit_retention_loop() -> None:
