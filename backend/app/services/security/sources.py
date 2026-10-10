@@ -372,6 +372,74 @@ def trivy_operator_drafts(
     return list(drafts.values())
 
 
+# ── Dockerfiles (CI ``trivy config``) ────────────────────────────────────────
+
+# Trivy's own wording is English; the common rules get a French title and fix.
+_DOCKERFILE_RULES: dict[str, tuple[str, str]] = {
+    "DS-0001": (
+        "Image de base en :latest",
+        "Fixe la version de l'image de base dans le `FROM`, par exemple "
+        "`python:3.13-slim`.",
+    ),
+    "DS-0002": (
+        "L'image tourne en root",
+        "Ajoute un utilisateur non root à la fin du Dockerfile, "
+        "par exemple `USER 10001`.",
+    ),
+    "DS-0004": (
+        "Port SSH 22 exposé",
+        "Retire `EXPOSE 22` : on n'entre pas dans un conteneur en SSH.",
+    ),
+    "DS-0005": (
+        "ADD utilisé à la place de COPY",
+        "Remplace `ADD` par `COPY`, sauf pour extraire une archive.",
+    ),
+    "DS-0026": (
+        "Pas de HEALTHCHECK",
+        "Ajoute un `HEALTHCHECK` au Dockerfile.",
+    ),
+}
+
+
+def _dockerfile_tier(severity: str) -> Tier:
+    if severity in ("CRITICAL", "HIGH"):
+        return Tier.IMPORTANT
+    if severity == "MEDIUM":
+        return Tier.RECOMMENDED
+    return Tier.INFO
+
+
+def _dockerfile_draft(
+    project: str, app: AppRef, misconfig: dict, run_url: str | None
+) -> Draft:
+    rule_id = misconfig.get("id", "")
+    target = misconfig.get("target", "")
+    title, fix = _DOCKERFILE_RULES.get(
+        rule_id,
+        (
+            misconfig.get("title") or rule_id,
+            misconfig.get("resolution") or "Voir le détail de la règle.",
+        ),
+    )
+    line = misconfig.get("line")
+    return Draft(
+        fingerprint=fingerprint(
+            project, app.name, "dockerfile", rule_id, target
+        ),
+        app=app.name,
+        source=Source.CI,
+        category=Category.CONTAINER,
+        tier=_dockerfile_tier(misconfig.get("severity", "")),
+        audience=Audience.DEVELOPER,
+        rule=rule_id,
+        title=title,
+        detail=misconfig.get("message") or misconfig.get("title") or "",
+        fix=fix,
+        location=f"{target} ligne {line}" if line else target,
+        link=misconfig.get("url") or run_url,
+    )
+
+
 def ci_drafts(project: str, app: AppRef, report: dict) -> list[Draft]:
     """Findings of a ``cnp-security-report``; schema 1 reports carry no detail."""
     scanners = report.get("scanners") or {}
@@ -435,6 +503,12 @@ def ci_drafts(project: str, app: AppRef, report: dict) -> list[Draft]:
                 vuln.get("class") == "os-pkgs",
             )
             drafts[draft.fingerprint] = draft
+
+    for misconfig in (scanners.get("trivy_config") or {}).get(
+        "misconfigurations", []
+    ):
+        draft = _dockerfile_draft(project, app, misconfig, run_url)
+        drafts[draft.fingerprint] = draft
     return list(drafts.values())
 
 
