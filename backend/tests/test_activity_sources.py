@@ -345,3 +345,93 @@ def test_search_cannot_break_out_of_the_query(client_for):
     )
 
     assert response.status_code == 400
+
+
+def flow_line(direction="INGRESS", port=8000) -> str:
+    return json.dumps(
+        {
+            "flow": {
+                "verdict": "DROPPED",
+                "IP": {"source": "10.0.0.1", "destination": "10.0.0.2"},
+                "l4": {
+                    "TCP": {"source_port": 40000, "destination_port": port}
+                },
+                "source": {
+                    "namespace": "default",
+                    "pod_name": "probe-7d4f9c8b6d-x2k4p",
+                },
+                "destination": {
+                    "namespace": "shop-web",
+                    "pod_name": "web-5f7c9d8b4c-abcde",
+                },
+                "traffic_direction": direction,
+                "drop_reason_desc": "POLICY_DENIED",
+            }
+        }
+    )
+
+
+def test_an_ingress_drop_belongs_to_the_destination_project():
+    event = src.network_event(NS_PROJECTS, NOW, flow_line())
+
+    assert (event.project, event.actor, event.target) == (
+        "shop",
+        "default/probe",
+        "shop-web/web",
+    )
+
+
+def test_an_egress_drop_from_outside_projects_is_ignored():
+    assert src.network_event(NS_PROJECTS, NOW, flow_line("EGRESS")) is None
+
+
+def test_denied_flows_are_grouped_by_pair_and_port(client_for):
+    flows = [
+        src.network_event(
+            NS_PROJECTS,
+            datetime.now(timezone.utc) - timedelta(minutes=m),
+            flow_line(),
+        )
+        for m in (1, 2, 3)
+    ]
+    client = client_for("member", flows)
+
+    response = client.get("/api/activity/network?project=shop")
+
+    assert [
+        (f["destination"], f["port"], f["count"]) for f in response.json()
+    ] == [("shop-web/web", 8000, 3)]
+
+
+def test_summary_counts_realm_logins_for_admins(client_for):
+    client = client_for(
+        "admin",
+        [
+            event("keycloak", "bob", "keycloak.login_error", 10),
+            event("keycloak", "bob", "keycloak.login_error", 20),
+            event("keycloak", "alice", "keycloak.login", 30),
+        ],
+    )
+
+    logins = client.get("/api/activity/summary?project=shop").json()["logins"]
+
+    assert (
+        sum(d["failure"] for d in logins["days"]),
+        logins["top_failed_users"],
+    ) == (2, [["bob", 2]])
+
+
+def test_members_get_no_login_breakdown(client_for):
+    client = client_for("member", [])
+
+    summary = client.get("/api/activity/summary?project=shop").json()
+
+    assert summary["logins"] is None
+
+
+def test_platform_status_is_for_cnp_admins_only(client_for):
+    client = client_for("admin", [])
+
+    response = client.get("/api/activity/platform")
+
+    assert response.status_code == 403

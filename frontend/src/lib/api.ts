@@ -603,8 +603,11 @@ export const testSecurityAlertTarget = (project: string, app: string | null) =>
 
 // ── Activity tab ──────────────────────────────────────────────────────────────
 
-function activityQuery(project: string, f: import("@/types").ActivityFilters) {
-  const params = new URLSearchParams({ project });
+function activityQuery(
+  project: string | null,
+  f: import("@/types").ActivityFilters,
+) {
+  const params = new URLSearchParams(project ? { project } : {});
   if (f.source) params.set("source", f.source);
   if (f.actor) params.set("actor", f.actor);
   if (f.action) params.set("action", f.action);
@@ -619,20 +622,31 @@ function activityQuery(project: string, f: import("@/types").ActivityFilters) {
 }
 
 export const getActivity = (
-  project: string,
+  project: string | null,
   filters: import("@/types").ActivityFilters,
 ) =>
   request<import("@/types").ActivityFeed>(
     `/activity?${activityQuery(project, filters)}&limit=100`,
   );
 
-export const getActivitySummary = (project: string, days = 7) =>
+export const getActivitySummary = (project: string | null, days = 7) =>
   request<import("@/types").ActivitySummary>(
-    `/activity/summary?${new URLSearchParams({ project, days: String(days) })}`,
+    `/activity/summary?${new URLSearchParams({
+      ...(project ? { project } : {}),
+      days: String(days),
+    })}`,
   );
 
+export const getDeniedFlows = (project: string, days = 1) =>
+  request<import("@/types").DeniedFlow[]>(
+    `/activity/network?${new URLSearchParams({ project, days: String(days) })}`,
+  );
+
+export const getPlatformStatus = () =>
+  request<import("@/types").PlatformStatus>("/activity/platform");
+
 export async function downloadActivity(
-  project: string,
+  project: string | null,
   filters: import("@/types").ActivityFilters,
   format: "csv" | "json",
 ) {
@@ -648,7 +662,7 @@ export async function downloadActivity(
   const url = URL.createObjectURL(await res.blob());
   const link = document.createElement("a");
   link.href = url;
-  link.download = `activity-${project}.${format}`;
+  link.download = `activity-${project ?? "platform"}.${format}`;
   link.click();
   URL.revokeObjectURL(url);
 }

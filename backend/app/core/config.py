@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     LOKI_TENANT: str = "default"
     # Days of audit history read from Loki the first time the collector runs.
     ACTIVITY_BACKFILL_DAYS: int = 7
+    ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key

@@ -34,6 +34,7 @@ import {
   timeLabel,
 } from "./labels";
 import { FilterBar } from "./FilterBar";
+import { HeatmapCard, LoginsCard } from "./InsightCards";
 import { NativeSelect } from "./NativeSelect";
 
 const TOOLTIP_STYLE = {
@@ -262,7 +263,7 @@ export function AuditView({
   canExport,
   showLogins,
 }: {
-  project: string;
+  project: string | null;
   canExport: boolean;
   showLogins: boolean;
 }) {
@@ -388,6 +389,15 @@ export function AuditView({
           )}
         </CardContent>
       </Card>
+
+      {summary && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {showLogins && summary.logins && project && (
+            <LoginsCard logins={summary.logins} />
+          )}
+          <HeatmapCard heatmap={summary.heatmap} />
+        </div>
+      )}
 
       {unavailable.length > 0 && (
         <p className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">

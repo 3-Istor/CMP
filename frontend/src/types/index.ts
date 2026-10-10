@@ -518,7 +518,31 @@ export interface ActivitySummary {
   login_failures: ActivityKpi | null;
   days: { day: string; counts: Partial<Record<ActivitySource, number>> }[];
   top_actors: [string, number][];
+  /** Actions by people per [weekday (0 = Monday)][hour], Paris time. */
+  heatmap: number[][];
+  logins: {
+    days: { day: string; success: number; failure: number }[];
+    top_failed_users: [string, number][];
+    top_failed_ips: [string, number][];
+  } | null;
   unavailable: ActivitySource[];
+}
+
+export interface DeniedFlow {
+  source: string;
+  destination: string;
+  port: number | null;
+  protocol: string;
+  direction: "ingress" | "egress" | "";
+  count: number;
+  last: string;
+}
+
+export interface PlatformStatus {
+  alerts: { name: string; severity: string; summary: string; since: string }[];
+  archive_last_success: string | null;
+  archive_last_schedule: string | null;
+  collected_until: Record<string, string>;
 }
 
 export interface ActivityFilters {

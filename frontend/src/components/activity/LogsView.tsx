@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilterBar } from "./FilterBar";
 import { errorMessage } from "./labels";
 import { NativeSelect } from "./NativeSelect";
+import { NetworkPanel } from "./NetworkPanel";
 
 const LIVE_MS = 3000;
 const CONTEXT_MS = 60_000;
@@ -450,6 +451,8 @@ export function LogsView({
           </>
         }
       />
+
+      {!fullscreen && <NetworkPanel project={project} />}
 
       {streams.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
