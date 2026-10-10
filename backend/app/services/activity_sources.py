@@ -71,13 +71,22 @@ def _ns(when: datetime) -> str:
     return str(int(when.timestamp() * 1e9))
 
 
-def _client() -> httpx.AsyncClient:
+def _client(tenant: str | None = None) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         base_url=settings.LOKI_URL,
         auth=(settings.LOKI_USERNAME, settings.LOKI_PASSWORD),
-        headers={"X-Scope-OrgID": settings.LOKI_TENANT},
+        headers={"X-Scope-OrgID": tenant or settings.LOKI_TENANT},
         timeout=30,
     )
+
+
+def project_tenants(project: str) -> str:
+    """
+    A project's logs live in the tenant named after it; lines written before
+    the move to per-project tenants are still in the shared one until they
+    expire.
+    """
+    return f"{project}|{settings.LOKI_TENANT}"
 
 
 async def loki_lines(
@@ -86,10 +95,11 @@ async def loki_lines(
     end: datetime,
     limit: int,
     direction: str = "backward",
+    tenant: str | None = None,
 ) -> list[tuple[datetime, dict[str, str], str]]:
     """Log lines matching ``query``, newest first."""
     try:
-        async with _client() as client:
+        async with _client(tenant) as client:
             response = await client.get(
                 "/loki/api/v1/query_range",
                 params={
@@ -405,7 +415,9 @@ async def app_logs(
     limit: int,
 ) -> list[LogLine]:
     query = logs_query(project, namespace, pod, container, search, level)
-    lines = await loki_lines(query, start, end, limit)
+    lines = await loki_lines(
+        query, start, end, limit, tenant=project_tenants(project)
+    )
     return [
         LogLine(
             time=when,
@@ -422,7 +434,7 @@ async def log_label_values(
     project: str, label: str, start: datetime, end: datetime
 ) -> list[str]:
     try:
-        async with _client() as client:
+        async with _client(project_tenants(project)) as client:
             response = await client.get(
                 f"/loki/api/v1/label/{label}/values",
                 params={
@@ -439,11 +451,15 @@ async def log_label_values(
 
 
 async def loki_matrix(
-    query: str, start: datetime, end: datetime, step: int
+    query: str,
+    start: datetime,
+    end: datetime,
+    step: int,
+    tenant: str | None = None,
 ) -> list[tuple[dict[str, str], list[tuple[datetime, float]]]]:
     """A metric query's series."""
     try:
-        async with _client() as client:
+        async with _client(tenant) as client:
             response = await client.get(
                 "/loki/api/v1/query_range",
                 params={

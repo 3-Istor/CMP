@@ -442,7 +442,7 @@ def test_log_volume_sums_each_namespace_and_finds_the_peak(client_for):
     t1 = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
     t2 = t1 + timedelta(hours=1)
 
-    async def matrix(query, start, end, step):
+    async def matrix(query, start, end, step, tenant=None):
         value = 600.0 if "count_over_time" in query else 6000.0
         return [({"namespace": "shop-web"}, [(t1, value), (t2, value / 2)])]
 
@@ -472,3 +472,21 @@ def test_log_volume_refuses_a_foreign_label_value(client_for):
     )
 
     assert response.status_code == 400
+
+
+def test_project_logs_are_read_from_the_project_tenant_and_the_shared_one(
+    client_for,
+):
+    client = client_for("member", [])
+    seen = {}
+
+    async def lines(
+        query, start, end, limit, direction="backward", tenant=None
+    ):
+        seen["tenant"] = tenant
+        return []
+
+    with mock.patch.object(src, "loki_lines", lines):
+        client.get("/api/activity/logs?project=shop")
+
+    assert seen["tenant"] == "shop|default"
