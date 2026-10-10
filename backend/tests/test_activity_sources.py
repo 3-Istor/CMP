@@ -71,6 +71,22 @@ def test_service_account_writes_are_left_to_gitops():
     assert src.kubernetes_event("shop", NAMESPACES, NOW, line, False) is None
 
 
+def test_the_admin_kubeconfig_counts_as_a_person():
+    line = audit_line(
+        user={"username": "system:admin"},
+        objectRef={
+            "resource": "deployments",
+            "namespace": "shop-web",
+            "name": "web",
+        },
+        verb="delete",
+    )
+
+    assert src.kubernetes_event(
+        "shop", NAMESPACES, NOW, line, False
+    ).actor == ("system:admin")
+
+
 def test_reads_are_hidden_unless_asked():
     line = audit_line(
         verb="get",

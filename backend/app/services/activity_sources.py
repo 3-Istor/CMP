@@ -125,7 +125,8 @@ def kubernetes_event(
     if namespace not in namespaces:
         return None
     shell = sub in _SHELL
-    machine = user.startswith("system:")
+    # system:admin is the admin kubeconfig: a person, not a controller.
+    machine = user.startswith("system:") and user != "system:admin"
     if machine and not shell:
         return None
     secret = resource == "secrets"
@@ -224,8 +225,14 @@ async def kubernetes_events(
     if not namespaces:
         return []
     alternatives = "|".join(sorted(re.escape(n) for n in namespaces))
-    query = f'{{job="k8s-audit"}} |~ `"namespace":"({alternatives})"`'
-    # Machine lines are dropped after the query, so read more than shown.
+    # Controllers would fill the window before a person's line shows: drop
+    # them in Loki, keeping their shells.
+    query = (
+        f'{{job="k8s-audit"}} |~ `"namespace":"({alternatives})"` '
+        '| json user="user.username", sub="objectRef.subresource" '
+        '| user !~ "system:.*" or user = "system:admin" '
+        'or sub =~ "exec|attach|portforward"'
+    )
     lines = await loki_lines(query, start, end, min(limit * 10, 5000))
     events = (
         kubernetes_event(project, namespaces, when, line, include_reads)
@@ -240,6 +247,7 @@ async def vault_events(
     query = (
         '{namespace="vault", container="vault"} '
         f'|= `"type":"response"` |= `"path":"project-{project}/`'
+        + "".join(f" != `{m}`" for m in _VAULT_MACHINES)
     )
     lines = await loki_lines(query, start, end, min(limit * 10, 5000))
     events = (vault_event(project, when, line) for when, _, line in lines)
