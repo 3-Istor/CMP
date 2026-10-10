@@ -67,14 +67,19 @@ def kube_list(
     return body.get("items", []) if body else []
 
 
-def _request(method: str, path: str, **kwargs: Any) -> requests.Response:
+def _request(
+    method: str,
+    path: str,
+    headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> requests.Response:
     base = _api_base()
     token = (SERVICE_ACCOUNT_DIR / "token").read_text().strip()
     try:
         response = requests.request(
             method,
             f"{base}{path}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", **(headers or {})},
             verify=str(SERVICE_ACCOUNT_DIR / "ca.crt"),
             timeout=REQUEST_TIMEOUT,
             **kwargs,
@@ -106,3 +111,21 @@ def kube_delete_collection(
 ) -> None:
     """DELETE every object of a collection path; an unknown path is a no-op."""
     _request("DELETE", path, params=params)
+
+
+def kube_merge_patch(path: str, body: dict[str, Any]) -> dict[str, Any]:
+    """
+    JSON merge-patch an object.
+
+    Raises:
+        KubeUnavailableError: Not in a cluster, refused, or the object is gone.
+    """
+    response = _request(
+        "PATCH",
+        path,
+        headers={"Content-Type": "application/merge-patch+json"},
+        json=body,
+    )
+    if response.status_code == 404:
+        raise KubeUnavailableError(f"PATCH {path}: HTTP 404")
+    return response.json()
