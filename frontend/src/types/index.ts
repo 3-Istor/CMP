@@ -40,10 +40,33 @@ export type ProjectRole = "owner" | "admin" | "member";
 /** The cloud a project's workloads run on. Immutable after creation. */
 export type TargetCloud = "onprem" | "aws" | "gcp";
 
+export type ProjectStatus =
+  | "provisioning"
+  | "active"
+  | "suspended"
+  | "decommissioning"
+  | "failed"
+  | "decommission_failed";
+
 export interface Project {
   name: string;
   role: ProjectRole;
   target_cloud: TargetCloud;
+  status: ProjectStatus;
+  /** What the bootstrap or teardown is doing now, or why it failed. */
+  step_message: string | null;
+  /** False while the project's Keycloak groups do not exist. */
+  is_accessible: boolean;
+}
+
+export function isProjectFailed(project: Project): boolean {
+  return project.status === "failed" || project.status === "decommission_failed";
+}
+
+export function isProjectInFlight(project: Project): boolean {
+  return (
+    project.status === "provisioning" || project.status === "decommissioning"
+  );
 }
 
 export interface ProjectCreateResponse {
@@ -78,6 +101,8 @@ export interface AddMemberResponse {
 export interface DeploymentConfig {
   repo: string;
   file_path: string;
+  /** Selectable components; empty when the app has a single values file. */
+  components: string[];
   /** File SHA — must be echoed back in PATCH requests */
   _sha: string;
   config: Record<string, unknown>;
@@ -89,6 +114,34 @@ export interface DeploymentConfigUpdateResponse {
   file_path: string;
   commit_sha: string;
   changed_keys: string[];
+}
+
+export type ExposurePreset =
+  | "public"
+  | "project_users"
+  | "project_members"
+  | "project_admins";
+
+export interface SecurityData {
+  repo: string;
+  can_edit: boolean;
+  exposure: ExposurePreset | "custom" | null;
+  database: {
+    backup: {
+      enabled: boolean;
+      keep_after_delete: boolean;
+      retention_policy: string | null;
+    };
+  } | null;
+}
+
+export interface SecurityDataUpdate {
+  exposure?: ExposurePreset;
+  backup?: {
+    enabled?: boolean;
+    keep_after_delete?: boolean;
+    retention_policy?: string;
+  };
 }
 
 // ── Terraform / Catalog ───────────────────────────────────────────────────────
@@ -303,4 +356,122 @@ export interface FinopsActionResponse {
   rec_id: string;
   status: string;
   commit_sha: string | null;
+}
+
+export type SecurityTier = "core" | "important" | "recommended" | "info";
+export type SecurityCategory =
+  | "leaks"
+  | "dependencies"
+  | "container"
+  | "access"
+  | "data"
+  | "journal";
+export type SecurityView = "developer" | "platform";
+
+export interface SecurityException {
+  id: number;
+  app: string | null;
+  fingerprint: string;
+  rule: string;
+  kind: "vulnerability" | "secret" | "other";
+  status: "not_affected" | "false_positive" | "accepted_risk" | "revoked";
+  justification: string | null;
+  statement: string;
+  expires_on: string;
+  author: string;
+  created_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  revoked_by: string | null;
+  revoked_at: string | null;
+  pending_approval: boolean;
+}
+
+export interface SecurityFinding {
+  fingerprint: string;
+  app: string | null;
+  category: SecurityCategory;
+  tier: SecurityTier;
+  audience: "developer" | "platform";
+  rule: string;
+  title: string;
+  detail: string;
+  fix: string;
+  location: string;
+  link: string | null;
+  raw: string;
+  sources: string[];
+  first_seen: string;
+  last_seen: string;
+  resolved_at: string | null;
+  exception: SecurityException | null;
+}
+
+export interface SecuritySegment {
+  category: SecurityCategory;
+  label: string;
+  worst: SecurityTier | null;
+  counts: Partial<Record<SecurityTier, number>>;
+  points_lost: number;
+}
+
+export interface SecurityScan {
+  app: string | null;
+  source: "kyverno" | "trivy-operator" | "ci" | "cnpg" | "exposure" | "cilium";
+  status: "ok" | "error" | "missing" | "unavailable";
+  message: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  collected_at: string | null;
+  requested_at: string | null;
+}
+
+export interface SecurityAppSummary {
+  app: string;
+  deployment_id: number | null;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+}
+
+export interface SecuritySummary {
+  project: string;
+  app: string | null;
+  view: SecurityView;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+  excepted: number;
+  segments: SecuritySegment[];
+  apps: SecurityAppSummary[];
+  scans: SecurityScan[];
+  guarantees: { label: string; ok: boolean }[];
+}
+
+export interface SecurityTrendPoint {
+  day: string;
+  score: number;
+  grade: string;
+  core: number;
+  important: number;
+  recommended: number;
+  new_major: number;
+}
+
+export interface SecurityProjectOverview {
+  project: string;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+}
+
+export interface SecurityExceptionRequest {
+  project: string;
+  status: SecurityException["status"];
+  justification: string | null;
+  statement: string;
+  expires_on: string | null;
 }

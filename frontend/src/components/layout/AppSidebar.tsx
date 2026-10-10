@@ -3,7 +3,11 @@
 import { Logo } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDeploymentsList, useProjects } from "@/lib/hooks";
+import {
+  useDeploymentsList,
+  useProjects,
+  useSecurityOverview,
+} from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import {
   Boxes,
@@ -12,6 +16,7 @@ import {
   FolderKanban,
   Home,
   PanelLeft,
+  Shield,
   ShieldCheck,
   User,
   Users,
@@ -57,6 +62,10 @@ export function AppSidebar() {
   const { projects, loading: loadingProjects } = useProjects(15000);
   // The sidebar list rarely needs fresh data: 15s while active, 30s when idle.
   const { deployments, loading: loadingApps } = useDeploymentsList(15000, 30000);
+  const security = useSecurityOverview();
+  const coreProjects = new Set(
+    security.filter((s) => s.core > 0).map((s) => s.project),
+  );
 
   // Only deployments that belong to a project (and are not deleted) are linkable
   const apps = deployments.filter(
@@ -112,7 +121,7 @@ export function AppSidebar() {
         </button>
       )}
 
-      {/* ── Quick links: Home + FinOps ── */}
+      {/* ── Quick links: Home, FinOps, Security ── */}
       <nav className="px-2 pt-2 space-y-0.5">
         <NavLink
           href="/"
@@ -127,6 +136,14 @@ export function AppSidebar() {
           collapsed={collapsed}
           icon={<Wallet className="h-4 w-4 shrink-0" />}
           label="FinOps"
+        />
+        <NavLink
+          href="/security"
+          active={pathname.startsWith("/security")}
+          collapsed={collapsed}
+          icon={<Shield className="h-4 w-4 shrink-0" />}
+          label="Sécurité"
+          alert={coreProjects.size > 0}
         />
       </nav>
 
@@ -163,6 +180,7 @@ export function AppSidebar() {
                   icon={<RoleIcon className="h-4 w-4 shrink-0" />}
                   label={p.name}
                   labelClassName="capitalize"
+                  alert={coreProjects.has(p.name)}
                 />
               );
             })
@@ -279,6 +297,7 @@ function NavLink({
   icon,
   label,
   labelClassName,
+  alert = false,
 }: {
   href: string;
   active: boolean;
@@ -286,6 +305,8 @@ function NavLink({
   icon: React.ReactNode;
   label: string;
   labelClassName?: string;
+  /** Red dot: a mandatory security action is open. */
+  alert?: boolean;
 }) {
   return (
     <Link
@@ -299,9 +320,20 @@ function NavLink({
         collapsed && "justify-center",
       )}
     >
-      {icon}
+      <span className="relative flex">
+        {icon}
+        {alert && collapsed && (
+          <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-600" />
+        )}
+      </span>
       {!collapsed && (
         <span className={cn("truncate", labelClassName)}>{label}</span>
+      )}
+      {alert && !collapsed && (
+        <span
+          className="ml-auto h-2 w-2 shrink-0 rounded-full bg-red-600"
+          title="Action de sécurité obligatoire"
+        />
       )}
     </Link>
   );

@@ -26,10 +26,6 @@ class Settings(BaseSettings):
     TF_BACKEND_AWS_REGION: str = "eu-west-3"
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
-    # Locking is not optional (D-09): with the S3 backend enabled and no lock
-    # table configured, the runner refuses to start rather than warning. Two
-    # concurrent applies on the same project corrupt state silently.
-    TF_BACKEND_S3_DYNAMODB_TABLE: str = ""
 
     # Project registry — the Git source of truth for project placement (D-01)
     CNP_REGISTRY_REPO: str = "3-Istor/cnp-projects"
@@ -82,6 +78,10 @@ class Settings(BaseSettings):
 
     # Discord Alerting (optional - for health monitoring alerts)
     DISCORD_WEBHOOK_URL: str = ""
+    # Default target of security alerts; a project or an app can set its own.
+    # Falls back to DISCORD_WEBHOOK_URL when empty.
+    SECURITY_DISCORD_WEBHOOK_URL: str = ""
+    CMP_PUBLIC_URL: str = "https://cmp.3istor.com"
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key

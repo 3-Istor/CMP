@@ -4,7 +4,10 @@ import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
+import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
 import { MembersPanel } from "@/components/projects/MembersPanel";
+import { SecurityAlert } from "@/components/security/SecurityAlert";
+import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +21,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
-import { useProjectApps } from "@/lib/hooks";
-import { addPendingDeletion, usePendingDeletions } from "@/lib/pendingDeletions";
+import { useProjectApps, useProjects } from "@/lib/hooks";
 import type { CatalogTemplate } from "@/types";
 import {
   ArrowLeft,
@@ -28,6 +30,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   Users,
   Wallet,
@@ -42,14 +45,17 @@ export default function ProjectPage() {
   const projectName = params.project_name as string;
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [tab, setTab] = useState("apps");
   const [deleting, setDeleting] = useState(false);
 
   // If this project is already being torn down (e.g. reached via a stale
   // tab or the back button after a delete elsewhere), don't render the
   // normal admin UI — the Keycloak groups backing project access can
   // disappear mid-render.
-  const pendingDeletions = usePendingDeletions();
-  const isBeingDeleted = pendingDeletions.some((d) => d.name === projectName);
+  const { projects } = useProjects();
+  const isBeingDeleted = projects.some(
+    (p) => p.name === projectName && p.status === "decommissioning",
+  );
 
   const {
     apps,
@@ -172,11 +178,8 @@ export default function ProjectPage() {
     try {
       await deleteProject(projectName);
 
-      // The call only schedules teardown — Keycloak group removal (which
-      // the project list is derived from) happens in the background and
-      // can take a while, so mark it as deleting rather than claim it's
-      // already gone.
-      addPendingDeletion(projectName);
+      // The call only schedules teardown. The project list reports it as
+      // "deleting" until the background destroy finishes.
       toast.success(`Deletion of "${projectName}" started`);
       router.push("/");
     } catch (err) {
@@ -256,18 +259,6 @@ export default function ProjectPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  router.push(
-                    `/finops?project=${encodeURIComponent(projectName)}`,
-                  )
-                }
-              >
-                <Wallet className="mr-2 h-4 w-4" />
-                Voir détails FinOps
-              </Button>
               <Badge variant="outline" className="font-mono text-xs">
                 {apps.length} app{apps.length !== 1 ? "s" : ""}
               </Badge>
@@ -275,10 +266,12 @@ export default function ProjectPage() {
           </div>
         </div>
 
+        <SecurityAlert project={projectName} onOpen={() => setTab("security")} />
+
         <Separator />
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue="apps">
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList>
             <TabsTrigger value="apps" className="gap-2">
               <LayoutGrid className="h-4 w-4" />
@@ -287,6 +280,14 @@ export default function ProjectPage() {
             <TabsTrigger value="members" className="gap-2">
               <Users className="h-4 w-4" />
               Members
+            </TabsTrigger>
+            <TabsTrigger value="security" className="gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Security
+            </TabsTrigger>
+            <TabsTrigger value="finops" className="gap-2">
+              <Wallet className="h-4 w-4" />
+              FinOps
             </TabsTrigger>
           </TabsList>
 
@@ -419,6 +420,14 @@ export default function ProjectPage() {
           {/* ── Members tab ── */}
           <TabsContent value="members" className="mt-6 space-y-6">
             <MembersPanel projectName={projectName} />
+          </TabsContent>
+
+          <TabsContent value="security" className="mt-6 space-y-6">
+            <SecurityDashboard project={projectName} fullPageLink />
+          </TabsContent>
+
+          <TabsContent value="finops" className="mt-6 space-y-6">
+            <ProjectFinopsPanel project={projectName} />
           </TabsContent>
         </Tabs>
       </main>

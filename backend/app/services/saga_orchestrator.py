@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services import aws_service, github_service, openstack_service
 from app.services.github_service import get_installation_token
+from app.services.state_lock import raise_if_state_locked
 from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
@@ -166,17 +167,11 @@ def _execute_terraform_kubernetes(
         init_cmd = [
             "terraform",
             "init",
-            f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
+            f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET}",
             f"-backend-config=key={state_key}",
             f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
             "-backend-config=encrypt=true",
-            *(
-                [
-                    f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"
-                ]
-                if settings.TF_BACKEND_S3_DYNAMODB_TABLE
-                else []
-            ),
+            "-backend-config=use_lockfile=true",
             "-reconfigure",
         ]
         _run_terraform_command(
@@ -301,11 +296,13 @@ def _run_terraform_command(
             env=env,
             check=True,
             capture_output=capture,
+            stderr=None if capture else subprocess.PIPE,
             text=True,
         )
         return result
     except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr if capture else str(exc)
+        stderr = exc.stderr or str(exc)
+        raise_if_state_locked(stderr)
         logger.error("Terraform command failed: %s", stderr)
         raise RuntimeError(f"Terraform failed: {stderr[:500]}") from exc
 
@@ -559,17 +556,11 @@ def _run_kubernetes_deletion(deployment: Deployment, db: Session) -> None:
             init_cmd = [
                 "terraform",
                 "init",
-                f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET or '3-istor-tf-infra-aws'}",
+                f"-backend-config=bucket={settings.TF_BACKEND_S3_BUCKET}",
                 f"-backend-config=key={deployment.terraform_state_path}",
                 f"-backend-config=region={settings.TF_BACKEND_AWS_REGION}",
                 "-backend-config=encrypt=true",
-                *(
-                    [
-                        f"-backend-config=dynamodb_table={settings.TF_BACKEND_S3_DYNAMODB_TABLE}"
-                    ]
-                    if settings.TF_BACKEND_S3_DYNAMODB_TABLE
-                    else []
-                ),
+                "-backend-config=use_lockfile=true",
                 "-reconfigure",
             ]
             _run_terraform_command(
