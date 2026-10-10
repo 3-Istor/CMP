@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   Crown,
   FolderKanban,
+  History,
   Home,
   PanelLeft,
   Shield,
@@ -144,6 +145,13 @@ export function AppSidebar() {
           icon={<Shield className="h-4 w-4 shrink-0" />}
           label="Sécurité"
           alert={coreProjects.size > 0}
+        />
+        <NavLink
+          href="/activity"
+          active={pathname.startsWith("/activity")}
+          collapsed={collapsed}
+          icon={<History className="h-4 w-4 shrink-0" />}
+          label="Activité"
         />
       </nav>
 

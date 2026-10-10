@@ -14,7 +14,9 @@ import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any
+from zoneinfo import ZoneInfo
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -22,8 +24,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.core.config import settings
 from app.core.database import get_db
-from app.models.audit import ActivityRecord, AuditEvent
+from app.models.audit import ActivityCursor, ActivityRecord, AuditEvent
 from app.routers.finops import is_cnp_admin
 from app.services import activity_sources as sources
 from app.services.audit import NOTABLE
@@ -31,12 +34,14 @@ from app.services.keycloak_service import (
     get_current_user,
     require_project_role,
 )
+from app.services.kube_client import KubeUnavailableError, kube_get
 
 router = APIRouter(prefix="/activity", tags=["Activity"])
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 ALL_SOURCES = ("cmp", "deployment", "kubernetes", "vault", "keycloak")
+PARIS = ZoneInfo("Europe/Paris")
 _LABEL_VALUE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
 
@@ -72,6 +77,18 @@ class Kpi(BaseModel):
     previous: int
 
 
+class LoginDay(BaseModel):
+    day: date
+    success: int
+    failure: int
+
+
+class Logins(BaseModel):
+    days: list[LoginDay]
+    top_failed_users: list[tuple[str, int]]
+    top_failed_ips: list[tuple[str, int]]
+
+
 class ActivitySummary(BaseModel):
     actions: Kpi
     people: Kpi
@@ -79,7 +96,21 @@ class ActivitySummary(BaseModel):
     login_failures: Kpi | None
     days: list[DayCount]
     top_actors: list[tuple[str, int]]
+    # Actions by people per [weekday (0 = Monday), hour], Paris time.
+    heatmap: list[list[int]]
+    # Realm logins, for project admins and up.
+    logins: Logins | None
     unavailable: list[str]
+
+
+class DeniedFlow(BaseModel):
+    source: str
+    destination: str
+    port: int | None
+    protocol: str
+    direction: str
+    count: int
+    last: datetime
 
 
 class LogLine(BaseModel):
@@ -319,7 +350,7 @@ async def list_activity(
 @router.get("/summary", response_model=ActivitySummary)
 async def activity_summary(
     token: CurrentUser,
-    project: str,
+    project: str | None = None,
     days: Annotated[int, Query(ge=1, le=30)] = 7,
     db: Session = Depends(get_db),
 ) -> ActivitySummary:
@@ -360,6 +391,11 @@ async def activity_summary(
     top = Counter(
         e.actor for e in actions(current) if e.source != "deployment"
     )
+    heatmap = [[0] * 24 for _ in range(7)]
+    for e in actions(current):
+        if e.source != "deployment":
+            local = e.time.astimezone(PARIS)
+            heatmap[local.weekday()][local.hour] += 1
     return ActivitySummary(
         actions=Kpi(
             value=len(actions(current)), previous=len(actions(previous))
@@ -378,8 +414,84 @@ async def activity_summary(
         ),
         days=days_list,
         top_actors=top.most_common(5),
+        heatmap=heatmap,
+        logins=None if role == "member" else _logins(current, first, days),
         unavailable=unavailable,
     )
+
+
+def _logins(events: list[ActivityEvent], first: date, days: int) -> Logins:
+    per_day: dict[date, Counter] = defaultdict(Counter)
+    failed_users: Counter = Counter()
+    failed_ips: Counter = Counter()
+    for e in events:
+        if e.action == "keycloak.login":
+            per_day[e.time.date()]["success"] += 1
+        elif e.action == "keycloak.login_error":
+            per_day[e.time.date()]["failure"] += 1
+            failed_users[e.actor or "?"] += 1
+            failed_ips[e.source_ip or "?"] += 1
+    return Logins(
+        days=[
+            LoginDay(
+                day=first + timedelta(days=i),
+                success=per_day[first + timedelta(days=i)]["success"],
+                failure=per_day[first + timedelta(days=i)]["failure"],
+            )
+            for i in range(days + 1)
+        ],
+        top_failed_users=failed_users.most_common(5),
+        top_failed_ips=failed_ips.most_common(5),
+    )
+
+
+@router.get("/network", response_model=list[DeniedFlow])
+async def denied_flows(
+    token: CurrentUser,
+    project: str,
+    days: Annotated[int, Query(ge=1, le=30)] = 1,
+    db: Session = Depends(get_db),
+) -> list[DeniedFlow]:
+    """Flows a network policy dropped on the project's side, by pair and port."""
+    await _role(token, project)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = db.scalars(
+        select(ActivityRecord).where(
+            ActivityRecord.source == "network",
+            ActivityRecord.project == project,
+            ActivityRecord.time >= since,
+        )
+    )
+    groups: dict[tuple, DeniedFlow] = {}
+    for row in rows:
+        d = json.loads(row.details or "{}")
+        when = (
+            row.time
+            if row.time.tzinfo
+            else row.time.replace(tzinfo=timezone.utc)
+        )
+        key = (
+            row.actor,
+            row.target,
+            d.get("port"),
+            d.get("protocol"),
+            d.get("direction"),
+        )
+        flow = groups.get(key)
+        if flow:
+            flow.count += 1
+            flow.last = max(flow.last, when)
+        else:
+            groups[key] = DeniedFlow(
+                source=row.actor,
+                destination=row.target,
+                port=d.get("port"),
+                protocol=d.get("protocol") or "",
+                direction=d.get("direction") or "",
+                count=1,
+                last=when,
+            )
+    return sorted(groups.values(), key=lambda f: f.last, reverse=True)
 
 
 _EXPORT_COLUMNS = [
@@ -517,3 +629,82 @@ async def log_targets(token: CurrentUser, project: str) -> LogTargets:
             status_code=502, detail="Logs are unavailable."
         ) from exc
     return LogTargets(namespaces=namespaces, pods=pods, containers=containers)
+
+
+# ── Platform ─────────────────────────────────────────────────────────────────
+
+
+class ActiveAlert(BaseModel):
+    name: str
+    severity: str
+    summary: str
+    since: datetime
+
+
+class PlatformStatus(BaseModel):
+    alerts: list[ActiveAlert]
+    archive_last_success: datetime | None
+    archive_last_schedule: datetime | None
+    # How far each audit source has been collected.
+    collected_until: dict[str, datetime]
+
+
+def _archive_status() -> tuple[datetime | None, datetime | None]:
+    cronjob = kube_get(
+        "/apis/batch/v1/namespaces/observability/cronjobs/audit-archive"
+    )
+    status = (cronjob or {}).get("status", {})
+
+    def parse(value: str | None) -> datetime | None:
+        return (
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if value
+            else None
+        )
+
+    return parse(status.get("lastSuccessfulTime")), parse(
+        status.get("lastScheduleTime")
+    )
+
+
+@router.get("/platform", response_model=PlatformStatus)
+async def platform_status(
+    token: CurrentUser, db: Session = Depends(get_db)
+) -> PlatformStatus:
+    """Active alerts, archive and collector health. CNP admins only."""
+    if await _role(token, None) != "platform":
+        raise HTTPException(status_code=403, detail="CNP admins only.")
+    alerts: list[ActiveAlert] = []
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(
+                f"{settings.ALERTMANAGER_URL}/api/v2/alerts",
+                params={"active": "true", "silenced": "false"},
+            )
+        for a in response.json() if response.status_code == 200 else []:
+            alerts.append(
+                ActiveAlert(
+                    name=a["labels"].get("alertname", "?"),
+                    severity=a["labels"].get("severity", ""),
+                    summary=a.get("annotations", {}).get("summary", ""),
+                    since=a["startsAt"],
+                )
+            )
+    except httpx.HTTPError:
+        pass
+    try:
+        last_success, last_schedule = await run_in_threadpool(_archive_status)
+    except KubeUnavailableError:
+        last_success = last_schedule = None
+    cursors = {
+        c.source: (
+            c.until if c.until.tzinfo else c.until.replace(tzinfo=timezone.utc)
+        )
+        for c in db.scalars(select(ActivityCursor))
+    }
+    return PlatformStatus(
+        alerts=sorted(alerts, key=lambda a: a.since, reverse=True),
+        archive_last_success=last_success,
+        archive_last_schedule=last_schedule,
+        collected_until=cursors,
+    )

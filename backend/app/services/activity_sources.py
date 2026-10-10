@@ -40,6 +40,9 @@ VAULT_QUERY = (
     + "".join(f" != `{m}`" for m in _VAULT_MACHINES)
 )
 KEYCLOAK_QUERY = '{namespace=~"keycloak|.+-system"} |= `org.keycloak.events`'
+NETWORK_QUERY = (
+    '{namespace="kube-system", container="cilium-agent"} |= `"POLICY_DENIED"`'
+)
 
 
 class LokiUnavailableError(Exception):
@@ -251,6 +254,57 @@ def keycloak_event(
         status_code=None,
         source_ip=pairs.get("ipAddress"),
         details={"error": pairs.get("error"), "type": kind, "realm": realm},
+    )
+
+
+def _workload(pod: str) -> str:
+    """A pod name without the suffixes its controller generated."""
+    return re.sub(r"-[a-z0-9]{8,10}-[a-z0-9]{5}$|-[a-z0-9]{5}$", "", pod)
+
+
+def network_event(
+    ns_projects: dict[str, str], when: datetime, line: str
+) -> Event | None:
+    """A flow a network policy dropped, kept on the side that dropped it."""
+    try:
+        flow = json.loads(line)["flow"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    src_side = flow.get("source") or {}
+    dst_side = flow.get("destination") or {}
+    ingress = flow.get("traffic_direction") == "INGRESS"
+    local = dst_side if ingress else src_side
+    project = ns_projects.get(local.get("namespace", ""))
+    if not project:
+        return None
+    l4 = flow.get("l4") or {}
+    proto = next(iter(l4), "")
+    port = (l4.get(proto) or {}).get("destination_port")
+    ips = flow.get("IP") or {}
+
+    def side(s: dict, ip: str | None) -> str:
+        if s.get("namespace"):
+            return f"{s['namespace']}/{_workload(s.get('pod_name', ''))}"
+        return ip or "world"
+
+    return Event(
+        id=_event_id("network", when, line),
+        time=when,
+        source="network",
+        actor=side(src_side, ips.get("source")),
+        action="network.denied",
+        notable=False,
+        project=project,
+        app=_app_of(local.get("namespace", ""), project),
+        target=side(dst_side, ips.get("destination")),
+        outcome="failure",
+        status_code=None,
+        source_ip=ips.get("source"),
+        details={
+            "direction": "ingress" if ingress else "egress",
+            "protocol": proto,
+            "port": port,
+        },
     )
 
 

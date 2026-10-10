@@ -29,6 +29,7 @@ QUERIES = {
     "kubernetes": src.KUBERNETES_QUERY,
     "vault": src.VAULT_QUERY,
     "keycloak": src.KEYCLOAK_QUERY,
+    "network": src.NETWORK_QUERY,
 }
 
 
@@ -101,6 +102,8 @@ def normalise(
         return src.kubernetes_event(ns_projects, when, line)
     if source == "vault":
         return src.vault_event(projects, when, line)
+    if source == "network":
+        return src.network_event(ns_projects, when, line)
     return src.keycloak_event(projects, when, line)
 
 
