@@ -82,13 +82,15 @@ async def sync_notifications(
 ) -> None:
     """One Discord contact point per webhook, routed by the rule's app label."""
     async with _client() as client:
-        await _call(
-            client,
-            "POST",
-            "/api/folders",
-            org,
-            json={"uid": FOLDER_UID, "title": "Alertes CNP"},
-        )
+        folder = await _call(client, "GET", f"/api/folders/{FOLDER_UID}", org)
+        if folder.status_code == 404:
+            await _call(
+                client,
+                "POST",
+                "/api/folders",
+                org,
+                json={"uid": FOLDER_UID, "title": "Alertes CNP"},
+            )
         existing = {
             cp["name"]: cp
             for cp in (
