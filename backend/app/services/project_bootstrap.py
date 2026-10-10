@@ -535,6 +535,7 @@ def _run(
 
     if settings.GRAFANA_ADMIN_PASSWORD:
         env["TF_VAR_grafana_admin_password"] = settings.GRAFANA_ADMIN_PASSWORD
+        env["TF_VAR_loki_password"] = settings.LOKI_GRAFANA_PROJECTS_PASSWORD
 
     try:
         result = subprocess.run(

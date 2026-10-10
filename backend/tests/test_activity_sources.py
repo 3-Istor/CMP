@@ -490,3 +490,9 @@ def test_project_logs_are_read_from_the_project_tenant_and_the_shared_one(
         client.get("/api/activity/logs?project=shop")
 
     assert seen["tenant"] == "shop|default"
+
+
+def test_project_admins_are_grafana_editors_not_admins():
+    from app.services.grafana_service import _map_role_to_grafana
+
+    assert _map_role_to_grafana("admin") == "Editor"

@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     LOKI_USERNAME: str = "cmp"
     LOKI_PASSWORD: str = ""
     LOKI_TENANT: str = "default"
+    # Credential of every project Grafana org's Loki datasource.
+    LOKI_GRAFANA_PROJECTS_PASSWORD: str = ""
     # Days of audit history read from Loki the first time the collector runs.
     ACTIVITY_BACKFILL_DAYS: int = 7
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
