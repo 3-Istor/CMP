@@ -21,8 +21,9 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
+import { appUrlOf } from "@/lib/utils";
 import type { Deployment } from "@/types";
-import { Activity, ExternalLink, FileCode, Shield } from "lucide-react";
+import { Activity, ExternalLink, FileCode, Globe, Shield } from "lucide-react";
 import { useState } from "react";
 
 const ACTIVE_STATUSES = new Set([
@@ -44,6 +45,7 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
   const polled = useDeploymentPolling(isActive ? deployment.id : null);
   // Use polled data if available (during active deployment), otherwise use parent data
   const currentDeployment = polled ?? deployment;
+  const appUrl = appUrlOf(currentDeployment.terraform_outputs);
 
   // Fetch real health status for running/degraded deployments
   const shouldFetchHealth = ["running", "degraded"].includes(
@@ -184,6 +186,22 @@ export function DeploymentCard({ deployment, onDelete }: Props) {
                   Quick Actions
                 </div>
                 <div className="grid grid-cols-1 gap-2">
+                  {appUrl && (
+                    <a
+                      href={appUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "justify-start",
+                      })}
+                    >
+                      <Globe className="h-4 w-4 mr-2" />
+                      Open Application
+                      <ExternalLink className="h-3 w-3 ml-auto" />
+                    </a>
+                  )}
                   <a
                     href={currentDeployment.github_repo_url}
                     target="_blank"

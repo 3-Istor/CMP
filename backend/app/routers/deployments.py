@@ -5,7 +5,14 @@ from io import StringIO
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+)
 from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
@@ -41,8 +48,7 @@ router = APIRouter(prefix="/deployments", tags=["Deployments"])
 _yaml = YAML()
 _yaml.preserve_quotes = True
 
-# Path of the GitOps configuration file inside every app repository
-_CONFIG_FILE_PATH = "deploy/values.yaml"
+_FULLSTACK_COMPONENTS = ["frontend", "backend"]
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
@@ -381,15 +387,31 @@ async def _get_github_token_for_deployment(deployment: Deployment) -> str:
         ) from exc
 
 
+def _config_file_for(app_type: str, component: str | None) -> str:
+    if app_type != "fullstack":
+        return security_data.SINGLE_VALUES_FILE
+    if component in (None, "frontend"):
+        return security_data.FRONTEND_VALUES_FILE
+    if component == "backend":
+        return security_data.BACKEND_VALUES_FILE
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unknown component '{component}', expected one of "
+        f"{', '.join(_FULLSTACK_COMPONENTS)}.",
+    )
+
+
 @router.get("/{deployment_id}/config")
 async def get_deployment_config(
     deployment_id: int,
     token_payload: CurrentUser,
+    component: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
-    Fetch the current ``deploy/values.yaml`` from the application's GitHub
-    repository and return it as a JSON object.
+    Fetch the app's values file from its GitHub repository and return it as
+    a JSON object. Fullstack apps have one file per component, picked with
+    ``component`` (``frontend`` by default).
 
     This allows the frontend to pre-populate the Day-2 configuration form
     without the user needing to know the repository URL.
@@ -403,6 +425,8 @@ async def get_deployment_config(
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token_payload
     )
+    app_type = _app_type_of(deployment)
+    file_path = _config_file_for(app_type, component)
     token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment.github_repo_url)
 
@@ -410,7 +434,7 @@ async def get_deployment_config(
         raw_content, sha = await get_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
         )
     except GitHubAppError as exc:
         status_code = 404 if "not found" in str(exc).lower() else 502
@@ -421,12 +445,13 @@ async def get_deployment_config(
     if not isinstance(parsed, dict):
         raise HTTPException(
             status_code=500,
-            detail=f"'{_CONFIG_FILE_PATH}' does not contain a YAML mapping.",
+            detail=f"'{file_path}' does not contain a YAML mapping.",
         )
 
     return {
         "repo": repo,
-        "file_path": _CONFIG_FILE_PATH,
+        "file_path": file_path,
+        "components": _FULLSTACK_COMPONENTS if app_type == "fullstack" else [],
         # SHA must be echoed back by the frontend in PATCH requests
         "_sha": sha,
         "config": dict(parsed),
@@ -437,6 +462,7 @@ async def get_deployment_config(
 async def update_deployment_config(
     deployment_id: int,
     token_payload: CurrentUser,
+    component: str | None = Query(default=None),
     # The request body must include the `_sha` field (obtained from GET /config)
     # plus any top-level or nested keys to update.
     payload: dict[str, Any] = Body(
@@ -458,8 +484,8 @@ async def update_deployment_config(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
-    Partially update ``deploy/values.yaml`` in the application's GitHub
-    repository and create a commit on ``main``.
+    Partially update the app's values file (same ``component`` rule as
+    ``GET /config``) in its GitHub repository and create a commit on ``main``.
 
     ArgoCD will automatically detect the new commit and sync the application.
 
@@ -480,6 +506,7 @@ async def update_deployment_config(
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token_payload, require_admin=True
     )
+    file_path = _config_file_for(_app_type_of(deployment), component)
 
     # Validate _sha is present in the body
     sha: str | None = payload.pop("_sha", None)
@@ -506,7 +533,7 @@ async def update_deployment_config(
         raw_content, current_sha = await get_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
         )
     except GitHubAppError as exc:
         status_code = 404 if "not found" in str(exc).lower() else 502
@@ -527,7 +554,7 @@ async def update_deployment_config(
     if not isinstance(parsed, dict):
         raise HTTPException(
             status_code=500,
-            detail=f"'{_CONFIG_FILE_PATH}' does not contain a YAML mapping.",
+            detail=f"'{file_path}' does not contain a YAML mapping.",
         )
 
     _deep_merge(parsed, payload)
@@ -549,7 +576,7 @@ async def update_deployment_config(
         result = await update_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
             content=updated_content,
             message=commit_message,
             sha=sha,
@@ -563,7 +590,7 @@ async def update_deployment_config(
     return {
         "message": "Configuration updated successfully. ArgoCD will sync shortly.",
         "repo": repo,
-        "file_path": _CONFIG_FILE_PATH,
+        "file_path": file_path,
         "commit_sha": commit_sha,
         "changed_keys": list(payload.keys()),
     }
