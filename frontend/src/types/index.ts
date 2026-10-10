@@ -475,3 +475,84 @@ export interface SecurityExceptionRequest {
   statement: string;
   expires_on: string | null;
 }
+
+// ── Activity tab ──────────────────────────────────────────────────────────────
+
+export type ActivitySource =
+  | "cmp"
+  | "deployment"
+  | "kubernetes"
+  | "vault"
+  | "keycloak";
+
+export interface ActivityEvent {
+  id: string;
+  time: string;
+  source: ActivitySource;
+  actor: string;
+  action: string;
+  notable: boolean;
+  project: string | null;
+  app: string | null;
+  target: string;
+  outcome: "success" | "failure";
+  status_code: number | null;
+  source_ip: string | null;
+  details: Record<string, unknown>;
+}
+
+export interface ActivityFeed {
+  events: ActivityEvent[];
+  unavailable: ActivitySource[];
+}
+
+export interface ActivityKpi {
+  value: number;
+  previous: number;
+}
+
+export interface ActivitySummary {
+  actions: ActivityKpi;
+  people: ActivityKpi;
+  notable: ActivityKpi;
+  login_failures: ActivityKpi | null;
+  days: { day: string; counts: Partial<Record<ActivitySource, number>> }[];
+  top_actors: [string, number][];
+  unavailable: ActivitySource[];
+}
+
+export interface ActivityFilters {
+  source?: ActivitySource | null;
+  actor?: string | null;
+  action?: string | null;
+  app?: string | null;
+  days?: number;
+  until?: string | null;
+  include_reads?: boolean;
+  notable_only?: boolean;
+}
+
+export interface LogLine {
+  time: string;
+  namespace: string;
+  pod: string;
+  container: string;
+  line: string;
+}
+
+export interface LogTargets {
+  namespaces: string[];
+  pods: string[];
+  containers: string[];
+}
+
+export interface LogFilters {
+  namespace?: string | null;
+  pod?: string | null;
+  container?: string | null;
+  search?: string | null;
+  level?: "error" | "warn" | null;
+  since?: string | null;
+  until?: string | null;
+  limit?: number;
+}
