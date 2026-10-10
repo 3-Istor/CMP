@@ -8,6 +8,7 @@ import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { ActivityTab } from "@/components/activity/ActivityTab";
+import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
@@ -48,6 +49,7 @@ import {
     Trash2,
     Wallet,
     XCircle,
+    BellRing,
     History,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -338,6 +340,12 @@ export default function AppControlCenterPage() {
                             Activity
                         </TabsTrigger>
                     )}
+                    {isKubernetes && (
+                        <TabsTrigger value="alerts" className="gap-2">
+                            <BellRing className="h-4 w-4" />
+                            Alerts
+                        </TabsTrigger>
+                    )}
                 </TabsList>
 
                 <TabsContent value="app" className="mt-6">
@@ -536,6 +544,12 @@ export default function AppControlCenterPage() {
                 {isKubernetes && (
                     <TabsContent value="activity" className="mt-6">
                         <ActivityTab project={projectName} app={current.name} />
+                    </TabsContent>
+                )}
+
+                {isKubernetes && (
+                    <TabsContent value="alerts" className="mt-6">
+                        <AlertsPanel project={projectName} app={current.name} />
                     </TabsContent>
                 )}
 

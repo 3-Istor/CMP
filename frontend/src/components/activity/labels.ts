@@ -130,6 +130,8 @@ export function describe(e: ActivityEvent): string {
       return `a ignoré une recommandation FinOps`;
     case "finops.recommendation.notify":
       return `a notifié une recommandation FinOps`;
+    case "alerting.update":
+      return `a ${d.enabled === false ? "désactivé" : "réglé"} une alerte du catalogue (${e.target})`;
     case "deployment.sync":
       return `a déployé ${e.target}`;
     case "keycloak.login":

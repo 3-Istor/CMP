@@ -16,6 +16,7 @@ from app.core.database import Base, engine
 from app.routers import (
     account,
     activity,
+    alerting,
     catalog,
     deployments,
     finops,
@@ -303,6 +304,7 @@ app.add_middleware(
 
 app.include_router(account.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
+app.include_router(alerting.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")

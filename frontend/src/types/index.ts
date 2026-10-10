@@ -591,3 +591,30 @@ export interface LogVolume {
     peak_per_minute: number;
   }[];
 }
+
+// ── Alerts tab ────────────────────────────────────────────────────────────────
+
+export interface CatalogAlert {
+  id: string;
+  title: string;
+  description: string;
+  severity: "critical" | "warning";
+  enabled: boolean;
+  state: "normal" | "pending" | "firing" | "error" | "nodata" | null;
+  params: {
+    key: string;
+    label: string;
+    unit: string;
+    value: number;
+    minimum: number;
+    maximum: number;
+  }[];
+}
+
+export interface AlertCatalog {
+  items: CatalogAlert[];
+  can_edit: boolean;
+  notifies: "app" | "project" | "platform" | null;
+  grafana_rules_url: string | null;
+  grafana_new_rule_url: string | null;
+}

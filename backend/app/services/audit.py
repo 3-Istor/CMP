@@ -73,6 +73,7 @@ ACTIONS: dict[tuple[str, str], str] = {
         "POST",
         "/api/finops/recommendations/{rec_id}/notify",
     ): "finops.recommendation.notify",
+    ("PUT", "/api/alerting/{alert_id}"): "alerting.update",
     ("POST", "/api/catalog/sync"): "catalog.sync",
     ("POST", "/api/account/picture"): "account.picture.update",
     (
@@ -261,7 +262,13 @@ async def _record(
     target = next(
         (
             str(params[k])
-            for k in ("username", "exception_id", "fingerprint", "rec_id")
+            for k in (
+                "username",
+                "exception_id",
+                "fingerprint",
+                "rec_id",
+                "alert_id",
+            )
             if k in params
         ),
         app or project or "",
