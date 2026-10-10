@@ -10,6 +10,7 @@ import {
 } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import {
+  BellRing,
   Boxes,
   ChevronLeft,
   Crown,
@@ -152,6 +153,13 @@ export function AppSidebar() {
           collapsed={collapsed}
           icon={<History className="h-4 w-4 shrink-0" />}
           label="Activité"
+        />
+        <NavLink
+          href="/alerts"
+          active={pathname.startsWith("/alerts")}
+          collapsed={collapsed}
+          icon={<BellRing className="h-4 w-4 shrink-0" />}
+          label="Alertes"
         />
       </nav>
 
