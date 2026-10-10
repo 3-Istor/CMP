@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.audit import ActivityCursor, ActivityRecord
 from app.services import activity_sources as src
+from app.services import metrics_isolation
 from app.services.kube_client import KubeUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,11 @@ async def collect_source(source: str, ns_projects: dict[str, str]) -> int:
 
 async def collect_once() -> None:
     ns_projects = await run_in_threadpool(src.namespace_projects)
+    if settings.METRICS_PROJECT_KEY and ns_projects:
+        try:
+            await run_in_threadpool(metrics_isolation.sync, ns_projects)
+        except KubeUnavailableError as exc:
+            logger.warning("vmauth config not written: %s", exc)
     for source in QUERIES:
         try:
             added = await collect_source(source, ns_projects)

@@ -26,6 +26,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.models.project import ProjectStatus
+from app.services import metrics_isolation
 from app.services.github_service import GitHubAppError, get_installation_token
 from app.services.project_status import delete_project_row, set_project_status
 from app.services.state_lock import StateLockedError, raise_if_state_locked
@@ -227,6 +228,13 @@ def run_project_bootstrap(
                     f"-var=project_name={project_name}",
                     f"-var=target_cloud={target_cloud}",
                 ],
+                extra_env={
+                    "TF_VAR_metrics_password": (
+                        metrics_isolation.password(project_name)
+                        if settings.METRICS_PROJECT_KEY
+                        else ""
+                    )
+                },
                 cwd=staged,
                 work_dir=work_dir,
                 github_token=github_token,
@@ -468,7 +476,11 @@ def _write_local_backend_override(
 
 
 def _run(
-    cmd: list[str], cwd: Path, work_dir: Path, github_token: str = ""
+    cmd: list[str],
+    cwd: Path,
+    work_dir: Path,
+    github_token: str = "",
+    extra_env: dict[str, str] | None = None,
 ) -> None:
     """
     Execute a Terraform command, forwarding all necessary credentials as
@@ -484,6 +496,8 @@ def _run(
         RuntimeError: If the command exits non-zero.
     """
     env = os.environ.copy()
+    # Secrets go through the environment, never on the command line.
+    env.update(extra_env or {})
     env["TF_IN_AUTOMATION"] = "1"
     env["TF_INPUT"] = "0"
     env["TF_DATA_DIR"] = str(work_dir / ".terraform")
