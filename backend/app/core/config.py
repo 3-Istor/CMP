@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     SECURITY_DISCORD_WEBHOOK_URL: str = ""
     CMP_PUBLIC_URL: str = "https://cmp.3istor.com"
 
+    # Days the journal of changes made through the CMP is kept.
+    AUDIT_RETENTION_DAYS: int = 30
+
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
     # Installation ID of the GitHub App on the 3-Istor org — used to mint

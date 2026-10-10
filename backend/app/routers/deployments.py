@@ -12,6 +12,7 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Request,
 )
 from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
@@ -22,7 +23,7 @@ from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.routers.finops import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
-from app.services import terraform_orchestrator
+from app.services import audit, terraform_orchestrator
 from app.services.catalog_service import get_template_by_id
 from app.services.github_service import (
     GitHubAppError,
@@ -461,6 +462,7 @@ async def get_deployment_config(
 @router.patch("/{deployment_id}/config")
 async def update_deployment_config(
     deployment_id: int,
+    request: Request,
     token_payload: CurrentUser,
     component: str | None = Query(default=None),
     # The request body must include the `_sha` field (obtained from GET /config)
@@ -557,6 +559,7 @@ async def update_deployment_config(
             detail=f"'{file_path}' does not contain a YAML mapping.",
         )
 
+    audit.note(request, file=file_path, changes=audit.changes(parsed, payload))
     _deep_merge(parsed, payload)
 
     # Serialise back to a YAML string
@@ -678,6 +681,7 @@ async def get_security_data(
 async def update_security_data(
     deployment_id: int,
     payload: security_data.SecurityDataUpdate,
+    request: Request,
     token_payload: CurrentUser,
     dry_run: bool = False,
     db: Session = Depends(get_db),
@@ -708,6 +712,12 @@ async def update_security_data(
         return loaded[file_path][0]
 
     if payload.exposure is not None:
+        audit.note(
+            request,
+            exposure_before=security_data.read_exposure(
+                await load(exposure_file)
+            ),
+        )
         if not security_data.has_ingress(await load(exposure_file)):
             raise HTTPException(
                 status_code=400,

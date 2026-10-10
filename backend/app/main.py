@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import (
     account,
+    activity,
     catalog,
     deployments,
     finops,
@@ -25,6 +26,7 @@ from app.routers import (
     security_databases,
 )
 from app.services import health_poller
+from app.services.audit import audit_middleware, audit_retention_loop
 from app.services.finops import alert_poller
 from app.services.security.collector import security_collector_loop
 from app.services.template_repository import get_repository
@@ -235,6 +237,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting security collector...")
     security_collector_task = asyncio.create_task(security_collector_loop())
+    audit_retention_task = asyncio.create_task(audit_retention_loop())
 
     logger.info("✅ Application startup complete")
 
@@ -245,10 +248,12 @@ async def lifespan(app: FastAPI):
     health_poller_task.cancel()
     finops_poller_task.cancel()
     security_collector_task.cancel()
+    audit_retention_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
         security_collector_task,
+        audit_retention_task,
     ):
         try:
             await task
@@ -275,6 +280,8 @@ app = FastAPI(
 # Apply custom OpenAPI schema with OAuth2
 app.openapi = custom_openapi
 
+app.middleware("http")(audit_middleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -291,6 +298,7 @@ app.add_middleware(
 )
 
 app.include_router(account.router, prefix="/api")
+app.include_router(activity.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
