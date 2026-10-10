@@ -580,3 +580,14 @@ export interface LogFilters {
   until?: string | null;
   limit?: number;
 }
+
+export interface LogVolume {
+  step_seconds: number;
+  series: {
+    namespace: string;
+    points: { time: string; lines: number; bytes: number }[];
+    total_lines: number;
+    total_bytes: number;
+    peak_per_minute: number;
+  }[];
+}

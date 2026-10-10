@@ -8,7 +8,13 @@ import { LogsView } from "./LogsView";
 
 type View = "audit" | "logs";
 
-export function ActivityTab({ project }: { project: string }) {
+export function ActivityTab({
+  project,
+  app,
+}: {
+  project: string;
+  app?: string;
+}) {
   const [view, setView] = useState<View>("audit");
   const [role, setRole] = useState<{ admin: boolean } | null>(null);
 
@@ -24,8 +30,8 @@ export function ActivityTab({ project }: { project: string }) {
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">
           {view === "audit"
-            ? "Qui a fait quoi dans ce projet : CMP, kubectl, Vault, Keycloak et déploiements."
-            : "Les logs des pods du projet, avec recherche et suivi en direct."}
+            ? `Qui a fait quoi dans ${app ? "cette app" : "ce projet"} : CMP, kubectl, Vault, Keycloak et déploiements.`
+            : `Les logs des pods ${app ? "de l'app" : "du projet"}, avec recherche et suivi en direct.`}
         </p>
         <div className="flex rounded-full border p-0.5">
           {(["audit", "logs"] as const).map((v) => (
@@ -49,12 +55,16 @@ export function ActivityTab({ project }: { project: string }) {
         role && (
           <AuditView
             project={project}
+            app={app}
             canExport={role.admin}
             showLogins={role.admin}
           />
         )
       ) : (
-        <LogsView project={project} />
+        <LogsView
+          project={project}
+          namespace={app ? `${project}-${app}` : undefined}
+        />
       )}
     </div>
   );

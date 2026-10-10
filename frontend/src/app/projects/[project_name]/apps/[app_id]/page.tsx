@@ -7,6 +7,7 @@ import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
 import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
+import { ActivityTab } from "@/components/activity/ActivityTab";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
@@ -47,6 +48,7 @@ import {
     Trash2,
     Wallet,
     XCircle,
+    History,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -330,6 +332,12 @@ export default function AppControlCenterPage() {
                         <Wallet className="h-4 w-4" />
                         FinOps
                     </TabsTrigger>
+                    {isKubernetes && (
+                        <TabsTrigger value="activity" className="gap-2">
+                            <History className="h-4 w-4" />
+                            Activity
+                        </TabsTrigger>
+                    )}
                 </TabsList>
 
                 <TabsContent value="app" className="mt-6">
@@ -522,6 +530,12 @@ export default function AppControlCenterPage() {
                             app={current.name}
                             fullPageLink
                         />
+                    </TabsContent>
+                )}
+
+                {isKubernetes && (
+                    <TabsContent value="activity" className="mt-6">
+                        <ActivityTab project={projectName} app={current.name} />
                     </TabsContent>
                 )}
 
