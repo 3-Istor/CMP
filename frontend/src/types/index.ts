@@ -101,6 +101,8 @@ export interface AddMemberResponse {
 export interface DeploymentConfig {
   repo: string;
   file_path: string;
+  /** Selectable components; empty when the app has a single values file. */
+  components: string[];
   /** File SHA — must be echoed back in PATCH requests */
   _sha: string;
   config: Record<string, unknown>;

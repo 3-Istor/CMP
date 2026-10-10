@@ -33,12 +33,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deleteDeployment, getDeployment } from "@/lib/api";
 import { useDeploymentPolling } from "@/lib/hooks";
+import { appUrlOf } from "@/lib/utils";
 import type { Deployment } from "@/types";
 import {
     ArrowLeft,
     CheckCircle2,
     ExternalLink,
     FileCode,
+    Globe,
     Loader2,
     RefreshCw,
     Shield,
@@ -207,6 +209,7 @@ export default function AppControlCenterPage() {
 
     const isKubernetes = current.provider_type === "kubernetes";
     const isRunning = current.status === "running";
+    const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
 
     return (
         <div className="min-h-screen">
@@ -355,6 +358,19 @@ export default function AppControlCenterPage() {
                                     <CardTitle className="text-base">Quick Actions</CardTitle>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {appUrl && (
+                                        <a
+                                            href={appUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                                        >
+                                            <Globe className="mr-2 h-4 w-4" />
+                                            Open Application
+                                            <ExternalLink className="ml-auto h-3 w-3" />
+                                        </a>
+                                    )}
+
                                     {current.github_repo_url && (
                                         <a
                                             href={current.github_repo_url}

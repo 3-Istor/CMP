@@ -331,15 +331,20 @@ export const removeProjectMember = async (
 };
 
 // Day-2 GitOps Config (Phase 4)
-export const getDeploymentConfig = (id: number) =>
-  request<import("@/types").DeploymentConfig>(`/deployments/${id}/config`);
+const configPath = (id: number, component?: string) =>
+  `/deployments/${id}/config` +
+  (component ? `?component=${encodeURIComponent(component)}` : "");
+
+export const getDeploymentConfig = (id: number, component?: string) =>
+  request<import("@/types").DeploymentConfig>(configPath(id, component));
 
 export const updateDeploymentConfig = (
   id: number,
   payload: Record<string, unknown> & { _sha: string },
+  component?: string,
 ) =>
   request<import("@/types").DeploymentConfigUpdateResponse>(
-    `/deployments/${id}/config`,
+    configPath(id, component),
     {
       method: "PATCH",
       body: JSON.stringify(payload),
