@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     # Days the journal of changes made through the CMP is kept.
     AUDIT_RETENTION_DAYS: int = 30
 
+    # Loki, through its authenticating gateway (Activity tab).
+    LOKI_URL: str = "http://loki-gateway.observability.svc.cluster.local"
+    LOKI_USERNAME: str = "cmp"
+    LOKI_PASSWORD: str = ""
+    LOKI_TENANT: str = "default"
+
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
     # Installation ID of the GitHub App on the 3-Istor org — used to mint

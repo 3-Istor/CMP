@@ -600,3 +600,81 @@ export const testSecurityAlertTarget = (project: string, app: string | null) =>
     method: "POST",
     body: JSON.stringify({ project, app }),
   });
+
+// ── Activity tab ──────────────────────────────────────────────────────────────
+
+function activityQuery(project: string, f: import("@/types").ActivityFilters) {
+  const params = new URLSearchParams({ project });
+  if (f.source) params.set("source", f.source);
+  if (f.actor) params.set("actor", f.actor);
+  if (f.action) params.set("action", f.action);
+  if (f.app) params.set("app", f.app);
+  if (f.include_reads) params.set("include_reads", "true");
+  if (f.notable_only) params.set("notable_only", "true");
+  const until = f.until ? new Date(f.until) : new Date();
+  params.set("until", until.toISOString());
+  const since = new Date(until.getTime() - (f.days ?? 7) * 86_400_000);
+  params.set("since", since.toISOString());
+  return params.toString();
+}
+
+export const getActivity = (
+  project: string,
+  filters: import("@/types").ActivityFilters,
+) =>
+  request<import("@/types").ActivityFeed>(
+    `/activity?${activityQuery(project, filters)}&limit=100`,
+  );
+
+export const getActivitySummary = (project: string, days = 7) =>
+  request<import("@/types").ActivitySummary>(
+    `/activity/summary?${new URLSearchParams({ project, days: String(days) })}`,
+  );
+
+export async function downloadActivity(
+  project: string,
+  filters: import("@/types").ActivityFilters,
+  format: "csv" | "json",
+) {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${BASE}/activity/export?${activityQuery(project, filters)}&format=${format}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `activity-${project}.${format}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export const getProjectLogs = (
+  project: string,
+  f: import("@/types").LogFilters,
+) => {
+  const params = new URLSearchParams({ project });
+  for (const key of [
+    "namespace",
+    "pod",
+    "container",
+    "search",
+    "level",
+    "since",
+    "until",
+  ] as const) {
+    const value = f[key];
+    if (value) params.set(key, value);
+  }
+  params.set("limit", String(f.limit ?? 500));
+  return request<import("@/types").LogLine[]>(`/activity/logs?${params}`);
+};
+
+export const getLogTargets = (project: string) =>
+  request<import("@/types").LogTargets>(
+    `/activity/logs/targets?${new URLSearchParams({ project })}`,
+  );

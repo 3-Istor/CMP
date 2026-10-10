@@ -221,9 +221,9 @@ def test_members_do_not_see_source_ips(build, session_factory):
         json={"_sha": "sha-deploy/values.yaml", "replicaCount": 2},
     )
 
-    response = client.get("/api/activity?project=demo")
+    response = client.get("/api/activity?project=demo&source=cmp")
 
-    assert response.json()[0]["source_ip"] is None
+    assert response.json()["events"][0]["source_ip"] is None
 
 
 def test_activity_of_a_project_is_refused_to_outsiders(build):

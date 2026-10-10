@@ -8,6 +8,7 @@ import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
 import { MembersPanel } from "@/components/projects/MembersPanel";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
+import { ActivityTab } from "@/components/activity/ActivityTab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +34,7 @@ import {
   ShieldCheck,
   Trash2,
   Users,
+  History,
   Wallet,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -289,6 +291,10 @@ export default function ProjectPage() {
               <Wallet className="h-4 w-4" />
               FinOps
             </TabsTrigger>
+            <TabsTrigger value="activity" className="gap-2">
+              <History className="h-4 w-4" />
+              Activity
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Applications tab ── */}
@@ -420,6 +426,10 @@ export default function ProjectPage() {
           {/* ── Members tab ── */}
           <TabsContent value="members" className="mt-6 space-y-6">
             <MembersPanel projectName={projectName} />
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-6">
+            <ActivityTab project={projectName} />
           </TabsContent>
 
           <TabsContent value="security" className="mt-6 space-y-6">
