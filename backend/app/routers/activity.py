@@ -750,12 +750,14 @@ async def log_volume(
                 start,
                 end,
                 step,
+                tenant=sources.project_tenants(project),
             ),
             sources.loki_matrix(
                 f"sum by (namespace) (bytes_over_time({selector}[{step}s]))",
                 start,
                 end,
                 step,
+                tenant=sources.project_tenants(project),
             ),
         )
     except sources.LokiUnavailableError as exc:
