@@ -240,6 +240,91 @@ def test_schema_1_ci_report_yields_no_findings():
     )
 
 
+def _config_report(*misconfigs):
+    return {
+        "run_url": "https://run",
+        "scanners": {"trivy_config": {"misconfigurations": list(misconfigs)}},
+    }
+
+
+def _misconfig(
+    rule_id="DS-0002", severity="HIGH", target="backend/Dockerfile"
+):
+    return {
+        "id": rule_id,
+        "severity": severity,
+        "title": "Image user should not be 'root'",
+        "message": "Specify at least 1 USER command in Dockerfile",
+        "resolution": "Add 'USER <non root user name>' line to the Dockerfile",
+        "target": target,
+        "line": None,
+        "url": "https://avd.aquasec.com/misconfig/ds-0002",
+    }
+
+
+def test_root_dockerfile_is_an_important_container_finding_for_developers():
+    # Act
+    draft = sources.ci_drafts("shop", API, _config_report(_misconfig()))[0]
+
+    # Assert
+    assert (draft.tier, draft.category, draft.audience, draft.title) == (
+        Tier.IMPORTANT,
+        Category.CONTAINER,
+        Audience.DEVELOPER,
+        "L'image tourne en root",
+    )
+
+
+@pytest.mark.parametrize(
+    "severity, tier",
+    [
+        ("CRITICAL", Tier.IMPORTANT),
+        ("MEDIUM", Tier.RECOMMENDED),
+        ("LOW", Tier.INFO),
+    ],
+)
+def test_dockerfile_finding_tier_follows_severity(severity, tier):
+    # Act
+    draft = sources.ci_drafts(
+        "shop", API, _config_report(_misconfig(severity=severity))
+    )[0]
+
+    # Assert
+    assert draft.tier is tier
+
+
+def test_unknown_dockerfile_rule_keeps_trivy_wording():
+    # Arrange
+    misconfig = _misconfig(rule_id="DS-9999")
+
+    # Act
+    draft = sources.ci_drafts("shop", API, _config_report(misconfig))[0]
+
+    # Assert
+    assert (draft.title, draft.fix) == (
+        misconfig["title"],
+        misconfig["resolution"],
+    )
+
+
+def test_same_rule_in_two_dockerfiles_is_two_findings():
+    # Act
+    drafts = sources.ci_drafts(
+        "shop",
+        API,
+        _config_report(
+            _misconfig(target="backend/Dockerfile"),
+            _misconfig(target="frontend/Dockerfile"),
+        ),
+    )
+
+    # Assert
+    assert sorted(d.location for d in drafts) == [
+        "backend/Dockerfile",
+        "frontend/Dockerfile",
+    ]
+
+
 def _cluster(backup=True, archiving=None, age=timedelta(days=3)):
     cluster = {
         "metadata": {
