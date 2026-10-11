@@ -85,9 +85,7 @@ def _resolve_role(
     # creator is recognised from the very first request, without waiting for
     # Terraform or the background task that adds them to -admins.
     row = (
-        db.query(Project)
-        .filter(Project.project_name == project_name)
-        .first()
+        db.query(Project).filter(Project.project_name == project_name).first()
     )
     if row is not None and row.owner_username == username:
         return user_id, username, ProjectRole.OWNER
@@ -171,9 +169,7 @@ def require_project_role(
         token_payload: Annotated[dict, Depends(get_current_user)],
         db: Annotated[Session, Depends(get_db)],
     ) -> ProjectContext:
-        return assert_project_role(
-            db, token_payload, project_name, minimum
-        )
+        return assert_project_role(db, token_payload, project_name, minimum)
 
     return _dep
 

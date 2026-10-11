@@ -70,6 +70,7 @@ class ProjectGroupMissingError(ValueError):
         self.group_name = group_name
         super().__init__(f"Keycloak group '{group_name}' does not exist.")
 
+
 # ── Simple in-process caches ──────────────────────────────────────────────────
 
 # Admin token cache: (token, expires_at)
@@ -342,17 +343,13 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         List of project dicts, sorted by name:
         ``[{"name": "sandbox", "role": "admin"}, ...]``
     """
-    logger.debug(
-        "🔍 Fetching groups from Keycloak for user_id: %s", user_id
-    )
+    logger.debug("🔍 Fetching groups from Keycloak for user_id: %s", user_id)
 
     groups = _fetch_user_groups(user_id)
     logger.debug("Raw groups: %s", [g.get("name") for g in groups])
 
     projects = _project_roles_from_groups(groups)
-    logger.debug(
-        "📊 Extracted %d projects: %s", len(projects), list(projects)
-    )
+    logger.debug("📊 Extracted %d projects: %s", len(projects), list(projects))
 
     return [
         {"name": name, "role": role.value}
@@ -403,9 +400,7 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
 
     if target_role not in ASSIGNABLE:
         allowed = ", ".join(repr(r.value) for r in ASSIGNABLE)
-        raise ValueError(
-            f"Invalid role '{role}'. Must be one of: {allowed}."
-        )
+        raise ValueError(f"Invalid role '{role}'. Must be one of: {allowed}.")
 
     admin_token = _get_admin_token()
 
@@ -513,9 +508,7 @@ def project_guests_supported(project_name: str) -> bool:
     the Guest option rather than letting an admin pick it and collect a 409.
     """
     admin_token = _get_admin_token()
-    group_name = (
-        f"project-{project_name}-{GROUP_SUFFIX[ProjectRole.GUEST]}"
-    )
+    group_name = f"project-{project_name}-{GROUP_SUFFIX[ProjectRole.GUEST]}"
     return _find_group_by_name(group_name, admin_token) is not None
 
 
@@ -571,9 +564,7 @@ def list_project_members(project_name: str) -> list[dict]:
     members: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=len(ASSIGNABLE)) as pool:
         futures = {
-            pool.submit(
-                _fetch_group_members, GROUP_SUFFIX[role], role
-            ): role
+            pool.submit(_fetch_group_members, GROUP_SUFFIX[role], role): role
             for role in ASSIGNABLE
         }
         for future in as_completed(futures):
@@ -583,14 +574,10 @@ def list_project_members(project_name: str) -> list[dict]:
                     username = user["username"]
                     # The strongest role wins when a user is in several groups
                     existing = members.get(username)
-                    if existing is None or rank(role) > rank(
-                        existing["role"]
-                    ):
+                    if existing is None or rank(role) > rank(existing["role"]):
                         members[username] = user
             except Exception as exc:
-                logger.warning(
-                    "Failed to fetch %s group: %s", role.value, exc
-                )
+                logger.warning("Failed to fetch %s group: %s", role.value, exc)
 
     return sorted(members.values(), key=lambda x: x["username"])
 

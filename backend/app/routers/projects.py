@@ -14,13 +14,7 @@ import logging
 from typing import Annotated
 
 import requests
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-    HTTPException,
-    status,
-)
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -46,7 +40,7 @@ from app.services.keycloak_service import (
     add_user_to_project,
     fetch_user_projects_from_keycloak,
     get_current_user,
-    get_user_id_from_token,  # noqa: F401  (re-exported: finops imports it)
+    get_user_id_from_token,
     list_project_members,
     project_guests_supported,
     remove_user_from_project,
@@ -90,9 +84,7 @@ def _administers_any_project(db: Session, token_payload: dict) -> bool:
         return True
 
     return (
-        db.query(Project)
-        .filter(Project.owner_username == username)
-        .first()
+        db.query(Project).filter(Project.owner_username == username).first()
         is not None
     )
 
