@@ -132,7 +132,13 @@ async def collect_source(source: str, ns_projects: dict[str, str]) -> int:
 
 
 async def collect_once() -> None:
-    ns_projects = await run_in_threadpool(src.namespace_projects)
+    try:
+        ns_projects = await run_in_threadpool(src.namespace_projects)
+    except KubeUnavailableError as exc:
+        # Without the namespace → project map no event can be attributed,
+        # so the tick is skipped (always the case outside a cluster).
+        logger.warning("Activity collector: tick skipped: %s", exc)
+        return
     if settings.METRICS_PROJECT_KEY and ns_projects:
         try:
             await run_in_threadpool(metrics_isolation.sync, ns_projects)
