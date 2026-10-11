@@ -16,6 +16,20 @@ class Settings(BaseSettings):
     # "Admin CNP" role (visibility over every project's costs).
     FINOPS_ADMIN_USERS: str = ""
 
+    # Repository imports remain disabled until all reviewed branches are deployed.
+    IMPORT_ENABLED: bool = False
+    IMPORT_WORKFLOW_REPO: str = "3-Istor/extern-project-analyzer"
+    IMPORT_WORKFLOW_REF: str = "main"
+    IMPORT_CHART_SHA: str = ""  # Reviewed infra-templates commit.
+    IMPORT_WORKFLOW_SHA: str = ""  # Immutable commit of the trusted workflow.
+    IMPORT_OIDC_AUDIENCE: str = "cnp-repository-import"
+    IMPORT_USER_AUDIENCE: str = "3-istor-openid"
+    IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/cnp-imports"
+    IMPORT_MAX_IMAGE_BYTES: int = 1024 * 1024 * 1024
+    IMPORT_DOMAIN: str = "3istor.com"
+    IMPORT_ARGOCD_URL: str = ""
+    IMPORT_ARGOCD_TOKEN: str = ""
+
     # Database
     DATABASE_URL: str = "sqlite:///./arcl.db"
 

@@ -197,6 +197,10 @@ async def register_app(
     app_type: str,
     repo_url: str,
     hostname: str,
+    source_revision: str | None = None,
+    chart_revision: str | None = None,
+    image_tag: str | None = None,
+    image_digest: str | None = None,
 ) -> None:
     """
     Add or update an app's entry in a project's registry record.
@@ -229,6 +233,27 @@ async def register_app(
         "repoURL": repo_url,
         "hostnames": {"prod": hostname},
     }
+    if source_revision is not None:
+        import re
+
+        if not re.fullmatch(
+            r"[0-9a-f]{40}", source_revision
+        ) or not re.fullmatch(r"[0-9a-f]{40}", chart_revision or ""):
+            raise RegistryError(
+                "Imports require immutable source and chart revisions"
+            )
+        entry.update(
+            sourceRevision=source_revision, chartRevision=chart_revision
+        )
+        if (
+            not image_tag
+            or not re.fullmatch(r"[a-zA-Z0-9_.-]+", image_tag)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", image_digest or "")
+        ):
+            raise RegistryError(
+                "Imported apps require the published image tag and digest"
+            )
+        entry.update(imageTag=image_tag, imageDigest=image_digest)
     for i, app in enumerate(apps):
         if app.get("name") == app_name:
             apps[i] = entry

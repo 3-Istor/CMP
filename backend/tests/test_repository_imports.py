@@ -1,0 +1,481 @@
+"""Import protocol tests: real DB and JWT signatures, mocked external systems."""
+
+import json
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
+
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import BackgroundTasks, HTTPException
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.core.config import settings
+from app.core.database import Base
+from app.models.deployment import Deployment
+from app.models.project import Project
+from app.models.repository_import import RepositoryImport
+from app.models.user_github import UserGitHubInstallation
+from app.services import repository_imports as service
+from app.services.terraform_executor import TerraformExecutor, create_executor
+
+
+class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.engine = create_engine("sqlite://")
+        Base.metadata.create_all(self.engine)
+        self.db = sessionmaker(bind=self.engine)()
+        self.job = RepositoryImport(
+            id="12345678-1234-1234-1234-123456789012",
+            project_name="sandbox",
+            app_name="web",
+            repository_url="https://github.com/example/original",
+            user_sub="user-id",
+            username="joe",
+            installation_id="11",
+            status="preparing",
+            run_id="123",
+            source_sha="a" * 40,
+            report={},
+            expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
+            + timedelta(hours=1),
+            configuration={
+                "target_cloud": "onprem",
+                "image": "ghcr.io/example/imports/web:import-123",
+                "chart_sha": "b" * 40,
+            },
+        )
+        self.db.add(self.job)
+        self.db.commit()
+        self.tasks = BackgroundTasks()
+        self.claims = {"run_id": "123"}
+
+    def tearDown(self):
+        self.db.close()
+        self.engine.dispose()
+
+    async def invoke(self, action, payload=None):
+        with patch.object(
+            service, "authorize", AsyncMock(return_value="read-token")
+        ), patch.object(service, "head", AsyncMock(return_value="a" * 40)):
+            return await service.worker(
+                self.db,
+                self.job,
+                self.claims,
+                action,
+                payload or {},
+                self.tasks,
+            )
+
+    async def test_missing_scan_prevents_build_and_deployment(self):
+        with self.assertRaises(HTTPException):
+            await self.invoke(
+                "validated",
+                {
+                    "source_sha": "a" * 40,
+                    "report": {"security": {"blocked": False}},
+                },
+            )
+        self.assertEqual(self.job.status, "failed")
+        self.assertEqual(self.db.query(Deployment).count(), 0)
+        self.assertEqual(len(self.tasks.tasks), 0)
+
+    async def test_failures_and_permission_revocation_stop_next_step(self):
+        with patch.object(
+            service,
+            "authorize",
+            AsyncMock(side_effect=HTTPException(403, "revoked")),
+        ):
+            with self.assertRaises(HTTPException):
+                await service.worker(
+                    self.db, self.job, self.claims, "write", {}, self.tasks
+                )
+        self.assertEqual(self.job.status, "failed")
+        self.assertEqual(len(self.tasks.tasks), 0)
+
+    async def test_wrong_runner_cannot_take_over(self):
+        self.claims = {"run_id": "999"}
+        with self.assertRaises(HTTPException):
+            await self.invoke("write")
+        self.assertEqual(self.job.status, "preparing")
+
+    async def test_waiting_pr_and_cancelled_jobs_cannot_continue(self):
+        for status in ("waiting_pr", "cancelled", "failed"):
+            self.job.status = status
+            self.db.commit()
+            with self.assertRaises(HTTPException):
+                await self.invoke(
+                    "complete",
+                    {
+                        "digest": "sha256:" + "b" * 64,
+                        "image": self.job.configuration["image"],
+                    },
+                )
+        self.assertEqual(self.db.query(Deployment).count(), 0)
+
+    async def test_out_of_order_deployment_stops_the_pipeline(self):
+        with self.assertRaises(HTTPException):
+            await self.invoke(
+                "complete",
+                {
+                    "digest": "sha256:" + "b" * 64,
+                    "image": self.job.configuration["image"],
+                },
+            )
+        self.assertEqual(self.job.status, "failed")
+
+    async def test_final_source_change_prevents_deployment(self):
+        self.job.status = "publishing"
+        self.db.commit()
+        with patch.object(
+            service, "authorize", AsyncMock(return_value="token")
+        ), patch.object(service, "head", AsyncMock(return_value="b" * 40)):
+            with self.assertRaises(HTTPException):
+                await service.worker(
+                    self.db,
+                    self.job,
+                    self.claims,
+                    "complete",
+                    {
+                        "digest": "sha256:" + "b" * 64,
+                        "image": self.job.configuration["image"],
+                    },
+                    self.tasks,
+                )
+        self.assertEqual(self.db.query(Deployment).count(), 0)
+
+    async def test_valid_completion_creates_one_existing_repo_deployment(self):
+        self.job.status = "publishing"
+        self.db.commit()
+        payload = {
+            "digest": "sha256:" + "b" * 64,
+            "image": self.job.configuration["image"],
+        }
+        await self.invoke("complete", payload)
+        deployment = self.db.query(Deployment).one()
+        config = json.loads(deployment.app_config)
+        self.assertEqual(config["repository_mode"], "existing")
+        self.assertEqual(deployment.github_repo_url, self.job.repository_url)
+        self.assertEqual(deployment.project_id, "sandbox")
+        with self.assertRaises(HTTPException):
+            await self.invoke("complete", payload)
+        self.assertEqual(self.db.query(Deployment).count(), 1)
+        self.assertEqual(len(self.tasks.tasks), 1)
+
+    async def test_unmerged_pr_prevents_resume_and_dispatch(self):
+        self.job.status = "waiting_pr"
+        self.job.pull_request = 7
+        self.db.commit()
+        with patch.object(
+            service, "authorize", AsyncMock(return_value="token")
+        ), patch.object(
+            service, "github", AsyncMock(return_value={"merged": False})
+        ), patch.object(
+            service, "dispatch", AsyncMock()
+        ) as dispatch:
+            with self.assertRaises(HTTPException):
+                await service.resume(self.db, self.job)
+            dispatch.assert_not_called()
+        self.assertEqual(self.job.status, "waiting_pr")
+
+    async def test_publish_rejects_missing_scan_or_oversize_image(self):
+        self.job.status = "building"
+        self.db.commit()
+        with self.assertRaises(HTTPException):
+            await self.invoke(
+                "publish",
+                {
+                    "image": self.job.configuration["image"],
+                    "source_sha": self.job.source_sha,
+                    "image_size": 2**40,
+                    "image_scan_passed": True,
+                },
+            )
+        self.assertEqual(self.job.status, "failed")
+
+    async def test_latest_pr_revision_requires_independent_approval(self):
+        self.job.status, self.job.pull_request = "waiting_pr", 7
+        self.db.commit()
+        pr = {
+            "merged": True,
+            "base": {"ref": "main"},
+            "user": {"id": 1},
+            "head": {"ref": f"cnp-import/{self.job.id}", "sha": "a" * 40},
+        }
+        approval = {
+            "user": {"id": 2},
+            "state": "APPROVED",
+            "commit_id": "a" * 40,
+        }
+        for reviews in (
+            [],
+            [{**approval, "commit_id": "c" * 40}],
+            [approval, {**approval, "state": "DISMISSED"}],
+            [
+                approval,
+                {**approval, "user": {"id": 3}, "state": "CHANGES_REQUESTED"},
+            ],
+        ):
+            with patch.object(
+                service, "github", AsyncMock(side_effect=[pr, reviews])
+            ), patch.object(service, "dispatch", AsyncMock()) as dispatch:
+                with self.assertRaises(HTTPException):
+                    await service.approved_pr(self.job, "read")
+                dispatch.assert_not_called()
+        with patch.object(
+            service, "authorize", AsyncMock(return_value="read")
+        ), patch.object(
+            service, "github", AsyncMock(side_effect=[pr, [approval]])
+        ), patch.object(
+            service, "dispatch", AsyncMock()
+        ) as dispatch:
+            await service.resume(self.db, self.job)
+            dispatch.assert_awaited_once()
+        self.assertEqual(self.job.status, "queued")
+        self.assertIsNone(self.job.run_id)
+
+    async def test_retry_recovers_existing_pr_without_duplicate_dispatch(self):
+        self.job.status = "failed"
+        self.db.commit()
+        with patch.object(
+            service, "authorize", AsyncMock(return_value="read")
+        ), patch.object(
+            service,
+            "github",
+            AsyncMock(return_value=[{"number": 7, "state": "open"}]),
+        ), patch.object(
+            service, "dispatch", AsyncMock()
+        ) as dispatch:
+            await service.retry(self.db, self.job)
+        dispatch.assert_not_called()
+        self.assertEqual(self.job.status, "waiting_pr")
+        self.assertEqual(self.job.pull_request, 7)
+
+    async def test_retry_cannot_duplicate_existing_deployment(self):
+        self.job.status = "publishing"
+        self.db.commit()
+        await self.invoke(
+            "complete",
+            {
+                "image": self.job.configuration["image"],
+                "digest": "sha256:" + "b" * 64,
+            },
+        )
+        self.job.status = "failed"
+        self.db.commit()
+        with self.assertRaises(HTTPException):
+            await service.retry(self.db, self.job)
+        self.assertEqual(self.db.query(Deployment).count(), 1)
+
+    async def test_legacy_config_write_cannot_bypass_import_scans(self):
+        from app.routers.deployments import update_deployment_config
+
+        self.job.status = "publishing"
+        self.db.commit()
+        await self.invoke(
+            "complete",
+            {
+                "image": self.job.configuration["image"],
+                "digest": "sha256:" + "b" * 64,
+            },
+        )
+        deployment = self.db.query(Deployment).one()
+        deployment.status = service.DeploymentStatus.RUNNING
+        self.db.commit()
+        with patch(
+            "app.routers.deployments.imported_portal_guard",
+            return_value=self.job,
+        ), patch(
+            "app.routers.deployments.update_file_content", AsyncMock()
+        ) as commit:
+            with self.assertRaises(HTTPException) as error:
+                await update_deployment_config(
+                    deployment.id,
+                    {"_sha": "old", "replicaCount": 3},
+                    self.db,
+                    None,
+                )
+        self.assertEqual(error.exception.status_code, 409)
+        commit.assert_not_called()
+
+
+class SignedIdentityTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.key = rsa.generate_private_key(
+            public_exponent=65537, key_size=2048
+        )
+
+    def test_unsigned_expired_and_other_workflow_tokens_are_rejected(self):
+        now = datetime.now(timezone.utc)
+        claims = {
+            "sub": "worker",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "iss": "https://token.actions.githubusercontent.com",
+            "aud": settings.IMPORT_OIDC_AUDIENCE,
+            "repository": settings.IMPORT_WORKFLOW_REPO,
+            "workflow_ref": f"{settings.IMPORT_WORKFLOW_REPO}/.github/workflows/import-project.yml@refs/heads/main",
+            "workflow_sha": "a" * 40,
+            "event_name": "workflow_dispatch",
+            "run_attempt": "1",
+            "run_id": "123",
+        }
+        client = Mock()
+        client.get_signing_key_from_jwt.return_value = SimpleNamespace(
+            key=self.key.public_key()
+        )
+        with patch.object(service, "enabled"), patch.object(
+            service, "jwks", return_value=client
+        ), patch.object(settings, "IMPORT_WORKFLOW_SHA", "a" * 40):
+            valid = jwt.encode(claims, self.key, algorithm="RS256")
+            self.assertEqual(
+                service.verify_token(valid, worker=True)["run_id"], "123"
+            )
+            for changes in (
+                {"workflow_ref": "attacker/workflow"},
+                {"workflow_sha": "b" * 40},
+                {"exp": now - timedelta(seconds=1)},
+                {"run_attempt": "2"},
+            ):
+                with self.assertRaises(HTTPException):
+                    service.verify_token(
+                        jwt.encode(
+                            {**claims, **changes}, self.key, algorithm="RS256"
+                        ),
+                        worker=True,
+                    )
+            with self.assertRaises(HTTPException):
+                service.verify_token(
+                    jwt.encode(claims, "", algorithm="none"), worker=True
+                )
+
+    def test_live_keycloak_refusal_blocks_owner_too(self):
+        db = Mock()
+        db.query.return_value.filter_by.return_value.one_or_none.return_value = Project(
+            project_name="sandbox",
+            owner_username="joe",
+            status=service.ProjectStatus.ACTIVE,
+        )
+        with patch.object(
+            service.keycloak_service, "_get_admin_token", return_value="token"
+        ), patch.object(
+            service.keycloak_service,
+            "_find_user_by_username",
+            return_value={"id": "user-id", "enabled": False},
+        ):
+            with self.assertRaises(HTTPException):
+                service.fresh_project(db, "sandbox", "user-id", "joe")
+
+    def test_tfvars_contain_no_token_and_keep_typed_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executor = TerraformExecutor.__new__(TerraformExecutor)
+            executor.working_dir = Path(directory)
+            args = executor._variable_args(
+                {
+                    "repository_mode": "existing",
+                    "existing_repository_url": "https://github.com/example/original",
+                    "github_token": "private-token",
+                }
+            )
+            self.assertEqual(args, [])
+            text = (Path(directory) / "import.auto.tfvars.json").read_text()
+            self.assertNotIn("private-token", text)
+            self.assertEqual(
+                executor._import_sensitive["TF_VAR_github_token"],
+                "private-token",
+            )
+
+    def test_import_tfvars_are_isolated_from_catalog_and_other_apps(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as directory:
+            previous = Path.cwd()
+            try:
+                os.chdir(directory)
+                template = Path(directory) / "catalog-template"
+                template.mkdir()
+                (template / "main.tf").write_text('variable "project_name" {}')
+                first = create_executor(template, "first", isolated=True)
+                second = create_executor(template, "second", isolated=True)
+                first._variable_args(
+                    {"repository_mode": "existing", "project_name": "one"}
+                )
+                second._variable_args(
+                    {"repository_mode": "existing", "project_name": "two"}
+                )
+                self.assertNotEqual(first.working_dir, second.working_dir)
+                self.assertFalse(
+                    (template / "import.auto.tfvars.json").exists()
+                )
+                self.assertEqual(
+                    json.loads(
+                        (
+                            first.working_dir / "import.auto.tfvars.json"
+                        ).read_text()
+                    )["project_name"],
+                    "one",
+                )
+                reused = create_executor(template, "first", isolated=True)
+                self.assertEqual(reused.working_dir, first.working_dir)
+            finally:
+                os.chdir(previous)
+
+
+class RepositoryPermissionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_installation_id_alone_never_grants_repository_access(self):
+        job = SimpleNamespace(
+            user_sub="user-id",
+            repository_url="https://github.com/example/private",
+        )
+        response = Mock()
+        response.json.return_value = []
+        with patch.object(
+            service.keycloak_service, "_get_admin_token", return_value="admin"
+        ), patch.object(
+            service.requests, "get", return_value=response
+        ), patch.object(
+            service, "github", AsyncMock()
+        ) as github:
+            with self.assertRaises(HTTPException):
+                await service.repository_user_permission(job, "read")
+        github.assert_not_called()
+
+    async def test_user_permission_is_checked_again_before_writes(self):
+        job = SimpleNamespace(
+            user_sub="user-id",
+            repository_url="https://github.com/example/private",
+        )
+        response = Mock()
+        response.json.return_value = [
+            {"identityProvider": "github", "userName": "joe", "userId": "42"}
+        ]
+        with patch.object(
+            service.keycloak_service, "_get_admin_token", return_value="admin"
+        ), patch.object(
+            service.requests, "get", return_value=response
+        ), patch.object(
+            service,
+            "github",
+            AsyncMock(
+                side_effect=[
+                    {"id": 42},
+                    {"permission": "read"},
+                    {"id": 42},
+                    {"permission": "read"},
+                ]
+            ),
+        ):
+            await service.repository_user_permission(job, "read")
+            with self.assertRaises(HTTPException):
+                await service.repository_user_permission(
+                    job, "read", write=True
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()

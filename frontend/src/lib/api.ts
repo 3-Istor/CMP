@@ -1,6 +1,42 @@
 import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
 import { getSession } from "next-auth/react";
 
+export interface RepositoryImport {
+  id: string;
+  project_name: string;
+  app_name: string;
+  repository_url: string;
+  status: string;
+  message: string;
+  pull_request: number | null;
+  source_sha: string | null;
+  deployment_id: number | null;
+  report: Record<string, unknown>;
+}
+
+export function getRepositoryImports(project: string) {
+  return request<RepositoryImport[]>(`/repository-imports?project_name=${encodeURIComponent(project)}`);
+}
+
+export function createRepositoryImport(payload: {
+  project_name: string; app_name: string; repository_url: string;
+  project_path: string; port: number; health_path: string; allow_changes: boolean;
+}) {
+  return request<RepositoryImport>("/repository-imports", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function resumeRepositoryImport(id: string) {
+  return request<RepositoryImport>(`/repository-imports/${encodeURIComponent(id)}/resume`, { method: "POST" });
+}
+
+export function retryRepositoryImport(id: string) {
+  return request<RepositoryImport>(`/repository-imports/${encodeURIComponent(id)}/retry`, { method: "POST" });
+}
+
+export function cancelRepositoryImport(id: string) {
+  return request<RepositoryImport>(`/repository-imports/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+}
+
 // Declare runtime config type
 declare global {
   interface Window {

@@ -5,6 +5,7 @@ import { DeployModal } from "@/components/catalog/DeployModal";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
 import { MembersPanel } from "@/components/projects/MembersPanel";
+import { RepositoryImports } from "@/components/projects/RepositoryImports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -292,6 +293,7 @@ export default function ProjectPage() {
 
           {/* ── Applications tab ── */}
           <TabsContent value="apps" className="mt-6 space-y-6">
+            <RepositoryImports projectName={projectName} onDeploymentChange={refreshApps} />
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <p className="text-sm text-muted-foreground">

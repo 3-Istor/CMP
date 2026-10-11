@@ -36,6 +36,13 @@ jobs:
           poetry run isort --check-only app/
           poetry run pylint app/ --fail-under=9.0
 
+      - name: Verify portal import gates
+        working-directory: ./backend
+        env:
+          DEBUG: "false"
+          DATABASE_URL: "sqlite://"
+        run: poetry run python -m unittest discover -s tests
+
   test-frontend:
     runs-on: ubuntu-latest
 
@@ -46,7 +53,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 

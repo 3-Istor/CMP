@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,27 @@ from app.services.github_service import (
 )
 
 router = APIRouter(prefix="/deployments", tags=["Deployments"])
+optional_bearer = HTTPBearer(auto_error=False)
+
+
+def imported_portal_guard(db, deployment, credentials):
+    from app.models.repository_import import RepositoryImport
+    from app.services import repository_imports
+
+    job = (
+        db.query(RepositoryImport)
+        .filter_by(deployment_id=deployment.id)
+        .one_or_none()
+    )
+    if job:
+        if not credentials:
+            raise HTTPException(401, "Authentifiez-vous dans le portail CNP")
+        claims = repository_imports.verify_token(credentials.credentials)
+        repository_imports.fresh_project(
+            db, job.project_name, claims["sub"], claims["preferred_username"]
+        )
+    return job
+
 
 # ── ruamel.yaml instance (round-trip mode preserves comments & formatting) ──
 _yaml = YAML()
@@ -51,6 +73,18 @@ async def create_deployment(
     Create a deployment record and kick off Terraform deployment in the background.
     Returns immediately with status=pending so the frontend can start polling.
     """
+    # Imported repositories can only enter through the validated portal protocol.
+    if (
+        payload.app_config.get("repository_mode", "create") != "create"
+        or "existing_repository_url" in payload.app_config
+    ):
+        raise HTTPException(
+            403, "Use the repository import flow for an existing repository"
+        )
+    from app.models.repository_import import RepositoryImport
+
+    if db.query(RepositoryImport).filter_by(app_name=payload.name).first():
+        raise HTTPException(409, "Ce nom est réservé par un parcours d’import")
     # Validate template exists
     template = get_template_by_id(payload.template_id)
     if not template:
@@ -162,6 +196,9 @@ async def delete_deployment(
     deployment_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer
+    ),
 ):
     """
     Trigger deletion of all Terraform-managed resources.
@@ -170,6 +207,7 @@ async def delete_deployment(
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         raise HTTPException(status_code=404, detail="Deployment not found")
+    imported_portal_guard(db, deployment, credentials)
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,
@@ -292,6 +330,9 @@ async def _get_github_token_for_deployment(deployment: Deployment) -> str:
 async def get_deployment_config(
     deployment_id: int,
     db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer
+    ),
 ) -> dict[str, Any]:
     """
     Fetch the current ``deploy/values.yaml`` from the application's GitHub
@@ -307,7 +348,13 @@ async def get_deployment_config(
         502 — GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(deployment_id, db)
-    token = await _get_github_token_for_deployment(deployment)
+    job = imported_portal_guard(db, deployment, credentials)
+    if job:
+        from app.services.repository_imports import scoped_token
+
+        token = await scoped_token(job)
+    else:
+        token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment.github_repo_url)
 
     try:
@@ -359,6 +406,9 @@ async def update_deployment_config(
         },
     ),
     db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer
+    ),
 ) -> dict[str, Any]:
     """
     Partially update ``deploy/values.yaml`` in the application's GitHub
@@ -381,6 +431,11 @@ async def update_deployment_config(
         502 — GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(deployment_id, db)
+    if imported_portal_guard(db, deployment, credentials):
+        raise HTTPException(
+            409,
+            "Ce repo utilise une révision validée : toute modification doit repasser par la CI d’import",
+        )
 
     # Validate _sha is present in the body
     sha: str | None = payload.pop("_sha", None)

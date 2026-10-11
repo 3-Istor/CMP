@@ -9,6 +9,7 @@ Supports S3 backend for remote state storage.
 import json
 import logging
 import os
+import shutil
 import subprocess
 import urllib.parse
 from pathlib import Path
@@ -36,6 +37,7 @@ class TerraformExecutor:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.use_s3_backend = settings.TF_BACKEND_S3_ENABLED
         self.log_file = log_file
+        self._import_sensitive: dict[str, str] = {}
 
     def _log_message(self, message: str, level: int = logging.INFO) -> None:
         """Log message to standard logger and dynamic log file if configured."""
@@ -199,6 +201,8 @@ class TerraformExecutor:
         env["TF_VAR_github_registry_username"] = (
             settings.GITHUB_REGISTRY_USERNAME
         )
+
+        env.update(getattr(self, "_import_sensitive", {}))
 
         # Sanitize command for logging (hide sensitive values)
         safe_command = self._sanitize_command_for_logging(command)
@@ -451,17 +455,46 @@ provider "openstack" {{
 
         self._run_command(command)
 
+    def _variable_args(self, variables: dict[str, Any]) -> list[str]:
+        if variables.get("repository_mode") != "existing":
+            return [
+                part
+                for key, value in variables.items()
+                for part in ("-var", f"{key}={value}")
+            ]
+        # Generated in the isolated app-template working copy, never the source repository.
+        sensitive = {
+            key: value
+            for key, value in variables.items()
+            if any(
+                word in key.lower()
+                for word in ("password", "token", "secret", "private_key")
+            )
+        }
+        self._import_sensitive = {
+            f"TF_VAR_{key}": str(value) for key, value in sensitive.items()
+        }
+        path = self.working_dir / "import.auto.tfvars.json"
+        path.write_text(
+            json.dumps(
+                {
+                    key: value
+                    for key, value in variables.items()
+                    if key not in sensitive
+                },
+                indent=2,
+            )
+        )
+        path.chmod(0o600)
+        return []
+
     def plan(self, variables: dict[str, Any]) -> str:
         """Run terraform plan and return the output."""
         logger.info(
             "Planning Terraform deployment for %s", self.deployment_name
         )
 
-        var_args = []
-        for key, value in variables.items():
-            # Terraform -var flag doesn't need quotes around values
-            # The subprocess handles shell escaping automatically
-            var_args.extend(["-var", f"{key}={value}"])
+        var_args = self._variable_args(variables)
 
         result = self._run_command(
             ["terraform", "plan", "-no-color", "-input=false", *var_args]
@@ -479,11 +512,7 @@ provider "openstack" {{
             "Applying Terraform deployment for %s", self.deployment_name
         )
 
-        var_args = []
-        for key, value in variables.items():
-            # Terraform -var flag doesn't need quotes around values
-            # The subprocess handles shell escaping automatically
-            var_args.extend(["-var", f"{key}={value}"])
+        var_args = self._variable_args(variables)
 
         # Apply with auto-approve and stream output
         logger.info("🚀 Starting terraform apply (streaming output)...")
@@ -525,11 +554,7 @@ provider "openstack" {{
             "Destroying Terraform deployment for %s", self.deployment_name
         )
 
-        var_args = []
-        for key, value in variables.items():
-            # Terraform -var flag doesn't need quotes around values
-            # The subprocess handles shell escaping automatically
-            var_args.extend(["-var", f"{key}={value}"])
+        var_args = self._variable_args(variables)
 
         logger.info("🗑️  Starting terraform destroy (streaming output)...")
         self._run_command(
@@ -578,6 +603,7 @@ def create_executor(
     deployment_name: str,
     s3_key_path: str | None = None,
     log_file: Path | None = None,
+    isolated: bool = False,
 ) -> TerraformExecutor:
     """
     Factory function to create a TerraformExecutor.
@@ -589,6 +615,21 @@ def create_executor(
                      If not provided, uses default prefix + deployment_name
         log_file: Optional path to log file to write all output to.
     """
+    if isolated:
+        destination = (
+            Path("data/terraform_workdirs") / deployment_name
+        ).resolve()
+        if not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(
+                template_path,
+                destination,
+                ignore=shutil.ignore_patterns(
+                    ".git", ".terraform", "*.tfstate*", "*.auto.tfvars*"
+                ),
+            )
+            destination.chmod(0o700)
+        template_path = destination
     return TerraformExecutor(
         template_path, deployment_name, s3_key_path, log_file
     )

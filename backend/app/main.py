@@ -271,6 +271,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.routers import repository_imports
+
+app.include_router(repository_imports.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")

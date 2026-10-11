@@ -62,6 +62,18 @@ def run_deployment(deployment_id: int) -> None:
             app_config = json.loads(deployment.app_config or "{}")
             logger.info(f"Original app_config keys: {list(app_config.keys())}")
 
+            imported = app_config.get("repository_mode") == "existing"
+            import_job = None
+            if imported:
+                from app.services.repository_imports import (
+                    deployment_gate,
+                    register_argo_repository,
+                    wait_for_argo,
+                )
+
+                import_job = deployment_gate(db, deployment)
+                register_argo_repository(import_job)
+
             # CRITICAL: Inject app_name from deployment name
             # This ensures Terraform resources are named correctly
             app_config["app_name"] = deployment.name
@@ -93,11 +105,20 @@ def run_deployment(deployment_id: int) -> None:
                 try:
                     import asyncio
 
-                    installation_token = asyncio.run(
-                        get_installation_token(
-                            int(app_config["github_installation_id"])
+                    if imported:
+                        from app.services.repository_imports import (
+                            scoped_token,
                         )
-                    )
+
+                        installation_token = asyncio.run(
+                            scoped_token(import_job)
+                        )
+                    else:
+                        installation_token = asyncio.run(
+                            get_installation_token(
+                                int(app_config["github_installation_id"])
+                            )
+                        )
                     app_config["github_token"] = installation_token
                     logger.info("✅ GitHub token generated successfully")
 
@@ -162,6 +183,14 @@ def run_deployment(deployment_id: int) -> None:
                     f"Template path does not exist: {template_path}"
                 )
 
+            if (
+                imported
+                and 'variable "repository_mode"'
+                not in (template_path / "variables.tf").read_text()
+            ):
+                raise ValueError(
+                    "Deploy the reviewed app-templates existing-repository mode first"
+                )
             logger.debug(f"Template path verified: {template_path}")
 
             # Create Terraform executor
@@ -177,7 +206,11 @@ def run_deployment(deployment_id: int) -> None:
 
             log_file = Path("logs/deployments") / f"{deployment.id}.log"
             executor = create_executor(
-                template_path, deployment.name, s3_key_path, log_file=log_file
+                template_path,
+                deployment.name,
+                s3_key_path,
+                log_file=log_file,
+                isolated=imported,
             )
             logger.info(
                 f"✅ Terraform executor created (working_dir={executor.working_dir})"
@@ -206,6 +239,8 @@ def run_deployment(deployment_id: int) -> None:
                 DeploymentStatus.PLANNING,
                 "📋 Planning deployment...",
             )
+            if imported:
+                deployment_gate(db, deployment)
             plan_output = executor.plan(app_config)
             logger.info(
                 f"Terraform plan output (first 500 chars):\n{plan_output[:500]}"
@@ -225,6 +260,8 @@ def run_deployment(deployment_id: int) -> None:
             logger.info(
                 "Running terraform apply... (this may take several minutes)"
             )
+            if imported:
+                deployment_gate(db, deployment)
             outputs = executor.apply(app_config)
             logger.info(
                 f"✅ Terraform apply completed. Outputs: {list(outputs.keys())}"
@@ -243,7 +280,11 @@ def run_deployment(deployment_id: int) -> None:
             # present; the k3s-gitops-app template doesn't expose a
             # github_repo_url output, so reconstruct it from the deterministic
             # naming (repo name = app name, created under the GitHub org).
-            repo_url = outputs.get("github_repo_url")
+            repo_url = (
+                app_config["existing_repository_url"]
+                if imported
+                else outputs.get("github_repo_url")
+            )
             if not repo_url and deployment.template_id == "k3s-gitops-app":
                 owner = app_config.get("github_owner", "3-Istor")
                 repo_url = f"https://github.com/{owner}/{deployment.name}"
@@ -259,9 +300,7 @@ def run_deployment(deployment_id: int) -> None:
             # (k3s-gitops-app/outputs.tf's hostname output description).
             # Without it the app's tunnel and Gateway exist but nothing tells
             # them the hostname, and every request 404s at the connector.
-            # Best-effort: the deployment itself already succeeded, and a
-            # registry write failure here shouldn't be reported as a failed
-            # deployment.
+            # A registry write is required before readiness can be accepted.
             if deployment.template_id == "k3s-gitops-app" and outputs.get(
                 "hostname"
             ):
@@ -273,6 +312,8 @@ def run_deployment(deployment_id: int) -> None:
                 )
 
                 try:
+                    if imported:
+                        deployment_gate(db, deployment)
                     asyncio.run(
                         register_app(
                             project_name=app_config["project_name"],
@@ -280,6 +321,26 @@ def run_deployment(deployment_id: int) -> None:
                             app_type=outputs.get("app_type", "static"),
                             repo_url=repo_url or "",
                             hostname=outputs["hostname"],
+                            source_revision=(
+                                import_job.source_sha if imported else None
+                            ),
+                            chart_revision=(
+                                import_job.configuration["chart_sha"]
+                                if imported
+                                else None
+                            ),
+                            image_tag=(
+                                import_job.configuration["image"].rsplit(
+                                    ":", 1
+                                )[1]
+                                if imported
+                                else None
+                            ),
+                            image_digest=(
+                                import_job.report["digest"]
+                                if imported
+                                else None
+                            ),
                         )
                     )
                     logger.info(
@@ -287,13 +348,9 @@ def run_deployment(deployment_id: int) -> None:
                         deployment.name,
                     )
                 except RegistryError as exc:
-                    logger.error(
-                        "⚠️  Could not register '%s' in the project "
-                        "registry — its tunnel/Gateway will not route to "
-                        "it until this is retried: %s",
-                        deployment.name,
-                        exc,
-                    )
+                    raise RuntimeError(
+                        "Project registry registration failed"
+                    ) from exc
 
             state_summary = executor.get_state_summary()
             deployment.resource_count = state_summary.get("resource_count", 0)
@@ -305,15 +362,24 @@ def run_deployment(deployment_id: int) -> None:
             logger.info("─" * 80)
             logger.info("STEP 5: Waiting for app to be accessible")
             logger.info("─" * 80)
+            if imported:
+                deployment_gate(db, deployment)
+                wait_for_argo(import_job)
             app_url = outputs.get("app_url")
+            if imported and not app_url:
+                raise RuntimeError(
+                    "Application URL missing from Terraform outputs"
+                )
             if app_url:
                 url_ready = _wait_for_url_ready(db, deployment, app_url)
                 if not url_ready:
-                    logger.warning(
-                        f"⚠️ {app_url} not accessible within timeout — ArgoCD may still be syncing"
+                    raise RuntimeError(
+                        "Application availability check timed out"
                     )
 
             # Step 6: Success
+            if imported:
+                deployment_gate(db, deployment)
             logger.info("─" * 80)
             logger.info("STEP 6: Finalization")
             logger.info("─" * 80)
@@ -374,7 +440,10 @@ def backfill_gitops_repo_urls() -> None:
                 owner = cfg.get("github_owner", owner)
             except Exception:  # noqa: BLE001 — best-effort config parse
                 pass
-            d.github_repo_url = f"https://github.com/{owner}/{d.name}"
+            d.github_repo_url = (
+                cfg.get("existing_repository_url")
+                or f"https://github.com/{owner}/{d.name}"
+            )
             updated += 1
         if updated:
             db.commit()
@@ -437,6 +506,9 @@ def run_deletion(deployment_id: int) -> None:
             template_path = Path(template["_template_path"])
             logger.debug("Creating Terraform executor...")
 
+            original_config = json.loads(deployment.app_config or "{}")
+            imported = original_config.get("repository_mode") == "existing"
+
             # For Kubernetes deployments, use structured S3 path: cnp/projects/{project}/{app}
             s3_key_path = None
             if deployment.project_id:
@@ -447,7 +519,11 @@ def run_deletion(deployment_id: int) -> None:
 
             log_file = Path("logs/deployments") / f"{deployment.id}.log"
             executor = create_executor(
-                template_path, deployment.name, s3_key_path, log_file=log_file
+                template_path,
+                deployment.name,
+                s3_key_path,
+                log_file=log_file,
+                isolated=imported,
             )
             logger.info(
                 f"✅ Terraform executor created (working_dir={executor.working_dir})"
@@ -499,6 +575,10 @@ def run_deletion(deployment_id: int) -> None:
                         "Removed github_installation_id from app_config (not needed by Terraform)"
                     )
                 except Exception as token_error:
+                    if imported:
+                        raise RuntimeError(
+                            "Import deletion permission could not be confirmed"
+                        ) from token_error
                     logger.warning(
                         f"⚠️  Failed to regenerate GitHub token: {token_error}"
                     )
@@ -578,6 +658,10 @@ def run_deletion(deployment_id: int) -> None:
                         )
                     )
                 except RegistryError as exc:
+                    if imported:
+                        raise RuntimeError(
+                            "Imported app could not be unregistered"
+                        ) from exc
                     logger.error(
                         "⚠️  Could not unregister '%s' from the project "
                         "registry — a stale hostname entry may remain: %s",

@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import app.models.deployment  # noqa: F401 - ensure models are registered
+import app.models.repository_import  # noqa: F401
 from alembic import context
 from app.core.config import settings
 from app.core.database import Base
