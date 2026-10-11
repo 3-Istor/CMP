@@ -4,7 +4,12 @@ import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
+import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
 import { MembersPanel } from "@/components/projects/MembersPanel";
+import { SecurityAlert } from "@/components/security/SecurityAlert";
+import { SecurityDashboard } from "@/components/security/SecurityDashboard";
+import { ActivityTab } from "@/components/activity/ActivityTab";
+import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -24,8 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
-import { useCan, useProjectApps } from "@/lib/hooks";
-import { addPendingDeletion, usePendingDeletions } from "@/lib/pendingDeletions";
+import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
 import { ROLE_LABEL } from "@/lib/permissions";
 import type { CatalogTemplate } from "@/types";
 import {
@@ -39,10 +43,13 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   Users,
   Vault,
-  Wallet
+  BellRing,
+  History,
+  Wallet,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -54,14 +61,17 @@ export default function ProjectPage() {
   const projectName = params.project_name as string;
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [tab, setTab] = useState("apps");
   const [deleting, setDeleting] = useState(false);
 
   // If this project is already being torn down (e.g. reached via a stale
   // tab or the back button after a delete elsewhere), don't render the
   // normal admin UI — the Keycloak groups backing project access can
   // disappear mid-render.
-  const pendingDeletions = usePendingDeletions();
-  const isBeingDeleted = pendingDeletions.some((d) => d.name === projectName);
+  const { projects } = useProjects();
+  const isBeingDeleted = projects.some(
+    (p) => p.name === projectName && p.status === "decommissioning",
+  );
 
   // What this user may do here. Every can() is false while the role loads,
   // so action buttons stay absent instead of flashing into view and then
@@ -206,11 +216,8 @@ export default function ProjectPage() {
     try {
       await deleteProject(projectName);
 
-      // The call only schedules teardown — Keycloak group removal (which
-      // the project list is derived from) happens in the background and
-      // can take a while, so mark it as deleting rather than claim it's
-      // already gone.
-      addPendingDeletion(projectName);
+      // The call only schedules teardown. The project list reports it as
+      // "deleting" until the background destroy finishes.
       toast.success(`Deletion of "${projectName}" started`);
       router.push("/");
     } catch (err) {
@@ -291,24 +298,16 @@ export default function ProjectPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  router.push(
-                    `/finops?project=${encodeURIComponent(projectName)}`,
-                  )
-                }
-              >
-                <Wallet className="mr-2 h-4 w-4" />
-                Voir détails FinOps
-              </Button>
               <Badge variant="outline" className="font-mono text-xs">
                 {apps.length} app{apps.length !== 1 ? "s" : ""}
               </Badge>
             </div>
           </div>
         </div>
+
+        {canViewObservability && (
+          <SecurityAlert project={projectName} onOpen={() => setTab("security")} />
+        )}
 
         <Separator />
 
@@ -377,7 +376,7 @@ export default function ProjectPage() {
         )}
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue="apps">
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList>
             <TabsTrigger value="apps" className="gap-2">
               <LayoutGrid className="h-4 w-4" />
@@ -389,6 +388,32 @@ export default function ProjectPage() {
               <TabsTrigger value="members" className="gap-2">
                 <Users className="h-4 w-4" />
                 Members
+              </TabsTrigger>
+            )}
+            {/* Security, activity and alerts expose findings and logs:
+                members and above, like the API. */}
+            {canViewObservability && (
+              <TabsTrigger value="security" className="gap-2">
+                <ShieldCheck className="h-4 w-4" />
+                Security
+              </TabsTrigger>
+            )}
+            {can("finops.view") && (
+              <TabsTrigger value="finops" className="gap-2">
+                <Wallet className="h-4 w-4" />
+                FinOps
+              </TabsTrigger>
+            )}
+            {canViewObservability && (
+              <TabsTrigger value="activity" className="gap-2">
+                <History className="h-4 w-4" />
+                Activity
+              </TabsTrigger>
+            )}
+            {canViewObservability && (
+              <TabsTrigger value="alerts" className="gap-2">
+                <BellRing className="h-4 w-4" />
+                Alerts
               </TabsTrigger>
             )}
           </TabsList>
@@ -535,6 +560,28 @@ export default function ProjectPage() {
                 projectName={projectName}
                 canManage={can("members.manage")}
               />
+            </TabsContent>
+          )}
+
+          {canViewObservability && (
+            <>
+              <TabsContent value="activity" className="mt-6">
+                <ActivityTab project={projectName} />
+              </TabsContent>
+
+              <TabsContent value="alerts" className="mt-6">
+                <AlertsPanel project={projectName} />
+              </TabsContent>
+
+              <TabsContent value="security" className="mt-6 space-y-6">
+                <SecurityDashboard project={projectName} fullPageLink />
+              </TabsContent>
+            </>
+          )}
+
+          {can("finops.view") && (
+            <TabsContent value="finops" className="mt-6 space-y-6">
+              <ProjectFinopsPanel project={projectName} />
             </TabsContent>
           )}
         </Tabs>

@@ -9,9 +9,8 @@ backend synchronises Keycloak project membership into Grafana via the Admin API.
 Organization naming convention: "Project <TitleCasedProjectName>"
   Example: project "alpha" -> "Project Alpha", project "sandbox" -> "Project Sandbox"
 
-Role mappings (CMP to Grafana):
-  - "admin" or "owner" -> "Admin"
-  - "member" -> "Editor"
+Role mappings (CMP to Grafana): every project role is "Editor". An org Admin
+could edit the Loki datasource and read another project's tenant.
 
 All operations are async and use connection pooling via httpx.AsyncClient.
 Errors are logged but do not crash the caller (graceful degradation).
@@ -167,10 +166,10 @@ def _map_role_to_grafana(
     Returns:
         Grafana role ("Admin", "Editor", "Viewer").
     """
+    # Project admins stay Editors: a Grafana org Admin can edit the Loki
+    # datasource and point it at another project's tenant.
     normalised = role.lower()
-    if normalised in ("admin", "owner"):
-        return "Admin"
-    elif normalised == "member":
+    if normalised in ("admin", "owner", "member"):
         return "Editor"
     elif normalised == "guest":
         # Guests read dashboards and nothing else. Spelled out rather than
