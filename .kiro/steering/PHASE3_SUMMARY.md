@@ -73,7 +73,7 @@ Add to `backend/.env`:
 ```bash
 GITHUB_APP_PRIVATE_KEY="..."
 TF_BACKEND_S3_ENABLED=true
-TF_BACKEND_S3_BUCKET=3-istor-tf-infra-aws
+TF_BACKEND_S3_BUCKET=istor-cnp-tfstate-757826
 ```
 
 ---

@@ -55,7 +55,7 @@ CLOUDFLARE_ZONE_ID="xxxx"
 
 # S3 Backend
 TF_BACKEND_S3_ENABLED=true
-TF_BACKEND_S3_BUCKET="3-istor-tf-infra-aws"
+TF_BACKEND_S3_BUCKET="istor-cnp-tfstate-757826"
 TF_BACKEND_AWS_ACCESS_KEY_ID="AKIA..."
 TF_BACKEND_AWS_SECRET_ACCESS_KEY="..."
 ```
@@ -329,7 +329,7 @@ ls -la app/terraform/k3s-project-bootstrap/
 
 ```bash
 # Test AWS credentials
-aws s3 ls s3://3-istor-tf-infra-aws/
+aws s3 ls s3://istor-cnp-tfstate-757826/
 
 # Verify credentials
 aws sts get-caller-identity

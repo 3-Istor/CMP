@@ -247,7 +247,7 @@ CLOUDFLARE_ZONE_ID="your_zone_id"
 
 # S3 Backend (if enabled)
 TF_BACKEND_S3_ENABLED=true
-TF_BACKEND_S3_BUCKET="3-istor-tf-infra-aws"
+TF_BACKEND_S3_BUCKET="istor-cnp-tfstate-757826"
 TF_BACKEND_AWS_ACCESS_KEY_ID="AKIA..."
 TF_BACKEND_AWS_SECRET_ACCESS_KEY="..."
 TF_BACKEND_AWS_REGION="eu-west-3"
@@ -402,7 +402,7 @@ Error: error configuring S3 Backend: no valid credential sources for S3 Backend 
 
 ```bash
 # Verify AWS credentials
-aws s3 ls s3://3-istor-tf-infra-aws/
+aws s3 ls s3://istor-cnp-tfstate-757826/
 
 # Check environment variables
 echo $TF_BACKEND_AWS_ACCESS_KEY_ID
