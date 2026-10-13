@@ -73,7 +73,7 @@ OS_PASSWORD=your_password
 OS_PROJECT_NAME=your_project
 ```
 
-AWS and Terraform state backend credentials come from the deployed CMP. With kubectl access to the k3s cluster:
+Credentials (AWS, Terraform state, Keycloak, Vault, Grafana, Loki, GitHub App...) come from the deployed CMP: the script copies every secret-backed variable of the `arcl-cmp-backend` deployment. With kubectl access to the k3s cluster:
 
 ```bash
 ./scripts/sync-local-env.sh
