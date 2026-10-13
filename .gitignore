@@ -29,3 +29,6 @@ values-secrets.yaml
 
 # Helm releases
 .helm-releases/
+
+# make network state
+.dev/

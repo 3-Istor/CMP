@@ -45,6 +45,17 @@ Python 3.12+, FastAPI, SQLAlchemy/Alembic ; TypeScript, Next.js 16, React 19, Ta
 
 ## Quick Start
 
+The Makefile wraps the steps below and works on Ubuntu and NixOS:
+
+```bash
+make doctor   # missing tools and access
+make setup    # dependencies, env files, migrations
+make env      # AWS and Terraform state credentials from the cluster
+make dev      # OpenStack tunnel if needed, backend and frontend
+```
+
+`make help` lists every target. Set `CMP_SSH_HOST` to your SSH alias for the bastion if it is not `pae-node-1`.
+
 ### 1. Clone & Setup
 
 ```bash
