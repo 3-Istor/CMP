@@ -64,7 +64,7 @@ GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 -----END RSA PRIVATE KEY-----"
 
 TF_BACKEND_S3_ENABLED=true
-TF_BACKEND_S3_BUCKET=3-istor-tf-infra-aws
+TF_BACKEND_S3_BUCKET=istor-cnp-tfstate-757826
 TF_BACKEND_S3_DYNAMODB_TABLE=terraform-state-lock
 ```
 
@@ -151,7 +151,7 @@ interface Deployment {
 
 **S3 Backend**:
 
-- ✅ Bucket: `3-istor-tf-infra-aws`
+- ✅ Bucket: `istor-cnp-tfstate-757826`
 - ✅ DynamoDB: `terraform-state-lock`
 - ✅ Encryption: Enabled
 

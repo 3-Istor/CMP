@@ -255,7 +255,7 @@ poetry run python -m app.main
 📦 Terraform S3 Backend (optional)
 --------------------------------------------------------------------------------
   ✅ TF_BACKEND_S3_ENABLED                    = True
-  ✅ TF_BACKEND_S3_BUCKET                     = 3-istor-tf-infra-aws
+  ✅ TF_BACKEND_S3_BUCKET                     = istor-cnp-tfstate-757826
   ✅ TF_BACKEND_AWS_REGION                    = eu-west-3
 
 ================================================================================
