@@ -4,14 +4,13 @@
 # Plain values are skipped: they are in-cluster URLs or the defaults of app/core/config.py.
 set -euo pipefail
 
-KUBE_CONTEXT="${KUBE_CONTEXT:-3-istor-k3s}"
 NAMESPACE="arcl-cmp"
 DEPLOYMENT="arcl-cmp-backend"
 ENV_FILE="${ENV_FILE:-$(cd "$(dirname "$0")/.." && pwd)/backend/.env}"
 
 [[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE, run ./setup.sh first" >&2; exit 1; }
 
-kube() { kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" "$@"; }
+kube() { kubectl -n "$NAMESPACE" "$@"; }
 
 read_secret() {
     local value
