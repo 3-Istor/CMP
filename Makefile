@@ -19,7 +19,7 @@ help: ## List the targets
 setup: ## Install backend and frontend dependencies, create env files, run migrations
 	./setup.sh
 
-env: ## Copy AWS and Terraform state credentials from the cluster into backend/.env
+env: ## Copy every secret-backed backend variable from the cluster into backend/.env
 	./scripts/sync-local-env.sh
 
 network: ## Route OpenStack through the bastion unless Keystone is already reachable

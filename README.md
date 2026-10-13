@@ -50,7 +50,7 @@ The Makefile wraps the steps below and works on Ubuntu and NixOS:
 ```bash
 make doctor   # missing tools and access
 make setup    # dependencies, env files, migrations
-make env      # AWS and Terraform state credentials from the cluster
+make env      # credentials from the cluster (same as prod)
 make dev      # OpenStack tunnel if needed, backend and frontend
 ```
 
