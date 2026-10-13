@@ -16,7 +16,11 @@ from app.core.database import SessionLocal
 from app.models.audit import ActivityCursor, ActivityRecord
 from app.services import activity_sources as src
 from app.services import metrics_isolation
-from app.services.kube_client import KubeUnavailableError
+from app.services.kube_client import (
+    OUTSIDE_CLUSTER_NOTICE,
+    KubeUnavailableError,
+    in_cluster,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +136,10 @@ async def collect_source(source: str, ns_projects: dict[str, str]) -> int:
 
 
 async def collect_once() -> None:
-    ns_projects = await run_in_threadpool(src.namespace_projects)
+    has_cluster = in_cluster()
+    ns_projects = (
+        await run_in_threadpool(src.namespace_projects) if has_cluster else {}
+    )
     if settings.METRICS_PROJECT_KEY and ns_projects:
         try:
             await run_in_threadpool(metrics_isolation.sync, ns_projects)
@@ -149,6 +156,8 @@ async def collect_once() -> None:
             logger.warning(
                 "Activity collector: %s unavailable: %s", source, exc
             )
+    if not has_cluster:
+        return
     try:
         deploys = await run_in_threadpool(src.deployment_events)
         await run_in_threadpool(store, deploys)
@@ -158,6 +167,8 @@ async def collect_once() -> None:
 
 async def activity_collector_loop() -> None:
     logger.info("Activity collector started")
+    if not in_cluster():
+        logger.warning("Activity collector: %s", OUTSIDE_CLUSTER_NOTICE)
     while True:
         try:
             await collect_once()

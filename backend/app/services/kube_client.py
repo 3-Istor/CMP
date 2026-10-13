@@ -21,11 +21,25 @@ class KubeUnavailableError(Exception):
     """Raised when the Kubernetes API cannot be reached or refuses the read."""
 
 
+OUTSIDE_CLUSTER_NOTICE = (
+    "not running inside a Kubernetes cluster: cluster data is not collected. "
+    "Expected when the backend runs locally."
+)
+
+
+def in_cluster() -> bool:
+    """True when the pod's service account is mounted (never in local dev)."""
+    return (
+        bool(os.environ.get("KUBERNETES_SERVICE_HOST"))
+        and (SERVICE_ACCOUNT_DIR / "token").exists()
+    )
+
+
 def _api_base() -> str:
-    host = os.environ.get("KUBERNETES_SERVICE_HOST")
-    port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
-    if not host or not (SERVICE_ACCOUNT_DIR / "token").exists():
+    if not in_cluster():
         raise KubeUnavailableError("not running inside a Kubernetes cluster")
+    host = os.environ["KUBERNETES_SERVICE_HOST"]
+    port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
     return f"https://{host}:{port}"
 
 

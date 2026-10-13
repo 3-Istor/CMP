@@ -45,6 +45,17 @@ Python 3.12+, FastAPI, SQLAlchemy/Alembic ; TypeScript, Next.js 16, React 19, Ta
 
 ## Quick Start
 
+The Makefile wraps the steps below and works on Ubuntu and NixOS:
+
+```bash
+make doctor   # missing tools and access
+make setup    # dependencies, env files, migrations
+make env      # credentials from the cluster (same as prod)
+make dev      # OpenStack tunnel if needed, backend and frontend
+```
+
+`make help` lists every target. Set `CMP_SSH_HOST` to your SSH alias for the bastion if it is not `pae-node-1`.
+
 ### 1. Clone & Setup
 
 ```bash
@@ -116,6 +127,14 @@ poetry run uvicorn app.main:app --reload --port 8000
 ```
 
 Backend will be available at http://localhost:8000
+
+Without the WireGuard VPN, OpenStack (`192.168.1.x`) is unreachable. Route it through the bastion in a dedicated terminal, with `CMP_SSH_HOST` set to your SSH alias for the node:
+
+```bash
+CMP_SSH_HOST=pae-node-1 ./scripts/dev-network.sh
+```
+
+Locally the backend has no Kubernetes service account: the security and activity collectors log one warning at startup and leave cluster data unmeasured. This is expected.
 
 ### 5. Start Frontend (in a new terminal)
 
