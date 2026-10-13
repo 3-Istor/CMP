@@ -73,6 +73,14 @@ OS_PASSWORD=your_password
 OS_PROJECT_NAME=your_project
 ```
 
+AWS and Terraform state backend credentials come from the deployed CMP. With kubectl access to the k3s cluster:
+
+```bash
+./scripts/sync-local-env.sh
+```
+
+The local backend then shares the prod Terraform states in `istor-cnp-tfstate-757826`: only deploy or destroy throwaway projects.
+
 ### 3. Configure Authentication (Optional)
 
 CMP supports two authentication modes:

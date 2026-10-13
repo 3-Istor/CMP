@@ -82,7 +82,7 @@ OS_PROJECT_NAME=your_project
 
 # Terraform S3 Backend
 TF_BACKEND_S3_ENABLED=true
-TF_BACKEND_S3_BUCKET=3-istor-tf-infra-aws
+TF_BACKEND_S3_BUCKET=istor-cnp-tfstate-757826
 TF_BACKEND_S3_DYNAMODB_TABLE=terraform-state-lock
 ```
 
@@ -235,7 +235,7 @@ poetry run alembic upgrade head
 aws sts get-caller-identity
 
 # Vérifier le bucket S3
-aws s3 ls s3://3-istor-tf-infra-aws/
+aws s3 ls s3://istor-cnp-tfstate-757826/
 ```
 
 ## 📈 Monitoring

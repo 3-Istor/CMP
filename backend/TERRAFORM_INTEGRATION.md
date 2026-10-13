@@ -65,7 +65,7 @@ CLOUDFLARE_ACCOUNT_ID="xxxx"
 
 # S3 Backend (for Terraform state)
 TF_BACKEND_S3_ENABLED=true
-TF_BACKEND_S3_BUCKET="3-istor-tf-infra-aws"
+TF_BACKEND_S3_BUCKET="istor-cnp-tfstate-757826"
 TF_BACKEND_AWS_ACCESS_KEY_ID="xxxx"
 TF_BACKEND_AWS_SECRET_ACCESS_KEY="xxxx"
 TF_BACKEND_AWS_REGION="eu-west-3"
@@ -341,7 +341,7 @@ variable "vault_token" { sensitive = true }
 Each application/project has its own isolated Terraform state file in S3:
 
 ```
-s3://3-istor-tf-infra-aws/
+s3://istor-cnp-tfstate-757826/
 ├── cmp/
 │   └── projects/
 │       ├── project-alpha/
@@ -464,7 +464,7 @@ python verify_terraform_integration.py
 ✅ CLOUDFLARE_ACCOUNT_ID: ********...********
 
 📦 S3 Backend for Terraform State:
-✅ TF_BACKEND_S3_BUCKET: 3-istor-tf-infra-aws
+✅ TF_BACKEND_S3_BUCKET: istor-cnp-tfstate-757826
 ✅ TF_BACKEND_AWS_ACCESS_KEY_ID: AKIA****...****
 ✅ TF_BACKEND_AWS_SECRET_ACCESS_KEY: ********...********
 ✅ TF_BACKEND_AWS_REGION: eu-west-3
