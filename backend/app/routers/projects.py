@@ -9,6 +9,7 @@ Endpoints:
   GET  /api/projects/{project_name}/apps   - List applications in a project
 """
 
+import json
 import logging
 from typing import Annotated
 
@@ -21,12 +22,13 @@ from fastapi import (
     HTTPException,
     status,
 )
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.deployment import Deployment, DeploymentStatus
-from app.models.project import Project, TargetCloud
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.project import Project, ProjectStatus, TargetCloud
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     ProjectCreate,
@@ -44,15 +46,22 @@ from app.services.keycloak_service import (
     has_project_access,
     list_project_members,
     remove_user_from_project,
+    require_project_role,
     verify_project_access,
 )
 from app.services.project_bootstrap import (
     run_project_bootstrap,
     run_project_teardown,
 )
+from app.services.project_preflight import (
+    PreflightUnavailableError,
+    find_leftovers,
+)
 from app.services.project_registry import (
     ImmutableCloudError,
+    NameCollisionError,
     RegistryError,
+    ensure_project_names_free,
     publish_record,
     remove_record,
 )
@@ -237,8 +246,36 @@ async def list_projects(
         # on-prem by definition, which is what the schema default says.
         if row is not None:
             p["target_cloud"] = row.target_cloud
+            p["status"] = row.status
+            p["step_message"] = row.step_message
             if username and row.owner_username == username:
                 p["role"] = "owner"
+
+    # A project whose bootstrap is running or failed has no Keycloak groups (yet),
+    # so the membership query cannot see it. Its owner still has to, otherwise a
+    # failed bootstrap would leave nothing on screen to explain what happened.
+    listed_names = {p["name"] for p in projects}
+    if username:
+        unlisted = (
+            db.query(Project)
+            .filter(
+                Project.owner_username == username,
+                Project.status != ProjectStatus.ACTIVE,
+                Project.project_name.notin_(listed_names),
+            )
+            .all()
+        )
+        projects.extend(
+            {
+                "name": row.project_name,
+                "role": "owner",
+                "target_cloud": row.target_cloud,
+                "status": row.status,
+                "step_message": row.step_message,
+                "is_accessible": False,
+            }
+            for row in unlisted
+        )
 
     return [ProjectRead(**p) for p in projects]
 
@@ -299,6 +336,46 @@ async def create_project(
     user_id = get_user_id_from_token(token_payload)
     username = token_payload.get("preferred_username") or user_id
 
+    # Both checks run before anything is written or applied. A project the DB
+    # already knows is a retry: its own resources are expected to exist.
+    is_known_project = (
+        db.query(Project)
+        .filter(Project.project_name == payload.project_name)
+        .first()
+        is not None
+    )
+    if not is_known_project:
+        try:
+            leftovers = await run_in_threadpool(
+                find_leftovers, payload.project_name
+            )
+        except PreflightUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+            ) from exc
+        if leftovers:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Cannot create project '{payload.project_name}': "
+                    "resources from a previous project of the same name "
+                    "still exist and must be cleaned first: "
+                    + "; ".join(leftovers)
+                ),
+            )
+
+    try:
+        await ensure_project_names_free(payload.project_name)
+    except NameCollisionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    except RegistryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not check the project registry: {exc}",
+        ) from exc
+
     # Store creator temporarily (will be removed once added to Keycloak group)
     _project_creators[payload.project_name] = user_id
     logger.info(
@@ -332,18 +409,25 @@ async def create_project(
 
     # Persist the project owner (creator) — immutable, can never be removed —
     # and mirror the cloud choice for the portal.
-    if (
-        not db.query(Project)
+    existing_project = (
+        db.query(Project)
         .filter(Project.project_name == payload.project_name)
         .first()
-    ):
+    )
+    if existing_project is None:
         db.add(
             Project(
                 project_name=payload.project_name,
                 owner_username=username,
                 target_cloud=payload.target_cloud,
+                status=ProjectStatus.PROVISIONING,
+                step_message="Bootstrap queued",
             )
         )
+        db.commit()
+    elif existing_project.status == ProjectStatus.FAILED:
+        existing_project.status = ProjectStatus.PROVISIONING
+        existing_project.step_message = "Bootstrap queued"
         db.commit()
         logger.info(
             "👑 Recorded '%s' as owner of project '%s' on '%s'",
@@ -819,10 +903,11 @@ async def delete_project(
     """
     Delete a project and tear down its Day-0 infrastructure.
 
-    Keycloak groups and the ownership record are removed synchronously so the
-    project disappears from listings immediately; the remaining infrastructure
-    (Vault policy, ArgoCD AppProject, GitHub resources and the per-project
-    Terraform state) is destroyed in the background via ``terraform destroy``.
+    The registry record is removed synchronously and the project is marked
+    ``decommissioning``. Everything else (Keycloak groups, Vault policy, ArgoCD
+    AppProject, GitHub resources and the per-project Terraform state) is
+    destroyed in the background via ``terraform destroy``. The project row goes
+    away once that succeeds, or turns ``failed`` with the reason.
 
     Requirements:
     - User must be project admin
@@ -847,13 +932,30 @@ async def delete_project(
         admin_group_name = f"project-{project_name}-admins"
         admin_group = _find_group_by_name(admin_group_name, admin_token)
 
-        if not admin_group:
+        row = (
+            db.query(Project)
+            .filter(Project.project_name == project_name)
+            .first()
+        )
+
+        # A teardown that failed after destroying the Keycloak groups leaves
+        # nobody an admin by group membership, yet it has to be retried. Its
+        # owner may do so; everyone else still gets a 404.
+        username = token_payload.get("preferred_username", "")
+        is_retry_by_owner = (
+            row is not None
+            and row.status == ProjectStatus.DECOMMISSION_FAILED
+            and bool(username)
+            and row.owner_username == username
+        )
+
+        if not admin_group and not is_retry_by_owner:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Project '{project_name}' not found.",
             )
 
-        if not _check_user_in_group_realtime(
+        if admin_group and not _check_user_in_group_realtime(
             user_id, admin_group["id"], admin_token
         ):
             raise HTTPException(
@@ -879,11 +981,6 @@ async def delete_project(
 
         logger.info(f"🗑️  Scheduling teardown for project '{project_name}'...")
 
-        row = (
-            db.query(Project)
-            .filter(Project.project_name == project_name)
-            .first()
-        )
         target_cloud = (
             row.target_cloud if row is not None else TargetCloud.ONPREM
         )
@@ -907,8 +1004,10 @@ async def delete_project(
                 detail=f"Could not deregister the project: {exc}",
             ) from exc
 
-        db.query(Project).filter(Project.project_name == project_name).delete()
-        db.commit()
+        if row is not None:
+            row.status = ProjectStatus.DECOMMISSIONING
+            row.step_message = "Teardown queued"
+            db.commit()
 
         background_tasks.add_task(
             run_project_teardown,

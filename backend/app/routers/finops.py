@@ -373,7 +373,7 @@ async def apply_recommendation(
 
     commit_sha: str | None = None
     if deployment.github_repo_url:
-        commit_sha = await _apply_patch_to_gitops(deployment, rec.patch)
+        commit_sha = await _apply_patch_to_gitops(deployment, rec.patch, db)
 
     _upsert_state(db, rec, _username(token), "applied")
     return ActionResponse(
@@ -518,7 +518,7 @@ def get_alerts(
 
 
 async def _apply_patch_to_gitops(
-    deployment: Deployment, patch: dict
+    deployment: Deployment, patch: dict, db: Session
 ) -> str | None:
     """
     Deep-merge ``patch`` into the app's ``deploy/values.yaml`` and commit.
@@ -527,11 +527,13 @@ async def _apply_patch_to_gitops(
     from io import StringIO
 
     from app.routers.deployments import (
-        _CONFIG_FILE_PATH,
+        _app_type_of,
+        _config_file_for,
         _deep_merge,
         _extract_repo_full_name,
         _get_github_token_for_deployment,
         _yaml,
+        require_mutable_source,
     )
     from app.services.github_service import (
         GitHubAppError,
@@ -539,13 +541,15 @@ async def _apply_patch_to_gitops(
         update_file_content,
     )
 
+    require_mutable_source(db, deployment)
+    file_path = _config_file_for(_app_type_of(deployment), None)
     try:
         token = await _get_github_token_for_deployment(deployment)
         repo = _extract_repo_full_name(deployment.github_repo_url)
         raw_content, sha = await get_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
         )
         parsed = _yaml.load(raw_content)
         _deep_merge(parsed, patch)
@@ -554,7 +558,7 @@ async def _apply_patch_to_gitops(
         result = await update_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
             content=out.getvalue(),
             message="chore(finops): apply cost optimisation recommendation",
             sha=sha,

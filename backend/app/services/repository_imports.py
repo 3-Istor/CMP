@@ -277,6 +277,9 @@ async def authorize(db, job, write=False):
     if job.configuration["chart_sha"] != settings.IMPORT_CHART_SHA:
         stop("La version approuvée du chart a changé", 403)
     await require_gitops_consumer()
+    await project_registry.ensure_app_names_free(
+        job.project_name, job.app_name, "static", job.configuration["hostname"]
+    )
     token = await scoped_token(job)
     await repository_user_permission(job, token, write=write)
     repo = await github(

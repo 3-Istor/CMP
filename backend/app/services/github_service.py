@@ -8,7 +8,11 @@ GitHub App ID: 3836905
 """
 
 import base64
+import io
+import json
 import logging
+import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -24,6 +28,15 @@ GITHUB_API_BASE = "https://api.github.com"
 
 class GitHubAppError(Exception):
     """Raised when GitHub App operations fail."""
+
+
+def _github_error_message(response: httpx.Response) -> str:
+    # Gateway errors (502/503/504) and some 403s come back with an empty or HTML body.
+    try:
+        message = response.json().get("message")
+    except ValueError:
+        message = None
+    return f"HTTP {response.status_code}: {message or response.text[:200] or response.reason_phrase}"
 
 
 class FileNotInRepoError(GitHubAppError):
@@ -183,7 +196,7 @@ async def create_repository(
             return repo_data
 
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         logger.error(
             "Failed to create repository %s: %s", repo_name, error_msg
         )
@@ -262,7 +275,7 @@ async def get_file_content(
     except GitHubAppError:
         raise
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         logger.error(
             "GitHub API error fetching '%s': %s", file_path, error_msg
         )
@@ -273,6 +286,48 @@ async def get_file_content(
         raise GitHubAppError(
             f"Unexpected error fetching file '{file_path}': {exc}"
         ) from exc
+
+
+async def list_directory(
+    installation_token: str,
+    repo_full_name: str,
+    dir_path: str,
+    ref: str = "main",
+) -> list[str]:
+    """
+    List the file names directly under a directory of a GitHub repository.
+
+    Returns an empty list when the directory does not exist.
+
+    Raises:
+        GitHubAppError: On HTTP errors or an unexpected response shape.
+    """
+    url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/contents/{dir_path}"
+    headers = {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url, headers=headers, params={"ref": ref}, timeout=15.0
+            )
+            if response.status_code == 404:
+                return []
+            response.raise_for_status()
+            entries = response.json()
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to list '{dir_path}' in '{repo_full_name}': {exc}"
+        ) from exc
+
+    if not isinstance(entries, list):
+        raise GitHubAppError(
+            f"'{dir_path}' in '{repo_full_name}' is not a directory"
+        )
+    return [e["name"] for e in entries if e.get("type") == "file"]
 
 
 async def update_file_content(
@@ -350,7 +405,7 @@ async def update_file_content(
     except GitHubAppError:
         raise
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         logger.error(
             "GitHub API error updating '%s': %s", file_path, error_msg
         )
@@ -435,7 +490,7 @@ async def put_file_content(
     except GitHubAppError:
         raise
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         raise GitHubAppError(
             f"Failed to write file '{file_path}': {error_msg}"
         ) from exc
@@ -498,7 +553,7 @@ async def delete_file(
             return data
 
     except httpx.HTTPStatusError as exc:
-        error_msg = exc.response.json().get("message", exc.response.text)
+        error_msg = _github_error_message(exc.response)
         raise GitHubAppError(
             f"Failed to delete file '{file_path}': {error_msg}"
         ) from exc
@@ -506,3 +561,133 @@ async def delete_file(
         raise GitHubAppError(
             f"Unexpected error deleting file '{file_path}': {exc}"
         ) from exc
+
+
+@dataclass(frozen=True)
+class Artifact:
+    id: str
+    created_at: datetime
+    content: dict | None
+
+
+def _api_headers(installation_token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+async def get_default_branch(
+    installation_token: str, repo_full_name: str
+) -> str:
+    """
+    Raises:
+        GitHubAppError: On HTTP errors.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}",
+                headers=_api_headers(installation_token),
+                timeout=15.0,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to read repository '{repo_full_name}': {exc}"
+        ) from exc
+    return response.json().get("default_branch", "main")
+
+
+async def get_latest_artifact(
+    installation_token: str,
+    repo_full_name: str,
+    artifact_name: str,
+    file_name: str,
+    branch: str,
+    known_id: str | None = None,
+) -> Artifact | None:
+    """
+    The newest non-expired artifact named *artifact_name* produced on
+    *branch*, with *file_name* parsed as JSON. The archive is not downloaded
+    when the artifact is *known_id*: its content is then None.
+
+    Returns None when there is no such artifact.
+
+    Raises:
+        GitHubAppError: On HTTP errors or an unreadable archive.
+    """
+    headers = _api_headers(installation_token)
+    list_url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/artifacts"
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(
+                list_url,
+                headers=headers,
+                params={"name": artifact_name, "per_page": 30},
+                timeout=15.0,
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            artifacts = [
+                a
+                for a in response.json().get("artifacts", [])
+                if not a.get("expired")
+                and (a.get("workflow_run") or {}).get("head_branch") == branch
+            ]
+            if not artifacts:
+                return None
+            newest = max(artifacts, key=lambda a: a.get("created_at", ""))
+            artifact_id = str(newest["id"])
+            created_at = datetime.fromisoformat(
+                newest["created_at"].replace("Z", "+00:00")
+            )
+            if artifact_id == known_id:
+                return Artifact(artifact_id, created_at, None)
+            archive = await client.get(
+                newest["archive_download_url"], headers=headers, timeout=30.0
+            )
+            archive.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to fetch artifact '{artifact_name}' of '{repo_full_name}': {exc}"
+        ) from exc
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive.content)) as bundle:
+            content = json.loads(bundle.read(file_name))
+    except (zipfile.BadZipFile, KeyError, ValueError) as exc:
+        raise GitHubAppError(
+            f"Artifact '{artifact_name}' of '{repo_full_name}' has no readable '{file_name}': {exc}"
+        ) from exc
+    return Artifact(artifact_id, created_at, content)
+
+
+async def dispatch_workflow(
+    installation_token: str, repo_full_name: str, workflow: str, ref: str
+) -> None:
+    """
+    Raises:
+        GitHubAppError: On HTTP errors, including a workflow without a
+            ``workflow_dispatch`` trigger (HTTP 422).
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/workflows/{workflow}/dispatches",
+                headers=_api_headers(installation_token),
+                json={"ref": ref},
+                timeout=15.0,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to start '{workflow}' on '{repo_full_name}': {exc}"
+        ) from exc
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to start '{workflow}' on '{repo_full_name}': "
+            f"{_github_error_message(response)}"
+        )

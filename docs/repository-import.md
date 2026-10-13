@@ -43,5 +43,5 @@ faire l’objet d’un nouveau parcours validé.
 Vérification backend :
 
 ```sh
-DEBUG=false DATABASE_URL=sqlite:// poetry run python -m unittest discover -s tests
+DEBUG=false DATABASE_URL=sqlite:// poetry run python -m pytest -q tests
 ```

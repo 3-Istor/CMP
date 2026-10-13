@@ -1,95 +1,34 @@
-<div align="center">
+# CMP
 
-# ⚡ CMP
+## Rôle
 
-### Hybrid Cloud Management Platform
+Portail de gestion de la CNP : catalogue, projets, déploiements et suivi des ressources. Le backend orchestre Terraform et publie les projets et applications dans le registre Git ; le frontend expose ces opérations aux utilisateurs.
 
-**Self-service deployment of application stacks across OpenStack + AWS**
+## Technologies
 
-[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+Python 3.12+, FastAPI, SQLAlchemy/Alembic ; TypeScript, Next.js 16, React 19, Tailwind CSS ; Terraform, Docker, Helm et GitHub Actions.
 
-</div>
+## Entrées
 
----
+| Origine / destinataire | Contenu et transmission |
+| --- | --- |
+| app-templates | Clone Git du catalogue : `templates/*/manifest.json`, modules et configurations Terraform. |
+| cnp-projects | Lecture des `registry/projects/*.yaml` via la GitHub App avant mise à jour du registre. |
+| Services de plateforme | Identité Keycloak, secrets Vault, API GitHub, Cloudflare et fournisseurs cloud ; paramètres de déploiement saisis par les utilisateurs. |
+| cnp-docs | Documentation déclarée comme sous-module dans `.kiro/steering/docs` pour les développeurs et assistants. |
 
-## What is CMP?
+## Sorties et consommateurs
 
-CMP is an internal web platform that lets your team deploy full application stacks on a **hybrid cloud** (private OpenStack + public AWS) in a few clicks - no CLI, no Terraform knowledge required, no IT ticket.
+| Origine / destinataire | Contenu et transmission |
+| --- | --- |
+| cnp-projects | Création et mise à jour des ProjectRecord et de leur liste d’applications par commits via la GitHub App. |
+| Dépôts applicatifs | Création et configuration via les templates Terraform exécutés : sources initiales et valeurs `deploy/*.yaml`. |
+| K3s / opérateurs | Images backend/frontend et chart `arcl-cmp` publiés dans GHCR ; consommés par la configuration GitOps de K3s. |
+| Utilisateurs / clients API | API HTTP, interface web, état des opérations, URL et outputs Terraform. |
 
-The platform uses **Terraform templates** loaded from a Git repository, allowing flexible deployment of any infrastructure configuration. Each template defines the resources to provision, and the CMP handles the entire lifecycle: deployment, tracking, and cleanup.
+## Documentation CNP
 
-**Key Features:**
-
-- 🚀 **Template-based deployments** - Load templates from Git repository
-- 🔄 **Automatic syncing** - Templates sync every 24 hours
-- 📊 **Real-time tracking** - Monitor deployment progress live
-- 🎯 **Output capture** - Automatically display IPs, URLs, and endpoints
-- 🗑️ **Clean destruction** - One-click resource cleanup
-- 🌐 **Multi-cloud ready** - Currently OpenStack, AWS support coming soon
-
----
-
-## Screenshots
-
-> App Catalog → click Deploy → configure → watch live progress → running app with public URL
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        User Browser                         │
-│              Next.js 15 + Tailwind + Shadcn/UI              │
-│         (polls /api/deployments/:id every 3s for status)    │
-│                    NextAuth v5 (Keycloak OIDC)              │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP + JWT Bearer Token
-┌──────────────────────────▼──────────────────────────────────┐
-│                    FastAPI Backend                          │
-│              Python 3.12 · SQLite · Alembic                 │
-│                    JWT Validation (Keycloak)                │
-│                                                             │
-│  POST /api/deployments  →  BackgroundTask: Terraform        │
-│                                    │                        │
-│                         ┌──────────▼──────────┐            │
-│                         │  Template Repository │            │
-│                         │  Git Clone/Sync      │            │
-│                         └──────────┬──────────┘            │
-│                                    │                        │
-│                         ┌──────────▼──────────┐            │
-│                         │  Terraform Executor  │            │
-│                         │  init → plan → apply │            │
-│                         └──────────┬──────────┘            │
-│                                    │                        │
-│                         ┌──────────▼──────────┐            │
-│                         │  Capture Outputs     │            │
-│                         │  IPs, URLs, etc.     │            │
-│                         └──────────────────────┘            │
-└────────────────────────────────────┼────────────────────────┘
-                                     │
-              ┌──────────────────────┴──────────────────────┐
-              │                                             │
-   ┌──────────▼──────────┐                    ┌────────────▼────────────┐
-   │  Private OpenStack  │◄──── WireGuard ────►│     Public AWS          │
-   │  192.168.1.0/24     │       VPN           │     10.1.0.0/16         │
-   │  172.16.0.0/24      │   10.0.0.0/24       │  (Future Support)       │
-   └─────────────────────┘                    └─────────────────────────┘
-```
-
-### Template Repository
-
-Templates are loaded from: https://github.com/3-Istor/ia-project-template
-
-- Automatically cloned on startup
-- Synced every 24 hours
-- Only enabled templates are shown
-- Each template includes Terraform configuration and metadata
-
----
+[Fiche `CMP` et workflows inter-repo](https://github.com/3-Istor/cnp-docs/blob/main/docs/04-templates/00-github-repositories-landscape.md#cmp).
 
 ## Prerequisites
 
@@ -98,7 +37,7 @@ Templates are loaded from: https://github.com/3-Istor/ia-project-template
 | Python    | 3.12+   | [python.org](https://python.org)     |
 | Poetry    | 2.0+    | `pip install poetry`                 |
 | Terraform | 1.0+    | [terraform.io](https://terraform.io) |
-| Node.js   | 18+     | [nodejs.org](https://nodejs.org)     |
+| Node.js   | Compatible avec Next.js 16 | [nodejs.org](https://nodejs.org)     |
 | npm       | 9+      | bundled with Node                    |
 | Git       | any     | [git-scm.com](https://git-scm.com)   |
 
@@ -110,8 +49,8 @@ Templates are loaded from: https://github.com/3-Istor/ia-project-template
 
 ```bash
 # Clone the repository
-git clone https://github.com/3-Istor/arcl-cmp.git
-cd arcl-cmp
+git clone https://github.com/3-Istor/CMP.git
+cd CMP
 
 # Run automated setup (installs dependencies, creates env files, runs migrations)
 ./setup.sh
@@ -159,7 +98,7 @@ KEYCLOAK_ISSUER=https://auth.3istor.com/realms/3istor
 EOF
 ```
 
-See [README_AUTH.md](README_AUTH.md) for complete authentication documentation.
+See [le guide des identités](https://github.com/3-Istor/cnp-docs/blob/main/docs/02-core-components/02-identity-keycloak.md) for complete authentication documentation.
 
 ### 4. Start Backend
 
@@ -181,7 +120,7 @@ Frontend will be available at http://localhost:3000
 
 ### Manual Setup
 
-See [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) for detailed manual setup steps.
+See [backend/README.md](backend/README.md) for detailed manual setup steps.
 
 ---
 
@@ -219,7 +158,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api
 ## Project Structure
 
 ```
-arcl-cmp/
+CMP/
 ├── backend/
 │   ├── app/
 │   │   ├── core/
@@ -297,23 +236,18 @@ Full interactive docs available at `http://localhost:8000/docs` when the backend
 
 ## App Catalog
 
-Templates are dynamically loaded from the Git repository. Current available templates:
-
-| App              | Category | Provider  | Description                |
-| ---------------- | -------- | --------- | -------------------------- |
-| 🌐 Nginx Website | Web      | OpenStack | Static website with Nginx  |
-| 🌐 Git Website   | Web      | OpenStack | Deploy from Git repository |
+Le catalogue est lu dans les manifests activés de [app-templates](https://github.com/3-Istor/app-templates/tree/main/templates). Il comprend notamment le bootstrap de projet, le chemin applicatif K3s/GitOps et des templates OpenStack/AWS. Les manifests présents font foi pour les options disponibles.
 
 Each template can be deployed **multiple times** with different configurations.
 
 ### Adding New Templates
 
-1. Fork https://github.com/3-Istor/ia-project-template
+1. Fork https://github.com/3-Istor/app-templates
 2. Add your template directory with `manifest.json` and Terraform files
 3. Set `"enabled": true` in the manifest
 4. The CMP will automatically sync and load your template
 
-See [backend/TERRAFORM_MIGRATION.md](backend/TERRAFORM_MIGRATION.md) for template requirements.
+See [le provisionneur Terraform](https://github.com/3-Istor/cnp-docs/blob/main/docs/04-templates/03-terraform-provisioner.md) for template requirements.
 
 ---
 
@@ -364,7 +298,7 @@ Cloud costs are controlled through template configuration:
 
 - Templates define resource sizes and counts
 - OpenStack resources are managed by your private cloud
-- AWS support coming soon with budget constraints
+- Les templates AWS sont présents ; leur usage nécessite les accès et infrastructures correspondants
 - Estimated cost per deployment varies by template
 
 Monitor resource usage through the dashboard's resource count display.
@@ -401,9 +335,9 @@ cd frontend
 npm run build
 npm start
 
-# Run backend with gunicorn
+# Run backend with Uvicorn
 cd backend
-poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ---
@@ -479,24 +413,13 @@ git tag v1.0.0 && git push origin v1.0.0
 git tag helm-v1.0.0 && git push origin helm-v1.0.0
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions and [DOCKER_KUBERNETES.md](DOCKER_KUBERNETES.md) for command reference.
+See [le runbook CMP](https://github.com/3-Istor/cnp-docs/blob/main/docs/05-cmp-backend-api/10-cmp-onboarding-runbook.md) for detailed instructions and [helm/arcl-cmp/README.md](helm/arcl-cmp/README.md) for command reference.
 
 ---
 
-## Roadmap
+## Évolutions
 
-- [x] Terraform-based deployment system
-- [x] Git repository template loading
-- [x] Automatic output capture
-- [x] Docker containerization
-- [x] Kubernetes Helm charts
-- [x] GitHub Actions CI/CD pipeline
-- [ ] AWS template support
-- [ ] WebSocket support for real-time Terraform logs
-- [ ] Template versioning
-- [ ] Multi-user support with RBAC
-- [ ] Cost estimation per deployment
-- [ ] Monitoring dashboard integration
+Consulter [la roadmap centrale](https://github.com/3-Istor/cnp-docs/blob/main/docs/README_ROADMAP.md) et [le chantier multicloud](https://github.com/3-Istor/cnp-docs/blob/main/docs/06-multicloud/00-index.md). Le code local contient déjà la gestion des projets/RBAC, des templates AWS et des services FinOps ; cela ne constitue pas une vérification de leur déploiement en production.
 
 ---
 

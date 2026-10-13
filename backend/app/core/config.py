@@ -92,6 +92,26 @@ class Settings(BaseSettings):
 
     # Discord Alerting (optional - for health monitoring alerts)
     DISCORD_WEBHOOK_URL: str = ""
+    # Default target of security alerts; a project or an app can set its own.
+    # Falls back to DISCORD_WEBHOOK_URL when empty.
+    SECURITY_DISCORD_WEBHOOK_URL: str = ""
+    CMP_PUBLIC_URL: str = "https://cmp.3istor.com"
+
+    # Days the journal of changes made through the CMP is kept.
+    AUDIT_RETENTION_DAYS: int = 30
+
+    # Loki, through its authenticating gateway (Activity tab).
+    LOKI_URL: str = "http://loki-gateway.observability.svc.cluster.local"
+    LOKI_USERNAME: str = "cmp"
+    LOKI_PASSWORD: str = ""
+    LOKI_TENANT: str = "default"
+    # Credential of every project Grafana org's Loki datasource.
+    LOKI_GRAFANA_PROJECTS_PASSWORD: str = ""
+    # Key the per-project vmauth passwords are derived from.
+    METRICS_PROJECT_KEY: str = ""
+    # Days of audit history read from Loki the first time the collector runs.
+    ACTIVITY_BACKFILL_DAYS: int = 7
+    ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key

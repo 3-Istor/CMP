@@ -318,3 +318,27 @@ export function useProjectMembers(projectName: string | null) {
 
   return { members, loading, error, refresh };
 }
+
+/** Security grade of every visible project, for badges. Polls slowly. */
+export function useSecurityOverview(intervalMs = 120000) {
+  const [overview, setOverview] = useState<
+    import("@/types").SecurityProjectOverview[]
+  >([]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const { getSecurityOverview } = await import("./api");
+      setOverview(await getSecurityOverview());
+    } catch {
+      // Badges are a convenience: the security page reports its own errors.
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const timer = setInterval(refresh, intervalMs);
+    return () => clearInterval(timer);
+  }, [refresh, intervalMs]);
+
+  return overview;
+}

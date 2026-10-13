@@ -289,17 +289,114 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
         with patch(
             "app.routers.deployments.imported_portal_guard",
             return_value=self.job,
+        ), patch.object(
+            service.keycloak_service, "get_project_role", return_value="admin"
         ), patch(
             "app.routers.deployments.update_file_content", AsyncMock()
         ) as commit:
             with self.assertRaises(HTTPException) as error:
                 await update_deployment_config(
-                    deployment.id,
-                    {"_sha": "old", "replicaCount": 3},
-                    self.db,
-                    None,
+                    deployment_id=deployment.id,
+                    request=Mock(),
+                    payload={"_sha": "old", "replicaCount": 3},
+                    token_payload={"sub": "user-id"},
+                    component=None,
+                    db=self.db,
+                    credentials=None,
                 )
         self.assertEqual(error.exception.status_code, 409)
+        commit.assert_not_called()
+
+    async def test_new_security_panel_cannot_write_imported_source(self):
+        from app.routers.deployments import update_security_data
+        from app.services.app_security_data import SecurityDataUpdate
+
+        self.job.status = "publishing"
+        self.db.commit()
+        await self.invoke(
+            "complete",
+            {
+                "image": self.job.configuration["image"],
+                "digest": "sha256:" + "b" * 64,
+            },
+        )
+        deployment = self.db.query(Deployment).one()
+        with patch.object(
+            service.keycloak_service, "get_project_role", return_value="admin"
+        ), patch(
+            "app.routers.deployments._get_github_token_for_deployment",
+            AsyncMock(),
+        ) as token, patch(
+            "app.routers.deployments.update_file_content", AsyncMock()
+        ) as commit:
+            with self.assertRaises(HTTPException) as error:
+                await update_security_data(
+                    deployment_id=deployment.id,
+                    payload=SecurityDataUpdate(exposure="public"),
+                    request=Mock(),
+                    token_payload={"sub": "user-id"},
+                    db=self.db,
+                )
+        self.assertEqual(error.exception.status_code, 409)
+        token.assert_not_called()
+        commit.assert_not_called()
+
+    async def test_finops_cannot_write_imported_source(self):
+        from app.routers.finops import _apply_patch_to_gitops
+
+        self.job.status = "publishing"
+        self.db.commit()
+        await self.invoke(
+            "complete",
+            {
+                "image": self.job.configuration["image"],
+                "digest": "sha256:" + "b" * 64,
+            },
+        )
+        deployment = self.db.query(Deployment).one()
+        with patch(
+            "app.services.github_service.update_file_content", AsyncMock()
+        ) as commit:
+            with self.assertRaises(HTTPException) as error:
+                await _apply_patch_to_gitops(
+                    deployment, {"replicaCount": 2}, self.db
+                )
+        self.assertEqual(error.exception.status_code, 409)
+        commit.assert_not_called()
+
+    async def test_security_settings_and_exception_copy_preserve_imported_source(
+        self,
+    ):
+        from app.routers.security import (
+            _sync_exceptions_file,
+            _write_app_settings,
+        )
+
+        self.job.status = "publishing"
+        self.db.commit()
+        await self.invoke(
+            "complete",
+            {
+                "image": self.job.configuration["image"],
+                "digest": "sha256:" + "b" * 64,
+            },
+        )
+        deployment = self.db.query(Deployment).one()
+        with patch(
+            "app.routers.security._github_token", AsyncMock()
+        ) as token, patch(
+            "app.routers.security.put_file_content", AsyncMock()
+        ) as commit:
+            with self.assertRaises(HTTPException) as error:
+                await _write_app_settings(
+                    deployment, "never", "joe", False, self.db
+                )
+            self.assertEqual(error.exception.status_code, 409)
+            result = await _sync_exceptions_file(
+                self.db, "sandbox", "web", "joe"
+            )
+        self.assertIsNone(result)
+        token.assert_not_called()
         commit.assert_not_called()
 
 

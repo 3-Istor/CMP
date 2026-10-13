@@ -13,9 +13,24 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.routers import account, catalog, deployments, finops, infra, projects
+from app.routers import (
+    account,
+    activity,
+    alerting,
+    catalog,
+    deployments,
+    finops,
+    infra,
+    projects,
+    security,
+    security_alerts,
+    security_databases,
+)
 from app.services import health_poller
+from app.services.activity_collector import activity_collector_loop
+from app.services.audit import audit_middleware, audit_retention_loop
 from app.services.finops import alert_poller
+from app.services.security.collector import security_collector_loop
 from app.services.template_repository import get_repository
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -222,6 +237,11 @@ async def lifespan(app: FastAPI):
     finops_poller_task = asyncio.create_task(alert_poller.finops_alert_loop())
     logger.info("FinOps alert poller started")
 
+    logger.info("Starting security collector...")
+    security_collector_task = asyncio.create_task(security_collector_loop())
+    audit_retention_task = asyncio.create_task(audit_retention_loop())
+    activity_collector_task = asyncio.create_task(activity_collector_loop())
+
     logger.info("✅ Application startup complete")
 
     yield
@@ -230,7 +250,16 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application...")
     health_poller_task.cancel()
     finops_poller_task.cancel()
-    for task in (health_poller_task, finops_poller_task):
+    security_collector_task.cancel()
+    audit_retention_task.cancel()
+    activity_collector_task.cancel()
+    for task in (
+        health_poller_task,
+        finops_poller_task,
+        security_collector_task,
+        audit_retention_task,
+        activity_collector_task,
+    ):
         try:
             await task
         except asyncio.CancelledError:
@@ -256,6 +285,8 @@ app = FastAPI(
 # Apply custom OpenAPI schema with OAuth2
 app.openapi = custom_openapi
 
+app.middleware("http")(audit_middleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -275,11 +306,16 @@ from app.routers import repository_imports
 
 app.include_router(repository_imports.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
+app.include_router(activity.router, prefix="/api")
+app.include_router(alerting.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(finops.router, prefix="/api")
+app.include_router(security.router, prefix="/api")
+app.include_router(security_alerts.router, prefix="/api")
+app.include_router(security_databases.router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])

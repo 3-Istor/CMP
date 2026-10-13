@@ -25,7 +25,11 @@ import tempfile
 from pathlib import Path
 
 from app.core.config import settings
+from app.models.project import ProjectStatus
+from app.services import metrics_isolation
 from app.services.github_service import GitHubAppError, get_installation_token
+from app.services.project_status import delete_project_row, set_project_status
+from app.services.state_lock import StateLockedError, raise_if_state_locked
 from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
@@ -104,6 +108,18 @@ def _get_module_path() -> Path:
     )
 
 
+def _failure_message(action: str, step: str, exc: Exception) -> str:
+    """User-facing reason a bootstrap or teardown stopped.
+
+    Only a held state lock is spelled out: it is the one failure the user can
+    fix by waiting. Anything else stays in the backend logs, where the full
+    Terraform output may carry values that do not belong in the UI.
+    """
+    if isinstance(exc, StateLockedError):
+        return str(exc)
+    return f"{action} failed {step}. See the backend logs for details."
+
+
 def run_project_bootstrap(
     project_name: str, target_cloud: str = "onprem"
 ) -> bool:
@@ -129,12 +145,23 @@ def run_project_bootstrap(
         target_cloud,
     )
 
+    set_project_status(
+        project_name,
+        ProjectStatus.PROVISIONING,
+        "Preparing the bootstrap module",
+    )
+
     try:
         module_path = _get_module_path()
     except FileNotFoundError as exc:
         logger.error(
             "Terraform module not found — project bootstrap aborted: %s",
             exc,
+        )
+        set_project_status(
+            project_name,
+            ProjectStatus.FAILED,
+            _failure_message("Bootstrap", "while locating the module", exc),
         )
         return False
 
@@ -154,6 +181,13 @@ def run_project_bootstrap(
             project_name,
             exc,
         )
+        set_project_status(
+            project_name,
+            ProjectStatus.FAILED,
+            _failure_message(
+                "Bootstrap", "while authenticating to GitHub", exc
+            ),
+        )
         return False
 
     # S3 state key — isolated per project, grouped per cloud
@@ -166,6 +200,11 @@ def run_project_bootstrap(
 
             # ── Step 1: terraform init ─────────────────────────────────
             logger.info("[%s] Initialising Terraform…", project_name)
+            set_project_status(
+                project_name,
+                ProjectStatus.PROVISIONING,
+                "Initialising the Terraform state backend",
+            )
             _terraform_init(
                 staged,
                 work_dir,
@@ -176,6 +215,11 @@ def run_project_bootstrap(
 
             # ── Step 2: terraform apply ────────────────────────────────
             logger.info("[%s] Applying Terraform configuration…", project_name)
+            set_project_status(
+                project_name,
+                ProjectStatus.PROVISIONING,
+                "Creating Keycloak groups, Vault policy and ArgoCD project",
+            )
             _run(
                 [
                     "terraform",
@@ -184,6 +228,13 @@ def run_project_bootstrap(
                     f"-var=project_name={project_name}",
                     f"-var=target_cloud={target_cloud}",
                 ],
+                extra_env={
+                    "TF_VAR_metrics_password": (
+                        metrics_isolation.password(project_name)
+                        if settings.METRICS_PROJECT_KEY
+                        else ""
+                    )
+                },
                 cwd=staged,
                 work_dir=work_dir,
                 github_token=github_token,
@@ -193,11 +244,17 @@ def run_project_bootstrap(
                 "Project bootstrap completed successfully for '%s'",
                 project_name,
             )
+            set_project_status(project_name, ProjectStatus.ACTIVE)
             return True
 
     except (RuntimeError, OSError) as exc:
         logger.error(
             "Project bootstrap failed for '%s': %s", project_name, exc
+        )
+        set_project_status(
+            project_name,
+            ProjectStatus.FAILED,
+            _failure_message("Bootstrap", "while applying Terraform", exc),
         )
         return False
 
@@ -225,6 +282,12 @@ def run_project_teardown(
         target_cloud,
     )
 
+    set_project_status(
+        project_name,
+        ProjectStatus.DECOMMISSIONING,
+        "Preparing the teardown module",
+    )
+
     try:
         module_path = _get_module_path()
     except FileNotFoundError as exc:
@@ -232,6 +295,11 @@ def run_project_teardown(
             "Terraform module not found — project teardown aborted "
             "(Vault/GitHub/ArgoCD resources may need manual cleanup): %s",
             exc,
+        )
+        set_project_status(
+            project_name,
+            ProjectStatus.DECOMMISSION_FAILED,
+            _failure_message("Teardown", "while locating the module", exc),
         )
         return
 
@@ -251,6 +319,13 @@ def run_project_teardown(
             project_name,
             exc,
         )
+        set_project_status(
+            project_name,
+            ProjectStatus.DECOMMISSION_FAILED,
+            _failure_message(
+                "Teardown", "while authenticating to GitHub", exc
+            ),
+        )
         return
 
     # Same S3 state key used by the bootstrap — destroy operates on that state.
@@ -263,6 +338,11 @@ def run_project_teardown(
 
             # ── Step 1: terraform init ─────────────────────────────────
             logger.info("[%s] Initialising Terraform…", project_name)
+            set_project_status(
+                project_name,
+                ProjectStatus.DECOMMISSIONING,
+                "Initialising the Terraform state backend",
+            )
             _terraform_init(
                 staged,
                 work_dir,
@@ -274,6 +354,11 @@ def run_project_teardown(
             # ── Step 2: terraform destroy ──────────────────────────────
             logger.info(
                 "[%s] Destroying Terraform configuration…", project_name
+            )
+            set_project_status(
+                project_name,
+                ProjectStatus.DECOMMISSIONING,
+                "Removing Vault policy, ArgoCD project and GitHub resources",
             )
             _run(
                 [
@@ -292,6 +377,7 @@ def run_project_teardown(
                 "Project teardown completed successfully for '%s'",
                 project_name,
             )
+            delete_project_row(project_name)
 
     except (RuntimeError, OSError) as exc:
         logger.error(
@@ -299,6 +385,11 @@ def run_project_teardown(
             "(Vault/GitHub/ArgoCD resources may need manual cleanup): %s",
             project_name,
             exc,
+        )
+        set_project_status(
+            project_name,
+            ProjectStatus.DECOMMISSION_FAILED,
+            _failure_message("Teardown", "while destroying Terraform", exc),
         )
 
 
@@ -385,7 +476,11 @@ def _write_local_backend_override(
 
 
 def _run(
-    cmd: list[str], cwd: Path, work_dir: Path, github_token: str = ""
+    cmd: list[str],
+    cwd: Path,
+    work_dir: Path,
+    github_token: str = "",
+    extra_env: dict[str, str] | None = None,
 ) -> None:
     """
     Execute a Terraform command, forwarding all necessary credentials as
@@ -401,6 +496,8 @@ def _run(
         RuntimeError: If the command exits non-zero.
     """
     env = os.environ.copy()
+    # Secrets go through the environment, never on the command line.
+    env.update(extra_env or {})
     env["TF_IN_AUTOMATION"] = "1"
     env["TF_INPUT"] = "0"
     env["TF_DATA_DIR"] = str(work_dir / ".terraform")
@@ -452,6 +549,7 @@ def _run(
 
     if settings.GRAFANA_ADMIN_PASSWORD:
         env["TF_VAR_grafana_admin_password"] = settings.GRAFANA_ADMIN_PASSWORD
+        env["TF_VAR_loki_password"] = settings.LOKI_GRAFANA_PROJECTS_PASSWORD
 
     try:
         result = subprocess.run(
@@ -466,6 +564,7 @@ def _run(
             logger.debug("Terraform stdout: %s", result.stdout[-2000:])
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr or ""
+        raise_if_state_locked(stderr)
         logger.error("Terraform error: %s", stderr[-2000:])
         raise RuntimeError(
             f"Terraform command failed: {stderr[-500:]}"

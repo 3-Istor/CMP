@@ -3,6 +3,12 @@
 import { Github } from "@/components/icons/Github";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
+import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
+import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
+import { SecurityAlert } from "@/components/security/SecurityAlert";
+import { SecurityDashboard } from "@/components/security/SecurityDashboard";
+import { ActivityTab } from "@/components/activity/ActivityTab";
+import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
@@ -26,20 +32,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deleteDeployment, getDeployment } from "@/lib/api";
 import { useDeploymentPolling } from "@/lib/hooks";
+import { appUrlOf } from "@/lib/utils";
 import type { Deployment } from "@/types";
 import {
     ArrowLeft,
     CheckCircle2,
     ExternalLink,
     FileCode,
+    Globe,
     Loader2,
     RefreshCw,
     Shield,
     Trash2,
     Wallet,
     XCircle,
+    BellRing,
+    History,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -110,6 +121,7 @@ export default function AppControlCenterPage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteConfirmName, setDeleteConfirmName] = useState("");
     const [deleting, setDeleting] = useState(false);
+    const [tab, setTab] = useState("app");
 
     // Poll only while in transient state
     const ACTIVE_STATUSES = new Set([
@@ -201,6 +213,7 @@ export default function AppControlCenterPage() {
 
     const isKubernetes = current.provider_type === "kubernetes";
     const isRunning = current.status === "running";
+    const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
 
     return (
         <div className="min-h-screen">
@@ -281,18 +294,6 @@ export default function AppControlCenterPage() {
                             Refresh
                         </Button>
                         <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                                router.push(
-                                    `/finops?project=${encodeURIComponent(projectName)}`,
-                                )
-                            }
-                        >
-                            <Wallet className="mr-2 h-4 w-4" />
-                            Détails FinOps
-                        </Button>
-                        <Button
                             variant="destructive"
                             size="sm"
                             onClick={() => {
@@ -307,8 +308,47 @@ export default function AppControlCenterPage() {
                     </div>
                 </div>
 
+                {isKubernetes && (
+                    <SecurityAlert
+                        project={projectName}
+                        app={current.name}
+                        onOpen={() => setTab("security")}
+                    />
+                )}
+
                 <Separator />
 
+                <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
+                <TabsList>
+                    <TabsTrigger value="app" className="gap-2">
+                        <FileCode className="h-4 w-4" />
+                        Application
+                    </TabsTrigger>
+                    {isKubernetes && (
+                        <TabsTrigger value="security" className="gap-2">
+                            <Shield className="h-4 w-4" />
+                            Security
+                        </TabsTrigger>
+                    )}
+                    <TabsTrigger value="finops" className="gap-2">
+                        <Wallet className="h-4 w-4" />
+                        FinOps
+                    </TabsTrigger>
+                    {isKubernetes && (
+                        <TabsTrigger value="activity" className="gap-2">
+                            <History className="h-4 w-4" />
+                            Activity
+                        </TabsTrigger>
+                    )}
+                    {isKubernetes && (
+                        <TabsTrigger value="alerts" className="gap-2">
+                            <BellRing className="h-4 w-4" />
+                            Alerts
+                        </TabsTrigger>
+                    )}
+                </TabsList>
+
+                <TabsContent value="app" className="mt-6">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
                     {/* ── Left column: status + quick actions ── */}
@@ -334,6 +374,19 @@ export default function AppControlCenterPage() {
                                     <CardTitle className="text-base">Quick Actions</CardTitle>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {appUrl && (
+                                        <a
+                                            href={appUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+                                        >
+                                            <Globe className="mr-2 h-4 w-4" />
+                                            Open Application
+                                            <ExternalLink className="ml-auto h-3 w-3" />
+                                        </a>
+                                    )}
+
                                     {current.github_repo_url && (
                                         <a
                                             href={current.github_repo_url}
@@ -385,7 +438,12 @@ export default function AppControlCenterPage() {
                     {/* ── Right column: Day-2 config ── */}
                     <div className="space-y-6">
                         {isKubernetes && isRunning ? (
-                            <AppConfigPanel deploymentId={appId} />
+                            <>
+                                <div id="security-data" className="scroll-mt-24">
+                                    <SecurityDataPanel deploymentId={appId} />
+                                </div>
+                                <AppConfigPanel deploymentId={appId} />
+                            </>
                         ) : isKubernetes && !isRunning ? (
                             <Card>
                                 <CardContent className="pt-6">
@@ -471,6 +529,37 @@ export default function AppControlCenterPage() {
                         </Card>
                     </div>
                 </div>
+                </TabsContent>
+
+                {isKubernetes && (
+                    <TabsContent value="security" className="mt-6">
+                        <SecurityDashboard
+                            project={projectName}
+                            app={current.name}
+                            fullPageLink
+                        />
+                    </TabsContent>
+                )}
+
+                {isKubernetes && (
+                    <TabsContent value="activity" className="mt-6">
+                        <ActivityTab project={projectName} app={current.name} />
+                    </TabsContent>
+                )}
+
+                {isKubernetes && (
+                    <TabsContent value="alerts" className="mt-6">
+                        <AlertsPanel project={projectName} app={current.name} />
+                    </TabsContent>
+                )}
+
+                <TabsContent value="finops" className="mt-6 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                        Les coûts sont suivis au niveau du projet.
+                    </p>
+                    <ProjectFinopsPanel project={projectName} />
+                </TabsContent>
+                </Tabs>
             </main>
 
             {/* ── Delete confirmation dialog ── */}

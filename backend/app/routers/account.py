@@ -2,7 +2,6 @@ import time
 from typing import Annotated
 
 import boto3
-import jwt
 import requests
 from botocore.exceptions import ClientError
 from fastapi import (
@@ -25,36 +24,10 @@ from app.schemas.account import (
     PictureUploadResponse,
     UserProfile,
 )
+from app.services.keycloak_service import get_current_user
 
 router = APIRouter(prefix="/account", tags=["Account"])
 security = HTTPBearer(auto_error=True)
-
-
-async def get_current_user(
-    request: Request,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-) -> dict:
-    """
-    Get current user from JWT token.
-
-    In production, Envoy Gateway injects the JWT in Authorization header.
-    """
-    token = credentials.credentials
-    try:
-        # Decode without verification (Envoy already validated it)
-        payload = jwt.decode(
-            token,
-            options={
-                "verify_signature": False,
-                "verify_aud": False,
-                "verify_exp": False,
-            },
-        )
-        return payload
-    except jwt.DecodeError as e:
-        raise HTTPException(
-            status_code=401, detail=f"Invalid token: {str(e)}"
-        ) from e
 
 
 @router.get("/me", response_model=UserProfile)
