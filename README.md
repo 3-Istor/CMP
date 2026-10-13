@@ -117,6 +117,14 @@ poetry run uvicorn app.main:app --reload --port 8000
 
 Backend will be available at http://localhost:8000
 
+Without the WireGuard VPN, OpenStack (`192.168.1.x`) is unreachable. Route it through the bastion in a dedicated terminal, with `CMP_SSH_HOST` set to your SSH alias for the node:
+
+```bash
+CMP_SSH_HOST=pae-node-1 ./scripts/dev-network.sh
+```
+
+Locally the backend has no Kubernetes service account: the security and activity collectors log one warning at startup and leave cluster data unmeasured. This is expected.
+
 ### 5. Start Frontend (in a new terminal)
 
 ```bash
