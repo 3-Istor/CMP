@@ -633,3 +633,107 @@ export interface AlertCatalog {
   grafana_rules_url: string | null;
   grafana_new_rule_url: string | null;
 }
+
+// ── Release tab ───────────────────────────────────────────────────────────────
+
+export type ReleaseStrategy = "rolling" | "canary" | "bluegreen";
+
+export type ReleasePhase =
+  | "Progressing"
+  | "Paused"
+  | "Healthy"
+  | "Degraded"
+  | "Aborted";
+
+/** `scale` comes from setCanaryScale: canary pod preparation, not shown as a full step. */
+export type ReleaseStepKind = "analysis" | "setWeight" | "pause" | "scale";
+
+export type ReleaseStepStatus =
+  | "done"
+  | "active"
+  | "running"
+  | "pending"
+  | "failed"
+  | "skipped";
+
+export interface ReleaseMetric {
+  name: string;
+  value: number | null;
+  threshold: number | null;
+  unit: string | null;
+  /** AnalysisRun measurement phase: Successful, Failed, Error, Inconclusive, Running. */
+  phase: string;
+}
+
+export interface ReleaseStep {
+  index: number;
+  kind: ReleaseStepKind;
+  label: string;
+  status: ReleaseStepStatus;
+  weight: number | null;
+  durationSeconds: number | null;
+  metrics: ReleaseMetric[];
+  message: string | null;
+}
+
+export interface ReleaseRevision {
+  hash: string;
+  role: "stable" | "canary";
+  image: string;
+  ready: number;
+  desired: number;
+}
+
+export interface ReleaseView {
+  enabled: boolean;
+  strategy: ReleaseStrategy | null;
+  preset: string | null;
+  phase: ReleasePhase | null;
+  revision: number | null;
+  stableHash: string | null;
+  canaryHash: string | null;
+  stableImage: string | null;
+  canaryImage: string | null;
+  currentStepIndex: number | null;
+  weights: { stable: number; canary: number } | null;
+  forced: boolean;
+  startedAt: string | null;
+  etaSeconds: number | null;
+  steps: ReleaseStep[];
+  revisions: ReleaseRevision[];
+  actions: {
+    promote: boolean;
+    promoteFull: boolean;
+    skip: boolean;
+    abort: boolean;
+  };
+}
+
+export type ReleaseOutcome =
+  | "running"
+  | "promoted"
+  | "aborted_auto"
+  | "aborted_manual"
+  | "superseded";
+
+export interface ReleaseActor {
+  user: string;
+  action: string;
+  reason: string | null;
+  at: string;
+}
+
+export interface ReleaseEvent {
+  id: number | string;
+  deployment_id: number;
+  revision: number;
+  image: string;
+  strategy: string;
+  started_at: string;
+  finished_at: string | null;
+  outcome: ReleaseOutcome;
+  forced: boolean;
+  reached_step: number | null;
+  steps: ReleaseStep[] | null;
+  actors: ReleaseActor[] | null;
+}

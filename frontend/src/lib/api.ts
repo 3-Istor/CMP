@@ -749,3 +749,80 @@ export const updateCatalogAlert = (
     `/alerting/${alertId}?${alertingQuery(project, app)}`,
     { method: "PUT", body: JSON.stringify({ enabled, params }) },
   );
+
+// ── Release tab ───────────────────────────────────────────────────────────────
+
+export const getRelease = (deploymentId: number) =>
+  request<import("@/types").ReleaseView>(`/deployments/${deploymentId}/release`);
+
+export const getReleaseHistory = (deploymentId: number) =>
+  request<import("@/types").ReleaseEvent[]>(`/deployments/${deploymentId}/releases`);
+
+export const promoteRelease = (
+  deploymentId: number,
+  mode: "next" | "full",
+  reason: string | null,
+) =>
+  request<import("@/types").ReleaseView>(
+    `/deployments/${deploymentId}/release/promote`,
+    { method: "POST", body: JSON.stringify({ mode, reason }) },
+  );
+
+export const skipReleaseStep = (deploymentId: number, reason: string) =>
+  request<import("@/types").ReleaseView>(
+    `/deployments/${deploymentId}/release/skip`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+
+export const abortRelease = (deploymentId: number, reason: string | null) =>
+  request<import("@/types").ReleaseView>(
+    `/deployments/${deploymentId}/release/abort`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+
+/**
+ * Read the release SSE stream until it ends or `signal` aborts.
+ *
+ * Uses fetch rather than EventSource: the backend authenticates with a Bearer
+ * header, which EventSource cannot send. Resolves when the server closes the
+ * stream; rejects on a non-2xx answer or a network error.
+ */
+export async function streamRelease(
+  deploymentId: number,
+  onView: (view: import("@/types").ReleaseView) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${deploymentId}/release/stream`, {
+    headers: {
+      Accept: "text/event-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.status, res.ok ? "empty stream" : await res.text());
+  }
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value.replace(/\r\n?/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const data = frame
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n");
+      if (data) onView(JSON.parse(data));
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+}

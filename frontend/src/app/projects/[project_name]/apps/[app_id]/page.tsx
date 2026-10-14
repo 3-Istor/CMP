@@ -12,6 +12,7 @@ import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
+import { ReleaseTab } from "@/components/release/ReleaseTab";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -51,6 +52,7 @@ import {
     XCircle,
     BellRing,
     History,
+    Rocket,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -133,6 +135,7 @@ export default function AppControlCenterPage() {
     const canViewFinops = can("finops.view");
     // Security, activity and alerts carry findings and logs: members and up.
     const canViewObservability = can("app.viewObservability");
+    const canViewRelease = can("release.view");
 
     // Poll only while in transient state
     const ACTIVE_STATUSES = new Set([
@@ -343,6 +346,12 @@ export default function AppControlCenterPage() {
                         <FileCode className="h-4 w-4" />
                         Application
                     </TabsTrigger>
+                    {isKubernetes && canViewRelease && (
+                        <TabsTrigger value="release" className="gap-2">
+                            <Rocket className="h-4 w-4" />
+                            Release
+                        </TabsTrigger>
+                    )}
                     {isKubernetes && canViewObservability && (
                         <TabsTrigger value="security" className="gap-2">
                             <Shield className="h-4 w-4" />
@@ -590,6 +599,12 @@ export default function AppControlCenterPage() {
                     </div>
                 </div>
                 </TabsContent>
+
+                {isKubernetes && canViewRelease && (
+                    <TabsContent value="release" className="mt-6">
+                        <ReleaseTab deploymentId={appId} projectName={projectName} />
+                    </TabsContent>
+                )}
 
                 {isKubernetes && canViewObservability && (
                     <TabsContent value="security" className="mt-6">
