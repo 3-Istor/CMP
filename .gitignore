@@ -84,3 +84,6 @@ values-secrets.yaml
 /frontend/public/next.svg
 /frontend/public/vercel.svg
 /frontend/public/window.svg
+
+# make network state
+.dev/

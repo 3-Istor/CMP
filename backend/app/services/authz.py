@@ -39,10 +39,10 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.roles import ProjectRole, at_least
 from app.models.project import Project
+from app.services import keycloak_service
 from app.services.keycloak_service import (
     get_current_user,
     get_user_id_from_token,
-    get_user_project_role,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,14 +85,15 @@ def _resolve_role(
     # creator is recognised from the very first request, without waiting for
     # Terraform or the background task that adds them to -admins.
     row = (
-        db.query(Project)
-        .filter(Project.project_name == project_name)
-        .first()
+        db.query(Project).filter(Project.project_name == project_name).first()
     )
     if row is not None and row.owner_username == username:
         return user_id, username, ProjectRole.OWNER
 
-    return user_id, username, get_user_project_role(user_id, project_name)
+    # Through keycloak_service.get_project_role so every router (and every
+    # test double) resolves group roles the same way.
+    role = keycloak_service.get_project_role(user_id, project_name)
+    return user_id, username, ProjectRole(role) if role else None
 
 
 def assert_project_role(
@@ -168,9 +169,7 @@ def require_project_role(
         token_payload: Annotated[dict, Depends(get_current_user)],
         db: Annotated[Session, Depends(get_db)],
     ) -> ProjectContext:
-        return assert_project_role(
-            db, token_payload, project_name, minimum
-        )
+        return assert_project_role(db, token_payload, project_name, minimum)
 
     return _dep
 

@@ -18,7 +18,7 @@ This module is invoked automatically by the CMP Backend's `saga_orchestrator.py`
 Each application gets its own isolated Terraform state file in S3:
 
 ```
-s3://3-istor-tf-infra-aws/cmp/projects/<project-name>/<app-name>.tfstate
+s3://istor-cnp-tfstate-757826/cnp/projects/<project-name>/<app-name>/terraform.tfstate
 ```
 
 This prevents state locking conflicts and allows parallel deployments.

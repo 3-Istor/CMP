@@ -208,6 +208,7 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
     const [loadingConfig, setLoadingConfig] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [component, setComponent] = useState<string | undefined>(undefined);
     // Keep the SHA in a ref so it is always fresh when we save
     const shaRef = useRef<string>("");
 
@@ -215,7 +216,7 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
         setLoadingConfig(true);
         setError(null);
         try {
-            const data = await getDeploymentConfig(deploymentId);
+            const data = await getDeploymentConfig(deploymentId, component);
             setRemoteConfig(data);
             setLocalConfig(data.config as Record<string, unknown>);
             shaRef.current = data._sha;
@@ -226,7 +227,7 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
         } finally {
             setLoadingConfig(false);
         }
-    }, [deploymentId]);
+    }, [deploymentId, component]);
 
     useEffect(() => {
         fetchConfig();
@@ -237,14 +238,17 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
         setIsDirty(true);
     }, []);
 
+    const configFile = remoteConfig?.file_path ?? "deploy/values.yaml";
+
     const handleSave = async () => {
         if (readOnly) return;
         setSaving(true);
         try {
-            await updateDeploymentConfig(deploymentId, {
-                ...localConfig,
-                _sha: shaRef.current,
-            });
+            await updateDeploymentConfig(
+                deploymentId,
+                { ...localConfig, _sha: shaRef.current },
+                component,
+            );
             toast.success(
                 "Configuration saved. ArgoCD will synchronise the new values in a few moments.",
                 { duration: 7000 },
@@ -292,12 +296,12 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                     {readOnly ? (
                         <>
                             Read-only view of{" "}
-                            <span className="font-mono">deploy/values.yaml</span>.
+                            <span className="font-mono">{configFile}</span>.
                         </>
                     ) : (
                         <>
                             Changes are committed to{" "}
-                            <span className="font-mono">deploy/values.yaml</span> on{" "}
+                            <span className="font-mono">{configFile}</span> on{" "}
                             <span className="font-mono">main</span>. ArgoCD syncs
                             automatically.
                         </>
@@ -314,7 +318,32 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                 </CardDescription>
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="space-y-4">
+                {(remoteConfig?.components.length ?? 0) > 1 && (
+                    <div className="flex gap-1 rounded-md bg-muted p-1">
+                        {remoteConfig!.components.map((name) => {
+                            const isActive =
+                                remoteConfig!.file_path === `deploy/values-${name}.yaml`;
+                            return (
+                                <Button
+                                    key={name}
+                                    variant={isActive ? "secondary" : "ghost"}
+                                    size="sm"
+                                    className="flex-1 capitalize"
+                                    disabled={saving || (isDirty && !isActive)}
+                                    title={
+                                        isDirty && !isActive
+                                            ? "Save or reload before switching"
+                                            : undefined
+                                    }
+                                    onClick={() => setComponent(name)}
+                                >
+                                    {name}
+                                </Button>
+                            );
+                        })}
+                    </div>
+                )}
                 {loadingConfig ? (
                     <div className="space-y-4">
                         {[1, 2, 3, 4].map((i) => (
@@ -345,7 +374,7 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                         {Object.keys(localConfig).length === 0 && (
                             <p className="text-sm text-muted-foreground py-4 text-center">
                                 No configuration keys found in{" "}
-                                <span className="font-mono">deploy/values.yaml</span>
+                                <span className="font-mono">{remoteConfig?.file_path}</span>
                             </p>
                         )}
 

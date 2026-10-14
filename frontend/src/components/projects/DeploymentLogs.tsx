@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getApiUrl } from "@/lib/api";
+import { getAccessToken, getApiUrl } from "@/lib/api";
 import { 
   Terminal, 
   Download, 
@@ -30,7 +30,7 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
   
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
   // Keep the latest status in a ref so the stream handlers always read the
@@ -60,26 +60,31 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
     ]);
 
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
 
-    const connect = () => {
-      const eventSource = new EventSource(streamUrl);
-      eventSourceRef.current = eventSource;
+    const scheduleReconnect = () => {
+      // Only keep streaming while the deployment is still progressing.
+      // Terminal states have a final log file, so we stop here instead of
+      // reconnecting every ~3s and re-streaming the same logs.
+      if (!stopped && ACTIVE_STATUSES.has(statusRef.current)) {
+        reconnectTimer = setTimeout(connect, 3000);
+      }
+    };
+
+    // fetch rather than EventSource: the API requires a bearer token, and
+    // EventSource cannot send headers.
+    const connect = async () => {
+      const controller = new AbortController();
+      streamAbortRef.current = controller;
 
       // The backend replays the whole log file from the start on every
       // connection. Track the line index within THIS connection so identical
       // re-sent lines never change state — only genuinely new (or changed)
       // lines update the view, avoiding pointless re-renders and scroll jumps.
       let lineIndex = 0;
-
-      eventSource.onopen = () => {
-        setIsConnected(true);
-        lineIndex = 0;
-      };
-
-      eventSource.onmessage = (event) => {
-        if (!event.data) return;
+      const onLine = (data: string) => {
+        if (!data) return;
         const idx = lineIndex++;
-        const data = event.data;
         setLogs((prev) => {
           if (idx < prev.length) {
             // Already displayed — keep the same array reference if unchanged
@@ -92,26 +97,53 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
         });
       };
 
-      eventSource.onerror = () => {
-        setIsConnected(false);
-        eventSource.close();
-        // Only keep streaming while the deployment is still progressing.
-        // Terminal states have a final log file, so we stop here instead of
-        // letting EventSource reconnect every ~3s and re-stream the same logs.
-        if (ACTIVE_STATUSES.has(statusRef.current)) {
-          reconnectTimer = setTimeout(connect, 3000);
+      try {
+        const token = await getAccessToken();
+        const response = await fetch(streamUrl, {
+          headers: {
+            Accept: "text/event-stream",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+        setIsConnected(true);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary !== -1) {
+            const event = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const data = event
+              .split("\n")
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).replace(/^ /, ""))
+              .join("\n");
+            onLine(data);
+            boundary = buffer.indexOf("\n\n");
+          }
         }
-      };
+      } catch {
+        if (controller.signal.aborted) return;
+      } finally {
+        setIsConnected(false);
+      }
+      scheduleReconnect();
     };
 
     connect();
 
     return () => {
+      stopped = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
     };
   }, [deploymentId]);
 

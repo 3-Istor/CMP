@@ -1,10 +1,19 @@
 import asyncio
+import difflib
 import json
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+)
 from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
@@ -13,8 +22,10 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project
+from app.routers.finops import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
-from app.services import terraform_orchestrator
+from app.services import app_security_data as security_data
+from app.services import audit, terraform_orchestrator
 from app.services.authz import assert_project_role
 from app.services.catalog_service import get_template_by_id
 from app.services.github_service import (
@@ -26,7 +37,13 @@ from app.services.github_service import (
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
+    get_project_role,
     get_user_id_from_token,
+)
+from app.services.project_registry import (
+    NameCollisionError,
+    RegistryError,
+    ensure_app_names_free,
 )
 
 router = APIRouter(prefix="/deployments", tags=["Deployments"])
@@ -39,8 +56,7 @@ CurrentUser = Annotated[dict, Depends(get_current_user)]
 _yaml = YAML()
 _yaml.preserve_quotes = True
 
-# Path of the GitOps configuration file inside every app repository
-_CONFIG_FILE_PATH = "deploy/values.yaml"
+_FULLSTACK_COMPONENTS = ["frontend", "backend"]
 
 
 # ── Authorization helpers ───────────────────────────────────────────────────
@@ -89,8 +105,10 @@ def _authorize_app(
     is refused rather than left open: "only the projects you are assigned to"
     has no sensible answer for an app that belongs to no project. Legacy rows
     in that state need a project_id backfilled before they are reachable
-    again.
+    again. Platform admins pass regardless.
     """
+    if is_cnp_admin(token):
+        return
     if not deployment.project_id:
         raise HTTPException(
             status_code=403,
@@ -122,20 +140,16 @@ def list_deployments(
     Return the caller's non-deleted deployments.
 
     Scoped to the projects the caller belongs to — including as a guest, who
-    is allowed to see which applications exist.
+    is allowed to see which applications exist. Platform admins see them all.
     """
-    projects = _user_project_names(db, token)
-    if not projects:
-        return []
-
-    return (
-        db.query(Deployment)
-        .filter(
-            Deployment.status != DeploymentStatus.DELETED,
-            Deployment.project_id.in_(projects),
-        )
-        .all()
+    query = db.query(Deployment).filter(
+        Deployment.status != DeploymentStatus.DELETED
     )
+    if not is_cnp_admin(token):
+        query = query.filter(
+            Deployment.project_id.in_(_user_project_names(db, token))
+        )
+    return query.all()
 
 
 @router.post("/", response_model=DeploymentRead, status_code=202)
@@ -158,12 +172,41 @@ def create_deployment(
             status_code=400,
             detail="project_id is required: an application must belong to a project.",
         )
-    assert_project_role(db, token, payload.project_id, ProjectRole.ADMIN)
+    if not is_cnp_admin(token):
+        assert_project_role(db, token, payload.project_id, ProjectRole.ADMIN)
 
     # Validate template exists
     template = get_template_by_id(payload.template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+
+    if payload.template_id == "k3s-gitops-app":
+        # Terraform deploys into app_config.project_name, not project_id: the
+        # two must agree or an admin of one project could deploy into another.
+        project_name = payload.app_config.get("project_name")
+        if project_name and project_name != payload.project_id:
+            raise HTTPException(
+                status_code=400,
+                detail="app_config.project_name must match project_id.",
+            )
+        if payload.project_id:
+            payload.app_config["project_name"] = project_name = (
+                payload.project_id
+            )
+        if project_name:
+            try:
+                await ensure_app_names_free(
+                    project_name,
+                    payload.name,
+                    payload.app_config.get("app_type", "static"),
+                )
+            except NameCollisionError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except RegistryError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Could not check the project registry: {exc}",
+                ) from exc
 
     deployment = Deployment(
         name=payload.name,
@@ -171,7 +214,12 @@ def create_deployment(
         template_name=template.name,
         template_icon=template.icon,
         template_category=template.category,
-        provider_type=payload.provider_type,
+        # The portal never sends provider_type: the template decides.
+        provider_type=(
+            ProviderType.KUBERNETES
+            if payload.template_id == "k3s-gitops-app"
+            else payload.provider_type
+        ),
         project_id=payload.project_id,
         app_config=json.dumps(payload.app_config),
         status=DeploymentStatus.PENDING,
@@ -410,15 +458,31 @@ async def _get_github_token_for_deployment(deployment: Deployment) -> str:
         ) from exc
 
 
+def _config_file_for(app_type: str, component: str | None) -> str:
+    if app_type != "fullstack":
+        return security_data.SINGLE_VALUES_FILE
+    if component in (None, "frontend"):
+        return security_data.FRONTEND_VALUES_FILE
+    if component == "backend":
+        return security_data.BACKEND_VALUES_FILE
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unknown component '{component}', expected one of "
+        f"{', '.join(_FULLSTACK_COMPONENTS)}.",
+    )
+
+
 @router.get("/{deployment_id}/config")
 async def get_deployment_config(
     deployment_id: int,
     token: CurrentUser,
+    component: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
-    Fetch the current ``deploy/values.yaml`` from the application's GitHub
-    repository and return it as a JSON object.
+    Fetch the app's values file from its GitHub repository and return it as
+    a JSON object. Fullstack apps have one file per component, picked with
+    ``component`` (``frontend`` by default).
 
     This allows the frontend to pre-populate the Day-2 configuration form
     without the user needing to know the repository URL.
@@ -436,6 +500,8 @@ async def get_deployment_config(
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token, ProjectRole.MEMBER
     )
+    app_type = _app_type_of(deployment)
+    file_path = _config_file_for(app_type, component)
     # Named gh_token so it cannot shadow the caller's JWT above.
     gh_token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment.github_repo_url)
@@ -444,7 +510,7 @@ async def get_deployment_config(
         raw_content, sha = await get_file_content(
             installation_token=gh_token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
         )
     except GitHubAppError as exc:
         status_code = 404 if "not found" in str(exc).lower() else 502
@@ -455,12 +521,13 @@ async def get_deployment_config(
     if not isinstance(parsed, dict):
         raise HTTPException(
             status_code=500,
-            detail=f"'{_CONFIG_FILE_PATH}' does not contain a YAML mapping.",
+            detail=f"'{file_path}' does not contain a YAML mapping.",
         )
 
     return {
         "repo": repo,
-        "file_path": _CONFIG_FILE_PATH,
+        "file_path": file_path,
+        "components": _FULLSTACK_COMPONENTS if app_type == "fullstack" else [],
         # SHA must be echoed back by the frontend in PATCH requests
         "_sha": sha,
         "config": dict(parsed),
@@ -470,7 +537,9 @@ async def get_deployment_config(
 @router.patch("/{deployment_id}/config")
 async def update_deployment_config(
     deployment_id: int,
+    request: Request,
     token: CurrentUser,
+    component: str | None = Query(default=None),
     # The request body must include the `_sha` field (obtained from GET /config)
     # plus any top-level or nested keys to update.
     payload: dict[str, Any] = Body(
@@ -492,8 +561,8 @@ async def update_deployment_config(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
-    Partially update ``deploy/values.yaml`` in the application's GitHub
-    repository and create a commit on ``main``.
+    Partially update the app's values file (same ``component`` rule as
+    ``GET /config``) in its GitHub repository and create a commit on ``main``.
 
     ArgoCD will automatically detect the new commit and sync the application.
 
@@ -519,6 +588,7 @@ async def update_deployment_config(
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token, ProjectRole.ADMIN
     )
+    file_path = _config_file_for(_app_type_of(deployment), component)
 
     # Validate _sha is present in the body
     sha: str | None = payload.pop("_sha", None)
@@ -546,7 +616,7 @@ async def update_deployment_config(
         raw_content, current_sha = await get_file_content(
             installation_token=gh_token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
         )
     except GitHubAppError as exc:
         status_code = 404 if "not found" in str(exc).lower() else 502
@@ -567,9 +637,10 @@ async def update_deployment_config(
     if not isinstance(parsed, dict):
         raise HTTPException(
             status_code=500,
-            detail=f"'{_CONFIG_FILE_PATH}' does not contain a YAML mapping.",
+            detail=f"'{file_path}' does not contain a YAML mapping.",
         )
 
+    audit.note(request, file=file_path, changes=audit.changes(parsed, payload))
     _deep_merge(parsed, payload)
 
     # Serialise back to a YAML string
@@ -589,7 +660,7 @@ async def update_deployment_config(
         result = await put_file_content(
             installation_token=gh_token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
             content=updated_content,
             message=commit_message,
             sha=sha,
@@ -603,7 +674,197 @@ async def update_deployment_config(
     return {
         "message": "Configuration updated successfully. ArgoCD will sync shortly.",
         "repo": repo,
-        "file_path": _CONFIG_FILE_PATH,
+        "file_path": file_path,
         "commit_sha": commit_sha,
         "changed_keys": list(payload.keys()),
     }
+
+
+# ── Exposure and database backups ────────────────────────────────────────────
+
+
+def _app_type_of(deployment: Deployment) -> str:
+    return security_data.app_type_of(
+        deployment.app_config, deployment.terraform_outputs
+    )
+
+
+async def _load_values_file(
+    token: str, repo: str, file_path: str
+) -> tuple[Any, str]:
+    try:
+        raw_content, sha = await get_file_content(
+            installation_token=token,
+            repo_full_name=repo,
+            file_path=file_path,
+        )
+    except GitHubAppError as exc:
+        status_code = 404 if "not found" in str(exc).lower() else 502
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    parsed = _yaml.load(raw_content)
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=500,
+            detail=f"'{file_path}' does not contain a YAML mapping.",
+        )
+    return parsed, sha
+
+
+@router.get(
+    "/{deployment_id}/security-data",
+    response_model=security_data.SecurityDataRead,
+)
+async def get_security_data(
+    deployment_id: int,
+    token_payload: CurrentUser,
+    db: Session = Depends(get_db),
+) -> security_data.SecurityDataRead:
+    deployment = _get_kubernetes_deployment_or_404(
+        deployment_id, db, token_payload, ProjectRole.MEMBER
+    )
+    can_edit = is_cnp_admin(token_payload) or (
+        get_project_role(token_payload.get("sub", ""), deployment.project_id)
+        == "admin"
+    )
+
+    token = await _get_github_token_for_deployment(deployment)
+    repo = _extract_repo_full_name(deployment.github_repo_url)
+    exposure_file, database_file = security_data.values_files_for(
+        _app_type_of(deployment)
+    )
+
+    exposure_values, _ = await _load_values_file(token, repo, exposure_file)
+    database_values = exposure_values
+    if database_file != exposure_file:
+        database_values, _ = await _load_values_file(
+            token, repo, database_file
+        )
+
+    return security_data.SecurityDataRead(
+        repo=repo,
+        can_edit=can_edit,
+        exposure=(
+            security_data.read_exposure(exposure_values)
+            if security_data.has_ingress(exposure_values)
+            else None
+        ),
+        database=(
+            security_data.DatabaseState(
+                backup=security_data.read_backup(database_values)
+            )
+            if security_data.has_database(database_values)
+            else None
+        ),
+    )
+
+
+@router.put("/{deployment_id}/security-data")
+async def update_security_data(
+    deployment_id: int,
+    payload: security_data.SecurityDataUpdate,
+    request: Request,
+    token_payload: CurrentUser,
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Write the exposure preset and/or the database backup settings into the
+    app repository's values files. Project admins only; only the keys of the
+    panel are ever written. With ``dry_run``, return the diff and commit
+    message of each file instead, for the confirmation dialog.
+    """
+    deployment = _get_kubernetes_deployment_or_404(
+        deployment_id, db, token_payload, ProjectRole.ADMIN
+    )
+
+    token = await _get_github_token_for_deployment(deployment)
+    repo = _extract_repo_full_name(deployment.github_repo_url)
+    exposure_file, database_file = security_data.values_files_for(
+        _app_type_of(deployment)
+    )
+
+    patches: dict[str, dict] = {}
+    labels: dict[str, list[str]] = {}
+    loaded: dict[str, tuple[Any, str]] = {}
+
+    async def load(file_path: str) -> Any:
+        if file_path not in loaded:
+            loaded[file_path] = await _load_values_file(token, repo, file_path)
+        return loaded[file_path][0]
+
+    if payload.exposure is not None:
+        audit.note(
+            request,
+            exposure_before=security_data.read_exposure(
+                await load(exposure_file)
+            ),
+        )
+        if not security_data.has_ingress(await load(exposure_file)):
+            raise HTTPException(
+                status_code=400,
+                detail="This application has no ingress to configure.",
+            )
+        patches[exposure_file] = security_data.exposure_patch(payload.exposure)
+        labels[exposure_file] = [
+            security_data.exposure_commit_label(payload.exposure)
+        ]
+
+    backup_labels = (
+        security_data.backup_commit_labels(payload.backup)
+        if payload.backup
+        else []
+    )
+    if backup_labels:
+        if not security_data.has_database(await load(database_file)):
+            raise HTTPException(
+                status_code=400,
+                detail="This application has no database.",
+            )
+        _deep_merge(
+            patches.setdefault(database_file, {}),
+            security_data.backup_patch(payload.backup),
+        )
+        labels.setdefault(database_file, []).extend(backup_labels)
+
+    commits: dict[str, str] = {}
+    previews: dict[str, dict[str, str]] = {}
+    for file_path, patch in patches.items():
+        parsed, sha = loaded[file_path]
+        before = StringIO()
+        _yaml.dump(parsed, before)
+        _deep_merge(parsed, patch)
+        out = StringIO()
+        _yaml.dump(parsed, out)
+        message = f"chore(cmp): {', '.join(labels[file_path])}"
+        if dry_run:
+            previews[file_path] = {
+                "message": message,
+                "diff": "".join(
+                    difflib.unified_diff(
+                        before.getvalue().splitlines(keepends=True),
+                        out.getvalue().splitlines(keepends=True),
+                        fromfile=f"a/{file_path}",
+                        tofile=f"b/{file_path}",
+                    )
+                ),
+            }
+            continue
+        try:
+            result = await put_file_content(
+                installation_token=token,
+                repo_full_name=repo,
+                file_path=file_path,
+                content=out.getvalue(),
+                message=message,
+                sha=sha,
+            )
+        except GitHubAppError as exc:
+            status_code = 409 if "conflict" in str(exc).lower() else 502
+            raise HTTPException(
+                status_code=status_code, detail=str(exc)
+            ) from exc
+        commits[file_path] = result.get("commit", {}).get("sha", "")
+
+    if dry_run:
+        return {"repo": repo, "previews": previews}
+    return {"repo": repo, "commits": commits}

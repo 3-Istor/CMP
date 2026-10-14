@@ -15,6 +15,10 @@ interface KeycloakProfile {
   groups?: string[];
 }
 
+// Refresh this long before expiry so a request never leaves with a token
+// that dies in flight.
+const REFRESH_MARGIN_SECONDS = 60;
+
 interface KeycloakTokenResponse {
   access_token: string;
   expires_in: number;
@@ -23,11 +27,10 @@ interface KeycloakTokenResponse {
 }
 
 async function refreshAccessToken(
-  refreshToken: string | undefined,
+  refreshToken: string,
 ): Promise<KeycloakTokenResponse | null> {
-  if (!refreshToken) return null;
   try {
-    const res = await fetch(
+    const response = await fetch(
       `${process.env.KEYCLOAK_ISSUER}/protocol/openid-connect/token`,
       {
         method: "POST",
@@ -40,13 +43,9 @@ async function refreshAccessToken(
         }),
       },
     );
-    if (!res.ok) {
-      console.warn("Keycloak token refresh failed:", res.status);
-      return null;
-    }
-    return (await res.json()) as KeycloakTokenResponse;
-  } catch (error) {
-    console.warn("Keycloak token refresh failed:", error);
+    if (!response.ok) return null;
+    return (await response.json()) as KeycloakTokenResponse;
+  } catch {
     return null;
   }
 }
@@ -85,18 +84,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.pictureFetched = false;
       }
 
-      // Renew the access token a minute before it expires (api.ts caches it
-      // for 30s, so callers never hold an expired one). A failed refresh —
-      // revoked session, refresh token expired — returns null, which clears
-      // the session so proxy.ts sends the user back to log in.
+      // The access token lives far shorter than the session: without this the
+      // backend refuses every call once it expires, while the user still looks
+      // logged in.
       const expiresAt = token.expiresAt as number | undefined;
-      if (!account && expiresAt && Date.now() >= expiresAt * 1000 - 60_000) {
-        const refreshed = await refreshAccessToken(token.refreshToken as string);
-        if (!refreshed) return null;
-        token.accessToken = refreshed.access_token;
-        token.expiresAt = Math.floor(Date.now() / 1000) + refreshed.expires_in;
-        token.refreshToken = refreshed.refresh_token ?? token.refreshToken;
-        token.idToken = refreshed.id_token ?? token.idToken;
+      if (
+        !account &&
+        expiresAt &&
+        Date.now() / 1000 > expiresAt - REFRESH_MARGIN_SECONDS
+      ) {
+        const refreshed = token.refreshToken
+          ? await refreshAccessToken(token.refreshToken as string)
+          : null;
+        if (refreshed) {
+          token.accessToken = refreshed.access_token;
+          token.expiresAt = Math.floor(Date.now() / 1000) + refreshed.expires_in;
+          token.refreshToken = refreshed.refresh_token ?? token.refreshToken;
+          token.idToken = refreshed.id_token ?? token.idToken;
+          delete token.error;
+        } else {
+          token.error = "RefreshAccessTokenError";
+        }
       }
 
       // Fetch picture from backend only once per session (or on update trigger)
@@ -157,6 +165,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Send properties to the client
       session.accessToken = token.accessToken as string;
       session.idToken = token.idToken as string;
+      session.error = token.error as string | undefined;
       session.user.id = token.sub as string;
       session.user.roles = token.groups as string[]; // Use groups as roles
       session.user.given_name = token.given_name as string;

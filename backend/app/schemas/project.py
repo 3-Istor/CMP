@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.core.roles import ProjectRole
-from app.models.project import TargetCloud
+from app.models.project import ProjectStatus, TargetCloud
 
 
 class ProjectRead(BaseModel):
@@ -28,6 +28,25 @@ class ProjectRead(BaseModel):
         description=(
             "The cloud this project runs on. Mirrored from the Git registry; "
             "projects created before the multicloud chantier read back as 'onprem'."
+        ),
+    )
+    status: ProjectStatus = Field(
+        default=ProjectStatus.ACTIVE,
+        description=(
+            "Lifecycle state of the project. 'provisioning' and 'decommissioning' "
+            "are transient; 'failed' means the last bootstrap or teardown stopped "
+            "and step_message says why."
+        ),
+    )
+    step_message: str | None = Field(
+        default=None,
+        description="What the bootstrap or teardown is doing now, or why it failed.",
+    )
+    is_accessible: bool = Field(
+        default=True,
+        description=(
+            "False while the project's Keycloak groups do not exist, e.g. a "
+            "bootstrap that has not finished or failed. Its page cannot load."
         ),
     )
 

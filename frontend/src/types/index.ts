@@ -49,10 +49,33 @@ export type AssignableRole = Exclude<ProjectRole, "owner">;
 /** The cloud a project's workloads run on. Immutable after creation. */
 export type TargetCloud = "onprem" | "aws" | "gcp";
 
+export type ProjectStatus =
+  | "provisioning"
+  | "active"
+  | "suspended"
+  | "decommissioning"
+  | "failed"
+  | "decommission_failed";
+
 export interface Project {
   name: string;
   role: ProjectRole;
   target_cloud: TargetCloud;
+  status: ProjectStatus;
+  /** What the bootstrap or teardown is doing now, or why it failed. */
+  step_message: string | null;
+  /** False while the project's Keycloak groups do not exist. */
+  is_accessible: boolean;
+}
+
+export function isProjectFailed(project: Project): boolean {
+  return project.status === "failed" || project.status === "decommission_failed";
+}
+
+export function isProjectInFlight(project: Project): boolean {
+  return (
+    project.status === "provisioning" || project.status === "decommissioning"
+  );
 }
 
 export interface ProjectCreateResponse {
@@ -93,6 +116,8 @@ export interface AddMemberResponse {
 export interface DeploymentConfig {
   repo: string;
   file_path: string;
+  /** Selectable components; empty when the app has a single values file. */
+  components: string[];
   /** File SHA — must be echoed back in PATCH requests */
   _sha: string;
   config: Record<string, unknown>;
@@ -104,6 +129,34 @@ export interface DeploymentConfigUpdateResponse {
   file_path: string;
   commit_sha: string;
   changed_keys: string[];
+}
+
+export type ExposurePreset =
+  | "public"
+  | "project_users"
+  | "project_members"
+  | "project_admins";
+
+export interface SecurityData {
+  repo: string;
+  can_edit: boolean;
+  exposure: ExposurePreset | "custom" | null;
+  database: {
+    backup: {
+      enabled: boolean;
+      keep_after_delete: boolean;
+      retention_policy: string | null;
+    };
+  } | null;
+}
+
+export interface SecurityDataUpdate {
+  exposure?: ExposurePreset;
+  backup?: {
+    enabled?: boolean;
+    keep_after_delete?: boolean;
+    retention_policy?: string;
+  };
 }
 
 // ── Terraform / Catalog ───────────────────────────────────────────────────────
@@ -318,4 +371,265 @@ export interface FinopsActionResponse {
   rec_id: string;
   status: string;
   commit_sha: string | null;
+}
+
+export type SecurityTier = "core" | "important" | "recommended" | "info";
+export type SecurityCategory =
+  | "leaks"
+  | "dependencies"
+  | "container"
+  | "access"
+  | "data"
+  | "journal";
+export type SecurityView = "developer" | "platform";
+
+export interface SecurityException {
+  id: number;
+  app: string | null;
+  fingerprint: string;
+  rule: string;
+  kind: "vulnerability" | "secret" | "other";
+  status: "not_affected" | "false_positive" | "accepted_risk" | "revoked";
+  justification: string | null;
+  statement: string;
+  expires_on: string;
+  author: string;
+  created_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  revoked_by: string | null;
+  revoked_at: string | null;
+  pending_approval: boolean;
+}
+
+export interface SecurityFinding {
+  fingerprint: string;
+  app: string | null;
+  category: SecurityCategory;
+  tier: SecurityTier;
+  audience: "developer" | "platform";
+  rule: string;
+  title: string;
+  detail: string;
+  fix: string;
+  location: string;
+  link: string | null;
+  raw: string;
+  sources: string[];
+  first_seen: string;
+  last_seen: string;
+  resolved_at: string | null;
+  exception: SecurityException | null;
+}
+
+export interface SecuritySegment {
+  category: SecurityCategory;
+  label: string;
+  worst: SecurityTier | null;
+  counts: Partial<Record<SecurityTier, number>>;
+  points_lost: number;
+}
+
+export interface SecurityScan {
+  app: string | null;
+  source: "kyverno" | "trivy-operator" | "ci" | "cnpg" | "exposure" | "cilium";
+  status: "ok" | "error" | "missing" | "unavailable";
+  message: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  collected_at: string | null;
+  requested_at: string | null;
+}
+
+export interface SecurityAppSummary {
+  app: string;
+  deployment_id: number | null;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+}
+
+export interface SecuritySummary {
+  project: string;
+  app: string | null;
+  view: SecurityView;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+  excepted: number;
+  segments: SecuritySegment[];
+  apps: SecurityAppSummary[];
+  scans: SecurityScan[];
+  guarantees: { label: string; ok: boolean }[];
+}
+
+export interface SecurityTrendPoint {
+  day: string;
+  score: number;
+  grade: string;
+  core: number;
+  important: number;
+  recommended: number;
+  new_major: number;
+}
+
+export interface SecurityProjectOverview {
+  project: string;
+  score: number;
+  grade: string;
+  actions: number;
+  core: number;
+}
+
+export interface SecurityExceptionRequest {
+  project: string;
+  status: SecurityException["status"];
+  justification: string | null;
+  statement: string;
+  expires_on: string | null;
+}
+
+// ── Activity tab ──────────────────────────────────────────────────────────────
+
+export type ActivitySource =
+  | "cmp"
+  | "deployment"
+  | "kubernetes"
+  | "vault"
+  | "keycloak";
+
+export interface ActivityEvent {
+  id: string;
+  time: string;
+  source: ActivitySource;
+  actor: string;
+  action: string;
+  notable: boolean;
+  project: string | null;
+  app: string | null;
+  target: string;
+  outcome: "success" | "failure";
+  status_code: number | null;
+  source_ip: string | null;
+  details: Record<string, unknown>;
+}
+
+export interface ActivityFeed {
+  events: ActivityEvent[];
+  unavailable: ActivitySource[];
+}
+
+export interface ActivityKpi {
+  value: number;
+  previous: number;
+}
+
+export interface ActivitySummary {
+  actions: ActivityKpi;
+  people: ActivityKpi;
+  notable: ActivityKpi;
+  login_failures: ActivityKpi | null;
+  days: { day: string; counts: Partial<Record<ActivitySource, number>> }[];
+  top_actors: [string, number][];
+  /** Actions by people per [weekday (0 = Monday)][hour], Paris time. */
+  heatmap: number[][];
+  logins: {
+    days: { day: string; success: number; failure: number }[];
+    top_failed_users: [string, number][];
+    top_failed_ips: [string, number][];
+  } | null;
+  unavailable: ActivitySource[];
+}
+
+export interface DeniedFlow {
+  source: string;
+  destination: string;
+  port: number | null;
+  protocol: string;
+  direction: "ingress" | "egress" | "";
+  count: number;
+  last: string;
+}
+
+export interface PlatformStatus {
+  alerts: { name: string; severity: string; summary: string; since: string }[];
+  archive_last_success: string | null;
+  archive_last_schedule: string | null;
+  collected_until: Record<string, string>;
+}
+
+export interface ActivityFilters {
+  source?: ActivitySource | null;
+  actor?: string | null;
+  action?: string | null;
+  app?: string | null;
+  days?: number;
+  until?: string | null;
+  include_reads?: boolean;
+  notable_only?: boolean;
+}
+
+export interface LogLine {
+  time: string;
+  namespace: string;
+  pod: string;
+  container: string;
+  line: string;
+}
+
+export interface LogTargets {
+  namespaces: string[];
+  pods: string[];
+  containers: string[];
+}
+
+export interface LogFilters {
+  namespace?: string | null;
+  pod?: string | null;
+  container?: string | null;
+  search?: string | null;
+  level?: "error" | "warn" | null;
+  since?: string | null;
+  until?: string | null;
+  limit?: number;
+}
+
+export interface LogVolume {
+  step_seconds: number;
+  series: {
+    namespace: string;
+    points: { time: string; lines: number; bytes: number }[];
+    total_lines: number;
+    total_bytes: number;
+    peak_per_minute: number;
+  }[];
+}
+
+// ── Alerts tab ────────────────────────────────────────────────────────────────
+
+export interface CatalogAlert {
+  id: string;
+  title: string;
+  description: string;
+  severity: "critical" | "warning";
+  enabled: boolean;
+  state: "normal" | "pending" | "firing" | "error" | "nodata" | null;
+  params: {
+    key: string;
+    label: string;
+    unit: string;
+    value: number;
+    minimum: number;
+    maximum: number;
+  }[];
+}
+
+export interface AlertCatalog {
+  items: CatalogAlert[];
+  can_edit: boolean;
+  notifies: "app" | "project" | "platform" | null;
+  grafana_rules_url: string | null;
+  grafana_new_rule_url: string | null;
 }

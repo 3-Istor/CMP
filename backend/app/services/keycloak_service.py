@@ -70,6 +70,7 @@ class ProjectGroupMissingError(ValueError):
         self.group_name = group_name
         super().__init__(f"Keycloak group '{group_name}' does not exist.")
 
+
 # ── Simple in-process caches ──────────────────────────────────────────────────
 
 # Admin token cache: (token, expires_at)
@@ -362,17 +363,13 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         List of project dicts, sorted by name:
         ``[{"name": "sandbox", "role": "admin"}, ...]``
     """
-    logger.debug(
-        "🔍 Fetching groups from Keycloak for user_id: %s", user_id
-    )
+    logger.debug("🔍 Fetching groups from Keycloak for user_id: %s", user_id)
 
     groups = _fetch_user_groups(user_id)
     logger.debug("Raw groups: %s", [g.get("name") for g in groups])
 
     projects = _project_roles_from_groups(groups)
-    logger.debug(
-        "📊 Extracted %d projects: %s", len(projects), list(projects)
-    )
+    logger.debug("📊 Extracted %d projects: %s", len(projects), list(projects))
 
     return [
         {"name": name, "role": role.value}
@@ -427,9 +424,7 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
 
     if target_role not in ASSIGNABLE:
         allowed = ", ".join(repr(r.value) for r in ASSIGNABLE)
-        raise ValueError(
-            f"Invalid role '{role}'. Must be one of: {allowed}."
-        )
+        raise ValueError(f"Invalid role '{role}'. Must be one of: {allowed}.")
 
     admin_token = _get_admin_token()
 
@@ -537,9 +532,7 @@ def project_guests_supported(project_name: str) -> bool:
     the Guest option rather than letting an admin pick it and collect a 409.
     """
     admin_token = _get_admin_token()
-    group_name = (
-        f"project-{project_name}-{GROUP_SUFFIX[ProjectRole.GUEST]}"
-    )
+    group_name = f"project-{project_name}-{GROUP_SUFFIX[ProjectRole.GUEST]}"
     return _find_group_by_name(group_name, admin_token) is not None
 
 
@@ -595,9 +588,7 @@ def list_project_members(project_name: str) -> list[dict]:
     members: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=len(ASSIGNABLE)) as pool:
         futures = {
-            pool.submit(
-                _fetch_group_members, GROUP_SUFFIX[role], role
-            ): role
+            pool.submit(_fetch_group_members, GROUP_SUFFIX[role], role): role
             for role in ASSIGNABLE
         }
         for future in as_completed(futures):
@@ -607,14 +598,10 @@ def list_project_members(project_name: str) -> list[dict]:
                     username = user["username"]
                     # The strongest role wins when a user is in several groups
                     existing = members.get(username)
-                    if existing is None or rank(role) > rank(
-                        existing["role"]
-                    ):
+                    if existing is None or rank(role) > rank(existing["role"]):
                         members[username] = user
             except Exception as exc:
-                logger.warning(
-                    "Failed to fetch %s group: %s", role.value, exc
-                )
+                logger.warning("Failed to fetch %s group: %s", role.value, exc)
 
     return sorted(members.values(), key=lambda x: x["username"])
 
@@ -624,23 +611,19 @@ def list_project_members(project_name: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-) -> dict:
+def decode_platform_token(token: str) -> dict:
     """
-    FastAPI dependency — verifies the Bearer JWT against the realm's signing
-    keys (signature, expiry, issuer) and returns its payload.
+    Verify a bearer JWT against the realm's signing keys (signature, expiry,
+    issuer) and return its claims.
 
     Verified here even when a gateway already checked it: the backend is also
     reachable without one (ingress straight to /api, in-cluster calls, local
     compose), and authorization trusts ``preferred_username`` blindly.
 
-    Sync on purpose: the first call (and a key rotation) fetches the JWKS over
-    HTTP, so FastAPI runs it in its threadpool.
-
-    Raises HTTPException 401 on an invalid or expired token.
+    Raises:
+        HTTPException 401: Invalid or expired token.
+        HTTPException 503: The realm's signing keys could not be fetched.
     """
-    token = credentials.credentials
     try:
         signing_key = _jwks_client.get_signing_key_from_jwt(token)
         return jwt.decode(
@@ -665,3 +648,65 @@ def get_current_user(
             detail=f"Invalid token: {exc}",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+) -> dict:
+    """
+    FastAPI dependency returning the verified claims of the bearer token.
+
+    Sync on purpose: the first call (and a key rotation) fetches the JWKS over
+    HTTP, so FastAPI runs it in its threadpool.
+    """
+    return decode_platform_token(credentials.credentials)
+
+
+def get_project_role(user_id: str, project_name: str) -> str | None:
+    """
+    Return the user's group role on the project ("admin", "member", "guest")
+    or None, from live Keycloak group membership (tokens can be stale).
+
+    Thin string-valued wrapper over :func:`get_user_project_role` for the
+    routers that only need the role name. Owner is not resolved here: it
+    lives in the database, see ``app.services.authz``.
+
+    Raises:
+        HTTPException 502: Keycloak could not be queried.
+    """
+    try:
+        role = get_user_project_role(user_id, project_name)
+    except requests.RequestException as exc:
+        logger.error(
+            "Failed to check access to project '%s': %s", project_name, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to verify project access.",
+        ) from exc
+    return role.value if role else None
+
+
+def require_project_role(
+    token_payload: dict, project_name: str, require_admin: bool = False
+) -> str:
+    """
+    Raise 403 unless the token's user is a member or above (or admin, when
+    required) of the project; return the role.
+
+    Guests are refused: the routers using this (security, activity, alerts)
+    expose logs and findings, which guests do not get.
+    """
+    user_id = token_payload.get("sub", "")
+    role = get_project_role(user_id, project_name) if user_id else None
+    minimum = ProjectRole.ADMIN if require_admin else ProjectRole.MEMBER
+    if rank(role) < rank(minimum):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Access denied: admin role required for project '{project_name}'."
+                if require_admin
+                else f"Access denied: member role required for project '{project_name}'."
+            ),
+        )
+    return role
