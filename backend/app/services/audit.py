@@ -73,6 +73,22 @@ ACTIONS: dict[tuple[str, str], str] = {
         "POST",
         "/api/finops/recommendations/{rec_id}/notify",
     ): "finops.recommendation.notify",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/release/promote",
+    ): "release.promote",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/release/skip",
+    ): "release.skip",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/release/abort",
+    ): "release.abort",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/release/retry",
+    ): "release.retry",
     ("PUT", "/api/alerting/{alert_id}"): "alerting.update",
     ("POST", "/api/catalog/sync"): "catalog.sync",
     ("POST", "/api/account/picture"): "account.picture.update",
@@ -92,6 +108,8 @@ NOTABLE = {
     "security.exception.approve",
     "security.policy.update",
     "database.restore",
+    "release.skip",
+    "release.abort",
 }
 
 # Body fields copied into the journal. Anything else, config values in
@@ -106,6 +124,7 @@ _SAFE_FIELDS = {
     "role",
     "exposure",
     "reason",
+    "mode",
     "template_id",
     "target",
     "enabled",
