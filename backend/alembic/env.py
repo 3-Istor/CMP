@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.models.deployment  # noqa: F401
 import app.models.finops  # noqa: F401
 import app.models.project  # noqa: F401
+import app.models.release  # noqa: F401
 import app.models.user_github  # noqa: F401
 from alembic import context
 from app.core.config import settings

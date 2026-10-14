@@ -429,3 +429,103 @@ export function useSecurityOverview(intervalMs = 120000) {
 
   return overview;
 }
+
+const RELEASE_POLL_MS = 3000;
+const RELEASE_RECONNECT_MS = 2000;
+const RELEASE_STREAM_ATTEMPTS = 2;
+
+/**
+ * Live release state of one deployment.
+ *
+ * Reads the SSE stream; if it cannot be opened twice in a row (proxy buffering,
+ * older backend), falls back to polling every 3s for the life of the hook.
+ */
+export function useRelease(deploymentId: number) {
+  const [view, setView] = useState<import("@/types").ReleaseView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState<"stream" | "polling" | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const { getRelease } = await import("./api");
+      setView(await getRelease(deploymentId));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch release");
+    }
+  }, [deploymentId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let failures = 0;
+
+    const startPolling = () => {
+      setLive("polling");
+      pollTimer = setInterval(refresh, RELEASE_POLL_MS);
+    };
+
+    const connect = async () => {
+      const { streamRelease } = await import("./api");
+      let received = false;
+      try {
+        await streamRelease(
+          deploymentId,
+          (v) => {
+            received = true;
+            failures = 0;
+            setLive("stream");
+            setView(v);
+            setError(null);
+          },
+          controller.signal,
+        );
+      } catch {
+        if (controller.signal.aborted) return;
+        if (!received) failures++;
+      }
+      if (controller.signal.aborted) return;
+      if (failures >= RELEASE_STREAM_ATTEMPTS) {
+        startPolling();
+        return;
+      }
+      reconnectTimer = setTimeout(connect, RELEASE_RECONNECT_MS);
+    };
+
+    refresh();
+    connect();
+    return () => {
+      controller.abort();
+      if (pollTimer) clearInterval(pollTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [deploymentId, refresh]);
+
+  return { view, error, live, refresh };
+}
+
+/** Past and current releases of one deployment, newest first. */
+export function useReleaseHistory(deploymentId: number) {
+  const [events, setEvents] = useState<import("@/types").ReleaseEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const { getReleaseHistory } = await import("./api");
+      setEvents(await getReleaseHistory(deploymentId));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch history");
+    } finally {
+      setLoading(false);
+    }
+  }, [deploymentId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { events, loading, error, refresh };
+}

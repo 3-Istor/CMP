@@ -21,6 +21,7 @@ from app.routers import (
     finops,
     infra,
     projects,
+    releases,
     security,
     security_alerts,
     security_databases,
@@ -29,6 +30,7 @@ from app.services import health_poller
 from app.services.activity_collector import activity_collector_loop
 from app.services.audit import audit_middleware, audit_retention_loop
 from app.services.finops import alert_poller
+from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
 from app.services.template_repository import get_repository
 
@@ -235,6 +237,7 @@ async def lifespan(app: FastAPI):
     security_collector_task = asyncio.create_task(security_collector_loop())
     audit_retention_task = asyncio.create_task(audit_retention_loop())
     activity_collector_task = asyncio.create_task(activity_collector_loop())
+    release_recorder_task = asyncio.create_task(release_recorder_loop())
 
     logger.info("✅ Application startup complete")
 
@@ -247,12 +250,14 @@ async def lifespan(app: FastAPI):
     security_collector_task.cancel()
     audit_retention_task.cancel()
     activity_collector_task.cancel()
+    release_recorder_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
         security_collector_task,
         audit_retention_task,
         activity_collector_task,
+        release_recorder_task,
     ):
         try:
             await task
@@ -303,6 +308,7 @@ app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
+app.include_router(releases.router, prefix="/api")
 app.include_router(finops.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")

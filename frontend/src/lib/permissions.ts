@@ -30,6 +30,8 @@ export type Capability =
   | "app.editConfig"
   | "app.viewSecretsLink"
   | "app.viewObservability"
+  | "release.view"
+  | "release.operate"
   | "members.view"
   | "members.manage"
   | "finops.view"
@@ -52,6 +54,8 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "app.editConfig": "admin",
   "app.viewSecretsLink": "admin",
   "app.viewObservability": "member",
+  "release.view": "guest",
+  "release.operate": "member",
   "members.view": "member",
   "members.manage": "admin",
   "finops.view": "guest",
