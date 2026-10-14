@@ -5,7 +5,8 @@ Mirrors the health-poller pattern: a long-lived asyncio loop (started from the
 app lifespan) that, every few minutes:
 
   * evaluates each project budget against month-to-date simulated spend and
-    raises a Discord alert + history row when a 70% / 90% threshold is newly
+    raises a Discord alert + history row when its warn / critical threshold
+    (70% / 90% by default) is newly
     crossed (``BudgetAlertState`` prevents repeat spam), and
   * flags anomalous consumption spikes per application.
 """
@@ -118,7 +119,7 @@ async def check_budgets() -> None:
 
 
 async def check_spikes() -> None:
-    """Flag apps whose simulated consumption spikes above the recent average."""
+    """Flag apps with a simulated consumption spike today (see usage.has_spike)."""
     db = SessionLocal()
     try:
         today = date.today()
@@ -155,7 +156,7 @@ async def check_spikes() -> None:
                     kind="spike",
                     message=(
                         f"Pic de consommation anormal détecté sur "
-                        f"{', '.join(spiking)} (> 150% de la moyenne 7 jours)."
+                        f"{', '.join(spiking)} (pic simulé)."
                     ),
                     value_pct=None,
                 )

@@ -100,7 +100,7 @@ def _get_openstack_connection(
         else settings.OS_PROJECT_NAME
     )
 
-    # Disable service discovery to avoid hanging
+    # Short timeout and no retries so an unreachable cloud fails fast
     return openstack.connect(
         auth_url=settings.OS_AUTH_URL,
         username=settings.OS_USERNAME,
@@ -224,7 +224,7 @@ async def _get_openstack_vpn_status() -> VPNStatus | None:
         except openstack.exceptions.HttpException as e:
             if "ServiceUnavailable" in str(e) or "500" in str(e):
                 logger.warning(
-                    "OpenStack Neutron service unavailable, VPN status unknown: %s",
+                    "OpenStack compute service unavailable, VPN status unknown: %s",
                     str(e)[:200],
                 )
                 return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
@@ -323,7 +323,7 @@ async def _get_openstack_hypervisors() -> list[HypervisorStatus]:
             error_msg = str(exc)
             if "ServiceUnavailable" in error_msg or "500" in error_msg:
                 logger.warning(
-                    "OpenStack Neutron service unavailable, hypervisor status unknown: %s",
+                    "OpenStack compute service unavailable, hypervisor status unknown: %s",
                     error_msg[:200],
                 )
                 return []
@@ -608,7 +608,7 @@ def _aggregate_health_status(
     Returns:
         "healthy" - All components healthy and match desired capacity
         "degraded" - Some components unhealthy, missing, or provisioning
-        "down" - No healthy components found
+                     (including when none is healthy)
         "unknown" - Unable to determine status (no data from either cloud)
     """
     # If we have no data from either cloud, status is unknown

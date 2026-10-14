@@ -104,7 +104,7 @@ async def send_budget_alert(
 
     Args:
         project_name: Project identifier.
-        level: "warning" (≥70%) or "critical" (≥90%).
+        level: "warning" or "critical" (the budget's own thresholds).
         consumed_pct: Percentage of the budget consumed.
         spent_eur: Amount spent so far this month.
         budget_eur: Monthly budget.
@@ -158,7 +158,6 @@ async def send_finops_recommendation(
     title: str,
     saving_eur: float,
 ) -> bool:
-    """Notify the Project Owner of an optimisation recommendation."""
     if not settings.DISCORD_WEBHOOK_URL:
         logger.debug(
             "Discord webhook not configured, skipping recommendation notice"

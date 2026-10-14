@@ -2,7 +2,7 @@
 Catalog Service
 
 Provides access to deployment templates from the Git repository.
-Templates are dynamically loaded from the ia-project-template repository.
+Templates are dynamically loaded from the app-templates repository.
 """
 
 from app.schemas.catalog import CatalogField, CatalogTemplate

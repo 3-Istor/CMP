@@ -1,18 +1,10 @@
-import time
+import logging
 from typing import Annotated
 
 import boto3
 import requests
 from botocore.exceptions import ClientError
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    HTTPException,
-    Request,
-    UploadFile,
-)
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -24,17 +16,16 @@ from app.schemas.account import (
     PictureUploadResponse,
     UserProfile,
 )
-from app.services.keycloak_service import get_current_user
+from app.services.keycloak_service import _get_admin_token, get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/account", tags=["Account"])
-security = HTTPBearer(auto_error=True)
 
 
 @router.get("/me", response_model=UserProfile)
-async def get_user_profile(
-    request: Request,
+def get_user_profile(
     token_payload: Annotated[dict, Depends(get_current_user)],
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     db: Session = Depends(get_db),
 ) -> UserProfile:
     """
@@ -43,10 +34,11 @@ async def get_user_profile(
     This ensures we always return the latest profile picture and other attributes,
     even if the JWT contains stale claims.
     """
-    # Extract groups from token (Keycloak uses 'groups' field)
+    # The 'groups' claim is not populated in this realm (see keycloak_service),
+    # so this normally falls through to the realm roles below.
     groups = token_payload.get("groups", [])
 
-    # Fallback to roles if groups not available
+    # Fallback to realm roles
     if not groups and "realm_access" in token_payload:
         groups = token_payload["realm_access"].get("roles", [])
 
@@ -68,49 +60,37 @@ async def get_user_profile(
     github_installation_id = None
 
     try:
-        # Get admin token
-        token_url = f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
-        token_response = requests.post(
-            token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": settings.KEYCLOAK_CLIENT_ID,
-                "client_secret": settings.KEYCLOAK_CLIENT_SECRET,
-            },
+        admin_token = _get_admin_token()
+
+        search_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
+        search_response = requests.get(
+            search_url,
+            headers={"Authorization": f"Bearer {admin_token}"},
+            params={"username": user_sub, "exact": "true"},
             timeout=10,
         )
-        if token_response.ok:
-            admin_token = token_response.json()["access_token"]
 
-            search_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
-            search_response = requests.get(
-                search_url,
+        if search_response.ok and search_response.json():
+            user_uuid = search_response.json()[0]["id"]
+
+            user_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_uuid}"
+            user_response = requests.get(
+                user_url,
                 headers={"Authorization": f"Bearer {admin_token}"},
-                params={"username": user_sub, "exact": "true"},
                 timeout=10,
             )
 
-            if search_response.ok and search_response.json():
-                user_uuid = search_response.json()[0]["id"]
+            if user_response.ok:
+                user_data = user_response.json()
+                keycloak_first_name = user_data.get("firstName")
+                keycloak_last_name = user_data.get("lastName")
 
-                user_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{user_uuid}"
-                user_response = requests.get(
-                    user_url,
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                    timeout=10,
-                )
-
-                if user_response.ok:
-                    user_data = user_response.json()
-                    keycloak_first_name = user_data.get("firstName")
-                    keycloak_last_name = user_data.get("lastName")
-
-                    attributes = user_data.get("attributes", {})
-                    if "picture" in attributes and attributes["picture"]:
-                        picture = attributes["picture"][0]
+                attributes = user_data.get("attributes", {})
+                if "picture" in attributes and attributes["picture"]:
+                    picture = attributes["picture"][0]
 
     except Exception as e:
-        print(f"Warning /me: Failed to fetch user data: {e}")
+        logger.warning("/me: failed to fetch user data: %s", e)
 
     # Récupérer l'ID d'installation GitHub depuis la base de données
     if user_sub:
@@ -147,10 +127,6 @@ async def upload_profile_picture(
     token_payload: dict = Depends(get_current_user),
 ) -> PictureUploadResponse:
     """Upload a new profile picture to S3 and update Keycloak."""
-    # Debug: Log the token payload to see what's available
-    print(f"DEBUG: Token payload keys: {token_payload.keys()}")
-    print(f"DEBUG: Token payload: {token_payload}")
-
     # Validate MIME type - only real image types accepted
     allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     max_size_bytes = 5 * 1024 * 1024  # 5 MB
@@ -227,23 +203,11 @@ async def upload_profile_picture(
 
     # Update Keycloak user profile
     try:
-        # Get admin token
-        token_url = f"{settings.KEYCLOAK_URL}/realms/3istor/protocol/openid-connect/token"
-        token_response = requests.post(
-            token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": settings.KEYCLOAK_CLIENT_ID,
-                "client_secret": settings.KEYCLOAK_CLIENT_SECRET,
-            },
-            timeout=10,
-        )
-        token_response.raise_for_status()
-        admin_token = token_response.json()["access_token"]
+        admin_token = _get_admin_token()
 
         # The 'sub' claim might be a username, not a UUID
         # First, try to find the user by username to get their UUID
-        search_url = f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users"
+        search_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
         search_response = requests.get(
             search_url,
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -260,12 +224,8 @@ async def upload_profile_picture(
             # Get the UUID from the first matching user
             user_uuid = users[0]["id"]
 
-        print(f"DEBUG: Using user UUID: {user_uuid} for username: {user_sub}")
-
         # First, GET the current user data to avoid overwriting other fields
-        user_url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{user_uuid}"
-        )
+        user_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_uuid}"
         get_response = requests.get(
             user_url,
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -273,9 +233,6 @@ async def upload_profile_picture(
         )
         get_response.raise_for_status()
         user_data = get_response.json()
-
-        print(f"DEBUG: Current user data keys: {user_data.keys()}")
-        print(f"DEBUG: Current attributes: {user_data.get('attributes', {})}")
 
         # Update only the picture attribute, preserving all other attributes
         if "attributes" not in user_data:
@@ -297,10 +254,6 @@ async def upload_profile_picture(
         for field in fields_to_remove:
             user_data.pop(field, None)
 
-        print(
-            f"DEBUG: Updating user with attributes: {user_data.get('attributes', {})}"
-        )
-
         # Now PUT the complete user data back with the updated picture
         update_response = requests.put(
             user_url,
@@ -312,23 +265,6 @@ async def upload_profile_picture(
             timeout=10,
         )
         update_response.raise_for_status()
-
-        print(
-            f"DEBUG: Successfully updated Keycloak user {user_uuid} with picture: {public_url}"
-        )
-
-        # Verify the update by fetching the user again
-        verify_response = requests.get(
-            user_url,
-            headers={"Authorization": f"Bearer {admin_token}"},
-            timeout=10,
-        )
-        if verify_response.ok:
-            verify_data = verify_response.json()
-            stored_picture = verify_data.get("attributes", {}).get(
-                "picture", []
-            )
-            print(f"DEBUG: Verified picture in Keycloak: {stored_picture}")
 
     except requests.RequestException as e:
         raise HTTPException(
@@ -375,10 +311,6 @@ async def save_github_installation(
         )
 
     try:
-        print(
-            f"DEBUG /github-installation: Saving installation_id {installation_id} for user {user_sub}"
-        )
-
         # Check if record exists
         existing = (
             db.query(UserGitHubInstallation)
@@ -388,13 +320,9 @@ async def save_github_installation(
 
         if existing:
             # Update existing record
-            print(
-                f"DEBUG /github-installation: Updating existing record (old ID: {existing.installation_id})"
-            )
             existing.installation_id = installation_id
         else:
             # Create new record
-            print(f"DEBUG /github-installation: Creating new record")
             new_record = UserGitHubInstallation(
                 user_sub=user_sub, installation_id=installation_id
             )
@@ -402,34 +330,15 @@ async def save_github_installation(
 
         db.commit()
 
-        # Verify the save
-        verify_record = (
-            db.query(UserGitHubInstallation)
-            .filter(UserGitHubInstallation.user_sub == user_sub)
-            .first()
-        )
-
-        if verify_record and verify_record.installation_id == installation_id:
-            print(
-                f"DEBUG /github-installation: Successfully saved and verified installation_id"
-            )
-            return GitHubInstallationResponse(
-                message="GitHub installation ID saved successfully",
-                installation_id=installation_id,
-            )
-        else:
-            print(
-                f"ERROR /github-installation: Verification failed after save"
-            )
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to verify saved installation ID",
-            )
-
     except Exception as e:
         db.rollback()
-        print(f"ERROR /github-installation: Database error: {e}")
+        logger.error("/github-installation: database error: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to save GitHub installation ID: {str(e)}",
         ) from e
+
+    return GitHubInstallationResponse(
+        message="GitHub installation ID saved successfully",
+        installation_id=installation_id,
+    )

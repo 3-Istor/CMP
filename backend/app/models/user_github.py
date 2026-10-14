@@ -12,7 +12,7 @@ class UserGitHubInstallation(Base):
     """
     Stores GitHub App installation IDs for users.
 
-    This table links Keycloak user IDs (sub) to GitHub App installation IDs.
+    This table links Keycloak users to GitHub App installation IDs.
     When a user links their GitHub account, we store the installation_id here.
     """
 
@@ -20,7 +20,7 @@ class UserGitHubInstallation(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
-    # Keycloak user UUID (from JWT 'sub' claim)
+    # Keycloak preferred_username (falls back to the JWT 'sub' claim)
     user_sub: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
     )

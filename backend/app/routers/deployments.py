@@ -14,6 +14,7 @@ from fastapi import (
     Query,
     Request,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
@@ -32,7 +33,7 @@ from app.services.github_service import (
     GitHubAppError,
     get_file_content,
     get_installation_token,
-    update_file_content,
+    put_file_content,
 )
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
@@ -132,7 +133,7 @@ def _get_app_or_404(
 
 
 @router.get("/", response_model=list[DeploymentRead])
-async def list_deployments(
+def list_deployments(
     token: CurrentUser,
     db: Session = Depends(get_db),
 ):
@@ -173,7 +174,14 @@ async def create_deployment(
             detail="project_id is required: an application must belong to a project.",
         )
     if not is_cnp_admin(token):
-        assert_project_role(db, token, payload.project_id, ProjectRole.ADMIN)
+        # Blocking Keycloak call: off the event loop.
+        await run_in_threadpool(
+            assert_project_role,
+            db,
+            token,
+            payload.project_id,
+            ProjectRole.ADMIN,
+        )
 
     # Validate template exists
     template = get_template_by_id(payload.template_id)
@@ -362,7 +370,7 @@ def _get_kubernetes_deployment_or_404(
     minimum: ProjectRole,
 ) -> Deployment:
     """
-    Fetch a RUNNING Kubernetes deployment the caller may touch, raising
+    Fetch a Kubernetes deployment the caller may touch, raising
     appropriate HTTP errors if it doesn't exist, they lack the role, it is not
     Kubernetes-type, or it has no GitHub repo linked.
     """
@@ -657,7 +665,7 @@ async def update_deployment_config(
     )
 
     try:
-        result = await update_file_content(
+        result = await put_file_content(
             installation_token=gh_token,
             repo_full_name=repo,
             file_path=file_path,
@@ -850,7 +858,7 @@ async def update_security_data(
             }
             continue
         try:
-            result = await update_file_content(
+            result = await put_file_content(
                 installation_token=token,
                 repo_full_name=repo,
                 file_path=file_path,

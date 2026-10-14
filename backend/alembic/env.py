@@ -6,7 +6,11 @@ from sqlalchemy import engine_from_config, pool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import app.models.deployment  # noqa: F401 - ensure models are registered
+# Imported so every model is registered on Base.metadata (autogenerate).
+import app.models.deployment  # noqa: F401
+import app.models.finops  # noqa: F401
+import app.models.project  # noqa: F401
+import app.models.user_github  # noqa: F401
 from alembic import context
 from app.core.config import settings
 from app.core.database import Base
