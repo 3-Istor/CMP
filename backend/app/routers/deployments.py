@@ -19,11 +19,14 @@ from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.project import Project
 from app.routers.finops import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
+from app.services.authz import assert_project_role
 from app.services.catalog_service import get_template_by_id
 from app.services.github_service import (
     GitHubAppError,
@@ -35,7 +38,7 @@ from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
     get_project_role,
-    require_project_role,
+    get_user_id_from_token,
 )
 from app.services.project_registry import (
     NameCollisionError,
@@ -45,57 +48,107 @@ from app.services.project_registry import (
 
 router = APIRouter(prefix="/deployments", tags=["Deployments"])
 
+# Type alias for the authenticated caller, so the endpoint signatures below
+# stay readable.
+CurrentUser = Annotated[dict, Depends(get_current_user)]
+
 # ── ruamel.yaml instance (round-trip mode preserves comments & formatting) ──
 _yaml = YAML()
 _yaml.preserve_quotes = True
 
 _FULLSTACK_COMPONENTS = ["frontend", "backend"]
 
-CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+# ── Authorization helpers ───────────────────────────────────────────────────
+#
+# An application belongs to a project, so every permission question here is
+# really a question about that project. ``Deployment.project_id`` holds the
+# project *name* (there is no foreign key), which is exactly what
+# ``assert_project_role`` takes.
 
 
-def _authorize_project(
-    token_payload: dict, project_id: str | None, require_admin: bool
+def _user_project_names(db: Session, token: dict) -> list[str]:
+    """
+    Every project the caller can see: their Keycloak group memberships plus
+    anything they own.
+
+    Owned projects are included separately because ownership lives in the
+    database, not in a group — the same reason ``GET /api/projects/`` merges
+    the two.
+    """
+    user_id = get_user_id_from_token(token)
+    username = token.get("preferred_username") or user_id
+
+    names = {p["name"] for p in fetch_user_projects_from_keycloak(user_id)}
+
+    if username:
+        names.update(
+            row.project_name
+            for row in db.query(Project)
+            .filter(Project.owner_username == username)
+            .all()
+        )
+
+    return sorted(names)
+
+
+def _authorize_app(
+    db: Session,
+    token: dict,
+    deployment: Deployment,
+    minimum: ProjectRole,
 ) -> None:
-    if is_cnp_admin(token_payload):
+    """
+    Raise unless the caller holds *minimum* on the application's project.
+
+    A deployment with no ``project_id`` cannot be attributed to anyone, so it
+    is refused rather than left open: "only the projects you are assigned to"
+    has no sensible answer for an app that belongs to no project. Legacy rows
+    in that state need a project_id backfilled before they are reachable
+    again. Platform admins pass regardless.
+    """
+    if is_cnp_admin(token):
         return
-    if not project_id:
+    if not deployment.project_id:
         raise HTTPException(
             status_code=403,
-            detail="Only platform admins can manage deployments outside a project.",
+            detail=(
+                "This application is not attached to a project, so access "
+                "cannot be determined."
+            ),
         )
-    require_project_role(token_payload, project_id, require_admin)
+    assert_project_role(db, token, deployment.project_id, minimum)
 
 
-def _authorized_deployment(
-    deployment_id: int,
-    db: Session,
-    token_payload: dict,
-    require_admin: bool = False,
+def _get_app_or_404(
+    db: Session, token: dict, deployment_id: int, minimum: ProjectRole
 ) -> Deployment:
+    """Fetch a deployment the caller is allowed to touch, or raise."""
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         raise HTTPException(status_code=404, detail="Deployment not found")
-    _authorize_project(token_payload, deployment.project_id, require_admin)
+    _authorize_app(db, token, deployment, minimum)
     return deployment
 
 
 @router.get("/", response_model=list[DeploymentRead])
 async def list_deployments(
-    token_payload: CurrentUser, db: Session = Depends(get_db)
+    token: CurrentUser,
+    db: Session = Depends(get_db),
 ):
-    """Return the non-deleted deployments of the projects the user belongs to."""
+    """
+    Return the caller's non-deleted deployments.
+
+    Scoped to the projects the caller belongs to — including as a guest, who
+    is allowed to see which applications exist. Platform admins see them all.
+    """
     query = db.query(Deployment).filter(
         Deployment.status != DeploymentStatus.DELETED
     )
-    if not is_cnp_admin(token_payload):
-        projects = [
-            p["name"]
-            for p in fetch_user_projects_from_keycloak(
-                token_payload.get("sub", "")
-            )
-        ]
-        query = query.filter(Deployment.project_id.in_(projects))
+    if not is_cnp_admin(token):
+        query = query.filter(
+            Deployment.project_id.in_(_user_project_names(db, token))
+        )
     return query.all()
 
 
@@ -103,14 +156,24 @@ async def list_deployments(
 async def create_deployment(
     payload: DeploymentCreate,
     background_tasks: BackgroundTasks,
-    token_payload: CurrentUser,
+    token: CurrentUser,
     db: Session = Depends(get_db),
 ):
     """
     Create a deployment record and kick off Terraform deployment in the background.
     Returns immediately with status=pending so the frontend can start polling.
+
+    Access control: admin or owner of the target project. The project comes
+    from the request body, so it is checked here rather than through a path
+    dependency.
     """
-    _authorize_project(token_payload, payload.project_id, require_admin=True)
+    if not payload.project_id:
+        raise HTTPException(
+            status_code=400,
+            detail="project_id is required: an application must belong to a project.",
+        )
+    if not is_cnp_admin(token):
+        assert_project_role(db, token, payload.project_id, ProjectRole.ADMIN)
 
     # Validate template exists
     template = get_template_by_id(payload.template_id)
@@ -178,20 +241,26 @@ async def create_deployment(
 @router.get("/{deployment_id}", response_model=DeploymentRead)
 async def get_deployment(
     deployment_id: int,
-    token_payload: CurrentUser,
+    token: CurrentUser,
     db: Session = Depends(get_db),
 ):
-    return _authorized_deployment(deployment_id, db, token_payload)
+    """Access control: any role on the application's project."""
+    return _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
 
 
 @router.get("/{deployment_id}/outputs")
 async def get_deployment_outputs(
     deployment_id: int,
-    token_payload: CurrentUser,
+    token: CurrentUser,
     db: Session = Depends(get_db),
 ):
-    """Return Terraform outputs for a deployment."""
-    deployment = _authorized_deployment(deployment_id, db, token_payload)
+    """
+    Return Terraform outputs for a deployment.
+
+    Access control: any role. These are the app's public endpoints — the URLs
+    and IPs already shown on its card.
+    """
+    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
 
     if not deployment.terraform_outputs:
         return {}
@@ -205,13 +274,16 @@ async def get_deployment_outputs(
 @router.get("/{deployment_id}/logs/stream")
 async def stream_deployment_logs(
     deployment_id: int,
-    token_payload: CurrentUser,
+    token: CurrentUser,
     db: Session = Depends(get_db),
 ):
     """
     Stream Terraform execution logs for a deployment in real-time.
+
+    Access control: member or above. Build output can carry infrastructure
+    detail, so guests do not get it.
     """
-    deployment = _authorized_deployment(deployment_id, db, token_payload)
+    _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
 
     log_file = Path("logs/deployments") / f"{deployment_id}.log"
 
@@ -256,16 +328,16 @@ async def stream_deployment_logs(
 async def delete_deployment(
     deployment_id: int,
     background_tasks: BackgroundTasks,
-    token_payload: CurrentUser,
+    token: CurrentUser,
     db: Session = Depends(get_db),
 ):
     """
     Trigger deletion of all Terraform-managed resources.
+
+    Access control: admin or owner of the application's project.
     Frontend must have already shown double-confirmation before calling this.
     """
-    deployment = _authorized_deployment(
-        deployment_id, db, token_payload, require_admin=True
-    )
+    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,
@@ -286,17 +358,15 @@ async def delete_deployment(
 def _get_kubernetes_deployment_or_404(
     deployment_id: int,
     db: Session,
-    token_payload: dict,
-    require_admin: bool = False,
+    token: dict,
+    minimum: ProjectRole,
 ) -> Deployment:
     """
-    Fetch a RUNNING Kubernetes deployment the user may access, raising
-    appropriate HTTP errors if it doesn't exist, is not Kubernetes-type, or
-    has no GitHub repo linked.
+    Fetch a RUNNING Kubernetes deployment the caller may touch, raising
+    appropriate HTTP errors if it doesn't exist, they lack the role, it is not
+    Kubernetes-type, or it has no GitHub repo linked.
     """
-    deployment = _authorized_deployment(
-        deployment_id, db, token_payload, require_admin
-    )
+    deployment = _get_app_or_404(db, token, deployment_id, minimum)
 
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
@@ -405,7 +475,7 @@ def _config_file_for(app_type: str, component: str | None) -> str:
 @router.get("/{deployment_id}/config")
 async def get_deployment_config(
     deployment_id: int,
-    token_payload: CurrentUser,
+    token: CurrentUser,
     component: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
@@ -417,23 +487,28 @@ async def get_deployment_config(
     This allows the frontend to pre-populate the Day-2 configuration form
     without the user needing to know the repository URL.
 
+    Access control: member or above — members read the configuration, only
+    admins may change it (see PATCH below).
+
     Raises:
         404 — Deployment not found.
+        403 — Caller has no access to the application's project.
         400 — Not a Kubernetes deployment.
         409 — GitHub repo not linked yet.
         502 — GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token_payload
+        deployment_id, db, token, ProjectRole.MEMBER
     )
     app_type = _app_type_of(deployment)
     file_path = _config_file_for(app_type, component)
-    token = await _get_github_token_for_deployment(deployment)
+    # Named gh_token so it cannot shadow the caller's JWT above.
+    gh_token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment.github_repo_url)
 
     try:
         raw_content, sha = await get_file_content(
-            installation_token=token,
+            installation_token=gh_token,
             repo_full_name=repo,
             file_path=file_path,
         )
@@ -463,7 +538,7 @@ async def get_deployment_config(
 async def update_deployment_config(
     deployment_id: int,
     request: Request,
-    token_payload: CurrentUser,
+    token: CurrentUser,
     component: str | None = Query(default=None),
     # The request body must include the `_sha` field (obtained from GET /config)
     # plus any top-level or nested keys to update.
@@ -499,14 +574,19 @@ async def update_deployment_config(
     **Merge strategy**: deep merge — existing keys not mentioned in the
     payload are preserved, including YAML comments.
 
+    Access control: admin or owner of the application's project. This commits
+    to the repository and ArgoCD then changes what is running, so it is a
+    write in every sense.
+
     Raises:
         400 — Missing ``_sha``, not a Kubernetes deployment, or no payload keys.
+        403 — Caller is not an admin of the application's project.
         404 — Deployment not found.
         409 — SHA conflict (another commit was pushed in between) or repo not linked.
         502 — GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token_payload, require_admin=True
+        deployment_id, db, token, ProjectRole.ADMIN
     )
     file_path = _config_file_for(_app_type_of(deployment), component)
 
@@ -527,13 +607,14 @@ async def update_deployment_config(
             detail="No configuration keys provided — nothing to update.",
         )
 
-    token = await _get_github_token_for_deployment(deployment)
+    # Named gh_token so it cannot shadow the caller's JWT above.
+    gh_token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment.github_repo_url)
 
     # ── 1. Fetch current file content ────────────────────────────────────
     try:
         raw_content, current_sha = await get_file_content(
-            installation_token=token,
+            installation_token=gh_token,
             repo_full_name=repo,
             file_path=file_path,
         )
@@ -577,7 +658,7 @@ async def update_deployment_config(
 
     try:
         result = await update_file_content(
-            installation_token=token,
+            installation_token=gh_token,
             repo_full_name=repo,
             file_path=file_path,
             content=updated_content,
@@ -639,7 +720,7 @@ async def get_security_data(
     db: Session = Depends(get_db),
 ) -> security_data.SecurityDataRead:
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token_payload
+        deployment_id, db, token_payload, ProjectRole.MEMBER
     )
     can_edit = is_cnp_admin(token_payload) or (
         get_project_role(token_payload.get("sub", ""), deployment.project_id)
@@ -693,7 +774,7 @@ async def update_security_data(
     message of each file instead, for the confirmation dialog.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token_payload, require_admin=True
+        deployment_id, db, token_payload, ProjectRole.ADMIN
     )
 
     token = await _get_github_token_for_deployment(deployment)

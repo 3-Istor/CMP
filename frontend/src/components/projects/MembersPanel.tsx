@@ -12,14 +12,21 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  ApiError,
   addProjectMember,
   removeProjectMember,
   searchKeycloakUsers,
 } from "@/lib/api";
-import { useProjectMembers } from "@/lib/hooks";
-import type { KeycloakUserResult, ProjectMember } from "@/types";
+import { clearProjectsCache, useProjectMembers } from "@/lib/hooks";
+import {
+  ASSIGNABLE_ROLES,
+  GROUP_SUFFIX,
+  ROLE_LABEL,
+} from "@/lib/permissions";
+import type { AssignableRole, KeycloakUserResult, ProjectMember } from "@/types";
 import {
   Crown,
+  Eye,
   Loader2,
   ShieldCheck,
   Trash2,
@@ -31,13 +38,20 @@ import { toast } from "sonner";
 
 interface Props {
   projectName: string;
+  /**
+   * Whether the viewer may add or remove members. Passed in rather than
+   * resolved here so the project page reads the role once and both halves of
+   * the page agree on it.
+   */
+  canManage?: boolean;
 }
 
-export function MembersPanel({ projectName }: Props) {
-  const { members, loading, error, refresh } = useProjectMembers(projectName);
+export function MembersPanel({ projectName, canManage = false }: Props) {
+  const { members, guestsSupported, loading, error, refresh } =
+    useProjectMembers(projectName);
 
   const [query, setQuery] = useState("");
-  const [role, setRole] = useState<"admin" | "member">("member");
+  const [role, setRole] = useState<AssignableRole>("member");
   const [results, setResults] = useState<KeycloakUserResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<KeycloakUserResult | null>(null);
@@ -98,30 +112,43 @@ export function MembersPanel({ projectName }: Props) {
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManage) return;
     const username = selected?.username ?? query.trim();
     if (!username) return;
 
     setAdding(true);
     try {
       await addProjectMember(projectName, username, role);
-      toast.success(`Added ${username} as ${role}`);
+      toast.success(`Added ${username} as ${ROLE_LABEL[role]}`);
       setQuery("");
       setSelected(null);
       setRole("member");
+      // The target user's own project list now carries a different role.
+      clearProjectsCache();
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to add member: ${msg}`);
+      // A 409 means the project has no guests group yet; the backend's message
+      // names the Terraform module to re-run, so show it as-is and leave it up
+      // long enough to read.
+      const isMissingGroup = err instanceof ApiError && err.status === 409;
+      if (isMissingGroup) {
+        toast.error(msg, { duration: 12_000 });
+      } else {
+        toast.error(`Failed to add member: ${msg}`);
+      }
     } finally {
       setAdding(false);
     }
   };
 
   const handleRemoveMember = async (memberUsername: string) => {
+    if (!canManage) return;
     setRemoving(memberUsername);
     try {
       await removeProjectMember(projectName, memberUsername);
       toast.success(`Removed ${memberUsername} from project`);
+      clearProjectsCache();
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -133,15 +160,30 @@ export function MembersPanel({ projectName }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* ── Add Member ── */}
+      {/* ── Add Member — admins only ── */}
+      {!canManage ? (
+        <p className="text-xs text-muted-foreground">
+          Only project admins can add or remove members.
+        </p>
+      ) : (
       <div>
         <h3 className="text-sm font-medium mb-1">Add Member</h3>
         <p className="text-xs text-muted-foreground mb-3">
           Search users from Keycloak. They will be added to{" "}
           <span className="font-mono">
-            project-{projectName}-{role === "admin" ? "admins" : "members"}
+            project-{projectName}-{GROUP_SUFFIX[role]}
           </span>
+          {role === "guest" && " — read-only access to projects and apps"}
         </p>
+
+        {!guestsSupported && (
+          <p className="text-xs text-muted-foreground mb-3">
+            This project was bootstrapped before guest support existed, so the
+            Guest role is unavailable. Re-run the project-bootstrap Terraform
+            module for{" "}
+            <span className="font-mono">{projectName}</span> to enable it.
+          </p>
+        )}
 
         <form onSubmit={handleAddMember} className="flex gap-2">
           {/* Search input with autocomplete */}
@@ -197,21 +239,27 @@ export function MembersPanel({ projectName }: Props) {
             )}
           </div>
 
-          {/* Role selector */}
+          {/* Role selector. Note SelectValue takes a render-function child
+              here, not a placeholder prop. */}
           <div className="w-36 shrink-0">
             <Select
               value={role}
-              onValueChange={(v) => setRole(v as "admin" | "member")}
+              onValueChange={(v) => setRole(v as AssignableRole)}
               disabled={adding}
             >
               <SelectTrigger>
                 <SelectValue>
-                  {(v) => (v === "admin" ? "Admin" : "Member")}
+                  {(v) => ROLE_LABEL[v as AssignableRole] ?? "Member"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                {ASSIGNABLE_ROLES.filter(
+                  (r) => r !== "guest" || guestsSupported,
+                ).map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -230,6 +278,7 @@ export function MembersPanel({ projectName }: Props) {
           </Button>
         </form>
       </div>
+      )}
 
       {/* ── Member list ── */}
       <div>
@@ -265,7 +314,9 @@ export function MembersPanel({ projectName }: Props) {
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-muted-foreground">
             <Users className="h-8 w-8 mb-2 opacity-50" />
             <p className="text-sm font-medium">No members yet</p>
-            <p className="text-xs mt-1">Add your first team member above.</p>
+            {canManage && (
+              <p className="text-xs mt-1">Add your first team member above.</p>
+            )}
           </div>
         ) : (
           <div className="rounded-lg border divide-y divide-border">
@@ -273,6 +324,7 @@ export function MembersPanel({ projectName }: Props) {
               <MemberRow
                 key={member.username}
                 member={member}
+                canManage={canManage}
                 removing={removing === member.username}
                 onRemove={() => handleRemoveMember(member.username)}
               />
@@ -288,12 +340,26 @@ export function MembersPanel({ projectName }: Props) {
 
 interface MemberRowProps {
   member: ProjectMember;
+  canManage: boolean;
   removing: boolean;
   onRemove: () => void;
 }
 
-function MemberRow({ member, removing, onRemove }: MemberRowProps) {
+const ROLE_ICON: Record<ProjectMember["role"], typeof Crown> = {
+  owner: Crown,
+  admin: ShieldCheck,
+  member: Users,
+  guest: Eye,
+};
+
+function MemberRow({
+  member,
+  canManage,
+  removing,
+  onRemove,
+}: MemberRowProps) {
   const isOwner = member.role === "owner";
+  const RoleIcon = ROLE_ICON[member.role] ?? Users;
 
   return (
     <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
@@ -314,21 +380,15 @@ function MemberRow({ member, removing, onRemove }: MemberRowProps) {
             </p>
             <Badge
               variant={
-                isOwner
+                isOwner || member.role === "admin"
                   ? "default"
-                  : member.role === "admin"
-                    ? "default"
+                  : member.role === "guest"
+                    ? "outline"
                     : "secondary"
               }
               className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
             >
-              {isOwner ? (
-                <Crown className="mr-1 h-3 w-3" />
-              ) : member.role === "admin" ? (
-                <ShieldCheck className="mr-1 h-3 w-3" />
-              ) : (
-                <Users className="mr-1 h-3 w-3" />
-              )}
+              <RoleIcon className="mr-1 h-3 w-3" />
               {member.role}
             </Badge>
           </div>
@@ -344,7 +404,7 @@ function MemberRow({ member, removing, onRemove }: MemberRowProps) {
         >
           Owner
         </span>
-      ) : (
+      ) : !canManage ? null : (
         <Button
           variant="ghost"
           size="sm"

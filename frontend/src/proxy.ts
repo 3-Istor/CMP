@@ -34,5 +34,10 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    // Exclude API, Next internals, and static public assets (images, fonts…).
+    // Without the file-extension guard, next/image's internal fetch of
+    // /logo.svg gets redirected to /welcome and the logo fails to load.
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.[\\w]+$).*)",
+  ],
 };

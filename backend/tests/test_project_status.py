@@ -7,9 +7,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
+from app.core.roles import ProjectRole
 from app.models.project import Project, ProjectStatus, TargetCloud
 from app.routers import projects as projects_router
 from app.services import project_bootstrap, project_status
+from app.services.authz import assert_project_role
 from app.services.project_bootstrap import _failure_message
 from app.services.state_lock import StateLockedError, StateLockInfo
 
@@ -250,25 +252,17 @@ def test_teardown_keeps_the_row_as_decommission_failed_when_destroy_fails(
 
 
 def delete_as(factory, username, project_name, groups_exist):
-    token = {"preferred_username": username}
+    """Resolve the RequireAdmin dependency by hand, then delete."""
+    token = {"sub": "uid", "preferred_username": username}
     background = mock.Mock()
-    admin_group = {"id": "g1"} if groups_exist else None
+    role = "admin" if groups_exist else None
     with factory() as db, mock.patch(
-        "app.services.keycloak_service._get_admin_token", return_value="t"
-    ), mock.patch(
-        "app.services.keycloak_service._find_group_by_name",
-        return_value=admin_group,
-    ), mock.patch(
-        "app.services.keycloak_service._check_user_in_group_realtime",
-        return_value=True,
-    ), mock.patch.object(
-        projects_router, "get_user_id_from_token", return_value="uid"
+        "app.services.keycloak_service.get_project_role", return_value=role
     ), mock.patch.object(
         projects_router, "remove_record", new=mock.AsyncMock()
     ):
-        asyncio.run(
-            projects_router.delete_project(project_name, background, token, db)
-        )
+        ctx = assert_project_role(db, token, project_name, ProjectRole.ADMIN)
+        asyncio.run(projects_router.delete_project(ctx, background, db))
     return background
 
 
@@ -290,7 +284,7 @@ def test_owner_can_retry_a_failed_teardown_after_the_groups_are_gone(
     )
 
 
-def test_other_users_get_not_found_for_a_failed_teardown_without_groups(
+def test_other_users_are_refused_a_failed_teardown_without_groups(
     session_factory,
 ):
     add_project(
@@ -300,15 +294,4 @@ def test_other_users_get_not_found_for_a_failed_teardown_without_groups(
     with pytest.raises(projects_router.HTTPException) as raised:
         delete_as(session_factory, "bob", "demo", groups_exist=False)
 
-    assert raised.value.status_code == 404
-
-
-def test_a_project_without_groups_is_not_found_unless_its_teardown_failed(
-    session_factory,
-):
-    add_project(session_factory, "demo", "alice", ProjectStatus.ACTIVE)
-
-    with pytest.raises(projects_router.HTTPException) as raised:
-        delete_as(session_factory, "alice", "demo", groups_exist=False)
-
-    assert raised.value.status_code == 404
+    assert raised.value.status_code == 403

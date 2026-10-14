@@ -1,1 +1,6 @@
+# Everything in LF, whatever the OS or core.autocrlf: the code runs in WSL
+# and in Linux containers, where CRLF breaks shell scripts.
 * text=auto eol=lf
+
+*.png binary
+*.ico binary
