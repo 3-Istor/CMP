@@ -14,6 +14,7 @@ from fastapi import (
     Query,
     Request,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
@@ -153,7 +154,7 @@ def list_deployments(
 
 
 @router.post("/", response_model=DeploymentRead, status_code=202)
-def create_deployment(
+async def create_deployment(
     payload: DeploymentCreate,
     background_tasks: BackgroundTasks,
     token: CurrentUser,
@@ -173,7 +174,14 @@ def create_deployment(
             detail="project_id is required: an application must belong to a project.",
         )
     if not is_cnp_admin(token):
-        assert_project_role(db, token, payload.project_id, ProjectRole.ADMIN)
+        # Blocking Keycloak call: off the event loop.
+        await run_in_threadpool(
+            assert_project_role,
+            db,
+            token,
+            payload.project_id,
+            ProjectRole.ADMIN,
+        )
 
     # Validate template exists
     template = get_template_by_id(payload.template_id)

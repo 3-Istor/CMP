@@ -4,13 +4,7 @@ from typing import Annotated
 import boto3
 import requests
 from botocore.exceptions import ClientError
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    HTTPException,
-    UploadFile,
-)
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -231,9 +225,7 @@ async def upload_profile_picture(
             user_uuid = users[0]["id"]
 
         # First, GET the current user data to avoid overwriting other fields
-        user_url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_uuid}"
-        )
+        user_url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_uuid}"
         get_response = requests.get(
             user_url,
             headers={"Authorization": f"Bearer {admin_token}"},

@@ -176,9 +176,7 @@ def _get_admin_token() -> str:
         if now < expires_at:
             return token
 
-    url = (
-        f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token"
-    )
+    url = f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token"
     response = requests.post(
         url,
         data={
@@ -208,7 +206,9 @@ def _find_user_by_username(username: str, admin_token: str) -> dict | None:
     Returns:
         User dict if found, None otherwise.
     """
-    url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
+    url = (
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users"
+    )
     response = requests.get(
         url,
         headers={"Authorization": f"Bearer {admin_token}"},
