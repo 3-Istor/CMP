@@ -9,14 +9,17 @@ import asyncio
 import logging
 
 from app.core.database import SessionLocal
-from app.models.deployment import Deployment, ProviderType
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services.kube_client import KubeUnavailableError
 from app.services.release import sync
+from app.services.release.route_reconciler import reconcile_route
 from app.services.release.source import KubeReleaseSource, ReleaseSource
 
 logger = logging.getLogger(__name__)
 
 RECORD_INTERVAL_SECONDS = 30
+# A canary shifting or holding traffic: re-syncing its route would reset the weights.
+MOVING_PHASES = {"Progressing", "Paused"}
 
 
 def record_all(source: ReleaseSource) -> int:
@@ -25,12 +28,15 @@ def record_all(source: ReleaseSource) -> int:
     with SessionLocal() as db:
         deployments = (
             db.query(Deployment)
-            .filter(Deployment.provider_type == ProviderType.KUBERNETES)
+            .filter(
+                Deployment.provider_type == ProviderType.KUBERNETES,
+                Deployment.status != DeploymentStatus.DELETED,
+            )
             .all()
         )
         for deployment in deployments:
             try:
-                _, snapshot, _ = sync.compute(db, deployment, source)
+                view, snapshot, _ = sync.compute(db, deployment, source)
             except KubeUnavailableError as exc:
                 logger.warning(
                     "Release recorder: cluster unreachable: %s", exc
@@ -43,6 +49,19 @@ def record_all(source: ReleaseSource) -> int:
                 )
                 db.rollback()
                 continue
+            if deployment.project_id:
+                try:
+                    reconcile_route(
+                        deployment.project_id,
+                        deployment.name,
+                        canary_moving=view.phase in MOVING_PHASES,
+                    )
+                except KubeUnavailableError as exc:
+                    logger.warning(
+                        "Route reconcile skipped for %s: %s",
+                        deployment.id,
+                        exc,
+                    )
             if snapshot is not None:
                 recorded += 1
     return recorded
