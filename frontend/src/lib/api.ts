@@ -780,6 +780,20 @@ export const abortRelease = (deploymentId: number, reason: string | null) =>
     { method: "POST", body: JSON.stringify({ reason }) },
   );
 
+export const getReleaseSettings = (deploymentId: number) =>
+  request<import("@/types").ReleaseSettingsRead>(
+    `/deployments/${deploymentId}/release/settings`,
+  );
+
+export const updateReleaseSettings = (
+  deploymentId: number,
+  settings: import("@/types").ReleaseSettings,
+) =>
+  request<import("@/types").ReleaseSettingsSaved>(
+    `/deployments/${deploymentId}/release/settings`,
+    { method: "PUT", body: JSON.stringify(settings) },
+  );
+
 /**
  * Read the release SSE stream until it ends or `signal` aborts.
  *

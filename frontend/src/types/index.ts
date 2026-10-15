@@ -737,3 +737,26 @@ export interface ReleaseEvent {
   steps: ReleaseStep[] | null;
   actors: ReleaseActor[] | null;
 }
+
+export interface ReleaseSettings {
+  strategy: "rolling" | "canary";
+  preset: "safe" | "fast" | "demo" | "manual";
+  stickiness: "none" | "cookie";
+  smokePath: string;
+  errorRateMax: number;
+  minRequests: number;
+  allowForce: boolean;
+}
+
+export interface ReleaseSettingsRead {
+  settings: ReleaseSettings;
+  files: string[];
+  canEdit: boolean;
+  declared: boolean;
+}
+
+export interface ReleaseSettingsSaved {
+  repo: string;
+  commits: Record<string, string>;
+  strategies: Record<string, "rolling" | "canary">;
+}

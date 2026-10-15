@@ -8,6 +8,7 @@ Reading needs any role on the app's project, acting needs member, like the
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from io import StringIO
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -19,7 +20,16 @@ from app.core.database import SessionLocal, get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment
 from app.models.release import ReleaseEvent
-from app.routers.deployments import _get_app_or_404
+from app.routers.deployments import (
+    _app_type_of,
+    _authorize_app,
+    _extract_repo_full_name,
+    _get_app_or_404,
+    _get_github_token_for_deployment,
+    _get_kubernetes_deployment_or_404,
+    _load_values_file,
+    _yaml,
+)
 from app.schemas.release import (
     AbortRequest,
     PromoteRequest,
@@ -27,9 +37,14 @@ from app.schemas.release import (
     ReleaseView,
     SkipRequest,
 )
+from app.services import app_security_data as security_data
+from app.services import audit
+from app.services.github_service import GitHubAppError, put_file_content
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
-from app.services.release import history, sync
+from app.services.release import history
+from app.services.release import settings as release_settings
+from app.services.release import sync
 from app.services.release.source import (
     KubeReleaseSource,
     ReleaseSource,
@@ -341,3 +356,149 @@ def retry_release(
         return RETRY_PATCH, "retry", False
 
     return _act(db, token, deployment_id, source, decide, None)
+
+
+def _release_files(deployment: Deployment) -> list[str]:
+    return list(
+        dict.fromkeys(security_data.values_files_for(_app_type_of(deployment)))
+    )
+
+
+def _holds(
+    db: Session, token: dict, deployment: Deployment, role: ProjectRole
+) -> bool:
+    try:
+        _authorize_app(db, token, deployment, role)
+    except HTTPException:
+        return False
+    return True
+
+
+async def _load_all(
+    deployment: Deployment,
+) -> tuple[str, str, list[tuple[str, Any, str]]]:
+    gh_token = await _get_github_token_for_deployment(deployment)
+    repo = _extract_repo_full_name(deployment.github_repo_url)
+    loaded = []
+    for file_path in _release_files(deployment):
+        values, sha = await _load_values_file(gh_token, repo, file_path)
+        loaded.append((file_path, values, sha))
+    return gh_token, repo, loaded
+
+
+@router.get(
+    "/{deployment_id}/release/settings",
+    response_model=release_settings.ReleaseSettingsRead,
+)
+async def get_release_settings(
+    deployment_id: int,
+    token: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    deployment = await run_in_threadpool(
+        _get_kubernetes_deployment_or_404,
+        deployment_id,
+        db,
+        token,
+        ProjectRole.MEMBER,
+    )
+    can_edit = await run_in_threadpool(
+        _holds, db, token, deployment, ProjectRole.ADMIN
+    )
+    _, _, loaded = await _load_all(deployment)
+    declared = [values for _, values, _ in loaded if "release" in values]
+    return release_settings.ReleaseSettingsRead(
+        settings=release_settings.read(
+            declared[0] if declared else loaded[0][1]
+        ),
+        files=[file_path for file_path, _, _ in loaded],
+        can_edit=can_edit,
+        declared=bool(declared),
+    )
+
+
+@router.put("/{deployment_id}/release/settings")
+async def update_release_settings(
+    deployment_id: int,
+    payload: release_settings.ReleaseSettings,
+    request: Request,
+    token: CurrentUser,
+    source: Source,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Commit the app's ``release`` block, like a developer editing it in Git.
+
+    Refused while a canary is on its way: changing the steps under a running
+    Rollout makes Argo Rollouts restart or skip them.
+    """
+    deployment = await run_in_threadpool(
+        _get_kubernetes_deployment_or_404,
+        deployment_id,
+        db,
+        token,
+        ProjectRole.ADMIN,
+    )
+    view = (await run_in_threadpool(_compute, db, deployment, source))[0]
+    if (
+        view.phase in ("Progressing", "Paused")
+        and view.canary_hash
+        and view.canary_hash != view.stable_hash
+    ):
+        raise _conflict(
+            "A release is in progress: promote or abort it before changing "
+            "the release settings."
+        )
+
+    gh_token, repo, loaded = await _load_all(deployment)
+    targets = []
+    for file_path, values, sha in loaded:
+        refused = release_settings.refusal(values, payload)
+        targets.append((file_path, values, sha, refused))
+    if all(refused for *_, refused in targets):
+        raise HTTPException(status_code=422, detail=targets[0][3])
+
+    commits: dict[str, str] = {}
+    applied: dict[str, str] = {}
+    for file_path, values, sha, refused in targets:
+        # A fullstack component that cannot take a canary (the backend has no
+        # route of its own) keeps rolling while the exposed one goes canary.
+        wanted = (
+            payload.model_copy(update={"strategy": "rolling"})
+            if refused
+            else payload
+        )
+        applied[file_path] = wanted.strategy
+        if "release" in values and release_settings.read(values) == wanted:
+            continue
+        audit.note(
+            request,
+            **{
+                f"{file_path}:release": wanted.model_dump(
+                    by_alias=True, mode="json"
+                )
+            },
+        )
+        release_settings.apply(values, wanted)
+        out = StringIO()
+        _yaml.dump(values, out)
+        try:
+            result = await put_file_content(
+                installation_token=gh_token,
+                repo_full_name=repo,
+                file_path=file_path,
+                content=out.getvalue(),
+                message=(
+                    f"chore(release): {wanted.strategy}, preset "
+                    f"{wanted.preset} via CMP"
+                ),
+                sha=sha,
+            )
+        except GitHubAppError as exc:
+            status_code = 409 if "conflict" in str(exc).lower() else 502
+            raise HTTPException(
+                status_code=status_code, detail=str(exc)
+            ) from exc
+        commits[file_path] = result.get("commit", {}).get("sha", "")
+
+    return {"repo": repo, "commits": commits, "strategies": applied}
