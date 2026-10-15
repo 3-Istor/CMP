@@ -788,10 +788,11 @@ export const getReleaseSettings = (deploymentId: number) =>
 export const updateReleaseSettings = (
   deploymentId: number,
   settings: import("@/types").ReleaseSettings,
+  migrationsCommand: string[] | null = null,
 ) =>
   request<import("@/types").ReleaseSettingsSaved>(
     `/deployments/${deploymentId}/release/settings`,
-    { method: "PUT", body: JSON.stringify(settings) },
+    { method: "PUT", body: JSON.stringify({ ...settings, migrationsCommand }) },
   );
 
 /**

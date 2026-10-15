@@ -2,6 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,7 +22,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { getReleaseSettings, updateReleaseSettings } from "@/lib/api";
-import type { ReleaseSettings, ReleaseSettingsRead } from "@/types";
+import type { CanaryBlockerCode, ReleaseSettings, ReleaseSettingsRead } from "@/types";
 import { Loader2, Save, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -49,6 +57,30 @@ const STICKINESS: Record<ReleaseSettings["stickiness"], string> = {
   none: "Aucune : chaque requête est tirée au sort",
 };
 
+const BLOCKERS: Record<
+  CanaryBlockerCode,
+  { title: string; short: string; why: string; fix: string }
+> = {
+  db_without_migrations: {
+    title: "Activer les migrations pour passer en Canary",
+    short: "l'app a une base de données sans migrations.",
+    why: "Pendant un canary, l'ancienne et la nouvelle version tournent ensemble sur la même base. La plateforme doit donc migrer le schéma une seule fois, avant le démarrage de la nouvelle version : c'est le Job de migration du standard CNP.",
+    fix: "",
+  },
+  no_route: {
+    title: "Exposer l'app pour passer en Canary",
+    short: "l'app n'est pas exposée.",
+    why: "Le canary répartit le trafic entre les deux versions via la route HTTP de l'app. Sans exposition, il n'y a pas de trafic à répartir.",
+    fix: "Activez l'exposition dans l'onglet Application, section Exposition, puis revenez ici.",
+  },
+  no_service: {
+    title: "Le canary a besoin du Service de l'app",
+    short: "le Service de l'app est désactivé.",
+    why: "Le canary route le trafic vers deux Services, stable et canary, construits à partir de celui de l'app.",
+    fix: "Réactivez service.enabled dans la configuration de l'app.",
+  },
+};
+
 export function ReleaseSettingsCard({
   deploymentId,
   inProgress,
@@ -60,12 +92,17 @@ export function ReleaseSettingsCard({
   const [draft, setDraft] = useState<ReleaseSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [blockerOpen, setBlockerOpen] = useState(false);
+  const [migrationsCommand, setMigrationsCommand] = useState("");
+  const [pendingMigrations, setPendingMigrations] = useState<string[] | null>(null);
 
   const load = useCallback(async () => {
     try {
       const data = await getReleaseSettings(deploymentId);
       setRemote(data);
       setDraft(data.settings);
+      setPendingMigrations(null);
+      setMigrationsCommand((data.migrationsCommand ?? ["/app/migrate"]).join(" "));
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
@@ -88,14 +125,37 @@ export function ReleaseSettingsCard({
   if (!remote || !draft) return <Skeleton className="h-48 w-full" />;
 
   const locked = !remote.canEdit || inProgress || saving;
-  const dirty = JSON.stringify(draft) !== JSON.stringify(remote.settings);
+  const dirty =
+    JSON.stringify(draft) !== JSON.stringify(remote.settings) || pendingMigrations !== null;
+  const blocker = remote.canaryBlocker;
+
+  const chooseStrategy = (strategy: ReleaseSettings["strategy"]) => {
+    if (strategy === "canary" && blocker && !pendingMigrations) {
+      setBlockerOpen(true);
+      return;
+    }
+    if (strategy === "rolling") setPendingMigrations(null);
+    set("strategy", strategy);
+  };
+
+  const enableMigrationsAndCanary = () => {
+    const command = migrationsCommand.trim().split(/\s+/).filter(Boolean);
+    if (command.length === 0) return;
+    setPendingMigrations(command);
+    set("strategy", "canary");
+    setBlockerOpen(false);
+  };
   const set = <K extends keyof ReleaseSettings>(key: K, value: ReleaseSettings[K]) =>
     setDraft((d) => (d ? { ...d, [key]: value } : d));
 
   const save = async () => {
     setSaving(true);
     try {
-      const saved = await updateReleaseSettings(deploymentId, draft);
+      const saved = await updateReleaseSettings(
+        deploymentId,
+        draft,
+        draft.strategy === "canary" ? pendingMigrations : null,
+      );
       const kept = Object.entries(saved.strategies)
         .filter(([, s]) => s !== draft.strategy)
         .map(([file]) => file);
@@ -148,7 +208,7 @@ export function ReleaseSettingsCard({
           <Label>Stratégie</Label>
           <Select
             value={draft.strategy}
-            onValueChange={(v) => set("strategy", v as ReleaseSettings["strategy"])}
+            onValueChange={(v) => chooseStrategy(v as ReleaseSettings["strategy"])}
             disabled={locked}
           >
             <SelectTrigger className="w-full">
@@ -165,6 +225,17 @@ export function ReleaseSettingsCard({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">{STRATEGIES[draft.strategy].hint}</p>
+          {blocker && draft.strategy === "rolling" && (
+            <p className="text-xs text-muted-foreground">
+              Canary indisponible pour l&apos;instant : {BLOCKERS[blocker.code].short}
+            </p>
+          )}
+          {pendingMigrations && draft.strategy === "canary" && (
+            <p className="text-xs text-muted-foreground">
+              Les migrations seront activées dans le même commit, avec{" "}
+              <code className="font-mono">{pendingMigrations.join(" ")}</code>.
+            </p>
+          )}
         </div>
 
         {draft.strategy === "canary" && (
@@ -301,6 +372,57 @@ export function ReleaseSettingsCard({
           )
         )}
       </CardContent>
+
+      {blocker && (
+        <Dialog open={blockerOpen} onOpenChange={setBlockerOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{BLOCKERS[blocker.code].title}</DialogTitle>
+              <DialogDescription>{BLOCKERS[blocker.code].why}</DialogDescription>
+            </DialogHeader>
+            {blocker.code === "db_without_migrations" ? (
+              <div className="space-y-3 text-sm">
+                <div className="space-y-1.5">
+                  <Label htmlFor="release-migrations-command">
+                    Commande de migration de l&apos;image
+                  </Label>
+                  <Input
+                    id="release-migrations-command"
+                    value={migrationsCommand}
+                    onChange={(e) => setMigrationsCommand(e.target.value)}
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    <code className="font-mono">/app/migrate</code> pour le template
+                    FastAPI + React. Elle doit être idempotente : relancée sans rien à
+                    faire, elle sort en 0.
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  L&apos;app n&apos;utilise pas sa base ? Désactivez-la plutôt dans
+                  l&apos;onglet Application, section Base de données. Attention, cela
+                  supprime la base.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{BLOCKERS[blocker.code].fix}</p>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBlockerOpen(false)}>
+                {blocker.code === "db_without_migrations" ? "Annuler" : "Fermer"}
+              </Button>
+              {blocker.code === "db_without_migrations" && (
+                <Button
+                  onClick={enableMigrationsAndCanary}
+                  disabled={migrationsCommand.trim() === ""}
+                >
+                  Activer les migrations et passer en Canary
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   );
 }

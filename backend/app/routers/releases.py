@@ -407,20 +407,31 @@ async def get_release_settings(
     )
     _, _, loaded = await _load_all(deployment)
     declared = [values for _, values, _ in loaded if "release" in values]
+    current = release_settings.read(declared[0] if declared else loaded[0][1])
+    as_canary = current.model_copy(update={"strategy": "canary"})
+    blockers = [
+        release_settings.refusal(values, as_canary) for _, values, _ in loaded
+    ]
+    commands = [
+        command
+        for _, values, _ in loaded
+        if (command := (values.get("migrations") or {}).get("command"))
+    ]
     return release_settings.ReleaseSettingsRead(
-        settings=release_settings.read(
-            declared[0] if declared else loaded[0][1]
-        ),
+        settings=current,
         files=[file_path for file_path, _, _ in loaded],
         can_edit=can_edit,
         declared=bool(declared),
+        # A fullstack app can go canary as soon as one component can.
+        canary_blocker=blockers[0] if all(blockers) else None,
+        migrations_command=list(commands[0]) if commands else None,
     )
 
 
 @router.put("/{deployment_id}/release/settings")
 async def update_release_settings(
     deployment_id: int,
-    payload: release_settings.ReleaseSettings,
+    payload: release_settings.ReleaseSettingsUpdate,
     request: Request,
     token: CurrentUser,
     source: Source,
@@ -451,25 +462,40 @@ async def update_release_settings(
         )
 
     gh_token, repo, loaded = await _load_all(deployment)
+    wanted_settings = release_settings.ReleaseSettings(
+        **payload.model_dump(exclude={"migrations_command"})
+    )
     targets = []
     for file_path, values, sha in loaded:
-        refused = release_settings.refusal(values, payload)
-        targets.append((file_path, values, sha, refused))
-    if all(refused for *_, refused in targets):
-        raise HTTPException(status_code=422, detail=targets[0][3])
+        migrations_before = dict(values.get("migrations") or {})
+        if payload.migrations_command and wanted_settings.strategy == "canary":
+            release_settings.enable_migrations(
+                values, payload.migrations_command
+            )
+        refused = release_settings.refusal(values, wanted_settings)
+        migrations_changed = (
+            dict(values.get("migrations") or {}) != migrations_before
+        )
+        targets.append((file_path, values, sha, refused, migrations_changed))
+    if all(target[3] for target in targets):
+        raise HTTPException(status_code=422, detail=targets[0][3].message)
 
     commits: dict[str, str] = {}
     applied: dict[str, str] = {}
-    for file_path, values, sha, refused in targets:
+    for file_path, values, sha, refused, migrations_changed in targets:
         # A fullstack component that cannot take a canary (the backend has no
         # route of its own) keeps rolling while the exposed one goes canary.
         wanted = (
-            payload.model_copy(update={"strategy": "rolling"})
+            wanted_settings.model_copy(update={"strategy": "rolling"})
             if refused
-            else payload
+            else wanted_settings
         )
         applied[file_path] = wanted.strategy
-        if "release" in values and release_settings.read(values) == wanted:
+        if (
+            "release" in values
+            and release_settings.read(values) == wanted
+            and not migrations_changed
+        ):
             continue
         audit.note(
             request,
@@ -490,7 +516,9 @@ async def update_release_settings(
                 content=out.getvalue(),
                 message=(
                     f"chore(release): {wanted.strategy}, preset "
-                    f"{wanted.preset} via CMP"
+                    f"{wanted.preset}"
+                    f"{', migrations enabled' if migrations_changed else ''}"
+                    " via CMP"
                 ),
                 sha=sha,
             )
