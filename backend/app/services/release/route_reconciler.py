@@ -18,6 +18,10 @@ APPLICATIONS_PATH = "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications"
 
 # Seen stuck on one pass: a sync may simply still be in flight. Synced on the next.
 _stuck_once: set[str] = set()
+# Re-synced and still out of sync: the diff is one a sync cannot clear (the
+# route's generation moves on every server-side dry run), so resyncing again
+# would only loop. Forgotten once the route is seen synced or a canary moves.
+_resynced: set[str] = set()
 
 
 def _route_out_of_sync(application: dict) -> bool:
@@ -47,11 +51,15 @@ def reconcile_route(
         name = application["metadata"]["name"]
         if canary_moving or not _route_out_of_sync(application):
             _stuck_once.discard(name)
+            _resynced.discard(name)
+            continue
+        if name in _resynced:
             continue
         if name not in _stuck_once:
             _stuck_once.add(name)
             continue
         _stuck_once.discard(name)
+        _resynced.add(name)
         kube_merge_patch(
             f"{APPLICATIONS_PATH}/{name}",
             {

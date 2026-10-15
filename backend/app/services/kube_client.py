@@ -12,9 +12,15 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
 
 SERVICE_ACCOUNT_DIR = Path("/var/run/secrets/kubernetes.io/serviceaccount")
 REQUEST_TIMEOUT = 10
+
+# Kept alive across calls: a fresh TLS handshake per read was the bulk of the
+# release poller's CPU.
+_session = requests.Session()
+_session.mount("https://", HTTPAdapter(pool_maxsize=16))
 
 
 class KubeUnavailableError(Exception):
@@ -57,7 +63,7 @@ def kube_get(
     base = _api_base()
     token = (SERVICE_ACCOUNT_DIR / "token").read_text().strip()
     try:
-        response = requests.get(
+        response = _session.get(
             f"{base}{path}",
             headers={"Authorization": f"Bearer {token}"},
             params=params,
@@ -90,7 +96,7 @@ def _request(
     base = _api_base()
     token = (SERVICE_ACCOUNT_DIR / "token").read_text().strip()
     try:
-        response = requests.request(
+        response = _session.request(
             method,
             f"{base}{path}",
             headers={"Authorization": f"Bearer {token}", **(headers or {})},

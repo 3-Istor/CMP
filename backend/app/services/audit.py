@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -225,32 +226,70 @@ def _store(event: AuditEvent) -> None:
         db.commit()
 
 
-async def audit_middleware(request: Request, call_next):
-    if request.method not in _MUTATING or not request.url.path.startswith(
-        "/api/"
-    ):
-        return await call_next(request)
+class AuditMiddleware:
+    """
+    Pure ASGI on purpose: Starlette's BaseHTTPMiddleware hides client
+    disconnects from streaming endpoints, which left every closed SSE stream
+    polling the cluster forever.
+    """
 
-    raw = await request.body()
-    response = await call_next(request)
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-    route = request.scope.get("route")
-    template = getattr(route, "path", request.url.path)
-    action = ACTIONS.get((request.method, template))
-    # 401s are anonymous noise; a dry run changes nothing.
-    if (
-        action is None
-        or response.status_code == 401
-        or request.query_params.get("dry_run") == "true"
-    ):
-        return response
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if (
+            scope["type"] != "http"
+            or scope["method"] not in _MUTATING
+            or not scope["path"].startswith("/api/")
+        ):
+            await self.app(scope, receive, send)
+            return
 
-    try:
-        await _record(request, action, raw, response.status_code)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        # A journal failure must never turn a done change into an error.
-        logger.error("Audit journal write failed: %s", exc, exc_info=True)
-    return response
+        chunks = []
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                return
+            chunks.append(message.get("body", b""))
+            if not message.get("more_body", False):
+                break
+        raw = b"".join(chunks)
+        replayed = False
+
+        async def replay() -> Message:
+            nonlocal replayed
+            if replayed:
+                return await receive()
+            replayed = True
+            return {"type": "http.request", "body": raw, "more_body": False}
+
+        status_code = 500
+
+        async def capture(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+            await send(message)
+
+        await self.app(scope, replay, capture)
+
+        request = Request(scope)
+        route = scope.get("route")
+        template = getattr(route, "path", scope["path"])
+        action = ACTIONS.get((scope["method"], template))
+        # 401s are anonymous noise; a dry run changes nothing.
+        if (
+            action is None
+            or status_code == 401
+            or request.query_params.get("dry_run") == "true"
+        ):
+            return
+
+        try:
+            await _record(request, action, raw, status_code)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            # A journal failure must never turn a done change into an error.
+            logger.error("Audit journal write failed: %s", exc, exc_info=True)
 
 
 async def _record(

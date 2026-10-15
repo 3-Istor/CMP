@@ -28,7 +28,7 @@ from app.routers import (
 )
 from app.services import health_poller
 from app.services.activity_collector import activity_collector_loop
-from app.services.audit import audit_middleware, audit_retention_loop
+from app.services.audit import AuditMiddleware, audit_retention_loop
 from app.services.finops import alert_poller
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
@@ -284,7 +284,7 @@ app = FastAPI(
 # Apply custom OpenAPI schema with OAuth2
 app.openapi = custom_openapi
 
-app.middleware("http")(audit_middleware)
+app.add_middleware(AuditMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
