@@ -748,11 +748,15 @@ export interface ReleaseSettings {
   allowForce: boolean;
 }
 
+export type CanaryBlockerCode = "no_route" | "no_service" | "db_without_migrations";
+
 export interface ReleaseSettingsRead {
   settings: ReleaseSettings;
   files: string[];
   canEdit: boolean;
   declared: boolean;
+  canaryBlocker: { code: CanaryBlockerCode; message: string } | null;
+  migrationsCommand: string[] | null;
 }
 
 export interface ReleaseSettingsSaved {

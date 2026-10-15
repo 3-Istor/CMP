@@ -56,6 +56,8 @@ CurrentUser = Annotated[dict, Depends(get_current_user)]
 # ── ruamel.yaml instance (round-trip mode preserves comments & formatting) ──
 _yaml = YAML()
 _yaml.preserve_quotes = True
+# The platform writes lists indented under their key; keep that on round trips.
+_yaml.indent(mapping=2, sequence=4, offset=2)
 
 _FULLSTACK_COMPONENTS = ["frontend", "backend"]
 

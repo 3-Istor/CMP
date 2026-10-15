@@ -67,6 +67,24 @@ class TestRead:
         assert (read.strategy, read.preset) == ("rolling", "fast")
 
 
+class TestSmokeDefault:
+    def test_the_smoke_test_defaults_to_the_monitored_health_path(self):
+        read = settings.read(
+            _load("monitoring:\n  enabled: true\n  path: /\n")
+        )
+
+        assert read.smoke_path == "/"
+
+    def test_an_explicit_smoke_path_wins_over_the_monitored_one(self):
+        read = settings.read(
+            _load(
+                "monitoring:\n  path: /\nrelease:\n  smoke:\n    path: /ready\n"
+            )
+        )
+
+        assert read.smoke_path == "/ready"
+
+
 class TestApply:
     def test_writes_the_block_and_keeps_comments(self):
         values = _load(STATIC_VALUES)
@@ -93,21 +111,35 @@ class TestRefusal:
     @pytest.mark.parametrize(
         "values, expected",
         [
-            ("ingress:\n  enabled: false\n", "expose"),
+            ("ingress:\n  enabled: false\n", "no_route"),
             (
                 "ingress:\n  enabled: true\nservice:\n  enabled: false\n",
-                "Service",
+                "no_service",
             ),
             (
                 "ingress:\n  enabled: true\ndb:\n  enabled: true\n",
-                "migrations",
+                "db_without_migrations",
             ),
         ],
     )
     def test_refuses_a_canary_the_chart_would_not_render(
         self, values, expected
     ):
-        assert expected in settings.refusal(_load(values), CANARY)
+        assert settings.refusal(_load(values), CANARY).code == expected
+
+    def test_enabling_migrations_lifts_the_database_blocker(self):
+        values = _load("ingress:\n  enabled: true\ndb:\n  enabled: true\n")
+
+        settings.enable_migrations(values, ["/app/migrate"])
+
+        assert settings.refusal(values, CANARY) is None
+
+    def test_migrations_are_not_enabled_on_an_app_without_database(self):
+        values = _load(STATIC_VALUES)
+
+        settings.enable_migrations(values, ["/app/migrate"])
+
+        assert "migrations" not in values
 
     def test_accepts_a_canary_with_migrations_on_a_database(self):
         values = _load(
@@ -326,3 +358,64 @@ class TestEndpoints:
             "deploy/values-frontend.yaml": "canary",
             "deploy/values-backend.yaml": "rolling",
         }
+
+    def test_reports_why_canary_is_unavailable(self, api):
+        client, _ = api(
+            {"deploy/values.yaml": STATIC_VALUES + "db:\n  enabled: true\n"}
+        )
+
+        body = client.get("/api/deployments/7/release/settings").json()
+
+        assert body["canaryBlocker"]["code"] == "db_without_migrations"
+
+    def test_reports_no_blocker_for_a_fullstack_app_with_an_exposed_component(
+        self, api
+    ):
+        client, _ = api(
+            {
+                "deploy/values-frontend.yaml": STATIC_VALUES,
+                "deploy/values-backend.yaml": "db:\n  enabled: true\n",
+            },
+            app_type="fullstack",
+        )
+
+        body = client.get("/api/deployments/7/release/settings").json()
+
+        assert body["canaryBlocker"] is None
+
+    def test_canary_with_a_migration_command_enables_migrations_in_one_commit(
+        self, api
+    ):
+        client, repo = api(
+            {"deploy/values.yaml": STATIC_VALUES + "db:\n  enabled: true\n"}
+        )
+
+        response = client.put(
+            "/api/deployments/7/release/settings",
+            json={**BODY, "migrationsCommand": ["/app/migrate"]},
+        )
+
+        ((_, content, message),) = repo.commits
+        written = _load(content)
+        assert response.status_code == 200
+        assert (
+            written["migrations"]["enabled"],
+            written["migrations"]["command"],
+            message,
+        ) == (
+            True,
+            ["/app/migrate"],
+            "chore(release): canary, preset fast, migrations enabled via CMP",
+        )
+
+    def test_an_empty_migration_command_is_rejected(self, api):
+        client, repo = api(
+            {"deploy/values.yaml": STATIC_VALUES + "db:\n  enabled: true\n"}
+        )
+
+        response = client.put(
+            "/api/deployments/7/release/settings",
+            json={**BODY, "migrationsCommand": []},
+        )
+
+        assert (response.status_code, repo.commits) == (422, [])

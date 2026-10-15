@@ -5,7 +5,7 @@ Git stays the source of truth: the CMP reads and commits that block, exactly
 what a developer would edit by hand. Defaults mirror the cnp-generic-app chart.
 """
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, ValidationError
 from pydantic.alias_generators import to_camel
@@ -36,12 +36,30 @@ class ReleaseSettings(_Camel):
     allow_force: bool
 
 
+class ReleaseSettingsUpdate(ReleaseSettings):
+    # Set by the "enable migrations" answer to a db_without_migrations blocker.
+    migrations_command: (
+        list[Annotated[str, Field(min_length=1, max_length=200)]] | None
+    ) = Field(default=None, min_length=1, max_length=10)
+
+
+BlockerCode = Literal["no_route", "no_service", "db_without_migrations"]
+
+
+class CanaryBlocker(_Camel):
+    code: BlockerCode
+    message: str
+
+
 class ReleaseSettingsRead(_Camel):
     settings: ReleaseSettings
     files: list[str]
     can_edit: bool
     # Absent from Git: the values shown are the chart's defaults.
     declared: bool
+    canary_blocker: CanaryBlocker | None = None
+    # The image's migration entrypoint, when Git already names one.
+    migrations_command: list[str] | None = None
 
 
 def _lookup(block: Any, *keys: str) -> Any:
@@ -61,11 +79,17 @@ def read(values: dict[str, Any]) -> ReleaseSettings:
         found = _lookup(block, *keys)
         return _lookup(DEFAULTS, *keys) if found is None else found
 
+    smoke_path = _lookup(block, "smoke", "path") or _lookup(
+        values, "monitoring", "path"
+    )
+
     raw = {
         "strategy": pick("strategy"),
         "preset": pick("preset"),
         "stickiness": pick("stickiness"),
-        "smoke_path": pick("smoke", "path"),
+        # The health path the platform already probes beats the chart's
+        # /healthz, which a plain nginx answers with a 404.
+        "smoke_path": smoke_path or pick("smoke", "path"),
         "error_rate_max": pick("analysis", "errorRateMax"),
         "min_requests": pick("analysis", "minRequests"),
         "allow_force": pick("allowForce"),
@@ -106,24 +130,44 @@ def _number(value: float) -> int | float:
     return int(value) if value == int(value) else value
 
 
-def refusal(values: dict[str, Any], settings: ReleaseSettings) -> str | None:
+def refusal(
+    values: dict[str, Any], settings: ReleaseSettings
+) -> CanaryBlocker | None:
     """Why the chart would refuse to render *settings* on *values*, if it would."""
     if settings.strategy != "canary":
         return None
     if not _lookup(values, "ingress", "enabled"):
-        return (
-            "A canary shifts traffic through the app's HTTP route: expose "
-            "the app first (ingress.enabled)."
+        return CanaryBlocker(
+            code="no_route",
+            message=(
+                "A canary shifts traffic through the app's HTTP route: expose "
+                "the app first (ingress.enabled)."
+            ),
         )
     # The chart enables the Service unless told otherwise.
     if _lookup(values, "service", "enabled") is False:
-        return "A canary needs the app's Service (service.enabled)."
+        return CanaryBlocker(
+            code="no_service",
+            message="A canary needs the app's Service (service.enabled).",
+        )
     if _lookup(values, "db", "enabled") and not _lookup(
         values, "migrations", "enabled"
     ):
-        return (
-            "Both versions share the database during a canary: enable "
-            "migrations (migrations.enabled) so the schema is migrated once, "
-            "before the new version starts."
+        return CanaryBlocker(
+            code="db_without_migrations",
+            message=(
+                "Both versions share the database during a canary: enable "
+                "migrations (migrations.enabled) so the schema is migrated "
+                "once, before the new version starts."
+            ),
         )
     return None
+
+
+def enable_migrations(values: dict[str, Any], command: list[str]) -> None:
+    """Turn on the platform's pre-sync migration Job for an app with a database."""
+    if not _lookup(values, "db", "enabled"):
+        return
+    block = values.setdefault("migrations", {})
+    block["enabled"] = True
+    block["command"] = command
