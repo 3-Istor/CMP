@@ -21,6 +21,7 @@ def _application(route_status="OutOfSync", **extra):
 @pytest.fixture(autouse=True)
 def fresh_state():
     route_reconciler._stuck_once.clear()
+    route_reconciler._resynced.clear()
 
 
 def _run(applications, canary_moving=False, passes=2):
@@ -82,3 +83,23 @@ def test_leaves_a_synced_route_alone():
 
     # Assert
     patch.assert_not_called()
+
+
+def test_resyncs_only_once_while_the_route_stays_out_of_sync():
+    # Act
+    _, patch = _run([_application()], passes=8)
+
+    # Assert
+    assert patch.call_count == 1
+
+
+def test_resyncs_again_after_the_route_was_seen_synced():
+    # Arrange
+    _run([_application()])
+    _run([_application("Synced")], passes=1)
+
+    # Act
+    synced, _ = _run([_application()])
+
+    # Assert
+    assert synced == ["shop-web-app"]

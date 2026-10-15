@@ -13,7 +13,7 @@ from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.release import ReleaseEvent
 from app.routers import releases
-from app.services import keycloak_service
+from app.services import audit, keycloak_service
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
 from app.services.release.source import RolloutSnapshot
@@ -258,8 +258,17 @@ def test_history_lists_the_attempts(session_factory, keycloak):
 
 
 class TestStream:
-    def _frames(self, session_factory, source, polls):
-        calls = iter([False] * polls + [True])
+    @pytest.fixture(autouse=True)
+    def fast_clock(self, session_factory):
+        with (
+            mock.patch.object(releases, "SessionLocal", session_factory),
+            mock.patch.object(releases, "POLL_SECONDS", 0.01),
+            mock.patch.object(releases, "KEEPALIVE_SECONDS", 0.05),
+        ):
+            yield
+
+    def _frames(self, source, checks):
+        calls = iter([False] * checks + [True])
 
         async def is_disconnected():
             return next(calls)
@@ -267,39 +276,109 @@ class TestStream:
         async def collect():
             return [f async for f in releases.view_stream(7, source, is_disconnected)]
 
-        with (
-            mock.patch.object(releases, "SessionLocal", session_factory),
-            mock.patch.object(releases, "POLL_SECONDS", 0),
-        ):
-            return asyncio.run(collect())
+        return asyncio.run(collect())
 
-    def test_emits_only_when_the_view_changes(self, session_factory):
-        source = FakeSource(_paused())
+    def test_emits_only_when_the_view_changes(self):
+        frames = self._frames(FakeSource(_paused()), checks=4)
 
-        frames = self._frames(session_factory, source, polls=3)
+        views = [f for f in frames if f.startswith("data: ")]
+        assert len(views) == 1 and json.loads(views[0].removeprefix("data: "))["phase"] == "Paused"
 
-        assert len(frames) == 1 and json.loads(frames[0].removeprefix("data: "))["phase"] == "Paused"
-
-    def test_stops_when_the_client_disconnects(self, session_factory):
-        source = mock.Mock(wraps=FakeSource(_paused()))
-
-        self._frames(session_factory, source, polls=2)
-
-        assert source.fetch.call_count == 2
-
-    def test_a_cluster_error_is_a_comment_the_client_ignores(self, session_factory):
+    def test_a_cluster_error_is_a_comment_the_client_ignores(self):
         source = mock.Mock(fetch=mock.Mock(side_effect=KubeUnavailableError("down")))
 
-        frames = self._frames(session_factory, source, polls=1)
+        frames = self._frames(source, checks=2)
 
-        assert frames[0].startswith(": ")
+        assert frames[0].startswith(": ") and "down" in frames[0]
 
-    def test_sends_no_buffering_headers(self, session_factory, keycloak):
+    def test_open_streams_share_one_poller(self):
+        source = mock.Mock(wraps=FakeSource(_paused()))
+
+        async def scenario():
+            async def tab():
+                async def is_disconnected():
+                    return asyncio.get_running_loop().time() > deadline
+
+                return [f async for f in releases.view_stream(7, source, is_disconnected)]
+
+            deadline = asyncio.get_running_loop().time() + 0.2
+            await asyncio.gather(*(tab() for _ in range(10)))
+
+        asyncio.run(scenario())
+
+        # One poller at 10 ms for 200 ms, not ten of them.
+        assert source.fetch.call_count <= 30
+
+    def test_polling_stops_when_the_last_stream_leaves(self):
+        source = mock.Mock(wraps=FakeSource(_paused()))
+
+        async def scenario():
+            self_disconnected = iter([False, False, True])
+
+            async def is_disconnected():
+                return next(self_disconnected)
+
+            [_ async for _ in releases.view_stream(7, source, is_disconnected)]
+            await asyncio.sleep(0.05)
+            after_leave = source.fetch.call_count
+            await asyncio.sleep(0.1)
+            return after_leave
+
+        after_leave = asyncio.run(scenario())
+
+        assert (source.fetch.call_count, releases._watches) == (after_leave, {})
+
+    def test_a_closed_stream_stops_polling_behind_the_audit_middleware(self, session_factory, keycloak):
+        # The 0.3.34 leak: BaseHTTPMiddleware hid the disconnect, every closed
+        # tab kept polling the cluster.
+        source = mock.Mock(wraps=FakeSource(_paused()))
+        app = _client(session_factory, source).app
+        app.add_middleware(audit.AuditMiddleware)
+
+        async def scenario():
+            got_frame, closed = asyncio.Event(), asyncio.Event()
+            requested = False
+
+            async def receive():
+                nonlocal requested
+                if not requested:
+                    requested = True
+                    return {"type": "http.request", "body": b"", "more_body": False}
+                await closed.wait()
+                return {"type": "http.disconnect"}
+
+            async def send(message):
+                if message.get("body", b"").startswith(b"data:"):
+                    got_frame.set()
+
+            scope = {
+                "type": "http",
+                "asgi": {"version": "3.0", "spec_version": "2.4"},
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/api/deployments/7/release/stream",
+                "raw_path": b"/api/deployments/7/release/stream",
+                "query_string": b"",
+                "root_path": "",
+                "headers": [],
+                "client": ("127.0.0.1", 1),
+                "server": ("test", 80),
+            }
+            response = asyncio.create_task(app(scope, receive, send))
+            await asyncio.wait_for(got_frame.wait(), 2)
+            closed.set()
+            await asyncio.wait_for(response, 2)
+            await asyncio.sleep(0.05)
+            return source.fetch.call_count
+
+        after_close = asyncio.run(scenario())
+
+        assert (source.fetch.call_count, releases._watches) == (after_close, {})
+
+    def test_sends_no_buffering_headers(self, keycloak, session_factory):
         client = _client(session_factory, FakeSource(_paused()))
-        with (
-            mock.patch.object(releases, "SessionLocal", session_factory),
-            mock.patch.object(releases, "view_stream", side_effect=_one_frame),
-        ):
+        with mock.patch.object(releases, "view_stream", side_effect=_one_frame):
             response = client.get("/api/deployments/7/release/stream")
 
         assert (response.headers["x-accel-buffering"], response.headers["cache-control"]) == ("no", "no-cache")

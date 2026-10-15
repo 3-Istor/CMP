@@ -279,9 +279,25 @@ async def get_deployment_outputs(
         return {}
 
 
+def _still_running(deployment_id: int) -> bool:
+    # A fresh session: the request's own one may be closed by now.
+    from app.core.database import SessionLocal
+
+    with SessionLocal() as check_db:
+        dep = check_db.get(Deployment, deployment_id)
+        return bool(dep) and dep.status in (
+            DeploymentStatus.PENDING,
+            DeploymentStatus.INITIALIZING,
+            DeploymentStatus.PLANNING,
+            DeploymentStatus.DEPLOYING,
+            DeploymentStatus.DELETING,
+        )
+
+
 @router.get("/{deployment_id}/logs/stream")
 async def stream_deployment_logs(
     deployment_id: int,
+    request: Request,
     token: CurrentUser,
     db: Session = Depends(get_db),
 ):
@@ -303,31 +319,19 @@ async def stream_deployment_logs(
 
         # Open and read log file incrementally
         with open(log_file, "r", encoding="utf-8") as f:
-            while True:
+            while not await request.is_disconnected():
                 line = f.readline()
                 if line:
                     yield f"data: {line.rstrip()}\n\n"
-                else:
-                    # Check if the deployment has reached a terminal state
-                    # We create a new DB session since the original DB session might be closed/expired
-                    from app.core.database import SessionLocal
-
-                    with SessionLocal() as check_db:
-                        dep = check_db.get(Deployment, deployment_id)
-                        if not dep or dep.status not in (
-                            DeploymentStatus.PENDING,
-                            DeploymentStatus.INITIALIZING,
-                            DeploymentStatus.PLANNING,
-                            DeploymentStatus.DEPLOYING,
-                            DeploymentStatus.DELETING,
-                        ):
-                            # Read any remaining output lines that were written since last read
-                            line = f.readline()
-                            while line:
-                                yield f"data: {line.rstrip()}\n\n"
-                                line = f.readline()
-                            break
-                    await asyncio.sleep(0.5)
+                    continue
+                if not await run_in_threadpool(_still_running, deployment_id):
+                    # Read any remaining output lines that were written since last read
+                    line = f.readline()
+                    while line:
+                        yield f"data: {line.rstrip()}\n\n"
+                        line = f.readline()
+                    break
+                await asyncio.sleep(0.5)
 
     return StreamingResponse(log_generator(), media_type="text/event-stream")
 

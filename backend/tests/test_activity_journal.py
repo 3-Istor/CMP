@@ -31,7 +31,7 @@ def build(session_factory):
         deployment_id = add_deployment(session_factory, app_type)
         repo = FakeRepo(files)
         app = FastAPI()
-        app.middleware("http")(audit.audit_middleware)
+        app.add_middleware(audit.AuditMiddleware)
         app.include_router(deployments_router.router, prefix="/api")
         app.include_router(activity_router.router, prefix="/api")
 
@@ -55,7 +55,7 @@ def build(session_factory):
                 deployments_router, "get_file_content", repo.get
             ),
             mock.patch.object(
-                deployments_router, "update_file_content", repo.put
+                deployments_router, "put_file_content", repo.put
             ),
             mock.patch.object(
                 deployments_router,

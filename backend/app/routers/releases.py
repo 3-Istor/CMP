@@ -7,6 +7,7 @@ Reading needs any role on the app's project, acting needs member, like the
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -109,32 +110,83 @@ def _poll_frame(deployment_id: int, source: ReleaseSource) -> str | None:
     return f"data: {view.model_dump_json(by_alias=True)}\n\n"
 
 
+@dataclass
+class _Watch:
+    """The latest frame of one app, shared by every stream open on it."""
+
+    listeners: int = 0
+    frame: str | None = None
+    version: int = 0
+    gone: bool = False
+    changed: asyncio.Event = field(default_factory=asyncio.Event)
+    poller: asyncio.Task | None = None
+
+
+_watches: dict[int, _Watch] = {}
+
+
+async def _poll_watch(
+    deployment_id: int, watch: _Watch, source: ReleaseSource
+) -> None:
+    try:
+        while watch.listeners:
+            frame = await run_in_threadpool(_poll_frame, deployment_id, source)
+            watch.gone = frame is None
+            if watch.gone or frame != watch.frame:
+                watch.frame = frame
+                watch.version += 1
+                watch.changed.set()
+                watch.changed = asyncio.Event()
+            if watch.gone:
+                return
+            await asyncio.sleep(POLL_SECONDS)
+    finally:
+        if _watches.get(deployment_id) is watch:
+            del _watches[deployment_id]
+
+
+def _join(deployment_id: int, source: ReleaseSource) -> _Watch:
+    watch = _watches.get(deployment_id)
+    if watch is None:
+        watch = _watches[deployment_id] = _Watch()
+        watch.listeners = 1
+        watch.poller = asyncio.create_task(
+            _poll_watch(deployment_id, watch, source)
+        )
+    else:
+        watch.listeners += 1
+    return watch
+
+
 async def view_stream(
     deployment_id: int,
     source: ReleaseSource,
     is_disconnected: Callable[[], Awaitable[bool]],
 ) -> AsyncIterator[str]:
     """
-    Poll the cluster and yield a frame each time the view changes.
+    Yield a frame each time the app's view changes.
 
-    Runs in the response's own task: a client disconnect cancels it at the
-    next await, and nothing else is spawned that could outlive it.
+    One poller per app however many streams are open: it stops when the
+    last stream leaves, so the cluster load does not grow with open tabs.
     """
-    last: str | None = None
-    quiet = 0.0
-    while not await is_disconnected():
-        frame = await run_in_threadpool(_poll_frame, deployment_id, source)
-        if frame is None:
-            return
-        if frame != last:
-            last = frame
-            quiet = 0.0
-            yield frame
-        elif quiet >= KEEPALIVE_SECONDS:
-            quiet = 0.0
-            yield ": keepalive\n\n"
-        await asyncio.sleep(POLL_SECONDS)
-        quiet += POLL_SECONDS
+    watch = _join(deployment_id, source)
+    seen = 0
+    try:
+        while not await is_disconnected():
+            if watch.gone:
+                return
+            if watch.version != seen:
+                seen = watch.version
+                yield watch.frame or ""
+                continue
+            try:
+                await asyncio.wait_for(
+                    watch.changed.wait(), timeout=KEEPALIVE_SECONDS
+                )
+            except asyncio.TimeoutError:
+                yield ": keepalive\n\n"
+    finally:
+        watch.listeners -= 1
 
 
 @router.get("/{deployment_id}/release/stream")
