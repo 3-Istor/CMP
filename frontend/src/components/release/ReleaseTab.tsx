@@ -14,6 +14,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Rocket, XCircle } from "lucide
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { ReleaseHistoryTable } from "./ReleaseHistoryTable";
+import { ReleaseSettingsCard } from "./ReleaseSettingsCard";
 import { ReleaseStepper } from "./ReleaseStepper";
 import {
   actionLabel,
@@ -41,24 +42,18 @@ function DisabledCard() {
           Release non activée
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <p className="text-muted-foreground">
+      <CardContent className="space-y-3 text-sm text-muted-foreground">
+        <p>
           Cette application est mise à jour en rolling update : chaque nouvelle
           version remplace les pods directement. Pour la livrer progressivement,
           avec une part du trafic d&apos;abord, une analyse automatique des
-          erreurs et une validation manuelle, ajoutez une section{" "}
-          <code className="font-mono">release</code> dans{" "}
-          <code className="font-mono">deploy/values.yaml</code> du dépôt de
-          l&apos;application :
+          erreurs et une validation manuelle, passez la stratégie en Canary
+          dans les réglages ci-dessous, ou dans la section{" "}
+          <code className="font-mono">release</code> du fichier values du dépôt.
         </p>
-        <pre className="overflow-x-auto rounded-lg bg-muted px-4 py-3 font-mono text-xs">
-          {`release:
-  strategy: canary   # rolling | canary | bluegreen
-  preset: safe       # safe | fast | demo | manual`}
-        </pre>
-        <p className="text-muted-foreground">
-          Une fois le changement mergé, Argo CD synchronise l&apos;application et
-          la version suivante passe par les étapes du preset.
+        <p>
+          Une fois le changement synchronisé par Argo CD, la version suivante
+          passe par les étapes du preset.
         </p>
       </CardContent>
     </Card>
@@ -294,6 +289,7 @@ export function ReleaseTab({
   } = useReleaseHistory(deploymentId);
   const { can } = useCan(projectName);
   const canOperate = can("release.operate");
+  const canReadSettings = can("app.viewConfig");
 
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState<Confirming>(null);
@@ -362,6 +358,9 @@ export function ReleaseTab({
     return (
       <div className="space-y-6">
         <DisabledCard />
+        {canReadSettings && (
+          <ReleaseSettingsCard deploymentId={deploymentId} inProgress={false} />
+        )}
         {events.length > 0 && (
           <Card>
             <CardHeader>
@@ -378,6 +377,8 @@ export function ReleaseTab({
 
   const phase = view.phase ? PHASE[view.phase] : null;
   const hasCanary = Boolean(view.canaryHash && view.canaryHash !== view.stableHash);
+  const inProgress =
+    hasCanary && (view.phase === "Progressing" || view.phase === "Paused");
   const visibleSteps = view.steps.filter(isVisibleStep);
   const stepTotal = visibleSteps.length;
   const currentIndex = view.currentStepIndex;
@@ -605,6 +606,10 @@ export function ReleaseTab({
           <Activity event={currentEvent} />
         </div>
       </div>
+
+      {canReadSettings && (
+        <ReleaseSettingsCard deploymentId={deploymentId} inProgress={inProgress} />
+      )}
 
       <Card>
         <CardHeader>

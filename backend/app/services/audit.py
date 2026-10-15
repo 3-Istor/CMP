@@ -90,6 +90,10 @@ ACTIONS: dict[tuple[str, str], str] = {
         "POST",
         "/api/deployments/{deployment_id}/release/retry",
     ): "release.retry",
+    (
+        "PUT",
+        "/api/deployments/{deployment_id}/release/settings",
+    ): "release.settings.update",
     ("PUT", "/api/alerting/{alert_id}"): "alerting.update",
     ("POST", "/api/catalog/sync"): "catalog.sync",
     ("POST", "/api/account/picture"): "account.picture.update",
@@ -111,6 +115,7 @@ NOTABLE = {
     "database.restore",
     "release.skip",
     "release.abort",
+    "release.settings.update",
 }
 
 # Body fields copied into the journal. Anything else, config values in
