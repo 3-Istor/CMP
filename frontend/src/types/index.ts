@@ -764,3 +764,19 @@ export interface ReleaseSettingsSaved {
   commits: Record<string, string>;
   strategies: Record<string, "rolling" | "canary">;
 }
+
+export interface TrafficEvent {
+  seq: number;
+  version: "stable" | "canary" | "error";
+  status: number;
+  ms: number;
+}
+
+export interface TrafficFrame {
+  running: boolean;
+  rps?: number;
+  remainingSeconds?: number;
+  startedBy?: string;
+  counts?: { stable: number; canary: number; error: number };
+  events?: TrafficEvent[];
+}

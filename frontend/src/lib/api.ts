@@ -795,6 +795,57 @@ export const updateReleaseSettings = (
     { method: "PUT", body: JSON.stringify({ ...settings, migrationsCommand }) },
   );
 
+export const startTraffic = (deploymentId: number, rps: number, minutes: number) =>
+  request<import("@/types").TrafficFrame>(`/deployments/${deploymentId}/release/traffic`, {
+    method: "POST",
+    body: JSON.stringify({ rps, minutes }),
+  });
+
+export const stopTraffic = (deploymentId: number) =>
+  request<{ stopped: boolean }>(`/deployments/${deploymentId}/release/traffic`, {
+    method: "DELETE",
+  });
+
+/** Read the demo traffic stream until the run ends or `signal` aborts. */
+export async function streamTraffic(
+  deploymentId: number,
+  onFrame: (frame: import("@/types").TrafficFrame) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${deploymentId}/release/traffic/stream`, {
+    headers: {
+      Accept: "text/event-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.status, res.ok ? "empty stream" : await res.text());
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value.replace(/\r\n?/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const data = buffer
+        .slice(0, boundary)
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n");
+      buffer = buffer.slice(boundary + 2);
+      if (data) onFrame(JSON.parse(data));
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+}
+
 /**
  * Read the release SSE stream until it ends or `signal` aborts.
  *

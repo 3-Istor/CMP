@@ -13,6 +13,7 @@ import type { ReleaseEvent, ReleaseRevision, ReleaseView } from "@/types";
 import { AlertTriangle, ArrowRight, CheckCircle2, Rocket, XCircle } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
+import { DemoTrafficCard } from "./DemoTrafficCard";
 import { ReleaseHistoryTable } from "./ReleaseHistoryTable";
 import { ReleaseSettingsCard } from "./ReleaseSettingsCard";
 import { ReleaseStepper } from "./ReleaseStepper";
@@ -602,6 +603,11 @@ export function ReleaseTab({
 
         <div className="space-y-6">
           <TrafficSplit view={view} />
+          <DemoTrafficCard
+            deploymentId={deploymentId}
+            canOperate={canOperate}
+            weights={view.weights}
+          />
           <Revisions revisions={view.revisions} />
           <Activity event={currentEvent} />
         </div>
