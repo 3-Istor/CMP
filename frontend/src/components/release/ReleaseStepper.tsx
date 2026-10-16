@@ -94,6 +94,14 @@ const STATUS_SR: Record<ReleaseStep["status"], string> = {
   skipped: "ignorée",
 };
 
+/** Argo Rollouts' messages say what happened, not what to do: say both. */
+function stepMessage(message: string): string {
+  if (/Inconclusive/i.test(message)) {
+    return "Pas assez de trafic sur la nouvelle version pour conclure : le nombre de requêtes canary est resté sous le minimum. La release attend votre décision : passer l'étape, tout promouvoir ou abort.";
+  }
+  return message;
+}
+
 export function ReleaseStepper({
   view,
   canOperate,
@@ -148,10 +156,12 @@ export function ReleaseStepper({
           : step.status === "pending" && step.durationSeconds
             ? `≈ ${formatDuration(step.durationSeconds)}`
             : "";
+        // "active" is an analysis that ended inconclusive and paused the
+        // release: it waits for someone to decide, like a running one.
         const canSkip =
           canOperate &&
           view.actions.skip &&
-          step.status === "running" &&
+          (step.status === "running" || step.status === "active") &&
           step.kind === "analysis";
         const showMetrics =
           step.metrics.length > 0 && (isFinished || step.status === "running");
@@ -218,7 +228,7 @@ export function ReleaseStepper({
               )}
 
               {step.message && (
-                <p className="mt-1 text-xs text-muted-foreground">{step.message}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{stepMessage(step.message)}</p>
               )}
               {step.status === "running" && !step.message && (
                 <p className="mt-1 text-xs text-muted-foreground">En cours…</p>
