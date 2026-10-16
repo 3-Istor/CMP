@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from app.schemas.release import (
     ReleaseActions,
@@ -115,37 +116,142 @@ def metric_threshold(
     return None, None
 
 
-def _template_seconds(template: dict[str, Any]) -> int | None:
+_ARG_REF = re.compile(r"^\{\{\s*args\.([\w-]+)\s*\}\}$")
+
+
+def _resolve(value: Any, args: dict[str, str]) -> Any:
+    """A template field, with an {{args.x}} reference replaced by its value."""
+    match = _ARG_REF.match(str(value)) if isinstance(value, str) else None
+    return args.get(match.group(1)) if match else value
+
+
+def _template_seconds(
+    template: dict[str, Any], args: dict[str, str] | None = None
+) -> int | None:
     """How long a template's measurements last; None if they never stop."""
+    args = args or {}
     longest = 0
     for metric in template.get("spec", {}).get("metrics", []):
-        interval = parse_duration(metric.get("interval"))
-        count = metric.get("count")
+        interval = parse_duration(_resolve(metric.get("interval"), args))
+        count = _resolve(metric.get("count"), args)
         if count is None and interval:
             return None
-        count = int(count or 1)
-        delay = parse_duration(metric.get("initialDelay")) or 0
-        longest = max(longest, delay + (interval or 0) * count)
+        try:
+            count = int(count or 1)
+        except ValueError:
+            return None
+        delay = parse_duration(_resolve(metric.get("initialDelay"), args)) or 0
+        # The first measurement comes after the delay, the next ones an
+        # interval apart: count measurements span (count - 1) intervals.
+        longest = max(longest, delay + (interval or 0) * max(count - 1, 0))
     return longest
+
+
+def _templates(
+    step: dict[str, Any], snapshot: RolloutSnapshot
+) -> list[dict[str, Any] | None]:
+    return [
+        snapshot.templates.get(
+            (bool(ref.get("clusterScope")), ref["templateName"])
+        )
+        for ref in step["analysis"].get("templates", [])
+    ]
 
 
 def _expected_analysis_seconds(
     step: dict[str, Any], snapshot: RolloutSnapshot
 ) -> int | None:
-    analysis = step["analysis"]
-    explicit = parse_duration(_args(analysis.get("args")).get("duration"))
-    if explicit is not None:
-        return explicit
-    longest = 0
-    for ref in analysis.get("templates", []):
-        template = snapshot.templates.get(
-            (bool(ref.get("clusterScope")), ref["templateName"])
+    """From the templates when known: a step's duration arg is only a hint
+    the templates do not read (cnp-error-rate waits 60 s, then measures)."""
+    args = _args(step["analysis"].get("args"))
+    templates = _templates(step, snapshot)
+    if templates and all(templates):
+        longest = 0
+        for template in templates:
+            seconds = _template_seconds(template, args)
+            if seconds is None:
+                return None
+            longest = max(longest, seconds)
+        return longest
+    return parse_duration(args.get("duration"))
+
+
+def _human(seconds: int | None) -> str:
+    if not seconds:
+        return "0 s"
+    if seconds % 60 == 0:
+        return f"{seconds // 60} min"
+    if seconds > 60:
+        return f"{seconds // 60} min {seconds % 60} s"
+    return f"{seconds} s"
+
+
+def _describe(
+    raw: dict[str, Any], kind: str, label: str, snapshot: RolloutSnapshot
+) -> str | None:
+    """What a step does, in one line a release watcher can act on."""
+    if kind == "setWeight":
+        return (
+            f"{raw['setWeight']} % des nouveaux visiteurs vont sur la nouvelle "
+            "version ; les autres restent sur la version stable."
         )
-        seconds = _template_seconds(template) if template else None
+    if kind == "pause":
+        seconds = parse_duration((raw["pause"] or {}).get("duration"))
         if seconds is None:
-            return None
-        longest = max(longest, seconds)
-    return longest
+            return (
+                "Attend votre validation : « Continuer » pour aller plus loin."
+            )
+        return f"Laisse tourner {_human(seconds)} avant l'étape suivante."
+    if kind == "scale":
+        if (raw.get("setCanaryScale") or {}).get("matchTrafficWeight"):
+            return "Ajuste le nombre de pods de la nouvelle version à sa part de trafic."
+        return (
+            "Démarre la nouvelle version, sans encore lui envoyer de trafic."
+        )
+    if kind != "analysis":
+        return None
+    args = _args(raw["analysis"].get("args"))
+    names = [
+        t.get("templateName") for t in raw["analysis"].get("templates", [])
+    ]
+    if "cnp-smoke" in names:
+        path = _url_path(args.get("smoke-url"))
+        return (
+            f"Un appel HTTP sur {path} de la nouvelle version, avant tout trafic : "
+            "il doit répondre 2xx."
+        )
+    parts = []
+    if args.get("min-requests"):
+        parts.append(
+            f"au moins {args['min-requests']} requêtes sur la nouvelle version"
+        )
+    if args.get("max-error-rate"):
+        try:
+            parts.append(
+                f"au plus {float(args['max-error-rate']) * 100:g} % d'erreurs"
+            )
+        except ValueError:
+            pass
+    timing = ""
+    for template in _templates(raw, snapshot):
+        for metric in (template or {}).get("spec", {}).get("metrics", []):
+            delay = parse_duration(_resolve(metric.get("initialDelay"), args))
+            interval = parse_duration(_resolve(metric.get("interval"), args))
+            count = _resolve(metric.get("count"), args)
+            if interval:
+                timing = (
+                    f" Première mesure après {_human(delay)}, le temps que les "
+                    f"métriques arrivent, puis toutes les {_human(interval)}"
+                    + (f" ({count} mesures)." if count else ".")
+                )
+            break
+    if not parts:
+        return label + "." + timing
+    return "Réussit avec " + " et ".join(parts) + "." + timing
+
+
+def _url_path(url: str | None) -> str:
+    return (urlsplit(url).path or "/") if url else "/"
 
 
 def _kind(step: dict[str, Any]) -> str:
@@ -363,10 +469,12 @@ def build_view(
     for index, raw in enumerate(raw_steps):
         kind = _kind(raw)
         run = runs.get(index) if kind == "analysis" else None
+        label = _label(raw, kind)
         step = ReleaseStep(
             index=index,
             kind=kind,
-            label=_label(raw, kind),
+            label=label,
+            description=_describe(raw, kind, label, snapshot),
             status="pending",
             weight=raw.get("setWeight"),
             metrics=_metrics(run) if run else [],
@@ -374,6 +482,7 @@ def build_view(
         expected: int | None = 0
         if kind == "analysis":
             expected = _expected_analysis_seconds(raw, snapshot)
+            step.expected_seconds = expected
             step.duration_seconds = _run_elapsed(run, now) if run else expected
         elif kind == "pause":
             expected = parse_duration((raw["pause"] or {}).get("duration"))

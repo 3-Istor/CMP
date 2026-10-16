@@ -26,13 +26,17 @@ UID = "5cbf961a-6ebe-4da8-b4d6-8cd4ab0eb0ec"
 
 
 def _ts(seconds_ago: int) -> str:
-    return (NOW - timedelta(seconds=seconds_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (NOW - timedelta(seconds=seconds_ago)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 def _error_rate(duration: str) -> dict:
     return {
         "analysis": {
-            "templates": [{"templateName": "cnp-error-rate", "clusterScope": True}],
+            "templates": [
+                {"templateName": "cnp-error-rate", "clusterScope": True}
+            ],
             "args": [
                 {"name": "duration", "value": duration},
                 {"name": "max-error-rate", "value": "0.01"},
@@ -44,7 +48,11 @@ def _error_rate(duration: str) -> dict:
 # The chart's prefix, then a preset.
 PREFIX = [
     {"setCanaryScale": {"replicas": 1}},
-    {"analysis": {"templates": [{"templateName": "cnp-smoke", "clusterScope": True}]}},
+    {
+        "analysis": {
+            "templates": [{"templateName": "cnp-smoke", "clusterScope": True}]
+        }
+    },
     {"setWeight": 10},
     {"setCanaryScale": {"matchTrafficWeight": True}},
 ]
@@ -90,7 +98,14 @@ def _weights(canary: int) -> dict:
     }
 
 
-def _run(step: int, phase: str, values=(), started=60, completed=None, name="error-rate") -> dict:
+def _run(
+    step: int,
+    phase: str,
+    values=(),
+    started=60,
+    completed=None,
+    name="error-rate",
+) -> dict:
     measurements = [
         {"phase": "Successful" if phase == "Running" else phase, "value": v}
         for v in values
@@ -98,12 +113,16 @@ def _run(step: int, phase: str, values=(), started=60, completed=None, name="err
     status = {
         "phase": phase,
         "startedAt": _ts(started),
-        "metricResults": [{"name": name, "phase": phase, "measurements": measurements}],
+        "metricResults": [
+            {"name": name, "phase": phase, "measurements": measurements}
+        ],
     }
     if completed is not None:
         status["completedAt"] = _ts(completed)
     if phase == "Failed":
-        status["message"] = 'Metric "error-rate" assessed Failed due to failed (2) > failureLimit (1)'
+        status["message"] = (
+            'Metric "error-rate" assessed Failed due to failed (2) > failureLimit (1)'
+        )
     return {
         "metadata": {
             "name": f"web-{CANARY}-5-{step}",
@@ -116,7 +135,10 @@ def _run(step: int, phase: str, values=(), started=60, completed=None, name="err
             },
         },
         "spec": {
-            "args": [{"name": "canary-hash", "value": CANARY}, {"name": "max-error-rate", "value": "0.01"}],
+            "args": [
+                {"name": "canary-hash", "value": CANARY},
+                {"name": "max-error-rate", "value": "0.01"},
+            ],
             "metrics": [
                 {
                     "name": name,
@@ -145,7 +167,10 @@ def _rs(pod_hash: str, image: str, ready: int, desired: int) -> dict:
             "creationTimestamp": _ts(500),
             "labels": {"rollouts-pod-template-hash": pod_hash},
         },
-        "spec": {"replicas": desired, "template": {"spec": {"containers": [{"image": image}]}}},
+        "spec": {
+            "replicas": desired,
+            "template": {"spec": {"containers": [{"image": image}]}},
+        },
         "status": {"readyReplicas": ready},
     }
 
@@ -157,7 +182,9 @@ REPLICA_SETS = [
 
 
 def _snapshot(rollout, runs=()) -> RolloutSnapshot:
-    return RolloutSnapshot(rollout=rollout, analysis_runs=list(runs), replica_sets=REPLICA_SETS)
+    return RolloutSnapshot(
+        rollout=rollout, analysis_runs=list(runs), replica_sets=REPLICA_SETS
+    )
 
 
 def _statuses(view) -> list[str]:
@@ -170,10 +197,15 @@ class TestPausedAtManualStep:
         rollout = _rollout(
             currentStepIndex=6,
             phase="Paused",
-            pauseConditions=[{"reason": "CanaryPauseStep", "startTime": _ts(30)}],
+            pauseConditions=[
+                {"reason": "CanaryPauseStep", "startTime": _ts(30)}
+            ],
             canary=_weights(25),
         )
-        runs = [_smoke_done(), _run(4, "Successful", ["[0.0021]"], started=200, completed=80)]
+        runs = [
+            _smoke_done(),
+            _run(4, "Successful", ["[0.0021]"], started=200, completed=80),
+        ]
         return build_view(_snapshot(rollout, runs), now=NOW)
 
     def test_steps_before_the_pause_are_done_and_the_pause_waits(self, view):
@@ -182,7 +214,12 @@ class TestPausedAtManualStep:
     def test_measured_error_rate_comes_from_the_last_measurement(self, view):
         metric = view.steps[4].metrics[0]
 
-        assert (metric.value, metric.threshold, metric.comparator, metric.phase) == (
+        assert (
+            metric.value,
+            metric.threshold,
+            metric.comparator,
+            metric.phase,
+        ) == (
             0.0021,
             0.01,
             "<=",
@@ -190,7 +227,12 @@ class TestPausedAtManualStep:
         )
 
     def test_reports_the_traffic_split_and_both_revisions(self, view):
-        assert (view.weights.stable, view.weights.canary, view.stable_image, view.canary_image) == (
+        assert (
+            view.weights.stable,
+            view.weights.canary,
+            view.stable_image,
+            view.canary_image,
+        ) == (
             75,
             25,
             "ghcr.io/3-istor/web:1.3.0",
@@ -227,7 +269,11 @@ def test_running_analysis_counts_its_remaining_time_in_the_eta():
 
     view = build_view(_snapshot(rollout, runs), now=NOW)
 
-    assert (view.steps[4].status, view.eta_seconds, view.actions.skip) == ("running", 40, True)
+    assert (view.steps[4].status, view.eta_seconds, view.actions.skip) == (
+        "running",
+        40,
+        True,
+    )
 
 
 def test_eta_adds_the_analysis_durations_still_ahead():
@@ -249,11 +295,19 @@ class TestAutomaticAbort:
         )
         runs = [
             _smoke_done(),
-            _run(4, "Failed", ["[0.6799999999999999]", "[0.6799999999999999]"], started=40, completed=20),
+            _run(
+                4,
+                "Failed",
+                ["[0.6799999999999999]", "[0.6799999999999999]"],
+                started=40,
+                completed=20,
+            ),
         ]
         return build_view(_snapshot(rollout, runs), now=NOW)
 
-    def test_marks_the_failed_analysis_although_the_index_was_reset(self, view):
+    def test_marks_the_failed_analysis_although_the_index_was_reset(
+        self, view
+    ):
         assert _statuses(view) == ["done"] * 4 + ["failed"] + ["pending"] * 5
 
     def test_explains_the_failure_with_the_run_message(self, view):
@@ -263,7 +317,12 @@ class TestAutomaticAbort:
         assert view.steps[4].metrics[0].value == pytest.approx(0.68)
 
     def test_only_offers_retry(self, view):
-        assert (view.phase, view.actions.retry, view.actions.abort, view.actions.promote_full) == (
+        assert (
+            view.phase,
+            view.actions.retry,
+            view.actions.abort,
+            view.actions.promote_full,
+        ) == (
             "Aborted",
             True,
             False,
@@ -274,17 +333,26 @@ class TestAutomaticAbort:
 def test_manual_abort_points_at_the_step_the_cmp_saw_last():
     rollout = _rollout(abort=True, currentStepIndex=0, canary=_weights(0))
 
-    view = build_view(_snapshot(rollout), now=NOW, hint=ReleaseHint(reached_step=6))
+    view = build_view(
+        _snapshot(rollout), now=NOW, hint=ReleaseHint(reached_step=6)
+    )
 
     assert view.steps[6].status == "failed"
 
 
 def test_finished_release_shows_every_step_done_and_full_traffic_on_stable():
-    rollout = _rollout(currentPodHash=STABLE, phase="Healthy", currentStepIndex=10)
+    rollout = _rollout(
+        currentPodHash=STABLE, phase="Healthy", currentStepIndex=10
+    )
 
     view = build_view(_snapshot(rollout), now=NOW)
 
-    assert (set(_statuses(view)), view.canary_hash, view.weights.stable, view.actions.abort) == (
+    assert (
+        set(_statuses(view)),
+        view.canary_hash,
+        view.weights.stable,
+        view.actions.abort,
+    ) == (
         {"done"},
         None,
         100,
@@ -299,17 +367,30 @@ def test_force_actions_disappear_when_the_chart_forbids_forcing():
         currentStepIndex=4,
     )
 
-    view = build_view(_snapshot(rollout, [_run(4, "Running", started=10)]), now=NOW)
+    view = build_view(
+        _snapshot(rollout, [_run(4, "Running", started=10)]), now=NOW
+    )
 
-    assert (view.actions.promote_full, view.actions.skip, view.actions.abort) == (False, False, True)
+    assert (
+        view.actions.promote_full,
+        view.actions.skip,
+        view.actions.abort,
+    ) == (False, False, True)
 
 
 def test_skipped_and_force_promoted_steps_show_as_skipped():
     rollout = _rollout(currentPodHash=STABLE, phase="Healthy")
 
-    view = build_view(_snapshot(rollout), now=NOW, hint=ReleaseHint(skipped={4}, skipped_from=8))
+    view = build_view(
+        _snapshot(rollout),
+        now=NOW,
+        hint=ReleaseHint(skipped={4}, skipped_from=8),
+    )
 
-    assert _statuses(view) == ["done"] * 4 + ["skipped"] + ["done"] * 3 + ["skipped"] * 2
+    assert (
+        _statuses(view)
+        == ["done"] * 4 + ["skipped"] + ["done"] * 3 + ["skipped"] * 2
+    )
 
 
 def test_no_rollout_gives_a_disabled_view():
@@ -317,14 +398,24 @@ def test_no_rollout_gives_a_disabled_view():
 
 
 def test_prefers_the_rollout_named_after_the_app():
-    rollouts = [{"metadata": {"name": n}} for n in ("shop-backend", "shop", "shop-frontend")]
+    rollouts = [
+        {"metadata": {"name": n}}
+        for n in ("shop-backend", "shop", "shop-frontend")
+    ]
 
     assert pick_rollout(rollouts, "shop")["metadata"]["name"] == "shop"
 
 
 @pytest.mark.parametrize(
     "raw, expected",
-    [("[0.68]", 0.68), ("0.002", 0.002), ("[]", None), ("[NaN]", None), (None, None), ("garbage", None)],
+    [
+        ("[0.68]", 0.68),
+        ("0.002", 0.002),
+        ("[]", None),
+        ("[NaN]", None),
+        (None, None),
+        ("garbage", None),
+    ],
 )
 def test_parses_prometheus_measurements(raw, expected):
     assert parse_measurement(raw) == expected
@@ -332,7 +423,16 @@ def test_parses_prometheus_measurements(raw, expected):
 
 @pytest.mark.parametrize(
     "raw, expected",
-    [("2m", 120), ("30s", 30), ("1m30s", 90), ("1h", 3600), (10, 10), ("10", 10), ("soon", None), (None, None)],
+    [
+        ("2m", 120),
+        ("30s", 30),
+        ("1m30s", 90),
+        ("1h", 3600),
+        (10, 10),
+        ("10", 10),
+        ("soon", None),
+        (None, None),
+    ],
 )
 def test_parses_go_durations(raw, expected):
     assert parse_duration(raw) == expected
@@ -355,11 +455,17 @@ class TestStatusPatches:
         )
 
         assert promote_patch(rollout, "next") == {
-            "status": {"pauseConditions": None, "controllerPause": False, "currentStepIndex": 7}
+            "status": {
+                "pauseConditions": None,
+                "controllerPause": False,
+                "currentStepIndex": 7,
+            }
         }
 
     def test_promote_all_sets_promote_full(self):
-        assert promote_patch(_rollout(), "full") == {"status": {"promoteFull": True}}
+        assert promote_patch(_rollout(), "full") == {
+            "status": {"promoteFull": True}
+        }
 
     def test_continue_past_an_inconclusive_analysis_moves_the_index(self):
         rollout = _rollout(
@@ -369,23 +475,39 @@ class TestStatusPatches:
         )
 
         assert promote_patch(rollout, "next") == {
-            "status": {"pauseConditions": None, "controllerPause": False, "currentStepIndex": 5}
+            "status": {
+                "pauseConditions": None,
+                "controllerPause": False,
+                "currentStepIndex": 5,
+            }
         }
 
     def test_skip_moves_past_the_running_analysis(self):
-        assert skip_patch(_rollout(currentStepIndex=4)) == {"status": {"currentStepIndex": 5}}
+        assert skip_patch(_rollout(currentStepIndex=4)) == {
+            "status": {"currentStepIndex": 5}
+        }
 
 
 @pytest.fixture
 def db():
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     with sessionmaker(bind=engine)() as session:
         yield session
 
 
 def _running_view(step=4):
-    return build_view(_snapshot(_rollout(currentStepIndex=step), [_smoke_done(), _run(4, "Running", started=10)]), now=NOW)
+    return build_view(
+        _snapshot(
+            _rollout(currentStepIndex=step),
+            [_smoke_done(), _run(4, "Running", started=10)],
+        ),
+        now=NOW,
+    )
 
 
 class TestHistory:
@@ -393,7 +515,9 @@ class TestHistory:
         for _ in range(3):
             history.sync_event(db, 1, _running_view())
 
-        assert [(e.revision, e.outcome) for e in db.query(ReleaseEvent)] == [(5, "running")]
+        assert [(e.revision, e.outcome) for e in db.query(ReleaseEvent)] == [
+            (5, "running")
+        ]
 
     def test_records_how_far_the_release_went(self, db):
         history.sync_event(db, 1, _running_view(4))
@@ -403,15 +527,25 @@ class TestHistory:
 
     def test_an_abort_nobody_asked_for_is_automatic(self, db):
         history.sync_event(db, 1, _running_view())
-        aborted = build_view(_snapshot(_rollout(abort=True), [_run(4, "Failed", started=30, completed=5)]), now=NOW)
+        aborted = build_view(
+            _snapshot(
+                _rollout(abort=True),
+                [_run(4, "Failed", started=30, completed=5)],
+            ),
+            now=NOW,
+        )
 
         history.sync_event(db, 1, aborted)
 
         assert db.query(ReleaseEvent).one().outcome == "aborted_auto"
 
-    def test_an_abort_from_the_cmp_is_manual_even_if_the_poll_saw_it_first(self, db):
+    def test_an_abort_from_the_cmp_is_manual_even_if_the_poll_saw_it_first(
+        self, db
+    ):
         event = history.sync_event(db, 1, _running_view())
-        history.sync_event(db, 1, build_view(_snapshot(_rollout(abort=True)), now=NOW))
+        history.sync_event(
+            db, 1, build_view(_snapshot(_rollout(abort=True)), now=NOW)
+        )
 
         history.record_action(db, event, "alice", "abort", None, 4, False)
 
@@ -419,7 +553,10 @@ class TestHistory:
 
     def test_a_finished_release_is_promoted(self, db):
         history.sync_event(db, 1, _running_view())
-        done = build_view(_snapshot(_rollout(currentPodHash=STABLE, phase="Healthy")), now=NOW)
+        done = build_view(
+            _snapshot(_rollout(currentPodHash=STABLE, phase="Healthy")),
+            now=NOW,
+        )
 
         history.sync_event(db, 1, done)
 
@@ -428,19 +565,135 @@ class TestHistory:
 
     def test_a_newer_revision_supersedes_the_running_one(self, db):
         history.sync_event(db, 1, _running_view())
-        newer = _rollout(annotations={"rollout.argoproj.io/revision": "6"}, currentStepIndex=0)
+        newer = _rollout(
+            annotations={"rollout.argoproj.io/revision": "6"},
+            currentStepIndex=0,
+        )
 
         history.sync_event(db, 1, build_view(_snapshot(newer), now=NOW))
 
-        assert [(e.revision, e.outcome) for e in db.query(ReleaseEvent).order_by(ReleaseEvent.id)] == [
+        assert [
+            (e.revision, e.outcome)
+            for e in db.query(ReleaseEvent).order_by(ReleaseEvent.id)
+        ] == [
             (5, "superseded"),
             (6, "running"),
         ]
 
     def test_force_and_skips_feed_back_into_the_view(self, db):
         event = history.sync_event(db, 1, _running_view())
-        history.record_action(db, event, "alice", "skip", "metrics down", 4, True)
+        history.record_action(
+            db, event, "alice", "skip", "metrics down", 4, True
+        )
 
         hint = history.hint_from(history.latest_event(db, 1), 5)
 
         assert (hint.forced, hint.skipped) == (True, {4})
+
+
+# The platform's ClusterAnalysisTemplates, as installed by K3s.
+ERROR_RATE_TEMPLATE = {
+    "spec": {
+        "metrics": [
+            {
+                "name": "canary-requests",
+                "initialDelay": "60s",
+                "interval": "20s",
+                "count": "{{args.count}}",
+            },
+            {
+                "name": "error-rate",
+                "initialDelay": "60s",
+                "interval": "20s",
+                "count": "{{args.count}}",
+            },
+        ]
+    }
+}
+SMOKE_TEMPLATE = {"spec": {"metrics": [{"name": "smoke"}]}}
+DEMO_ANALYSIS = {
+    "analysis": {
+        "templates": [
+            {"templateName": "cnp-error-rate", "clusterScope": True}
+        ],
+        "args": [
+            {"name": "duration", "value": "30s"},
+            {"name": "count", "value": "2"},
+            {"name": "max-error-rate", "value": "0.01"},
+            {"name": "min-requests", "value": "50"},
+        ],
+    }
+}
+
+
+def _with_templates(rollout):
+    snapshot = _snapshot(rollout, [_smoke_done()])
+    snapshot.templates = {
+        (True, "cnp-error-rate"): ERROR_RATE_TEMPLATE,
+        (True, "cnp-smoke"): SMOKE_TEMPLATE,
+    }
+    return snapshot
+
+
+def test_analysis_lasts_what_its_templates_measure_not_its_duration_hint():
+    # 60 s delay, then 2 measurements 20 s apart: 80 s, not the "30s" arg.
+    rollout = _rollout(
+        steps=PREFIX + [DEMO_ANALYSIS, {"setWeight": 100}],
+        currentStepIndex=2,
+        canary=_weights(0),
+    )
+
+    view = build_view(_with_templates(rollout), now=NOW)
+
+    assert view.steps[4].expected_seconds == 80
+
+
+def test_describes_the_error_rate_analysis_with_its_real_thresholds_and_timing():
+    rollout = _rollout(
+        steps=PREFIX + [DEMO_ANALYSIS, {"setWeight": 100}],
+        currentStepIndex=2,
+        canary=_weights(0),
+    )
+
+    description = (
+        build_view(_with_templates(rollout), now=NOW).steps[4].description
+    )
+
+    assert description == (
+        "Réussit avec au moins 50 requêtes sur la nouvelle version et au plus 1 % d'erreurs."
+        " Première mesure après 1 min, le temps que les métriques arrivent, puis toutes les 20 s (2 mesures)."
+    )
+
+
+def test_describes_weights_pauses_and_the_smoke_test():
+    steps = [
+        {
+            "analysis": {
+                "templates": [
+                    {"templateName": "cnp-smoke", "clusterScope": True}
+                ],
+                "args": [
+                    {
+                        "name": "smoke-url",
+                        "value": "http://web-canary.shop.svc:80/healthz",
+                    }
+                ],
+            }
+        },
+        {"setWeight": 25},
+        {"pause": {}},
+        {"pause": {"duration": "10s"}},
+    ]
+    rollout = _rollout(steps=steps, currentStepIndex=0, canary=_weights(0))
+
+    descriptions = [
+        s.description
+        for s in build_view(_with_templates(rollout), now=NOW).steps
+    ]
+
+    assert descriptions == [
+        "Un appel HTTP sur /healthz de la nouvelle version, avant tout trafic : il doit répondre 2xx.",
+        "25 % des nouveaux visiteurs vont sur la nouvelle version ; les autres restent sur la version stable.",
+        "Attend votre validation : « Continuer » pour aller plus loin.",
+        "Laisse tourner 10 s avant l'étape suivante.",
+    ]

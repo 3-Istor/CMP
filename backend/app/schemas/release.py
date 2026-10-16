@@ -38,9 +38,14 @@ class ReleaseStep(_Camel):
     index: int
     kind: StepKind
     label: str
+    # What the step does, with its real thresholds and timings.
+    description: str | None = None
     status: StepStatus
     weight: int | None = None
     duration_seconds: int | None = None
+    # How long an analysis step lasts in total (its templates' delay and
+    # measurements), next to duration_seconds which is the time elapsed.
+    expected_seconds: int | None = None
     metrics: list[ReleaseMetric] = []
     message: str | None = None
 

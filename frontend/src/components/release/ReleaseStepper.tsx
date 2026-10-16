@@ -155,7 +155,9 @@ export function ReleaseStepper({
           ? formatDuration(step.durationSeconds)
           : step.status === "pending" && step.durationSeconds
             ? `≈ ${formatDuration(step.durationSeconds)}`
-            : "";
+            : step.status === "running" && step.expectedSeconds
+              ? `${formatDuration(step.durationSeconds ?? 0)} / ≈ ${formatDuration(step.expectedSeconds)}`
+              : "";
         // "active" is an analysis that ended inconclusive and paused the
         // release: it waits for someone to decide, like a running one.
         const canSkip =
@@ -210,6 +212,9 @@ export function ReleaseStepper({
                   </span>
                 )}
               </div>
+              {step.description && (
+                <p className="mt-0.5 text-xs text-muted-foreground">{step.description}</p>
+              )}
 
               {scale && (
                 <p
