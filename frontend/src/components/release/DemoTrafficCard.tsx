@@ -79,16 +79,23 @@ export function DemoTrafficCard({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    streamTraffic(
-      deploymentId,
-      (next) => {
-        setFrame(next);
-        addBubbles(next.events ?? []);
-      },
-      controller.signal,
-    ).catch(() => {
-      if (!controller.signal.aborted) setFrame((f) => ({ ...f, running: false }));
-    });
+    let running = false;
+    const read = () =>
+      streamTraffic(
+        deploymentId,
+        (next) => {
+          running = next.running;
+          setFrame(next);
+          addBubbles(next.events ?? []);
+        },
+        controller.signal,
+      )
+        .catch(() => undefined)
+        .then(() => {
+          // A proxy may cut a long stream: pick the run up again while it lasts.
+          if (!controller.signal.aborted && running) setTimeout(read, 1000);
+        });
+    read();
   }, [deploymentId, addBubbles]);
 
   // A run started from another tab, or before a reload, is picked up here.
@@ -101,10 +108,11 @@ export function DemoTrafficCard({
     setBusy(true);
     try {
       await startTraffic(deploymentId, rps, minutes);
-      follow();
     } catch (e) {
-      toast.error(errorMessage(e));
+      // Already running (another tab, a reload): show it rather than an error.
+      if (!errorMessage(e).includes("already running")) toast.error(errorMessage(e));
     } finally {
+      follow();
       setBusy(false);
     }
   };
