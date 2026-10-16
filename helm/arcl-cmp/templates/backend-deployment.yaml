@@ -7,6 +7,10 @@ metadata:
     app.kubernetes.io/component: backend
 spec:
   replicas: {{ .Values.replicaCount }}
+  # SQLite on ReadWriteOnce volumes: one writer at a time, and a rolling update
+  # needs room for a second 1Gi pod on the same node, which it does not get.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "arcl-cmp.selectorLabels" . | nindent 6 }}
