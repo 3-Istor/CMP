@@ -669,9 +669,11 @@ export interface ReleaseStep {
   index: number;
   kind: ReleaseStepKind;
   label: string;
+  description: string | null;
   status: ReleaseStepStatus;
   weight: number | null;
   durationSeconds: number | null;
+  expectedSeconds: number | null;
   metrics: ReleaseMetric[];
   message: string | null;
 }

@@ -21,6 +21,9 @@ const RATES = [5, 10, 20];
 const DURATIONS = [2, 5, 10];
 const MAX_BUBBLES = 80;
 const BUBBLE_MS = 2600;
+// The split shown follows the weights as they move: a cumulative one would
+// still say 2 % canary long after the canary took 50 %.
+const WINDOW_MS = 10_000;
 
 const COLOR: Record<TrafficEvent["version"], string> = {
   stable: "bg-primary/80 shadow-primary/40",
@@ -62,8 +65,25 @@ export function DemoTrafficCard({
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  const [recentAnswers, setRecentAnswers] = useState<
+    { at: number; version: TrafficEvent["version"] }[]
+  >([]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const cutoff = Date.now() - WINDOW_MS;
+      setRecentAnswers((current) => current.filter((r) => r.at >= cutoff));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const addBubbles = useCallback((events: TrafficEvent[]) => {
     if (events.length === 0) return;
+    const now = Date.now();
+    setRecentAnswers((current) => [
+      ...current,
+      ...events.map((e) => ({ at: now, version: e.version })),
+    ]);
     const fresh = events.slice(-30).map((e) => ({
       id: e.seq,
       version: e.version,
@@ -129,8 +149,10 @@ export function DemoTrafficCard({
   };
 
   const counts = frame.counts ?? { stable: 0, canary: 0, error: 0 };
-  const total = counts.stable + counts.canary + counts.error;
-  const observed = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const recent = { stable: 0, canary: 0, error: 0 };
+  for (const r of recentAnswers) recent[r.version] += 1;
+  const recentTotal = recent.stable + recent.canary + recent.error;
+  const share = (n: number) => (recentTotal > 0 ? Math.round((n / recentTotal) * 100) : 0);
 
   return (
     <Card>
@@ -189,16 +211,18 @@ export function DemoTrafficCard({
                 <i className={cn("size-2.5 rounded-sm", swatch)} aria-hidden />
                 {label}
               </div>
-              <div className="font-mono text-sm tabular-nums">
-                {counts[key]} <span className="text-muted-foreground">· {observed(counts[key])} %</span>
+              <div className="font-mono text-sm tabular-nums">{share(recent[key])} %</div>
+              <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                {counts[key]} au total
               </div>
             </div>
           ))}
         </div>
-        {weights && total > 0 && (
+        {weights && recentTotal > 0 && (
           <p className="text-xs text-muted-foreground">
-            Poids configurés : {weights.stable} % stable, {weights.canary} % canary. Réparti
-            par Envoy : {observed(counts.stable)} % / {observed(counts.canary)} %.
+            Sur les 10 dernières secondes, Envoy a envoyé {share(recent.stable)} % des
+            requêtes sur stable et {share(recent.canary)} % sur canary, pour des poids
+            configurés de {weights.stable} % / {weights.canary} %.
           </p>
         )}
 
