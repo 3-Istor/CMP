@@ -11,7 +11,12 @@ def _application(route_status="OutOfSync", **extra):
         "status": {
             "resources": [
                 {"kind": "Service", "status": "Synced"},
-                {"kind": "HTTPRoute", "status": route_status},
+                {
+                    "kind": "HTTPRoute",
+                    "namespace": "shop-web",
+                    "name": "web-route",
+                    "status": route_status,
+                },
             ]
         },
         **extra,
@@ -24,10 +29,32 @@ def fresh_state():
     route_reconciler._resynced.clear()
 
 
-def _run(applications, canary_moving=False, passes=2):
+CANARY_ROUTE = {
+    "spec": {
+        "rules": [
+            {"backendRefs": [{"name": "web-canary", "weight": 1}]},
+            {"backendRefs": [{"name": "web-stable", "weight": 1}]},
+            {
+                "backendRefs": [
+                    {"name": "web-stable", "weight": 90},
+                    {"name": "web-canary", "weight": 10},
+                ]
+            },
+        ]
+    }
+}
+ROLLING_ROUTE = {
+    "spec": {"rules": [{"backendRefs": [{"name": "web", "weight": 1}]}]}
+}
+
+
+def _run(applications, canary_moving=False, passes=2, route=None):
     with (
         mock.patch.object(
             route_reconciler, "kube_list", return_value=applications
+        ),
+        mock.patch.object(
+            route_reconciler, "kube_get", return_value=route or CANARY_ROUTE
         ),
         mock.patch.object(route_reconciler, "kube_merge_patch") as patch,
     ):
@@ -103,3 +130,18 @@ def test_resyncs_again_after_the_route_was_seen_synced():
 
     # Assert
     assert synced == ["shop-web-app"]
+
+
+def test_resyncs_a_route_without_canary_backend_while_the_canary_waits_on_it():
+    # The Rollout sits at step 0 ("backendRef was not found in httpRoute").
+    synced, _ = _run(
+        [_application("Synced")], canary_moving=True, route=ROLLING_ROUTE
+    )
+
+    assert synced == ["shop-web-app"]
+
+
+def test_keeps_the_weights_of_a_canary_route_while_the_canary_moves():
+    _, patch = _run([_application()], canary_moving=True, route=CANARY_ROUTE)
+
+    patch.assert_not_called()

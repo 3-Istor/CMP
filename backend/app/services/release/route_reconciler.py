@@ -10,11 +10,12 @@ the weights, so it changes nothing else.
 
 import logging
 
-from app.services.kube_client import kube_list, kube_merge_patch
+from app.services.kube_client import kube_get, kube_list, kube_merge_patch
 
 logger = logging.getLogger(__name__)
 
 APPLICATIONS_PATH = "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications"
+HTTPROUTES_API = "/apis/gateway.networking.k8s.io/v1"
 
 # Seen stuck on one pass: a sync may simply still be in flight. Synced on the next.
 _stuck_once: set[str] = set()
@@ -24,17 +25,56 @@ _stuck_once: set[str] = set()
 _resynced: set[str] = set()
 
 
-def _route_out_of_sync(application: dict) -> bool:
+def _sync_in_flight(application: dict) -> bool:
     status = application.get("status", {})
-    if "operation" in application:
-        return False
-    if status.get("operationState", {}).get("phase") == "Running":
-        return False
-    return any(
-        resource.get("kind") == "HTTPRoute"
-        and resource.get("status") == "OutOfSync"
-        for resource in status.get("resources", [])
+    return (
+        "operation" in application
+        or status.get("operationState", {}).get("phase") == "Running"
     )
+
+
+def _routes(application: dict) -> list[dict]:
+    return [
+        resource
+        for resource in application.get("status", {}).get("resources", [])
+        if resource.get("kind") == "HTTPRoute"
+    ]
+
+
+def _route_out_of_sync(application: dict) -> bool:
+    return any(
+        route.get("status") == "OutOfSync" for route in _routes(application)
+    )
+
+
+def _route_lacks_canary(application: dict) -> bool:
+    """A route still in its rolling shape: the Rollout cannot set weights."""
+    for resource in _routes(application):
+        route = kube_get(
+            f"{HTTPROUTES_API}/namespaces/{resource.get('namespace')}"
+            f"/httproutes/{resource.get('name')}"
+        )
+        if route is None:
+            continue
+        backends = [
+            ref.get("name", "")
+            for rule in route.get("spec", {}).get("rules", [])
+            for ref in rule.get("backendRefs", [])
+        ]
+        if not any(name.endswith("-canary") for name in backends):
+            return True
+    return False
+
+
+def _needs_resync(application: dict, canary_moving: bool) -> bool:
+    if _sync_in_flight(application):
+        return False
+    # Under a moving canary a resync would reset the weights it set, unless
+    # the route never got its canary backend: then there are none to keep and
+    # the Rollout is stuck at its first step until the route is reshaped.
+    if canary_moving:
+        return _route_lacks_canary(application)
+    return _route_out_of_sync(application)
 
 
 def reconcile_route(
@@ -49,7 +89,7 @@ def reconcile_route(
         APPLICATIONS_PATH, {"labelSelector": selector}
     ):
         name = application["metadata"]["name"]
-        if canary_moving or not _route_out_of_sync(application):
+        if not _needs_resync(application, canary_moving):
             _stuck_once.discard(name)
             _resynced.discard(name)
             continue
@@ -69,6 +109,6 @@ def reconcile_route(
                 }
             },
         )
-        logger.info("Re-synced %s: its HTTPRoute stayed out of sync", name)
+        logger.info("Re-synced %s: its HTTPRoute kept a stale shape", name)
         synced.append(name)
     return synced

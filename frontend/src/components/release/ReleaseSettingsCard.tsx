@@ -81,6 +81,10 @@ const BLOCKERS: Record<
   },
 };
 
+function componentOf(file: string): string {
+  return file.match(/values-(\w+)\.yaml$/)?.[1] ?? file;
+}
+
 export function ReleaseSettingsCard({
   deploymentId,
   inProgress,
@@ -158,7 +162,7 @@ export function ReleaseSettingsCard({
       );
       const kept = Object.entries(saved.strategies)
         .filter(([, s]) => s !== draft.strategy)
-        .map(([file]) => file);
+        .map(([file]) => componentOf(file));
       toast.success(
         Object.keys(saved.commits).length === 0
           ? "Réglages déjà à jour dans Git."
@@ -166,9 +170,10 @@ export function ReleaseSettingsCard({
         { duration: 7000 },
       );
       if (kept.length > 0) {
-        toast.info(`Reste en rolling (pas de route HTTP propre) : ${kept.join(", ")}`, {
-          duration: 9000,
-        });
+        toast.info(
+          `Le ${kept.join(" et le ")} reste en rolling update : il n'est pas exposé directement, le frontend lui relaie /api. Le canary s'applique au frontend.`,
+          { duration: 9000 },
+        );
       }
       await load();
     } catch (e) {
@@ -225,6 +230,13 @@ export function ReleaseSettingsCard({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">{STRATEGIES[draft.strategy].hint}</p>
+          {draft.strategy === "canary" && remote.files.length > 1 && (
+            <p className="text-xs text-muted-foreground">
+              Application fullstack : le canary s&apos;applique au frontend, qui est
+              exposé. Le backend reste en rolling update, car il n&apos;a pas de route
+              propre : le frontend lui relaie <code className="font-mono">/api</code>.
+            </p>
+          )}
           {blocker && draft.strategy === "rolling" && (
             <p className="text-xs text-muted-foreground">
               Canary indisponible pour l&apos;instant : {BLOCKERS[blocker.code].short}
