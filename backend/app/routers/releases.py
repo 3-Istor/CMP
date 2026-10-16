@@ -6,6 +6,7 @@ Reading needs any role on the app's project, acting needs member, like the
 """
 
 import asyncio
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from io import StringIO
@@ -14,6 +15,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
@@ -44,7 +46,7 @@ from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
 from app.services.release import history
 from app.services.release import settings as release_settings
-from app.services.release import sync
+from app.services.release import sync, traffic
 from app.services.release.source import (
     KubeReleaseSource,
     ReleaseSource,
@@ -530,3 +532,101 @@ async def update_release_settings(
         commits[file_path] = result.get("commit", {}).get("sha", "")
 
     return {"repo": repo, "commits": commits, "strategies": applied}
+
+
+class TrafficRequest(BaseModel):
+    rps: int = Field(default=10, ge=1, le=traffic.MAX_RPS)
+    minutes: int = Field(default=5, ge=1, le=traffic.MAX_MINUTES)
+
+
+def _app_url(deployment: Deployment) -> str:
+    try:
+        outputs = json.loads(deployment.terraform_outputs or "{}")
+    except ValueError:
+        outputs = {}
+    hostname = outputs.get("hostname") if isinstance(outputs, dict) else None
+    if not hostname:
+        raise _conflict("This app has no public hostname to send traffic to.")
+    return f"https://{hostname}/"
+
+
+@router.post("/{deployment_id}/release/traffic")
+async def start_traffic(
+    deployment_id: int,
+    payload: TrafficRequest,
+    token: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Play visitors on the app for a while, through its real SSO route."""
+    deployment = await run_in_threadpool(
+        _get_app_or_404, db, token, deployment_id, ProjectRole.MEMBER
+    )
+    try:
+        session = await traffic.start(
+            deployment_id,
+            _app_url(deployment),
+            deployment.project_id,
+            payload.rps,
+            payload.minutes,
+            _actor(token),
+        )
+    except traffic.TrafficError as exc:
+        raise _conflict(str(exc)) from exc
+    return session.snapshot()
+
+
+@router.delete("/{deployment_id}/release/traffic")
+async def stop_traffic(
+    deployment_id: int,
+    token: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    await run_in_threadpool(
+        _get_app_or_404, db, token, deployment_id, ProjectRole.MEMBER
+    )
+    return {"stopped": traffic.stop(deployment_id)}
+
+
+async def traffic_stream(
+    deployment_id: int, is_disconnected: Callable[[], Awaitable[bool]]
+) -> AsyncIterator[str]:
+    """The run's counters and each request as it is answered, until it ends."""
+    seen = 0
+    while not await is_disconnected():
+        session = traffic.session_for(deployment_id)
+        if session is None:
+            yield f"data: {json.dumps({'running': False})}\n\n"
+            return
+        fresh = [e for e in session.events if e["seq"] > seen]
+        if fresh:
+            seen = fresh[-1]["seq"]
+        yield "data: " + json.dumps(
+            {**session.snapshot(), "events": fresh}
+        ) + "\n\n"
+        if session.stopped:
+            return
+        try:
+            await asyncio.wait_for(
+                session.changed.wait(), timeout=KEEPALIVE_SECONDS
+            )
+        except asyncio.TimeoutError:
+            pass
+        # Batch the answers of a busy run into a few frames a second.
+        await asyncio.sleep(0.25)
+
+
+@router.get("/{deployment_id}/release/traffic/stream")
+async def stream_traffic(
+    deployment_id: int,
+    request: Request,
+    token: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    await run_in_threadpool(
+        _get_app_or_404, db, token, deployment_id, ProjectRole.GUEST
+    )
+    return StreamingResponse(
+        traffic_stream(deployment_id, request.is_disconnected),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

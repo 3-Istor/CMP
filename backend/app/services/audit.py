@@ -94,6 +94,14 @@ ACTIONS: dict[tuple[str, str], str] = {
         "PUT",
         "/api/deployments/{deployment_id}/release/settings",
     ): "release.settings.update",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/release/traffic",
+    ): "release.traffic.start",
+    (
+        "DELETE",
+        "/api/deployments/{deployment_id}/release/traffic",
+    ): "release.traffic.stop",
     ("PUT", "/api/alerting/{alert_id}"): "alerting.update",
     ("POST", "/api/catalog/sync"): "catalog.sync",
     ("POST", "/api/account/picture"): "account.picture.update",
