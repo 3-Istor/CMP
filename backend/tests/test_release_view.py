@@ -345,10 +345,18 @@ def test_threshold_from_a_failure_condition_passes_below_it():
 
 
 class TestStatusPatches:
-    def test_continue_clears_the_pause(self):
-        rollout = _rollout(currentStepIndex=6, pauseConditions=[{"reason": "CanaryPauseStep"}])
+    def test_continue_on_a_manual_pause_moves_to_the_next_step(self):
+        # The state a 0.3.33-0.3.37 "Continuer" left behind: pause cleared,
+        # controllerPause still set, the Rollout stuck on step 6.
+        rollout = _rollout(
+            currentStepIndex=6,
+            controllerPause=True,
+            pauseConditions=[{"reason": "CanaryPauseStep"}],
+        )
 
-        assert promote_patch(rollout, "next") == {"status": {"pauseConditions": None}}
+        assert promote_patch(rollout, "next") == {
+            "status": {"pauseConditions": None, "controllerPause": False, "currentStepIndex": 7}
+        }
 
     def test_promote_all_sets_promote_full(self):
         assert promote_patch(_rollout(), "full") == {"status": {"promoteFull": True}}

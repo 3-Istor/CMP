@@ -152,7 +152,7 @@ class TestAuthorization:
 
 
 class TestActions:
-    def test_continue_clears_the_pause_and_records_who(self, session_factory, keycloak):
+    def test_continue_moves_past_the_pause_and_records_who(self, session_factory, keycloak):
         source = FakeSource(_paused())
         client = _client(session_factory, source)
 
@@ -161,7 +161,13 @@ class TestActions:
         with session_factory() as db:
             actors = db.query(ReleaseEvent).one().actors
         assert (source.patches, [(a["user"], a["action"]) for a in actors]) == (
-            [("release-lab", "web", {"status": {"pauseConditions": None}})],
+            [
+                (
+                    "release-lab",
+                    "web",
+                    {"status": {"pauseConditions": None, "controllerPause": False, "currentStepIndex": 7}},
+                )
+            ],
             [("dev-alice", "promote")],
         )
 

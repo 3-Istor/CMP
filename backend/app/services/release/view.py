@@ -512,7 +512,10 @@ def _next_step_index(rollout: dict[str, Any]) -> int:
     return min(int(status.get("currentStepIndex") or 0) + 1, len(steps))
 
 
-def _past_inconclusive_patch(rollout: dict[str, Any]) -> dict[str, Any]:
+def _next_step_patch(rollout: dict[str, Any]) -> dict[str, Any]:
+    # What `kubectl argo rollouts promote` sends. Clearing pauseConditions
+    # alone leaves controllerPause set on an indefinite pause step, and the
+    # Rollout then waits on that step forever ("waiting for all steps").
     return {
         "status": {
             "pauseConditions": None,
@@ -525,19 +528,12 @@ def _past_inconclusive_patch(rollout: dict[str, Any]) -> dict[str, Any]:
 def promote_patch(rollout: dict[str, Any], mode: str) -> dict[str, Any]:
     if mode == "full":
         return {"status": {"promoteFull": True}}
-    status = rollout.get("status", {})
-    if (
-        _is_inconclusive(rollout)
-        and status.get("pauseConditions")
-        and status.get("controllerPause")
-    ):
-        return _past_inconclusive_patch(rollout)
-    return {"status": {"pauseConditions": None}}
+    return _next_step_patch(rollout)
 
 
 def skip_patch(rollout: dict[str, Any]) -> dict[str, Any]:
     if _is_inconclusive(rollout):
-        return _past_inconclusive_patch(rollout)
+        return _next_step_patch(rollout)
     return {"status": {"currentStepIndex": _next_step_index(rollout)}}
 
 
