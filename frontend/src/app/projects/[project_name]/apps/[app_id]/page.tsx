@@ -41,11 +41,14 @@ import type { Deployment } from "@/types";
 import {
     ArrowLeft,
     CheckCircle2,
+    ChevronDown,
+    ChevronUp,
     ExternalLink,
     FileCode,
     Globe,
     Loader2,
     RefreshCw,
+    Settings,
     Shield,
     Trash2,
     Wallet,
@@ -124,6 +127,14 @@ export default function AppControlCenterPage() {
     const [deleteConfirmName, setDeleteConfirmName] = useState("");
     const [deleting, setDeleting] = useState(false);
     const [tab, setTab] = useState("app");
+    // null = follow the status (collapsed once running) until the user toggles.
+    const [statusOpen, setStatusOpen] = useState<boolean | null>(null);
+
+    // Security findings link to "#security-data", which now lives in the
+    // Configuration tab.
+    useEffect(() => {
+        if (window.location.hash === "#security-data") setTab("config");
+    }, []);
 
     // The app's project comes from the route, so the role is available here
     // without an extra request.
@@ -358,6 +369,12 @@ export default function AppControlCenterPage() {
                             Security
                         </TabsTrigger>
                     )}
+                    {isKubernetes && canViewConfig && (
+                        <TabsTrigger value="config" className="gap-2">
+                            <Settings className="h-4 w-4" />
+                            Configuration
+                        </TabsTrigger>
+                    )}
                     {canViewFinops && (
                         <TabsTrigger value="finops" className="gap-2">
                             <Wallet className="h-4 w-4" />
@@ -378,133 +395,142 @@ export default function AppControlCenterPage() {
                     )}
                 </TabsList>
 
-                <TabsContent value="app" className="mt-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Quick links — ArgoCD, Vault and the live app follow the
+                    config/secrets permissions; the repo link is for everyone. */}
+                {(() => {
+                    const linkClass = buttonVariants({ variant: "outline", size: "sm" });
+                    const showK8sLinks = isKubernetes && canViewLogs && current.project_id && current.name;
+                    // Determine which ArgoCD app links to show based on template
+                    const templateId = (current.template_id ?? "").toLowerCase();
+                    const hasFrontend = templateId.includes("frontend") || templateId.includes("fullstack") || templateId.includes("full-stack") || templateId.includes("full_stack");
+                    const hasBackend = !templateId.includes("frontend-only");
+                    const base = `https://argocd.3istor.com/applications/argocd/${current.project_id}-${current.name}`;
+                    const links = [
+                        isKubernetes && canViewLogs && appUrl && { href: appUrl, icon: Globe, label: "Open Application" },
+                        current.github_repo_url && { href: current.github_repo_url, icon: Github, label: "GitHub Repository" },
+                        showK8sLinks && hasBackend && { href: `${base}-backend?resource=`, icon: FileCode, label: "ArgoCD — Backend" },
+                        showK8sLinks && hasFrontend && { href: `${base}-frontend?resource=`, icon: FileCode, label: "ArgoCD — Frontend" },
+                        // Vault is admin-only: only admins hold the project's
+                        // Vault policy, so for anyone else this link is a 403.
+                        showK8sLinks && can("app.viewSecretsLink") && {
+                            href: `https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`,
+                            icon: Shield,
+                            label: "Manage Secrets in Vault",
+                        },
+                    ].filter((l) => !!l);
+                    if (links.length === 0) return null;
+                    return (
+                        <div className="mt-4 flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium text-muted-foreground mr-1">
+                                Quick links
+                            </span>
+                            {links.map(({ href, icon: Icon, label }) => (
+                                <a
+                                    key={label}
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={linkClass}
+                                >
+                                    <Icon className="mr-2 h-4 w-4" />
+                                    {label}
+                                    <ExternalLink className="ml-2 h-3 w-3" />
+                                </a>
+                            ))}
+                        </div>
+                    );
+                })()}
 
-                    {/* ── Left column: status + quick actions ── */}
-                    <div className="lg:col-span-2 space-y-6">
-
-                        {/* Deployment progress */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Deployment Status</CardTitle>
-                            </CardHeader>
+                <TabsContent value="app" className="mt-6 space-y-6">
+                    {/* Deployment progress — collapsed by default once running */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle className="text-base">Deployment Status</CardTitle>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setStatusOpen(!(statusOpen ?? !isRunning))}
+                                className="h-8 w-8"
+                                title={(statusOpen ?? !isRunning) ? "Collapse" : "Expand"}
+                            >
+                                {(statusOpen ?? !isRunning) ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                )}
+                            </Button>
+                        </CardHeader>
+                        {(statusOpen ?? !isRunning) && (
                             <CardContent>
                                 <DeploymentStepper deployment={current} />
                             </CardContent>
+                        )}
+                    </Card>
+
+                    {/* Live deployment log streaming — members and up.
+                        A guest sees the status badge and the stepper, not
+                        the build output. */}
+                    {canViewLogs && (
+                        <DeploymentLogs deploymentId={appId} deploymentStatus={current.status} />
+                    )}
+
+                    {/* Health summary (inline, collapsible like the logs) */}
+                    {shouldFetchHealth && canViewLogs && (
+                        <DeploymentHealth deploymentId={appId} />
+                    )}
+
+                    {/* Legacy deployments: show Terraform outputs */}
+                    {!isKubernetes && canViewConfig && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Terraform Outputs</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {current.terraform_outputs ? (
+                                    <div className="space-y-1.5 text-xs font-mono">
+                                        {Object.entries(
+                                            (() => {
+                                                try {
+                                                    return JSON.parse(current.terraform_outputs) as Record<string, unknown>;
+                                                } catch {
+                                                    return {};
+                                                }
+                                            })(),
+                                        ).map(([key, value]) => (
+                                            <div key={key} className="flex gap-2 flex-wrap">
+                                                <span className="text-muted-foreground shrink-0">{key}:</span>
+                                                {typeof value === "string" &&
+                                                    value.startsWith("http") ? (
+                                                    <a
+                                                        href={value}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="text-primary underline break-all"
+                                                    >
+                                                        {value}
+                                                    </a>
+                                                ) : (
+                                                    <span className="break-all">{String(value)}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                        No outputs yet.
+                                    </p>
+                                )}
+                            </CardContent>
                         </Card>
+                    )}
+                </TabsContent>
 
-                        {/* Live deployment log streaming — members and up.
-                            A guest sees the status badge and the stepper, not
-                            the build output. */}
-                        {canViewLogs && (
-                            <DeploymentLogs deploymentId={appId} deploymentStatus={current.status} />
-                        )}
-
-                        {/* Quick Actions (Kubernetes only) — these link into
-                            ArgoCD, Vault and the repo, so they follow the
-                            config/secrets permissions rather than being shown
-                            to every viewer. */}
-                        {isKubernetes && canViewLogs && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base">Quick Actions</CardTitle>
-                                </CardHeader>
-                                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {appUrl && (
-                                        <a
-                                            href={appUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <Globe className="mr-2 h-4 w-4" />
-                                            Open Application
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
-
-                                    {current.github_repo_url && (
-                                        <a
-                                            href={current.github_repo_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <Github className="mr-2 h-4 w-4" />
-                                            Open GitHub Repository
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
-
-                                    {current.project_id && current.name && (() => {
-                                        // Determine which ArgoCD app links to show based on template
-                                        const templateId = (current.template_id ?? "").toLowerCase();
-                                        const hasFrontend = templateId.includes("frontend") || templateId.includes("fullstack") || templateId.includes("full-stack") || templateId.includes("full_stack");
-                                        const hasBackend = !templateId.includes("frontend-only");
-                                        const base = `https://argocd.3istor.com/applications/argocd/${current.project_id}-${current.name}`;
-
-                                        return (
-                                            <>
-                                                {hasBackend && (
-                                                    <a
-                                                        href={`${base}-backend?resource=`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                                    >
-                                                        <FileCode className="mr-2 h-4 w-4" />
-                                                        ArgoCD — Backend
-                                                        <ExternalLink className="ml-auto h-3 w-3" />
-                                                    </a>
-                                                )}
-                                                {hasFrontend && (
-                                                    <a
-                                                        href={`${base}-frontend?resource=`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                                    >
-                                                        <FileCode className="mr-2 h-4 w-4" />
-                                                        ArgoCD — Frontend
-                                                        <ExternalLink className="ml-auto h-3 w-3" />
-                                                    </a>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-
-                                    {/* Vault is admin-only: only admins hold the
-                                        project's Vault policy, so for anyone
-                                        else this link leads to a 403. */}
-                                    {current.project_id && current.name && can("app.viewSecretsLink") && (
-                                        <a
-                                            href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <Shield className="mr-2 h-4 w-4" />
-                                            Manage Secrets in Vault
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {/* Health summary (inline, collapsible like the logs) */}
-                        {shouldFetchHealth && canViewLogs && (
-                            <DeploymentHealth deploymentId={appId} />
-                        )}
-                    </div>
-
-                    {/* ── Right column: Day-2 config ──
-                        Two levels: members see the values read-only, admins can
-                        change them, guests get no column at all. */}
-                    <div className="space-y-6">
-                        {!canViewConfig ? null : isKubernetes && isRunning ? (
-                            <>
+                {/* Day-2 config — members see the values read-only, admins
+                    can change them, guests get no tab at all. */}
+                {isKubernetes && canViewConfig && (
+                    <TabsContent value="config" className="mt-6">
+                        {isRunning ? (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                                 <div id="security-data" className="scroll-mt-24">
                                     <SecurityDataPanel deploymentId={appId} />
                                 </div>
@@ -512,8 +538,8 @@ export default function AppControlCenterPage() {
                                     deploymentId={appId}
                                     readOnly={!canEditConfig}
                                 />
-                            </>
-                        ) : isKubernetes && !isRunning ? (
+                            </div>
+                        ) : (
                             <Card>
                                 <CardContent className="pt-6">
                                     <p className="text-sm text-muted-foreground text-center">
@@ -522,83 +548,9 @@ export default function AppControlCenterPage() {
                                     </p>
                                 </CardContent>
                             </Card>
-                        ) : (
-                            /* Legacy deployments: show Terraform outputs */
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base">Terraform Outputs</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {current.terraform_outputs ? (
-                                        <div className="space-y-1.5 text-xs font-mono">
-                                            {Object.entries(
-                                                (() => {
-                                                    try {
-                                                        return JSON.parse(current.terraform_outputs) as Record<string, unknown>;
-                                                    } catch {
-                                                        return {};
-                                                    }
-                                                })(),
-                                            ).map(([key, value]) => (
-                                                <div key={key} className="flex gap-2 flex-wrap">
-                                                    <span className="text-muted-foreground shrink-0">{key}:</span>
-                                                    {typeof value === "string" &&
-                                                        value.startsWith("http") ? (
-                                                        <a
-                                                            href={value}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="text-primary underline break-all"
-                                                        >
-                                                            {value}
-                                                        </a>
-                                                    ) : (
-                                                        <span className="break-all">{String(value)}</span>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground">
-                                            No outputs yet.
-                                        </p>
-                                    )}
-                                </CardContent>
-                            </Card>
                         )}
-
-                        {/* GitHub Repository (just below Terraform Outputs) */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <Github className="h-4 w-4" />
-                                    GitHub Repository
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {current.github_repo_url ? (
-                                    <a
-                                        href={current.github_repo_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-sm text-primary underline break-all inline-flex items-center gap-1.5"
-                                    >
-                                        {current.github_repo_url.replace(
-                                            "https://github.com/",
-                                            "",
-                                        )}
-                                        <ExternalLink className="h-3 w-3 shrink-0" />
-                                    </a>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">
-                                        No GitHub repository linked for this deployment.
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-                </TabsContent>
+                    </TabsContent>
+                )}
 
                 {isKubernetes && canViewRelease && (
                     <TabsContent value="release" className="mt-6">
