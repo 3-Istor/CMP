@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
-from app.models.project import Project
+from app.models.project import Project, TargetCloud
 from app.routers.finops import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
@@ -203,6 +203,16 @@ async def create_deployment(
             payload.app_config["project_name"] = project_name = (
                 payload.project_id
             )
+        # Forced from the DB: the Vault role mount depends on it, and a project
+        # admin must not pick another cloud's mount.
+        project_row = (
+            db.query(Project)
+            .filter(Project.project_name == project_name)
+            .first()
+        )
+        payload.app_config["target_cloud"] = (
+            project_row.target_cloud if project_row else TargetCloud.ONPREM
+        ).value
         if project_name:
             try:
                 await ensure_app_names_free(
