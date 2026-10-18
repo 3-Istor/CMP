@@ -128,3 +128,9 @@
     @apply font-sans;
   }
 }
+
+/* Matches of the search box on an app's Configuration tab. */
+::highlight(config-search) {
+  background-color: rgb(253 224 71); /* yellow-300 */
+  color: black;
+}

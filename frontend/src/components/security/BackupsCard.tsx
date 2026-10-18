@@ -124,7 +124,7 @@ export function BackupsCard({
           <p className="text-muted-foreground">Chargement…</p>
         ) : backups.length === 0 ? (
           <p className="text-muted-foreground">
-            Aucune sauvegarde. Active-les dans l&apos;onglet Application, panneau
+            Aucune sauvegarde. Active-les dans l&apos;onglet Configuration, panneau
             « Exposition et données ».
           </p>
         ) : (

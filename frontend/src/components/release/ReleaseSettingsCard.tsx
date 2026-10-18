@@ -71,7 +71,7 @@ const BLOCKERS: Record<
     title: "Exposer l'app pour passer en Canary",
     short: "l'app n'est pas exposée.",
     why: "Le canary répartit le trafic entre les deux versions via la route HTTP de l'app. Sans exposition, il n'y a pas de trafic à répartir.",
-    fix: "Activez l'exposition dans l'onglet Application, section Exposition, puis revenez ici.",
+    fix: "Activez l'exposition dans l'onglet Configuration, section Exposition, puis revenez ici.",
   },
   no_service: {
     title: "Le canary a besoin du Service de l'app",
@@ -412,7 +412,7 @@ export function ReleaseSettingsCard({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   L&apos;app n&apos;utilise pas sa base ? Désactivez-la plutôt dans
-                  l&apos;onglet Application, section Base de données. Attention, cela
+                  l&apos;onglet Configuration, section Base de données. Attention, cela
                   supprime la base.
                 </p>
               </div>
