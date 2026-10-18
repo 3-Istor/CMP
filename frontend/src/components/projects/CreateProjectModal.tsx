@@ -46,7 +46,7 @@ const CLOUDS: CloudOption[] = [
             "Mature IAM & compliance tooling",
             "Broad global region coverage",
         ],
-        available: false,
+        available: true,
     },
     {
         value: "gcp",
@@ -56,7 +56,7 @@ const CLOUDS: CloudOption[] = [
             "Typically the most competitive compute pricing",
             "Strong data & AI tooling",
         ],
-        available: false,
+        available: true,
     },
 ];
 
