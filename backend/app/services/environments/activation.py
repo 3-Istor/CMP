@@ -208,6 +208,7 @@ async def _write_env_files(
                     image,
                     deployment.project_id,
                     deployment.name,
+                    component,
                     outputs["hostname"],
                     outputs["vault_path"],
                     outputs["vault_role"],

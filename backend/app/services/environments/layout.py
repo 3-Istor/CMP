@@ -60,10 +60,18 @@ def pinned(repository: str, tag: str, digest: str) -> dict[str, str]:
     }
 
 
+def chart_fullname(project: str, app: str, component: str) -> str:
+    """The prod object names the chart derives (cnp-generic-app.fullname)."""
+    return f"{application(project, app, component, 'prod')}-cnp-generic-app"[
+        :63
+    ].rstrip("-")
+
+
 def staging_values(
     image: dict[str, str],
     project: str,
     app: str,
+    component: str,
     hostname: str,
     vault_path: str,
     vault_role: str,
@@ -80,6 +88,9 @@ def staging_values(
     """
     values: dict[str, Any] = {
         "environment": "staging",
+        # The prod names, in the staging namespace: the frontend reaches its
+        # backend by the Service's short name, which would not exist otherwise.
+        "fullnameOverride": chart_fullname(project, app, component),
         "image": dict(image),
         "replicaCount": 1,
         "secrets": {"vaultPath": vault_path, "vaultRole": vault_role},

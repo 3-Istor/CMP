@@ -193,6 +193,7 @@ class TestStagingValues:
             {"repository": "ghcr.io/o/web", "tag": "1.3.2"},
             "shop",
             "web",
+            "app",
             "web-shop-staging.3istor.com",
             "project-shop/web/staging",
             "shop-web-staging-role",
@@ -215,11 +216,31 @@ class TestStagingValues:
             False,
         )
 
+    def test_staging_objects_keep_the_prod_names_so_short_service_names_resolve(
+        self,
+    ):
+        values = layout.staging_values(
+            {"repository": "r", "tag": "t"},
+            "shop",
+            "web",
+            "backend",
+            "h",
+            "p",
+            "r",
+            "c",
+            layout.DEFAULT_STAGING_OFFHOURS,
+            exposed=False,
+            has_auth=False,
+        )
+
+        assert values["fullnameOverride"] == "shop-web-backend-cnp-generic-app"
+
     def test_staging_is_put_to_sleep_by_default(self):
         values = layout.staging_values(
             {"repository": "r", "tag": "t"},
             "shop",
             "web",
+            "app",
             "h",
             "p",
             "r",
@@ -527,7 +548,9 @@ class TestEnvironmentsApi:
                 yield db
 
             app.dependency_overrides[get_db] = override
-            app.dependency_overrides[router.get_current_user] = lambda: USER_TOKENS[who]
+            app.dependency_overrides[router.get_current_user] = (
+                lambda: USER_TOKENS[who]
+            )
             return TestClient(app)
 
         return build
@@ -536,12 +559,22 @@ class TestEnvironmentsApi:
         with _observed(_state(RC2, "1.4.0-rc.2")):
             response = client("guest").get("/api/deployments/7/environments")
 
-        assert [e["name"] for e in response.json()["environments"]] == ["staging", "prod"]
+        assert [e["name"] for e in response.json()["environments"]] == [
+            "staging",
+            "prod",
+        ]
 
     def test_a_member_cannot_change_the_promotion_policy(self, client):
-        response = client("dev").put("/api/deployments/7/promotion-policy", json={"suites": []})
+        response = client("dev").put(
+            "/api/deployments/7/promotion-policy", json={"suites": []}
+        )
 
         assert response.status_code == 403
 
     def test_an_outsider_cannot_read_the_environments(self, client):
-        assert client("outsider").get("/api/deployments/7/environments").status_code == 403
+        assert (
+            client("outsider")
+            .get("/api/deployments/7/environments")
+            .status_code
+            == 403
+        )
