@@ -114,12 +114,8 @@ async def start(
         RunRefused: Environment asleep (it is woken), moving, already being
             verified by this suite, or running other digests than expected.
     """
-    kind = gitops.app_type(deployment)
-    project, app = deployment.project_id, deployment.name
-    state = await asyncio.to_thread(
-        observe.observe, project, app, kind, environment
-    )
-    if state.asleep:
+    state = await asyncio.to_thread(observe.of, deployment, environment)
+    if state.asleep and gitops.target_cloud(deployment) == "onprem":
         await asyncio.to_thread(observe.wake, state.namespace)
         raise RunRefused(
             f"{environment} was asleep (offhours): it is waking up, the run starts once it is up."
@@ -192,6 +188,20 @@ async def _execute(
     kind = gitops.app_type(deployment)
     project, app = deployment.project_id, deployment.name
     namespace = layout.namespace(project, app, run.environment)
+    cloud = gitops.target_cloud(deployment)
+    if spec["kind"] == "smoke" and cloud != "onprem":
+        target = public_url(db, deployment, run.environment)
+        if not target:
+            return suites.Outcome(
+                "error", f"{run.environment} has no public hostname to test."
+            )
+        return await suites.run_public_smoke(target, project)
+    if spec["kind"] == "metrics" and cloud != "onprem":
+        return suites.Outcome(
+            "error",
+            f"The Envoy metrics of {cloud} are not collected by the platform yet: "
+            "use an external suite there.",
+        )
     if spec["kind"] == "smoke":
         gh = await gitops.token_for(deployment)
         base = await gitops.read_base(gh, gitops.repo_of(deployment), kind)
@@ -220,7 +230,7 @@ async def _execute(
                 "main",
                 {
                     "target_url": target,
-                    "version": run.version or "",
+                    "version": run.version or "unknown",
                     "callback_url": f"{settings.CMP_PUBLIC_URL}/api/verification-runs/{run.id}/result",
                     "callback_token": token or "",
                 },

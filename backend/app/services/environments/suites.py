@@ -20,6 +20,7 @@ from pydantic import Field
 from app.schemas.release import _Camel
 from app.services.kube_client import kube_list
 from app.services.metrics_isolation import VMSELECT
+from app.services.release import traffic
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,35 @@ async def run_smoke(
     summary = ", ".join(f"{c} {a}" for c, a in answers.items())
     return Outcome(
         "failed" if failed else "passed", summary, {"answers": answers}
+    )
+
+
+async def run_public_smoke(url: str, realm: str) -> Outcome:
+    """
+    GET the environment through its public hostname, logged in as the realm's
+    technical user when SSO stands in front: the CMP cannot reach a Service on
+    a public cloud cluster.
+    """
+    host = httpx.URL(url).host
+    try:
+        async with httpx.AsyncClient(
+            timeout=10.0, follow_redirects=True
+        ) as client:
+            first = await client.get(url)
+            if first.url.host == host:
+                status = first.status_code
+            else:
+                cookie = await traffic.login(url, realm)
+                status = (
+                    await client.get(url, headers={"Cookie": cookie})
+                ).status_code
+    except (httpx.HTTPError, traffic.TrafficError) as exc:
+        return Outcome("failed", f"{url}: {exc}")
+    passed = status < 400
+    return Outcome(
+        "passed" if passed else "failed",
+        f"{url} {status}",
+        {"answers": {"public": status}},
     )
 
 

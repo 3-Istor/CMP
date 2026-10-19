@@ -75,11 +75,6 @@ def _set(
 
 
 def check_can_enable(db: Session, deployment: Deployment) -> None:
-    config = json.loads(deployment.app_config or "{}")
-    if config.get("target_cloud", "onprem") != "onprem":
-        raise ActivationRefused(
-            "Staging environments are only available on-prem for now."
-        )
     row = db.get(AppEnvironment, (deployment.id, STAGING))
     if row is not None and row.state != "failed":
         raise ActivationRefused(f"Staging is already {row.state}.")

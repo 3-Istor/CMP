@@ -170,7 +170,7 @@ async def _follow(
     return response
 
 
-async def _login(app_url: str, realm: str) -> str:
+async def login(app_url: str, realm: str) -> str:
     """Log the traffic user into the app, return its session as a Cookie header."""
     host = httpx.URL(app_url).host
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
@@ -228,7 +228,7 @@ async def _visit(
 
 async def _run(session: TrafficSession, realm: str) -> None:
     try:
-        cookie = await _login(session.app_url, realm)
+        cookie = await login(session.app_url, realm)
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             pending: set[asyncio.Task] = set()
             while not session.stopped and time.time() < session.until:
@@ -237,7 +237,7 @@ async def _run(session: TrafficSession, realm: str) -> None:
                 visit.add_done_callback(pending.discard)
                 await asyncio.sleep(1 / session.rps)
                 if visit.done() and visit.result() is False:
-                    cookie = await _login(session.app_url, realm)
+                    cookie = await login(session.app_url, realm)
             await asyncio.gather(*pending, return_exceptions=True)
     except TrafficError as exc:
         logger.warning("Demo traffic for %s stopped: %s", session.app_url, exc)

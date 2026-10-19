@@ -221,11 +221,8 @@ class ProjectStagingUpdate(_Camel):
 def _observe(
     deployment: Deployment, environment: str, hostname: str | None
 ) -> EnvironmentRead:
-    kind = gitops.app_type(deployment)
     try:
-        state = observe.observe(
-            deployment.project_id, deployment.name, kind, environment
-        )
+        state = observe.of(deployment, environment)
     except KubeUnavailableError:
         return EnvironmentRead(
             name=environment,

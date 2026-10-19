@@ -81,7 +81,7 @@ def _client_with(handler):
 def test_logs_in_through_the_realm_form_and_keeps_only_the_sso_cookies():
     logins = []
     with _client_with(_fake_sso(logins)):
-        cookie = asyncio.run(traffic._login(APP, "shop"))
+        cookie = asyncio.run(traffic.login(APP, "shop"))
 
     assert "username=cnp-traffic" in logins[0]
     assert sorted(part.split("=")[0] for part in cookie.split("; ")) == [
@@ -99,7 +99,7 @@ def test_refuses_an_app_without_sso_login_page():
         return httpx.Response(200, text="<html>no sso</html>")
 
     with _client_with(handler), pytest.raises(traffic.TrafficError):
-        asyncio.run(traffic._login(APP, "shop"))
+        asyncio.run(traffic.login(APP, "shop"))
 
 
 def _session():
