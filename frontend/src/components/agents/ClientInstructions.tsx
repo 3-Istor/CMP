@@ -24,17 +24,17 @@ export const CLIENTS: Client[] = [
     forWho: "Everyone. Nothing to install.",
     steps: [
       {
-        text: "Open Settings, then Connectors. If your organization already added CNP, click Connect next to it and skip to the last step.",
+        text: "Open Customize, then Connectors (claude.ai/customize/connectors). If your organization already added CNP, click Connect next to it and skip to the last step.",
       },
       {
-        text: "Otherwise click “Add custom connector”, name it CNP and paste this URL:",
+        text: "Otherwise click +, then “Add custom connector”, name it CNP and paste this URL:",
         code: MCP_URL,
       },
       {
         text: "Sign in with your company account and approve the access on the CNP page. Then just ask: “Put a page with … online”.",
       },
     ],
-    note: "On Team and Enterprise plans, an Owner adds the connector once for the whole organization.",
+    note: "On Team and Enterprise plans, an Owner adds it once for everyone in Organization settings, Connectors (claude.ai/admin-settings/connectors); members then only click Connect.",
   },
   {
     id: "claude-code",

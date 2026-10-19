@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
 
 import { ClientInstructions } from "@/components/agents/ClientInstructions";
+import { InstallButtons } from "@/components/agents/InstallButtons";
 import { Mascot } from "@/components/agents/Mascot";
 import { Logo } from "@/components/brand/Logo";
 
@@ -84,6 +85,10 @@ export default function ConnectAiPage() {
               login and your rights.
             </p>
           </div>
+        </section>
+
+        <section className="mt-8" aria-label="Install">
+          <InstallButtons />
         </section>
 
         <section className="mt-10" aria-labelledby="setup">
