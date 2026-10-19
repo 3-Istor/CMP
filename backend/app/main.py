@@ -20,6 +20,7 @@ from app.routers import (
     alerting,
     catalog,
     deployments,
+    environments,
     finops,
     infra,
     projects,
@@ -32,6 +33,7 @@ from app.services import health_poller
 from app.services.activity_collector import activity_collector_loop
 from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
+from app.services.environments.loop import environment_loop
 from app.services.finops import alert_poller
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
@@ -241,6 +243,7 @@ async def lifespan(app: FastAPI):
     audit_retention_task = asyncio.create_task(audit_retention_loop())
     activity_collector_task = asyncio.create_task(activity_collector_loop())
     release_recorder_task = asyncio.create_task(release_recorder_loop())
+    environment_task = asyncio.create_task(environment_loop())
 
     # Last, so it only gets the paths no router claimed: /mcp, the OAuth
     # endpoints (/authorize, /token, /register, /revoke) and their
@@ -260,6 +263,7 @@ async def lifespan(app: FastAPI):
     audit_retention_task.cancel()
     activity_collector_task.cancel()
     release_recorder_task.cancel()
+    environment_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
@@ -267,6 +271,7 @@ async def lifespan(app: FastAPI):
         audit_retention_task,
         activity_collector_task,
         release_recorder_task,
+        environment_task,
     ):
         try:
             await task
@@ -320,6 +325,9 @@ app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
+app.include_router(environments.router, prefix="/api")
+app.include_router(environments.callbacks, prefix="/api")
+app.include_router(environments.projects, prefix="/api")
 app.include_router(finops.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")

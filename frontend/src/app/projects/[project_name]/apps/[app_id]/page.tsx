@@ -12,6 +12,7 @@ import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
+import { EnvironmentsTab } from "@/components/environments/EnvironmentsTab";
 import { ReleaseTab } from "@/components/release/ReleaseTab";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -56,6 +57,7 @@ import {
     XCircle,
     BellRing,
     History,
+    Layers,
     Rocket,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -457,6 +459,12 @@ export default function AppControlCenterPage() {
                             Release
                         </TabsTrigger>
                     )}
+                    {isKubernetes && canViewRelease && (
+                        <TabsTrigger value="environments" className="gap-2">
+                            <Layers className="h-4 w-4" />
+                            Environnements
+                        </TabsTrigger>
+                    )}
                     {isKubernetes && canViewObservability && (
                         <TabsTrigger value="security" className="gap-2">
                             <Shield className="h-4 w-4" />
@@ -649,6 +657,12 @@ export default function AppControlCenterPage() {
                 {isKubernetes && canViewRelease && (
                     <TabsContent value="release" className="mt-6">
                         <ReleaseTab deploymentId={appId} projectName={projectName} />
+                    </TabsContent>
+                )}
+
+                {isKubernetes && canViewRelease && (
+                    <TabsContent value="environments" className="mt-6">
+                        <EnvironmentsTab deploymentId={appId} />
                     </TabsContent>
                 )}
 

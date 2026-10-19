@@ -750,6 +750,100 @@ export const updateCatalogAlert = (
     { method: "PUT", body: JSON.stringify({ enabled, params }) },
   );
 
+// ── Environments tab ──────────────────────────────────────────────────────────
+
+export const getEnvironments = (deploymentId: number) =>
+  request<import("@/types").EnvironmentsView>(`/deployments/${deploymentId}/environments`);
+
+export const enableStaging = (deploymentId: number, offhours: import("@/types").StagingOffhours) =>
+  request<import("@/types").StagingStatus>(`/deployments/${deploymentId}/environments/staging`, {
+    method: "POST",
+    body: JSON.stringify({ offhours }),
+  });
+
+export const disableStaging = (deploymentId: number) =>
+  request<import("@/types").StagingStatus>(`/deployments/${deploymentId}/environments/staging`, {
+    method: "DELETE",
+  });
+
+export const getStagingOffhours = (deploymentId: number) =>
+  request<import("@/types").StagingOffhours>(
+    `/deployments/${deploymentId}/environments/staging/offhours`,
+  );
+
+export const updateStagingOffhours = (
+  deploymentId: number,
+  offhours: import("@/types").StagingOffhours,
+) =>
+  request<{ commit: string }>(`/deployments/${deploymentId}/environments/staging/offhours`, {
+    method: "PUT",
+    body: JSON.stringify(offhours),
+  });
+
+export const wakeStaging = (deploymentId: number) =>
+  request<{ woken: number }>(`/deployments/${deploymentId}/environments/staging/wake`, {
+    method: "POST",
+  });
+
+export const updatePromotionPolicy = (
+  deploymentId: number,
+  policy: import("@/types").PromotionPolicy,
+) =>
+  request<import("@/types").PromotionPolicy>(`/deployments/${deploymentId}/promotion-policy`, {
+    method: "PUT",
+    body: JSON.stringify(policy),
+  });
+
+export const listRuns = (deploymentId: number, environment: import("@/types").EnvironmentName) =>
+  request<import("@/types").VerificationRun[]>(
+    `/deployments/${deploymentId}/environments/${environment}/runs`,
+  );
+
+export const startRun = (
+  deploymentId: number,
+  environment: import("@/types").EnvironmentName,
+  suite: string,
+) =>
+  request<import("@/types").VerificationRun>(
+    `/deployments/${deploymentId}/environments/${environment}/runs`,
+    { method: "POST", body: JSON.stringify({ suite }) },
+  );
+
+export const cancelRun = (deploymentId: number, runId: number) =>
+  request<import("@/types").VerificationRun>(`/deployments/${deploymentId}/runs/${runId}/cancel`, {
+    method: "POST",
+  });
+
+export const listPromotions = (deploymentId: number) =>
+  request<import("@/types").Promotion[]>(`/deployments/${deploymentId}/promotions`);
+
+export const startPromotion = (
+  deploymentId: number,
+  body: { emergency?: boolean; reason?: string | null; rollbackTo?: number | null },
+) =>
+  request<import("@/types").Promotion>(`/deployments/${deploymentId}/promotions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const approvePromotion = (deploymentId: number, promotionId: number) =>
+  request<import("@/types").Promotion>(
+    `/deployments/${deploymentId}/promotions/${promotionId}/approve`,
+    { method: "POST" },
+  );
+
+export const acceptPromotionStep = (deploymentId: number, promotionId: number, index: number) =>
+  request<import("@/types").Promotion>(
+    `/deployments/${deploymentId}/promotions/${promotionId}/steps/${index}/accept`,
+    { method: "POST" },
+  );
+
+export const cancelPromotion = (deploymentId: number, promotionId: number) =>
+  request<import("@/types").Promotion>(
+    `/deployments/${deploymentId}/promotions/${promotionId}/cancel`,
+    { method: "POST" },
+  );
+
 // ── Release tab ───────────────────────────────────────────────────────────────
 
 export const getRelease = (deploymentId: number) =>
