@@ -24,6 +24,9 @@ COMMIT_ATTEMPTS = 3
 _yaml = YAML()
 _yaml.preserve_quotes = True
 _yaml.indent(mapping=2, sequence=4, offset=2)
+# A pinned tag (1.4.0-rc.2@sha256:...) is longer than the default 80 columns;
+# folded, it stays valid YAML but unreadable in a diff.
+_yaml.width = 4096
 
 
 class GitOpsError(Exception):

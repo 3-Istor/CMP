@@ -64,11 +64,17 @@ def _split(image: str) -> tuple[str, str | None]:
     return name, None
 
 
-def _digest(image_id: str, image: str) -> str | None:
-    """repository@sha256 from a container status, None before the pull."""
+def _digest(image_id: str) -> str | None:
+    """
+    repository@sha256 from a container status, None before the pull.
+
+    imageID, not image: containerd sometimes reports the image config ID
+    (sha256:...) as status.image.
+    """
     if "@sha256:" not in image_id:
         return None
-    return f"{_split(image)[0]}@{image_id.rsplit('@', 1)[1]}"
+    repository, digest = image_id.rsplit("@", 1)
+    return f"{_split(repository)[0]}@{digest}"
 
 
 def _tag(image: str) -> str | None:
@@ -90,13 +96,19 @@ def component_state(pods: list[dict]) -> ComponentState:
         if not statuses:
             continue
         status = statuses[0]
+        spec_image = next(
+            (
+                c.get("image", "")
+                for c in pod.get("spec", {}).get("containers") or []
+                if c.get("name") == CONTAINER
+            ),
+            "",
+        )
         state.pods += 1
         if status.get("ready"):
             state.ready += 1
-        digests.add(
-            _digest(status.get("imageID", ""), status.get("image", ""))
-        )
-        versions.add(_tag(status.get("image", "")))
+        digests.add(_digest(status.get("imageID", "")))
+        versions.add(_tag(spec_image))
     if len(digests) == 1:
         state.digest = digests.pop()
     if len(versions) == 1:
