@@ -35,14 +35,17 @@ RC3 = {"app": "ghcr.io/3-istor/web@sha256:" + "3" * 64}
 PROD = {"app": "ghcr.io/3-istor/web@sha256:" + "1" * 64}
 
 
-def _pod(image, image_id, ready=True, name="cnp-generic-app"):
+def _pod(
+    image, image_id, ready=True, name="cnp-generic-app", status_image=None
+):
     return {
         "metadata": {"name": "p"},
+        "spec": {"containers": [{"name": name, "image": image}]},
         "status": {
             "containerStatuses": [
                 {
                     "name": name,
-                    "image": image,
+                    "image": status_image or image,
                     "imageID": image_id,
                     "ready": ready,
                 }
@@ -148,6 +151,21 @@ class TestObservation:
             "ghcr.io/3-istor/web@sha256:" + "b" * 64,
             "1.4.0-rc.2",
         )
+
+    def test_ignores_the_config_id_containerd_sometimes_reports_as_image(self):
+        digest = "ghcr.io/o/web@sha256:" + "4" * 64
+        pods = [
+            _pod("ghcr.io/o/web:1.2.0-rc.1@sha256:" + "4" * 64, digest),
+            _pod(
+                "ghcr.io/o/web:1.2.0-rc.1@sha256:" + "4" * 64,
+                digest,
+                status_image="sha256:" + "8" * 64,
+            ),
+        ]
+
+        state = observe.component_state(pods)
+
+        assert (state.digest, state.version) == (digest, "1.2.0-rc.1")
 
     def test_keeps_the_registry_port_in_the_repository(self):
         state = observe.component_state(
