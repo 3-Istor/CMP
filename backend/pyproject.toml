@@ -8,8 +8,8 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = "^0.115.0"
-uvicorn = { extras = ["standard"], version = "^0.30.0" }
+fastapi = "0.142.2"
+uvicorn = {version = ">=0.31.1,<1", extras = ["standard"]}
 sqlalchemy = "^2.0.0"
 alembic = "^1.13.0"
 pydantic = "^2.7.0"
@@ -23,8 +23,9 @@ python-multipart = "^0.0.26"
 psycopg2-binary = "^2.9.12"
 httpx = "^0.28.1"
 ruamel-yaml = "^0.18.0"
-mcp = "^1.0.0"
+mcp = "^1.30.0"
 cryptography = ">=43,<51"
+starlette = "1.7.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.4.0"

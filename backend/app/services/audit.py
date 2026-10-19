@@ -9,6 +9,7 @@ values a config change replaced, say) add it with ``note``.
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -107,9 +108,47 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/account/picture"): "account.picture.update",
     (
         "POST",
+        "/api/agents/requests/{request_id}/approve",
+    ): "agent.connect",
+    ("DELETE", "/api/agents/grants/{grant_id}"): "agent.disconnect",
+    (
+        "POST",
+        "/api/agents/confirmations/{confirmation_id}/{decision}",
+    ): "agent.confirmation.decide",
+    (
+        "PUT",
+        "/api/projects/{project_name}/agent-settings",
+    ): "project.agents.update",
+    (
+        "POST",
         "/api/account/github-installation",
     ): "account.github.link",
 }
+
+# Matched on the raw path rather than on the route FastAPI selected: since
+# FastAPI 0.13x the selected route only knows its path inside its router,
+# without the /api/<prefix> the table is keyed on.
+_ACTION_PATTERNS = [
+    (
+        method,
+        re.compile(
+            "^" + re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", template) + "$"
+        ),
+        action,
+    )
+    for (method, template), action in ACTIONS.items()
+]
+
+
+def match_action(method: str, path: str) -> tuple[str | None, dict]:
+    for pattern_method, pattern, action in _ACTION_PATTERNS:
+        if pattern_method != method:
+            continue
+        found = pattern.match(path)
+        if found:
+            return action, found.groupdict()
+    return None, {}
+
 
 # A change worth a second look, shown with a badge in the activity feed.
 NOTABLE = {
@@ -124,6 +163,8 @@ NOTABLE = {
     "release.skip",
     "release.abort",
     "release.settings.update",
+    "agent.connect",
+    "project.agents.update",
 }
 
 # Body fields copied into the journal. Anything else, config values in
@@ -216,6 +257,52 @@ def _actor(request: Request) -> str:
     return claims.get("preferred_username") or claims.get("sub") or "unknown"
 
 
+def _assistant(request: Request) -> str | None:
+    """The AI assistant behind the call, None when a person made it."""
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        return None
+    try:
+        claims = decode_platform_token(header[7:])
+    except HTTPException:
+        return None
+    return (claims.get("cnp_agent") or {}).get("client")
+
+
+def record_agent_event(
+    claims: dict,
+    action: str,
+    project: str | None,
+    app: str | None,
+    target: str,
+    succeeded: bool,
+    details: dict,
+) -> None:
+    """
+    Journal an assistant action that does not go through a REST endpoint,
+    such as a commit or a release tag pushed straight to the app repository.
+    """
+    _store(
+        AuditEvent(
+            actor=claims.get("preferred_username") or claims.get("sub", ""),
+            action=action,
+            project=project,
+            app=app,
+            target=target,
+            outcome="success" if succeeded else "failure",
+            status_code=200 if succeeded else 400,
+            source_ip="agent",
+            details=json.dumps(
+                {
+                    **details,
+                    "via": (claims.get("cnp_agent") or {}).get("client"),
+                },
+                default=str,
+            ),
+        )
+    )
+
+
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
@@ -287,9 +374,7 @@ class AuditMiddleware:
         await self.app(scope, replay, capture)
 
         request = Request(scope)
-        route = scope.get("route")
-        template = getattr(route, "path", scope["path"])
-        action = ACTIONS.get((scope["method"], template))
+        action, params = match_action(scope["method"], scope["path"])
         # 401s are anonymous noise; a dry run changes nothing.
         if (
             action is None
@@ -299,16 +384,19 @@ class AuditMiddleware:
             return
 
         try:
-            await _record(request, action, raw, status_code)
+            await _record(request, action, params, raw, status_code)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             # A journal failure must never turn a done change into an error.
             logger.error("Audit journal write failed: %s", exc, exc_info=True)
 
 
 async def _record(
-    request: Request, action: str, raw: bytes, status_code: int
+    request: Request,
+    action: str,
+    params: dict,
+    raw: bytes,
+    status_code: int,
 ) -> None:
-    params = request.scope.get("path_params", {})
     fields = _body_fields(raw)
     noted = dict(getattr(request.state, "audit", {}))
 
@@ -344,6 +432,10 @@ async def _record(
         ),
         app or project or "",
     )
+
+    via = await run_in_threadpool(_assistant, request)
+    if via:
+        noted["via"] = via
 
     event = AuditEvent(
         actor=await run_in_threadpool(_actor, request),
