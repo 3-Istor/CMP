@@ -16,12 +16,6 @@ HOSTNAME_DOMAIN = "3istor.com"
 # suffix. Must match the cnp-apps ApplicationSet and cnp-project-base.
 ENVIRONMENT_SUFFIX = {"prod": "", "staging": "-stg"}
 
-
-def app_environments(app: dict) -> list[str]:
-    environments = app.get("environments") or ["prod"]
-    return [env for env in environments if env in ENVIRONMENT_SUFFIX]
-
-
 DerivedName = tuple[str, str, str]
 
 
@@ -56,8 +50,9 @@ def app_names(project: str, app: dict) -> list[DerivedName]:
         FULLSTACK_COMPONENTS if app.get("type") == "fullstack" else ("app",)
     )
     names: list[DerivedName] = []
-    for environment in app_environments(app):
-        suffix = ENVIRONMENT_SUFFIX[environment]
+    # Both environments, staging or not: the AppProjects always permit both
+    # namespaces, so both names belong to this app.
+    for environment, suffix in ENVIRONMENT_SUFFIX.items():
         names.append(
             (
                 "namespace",
@@ -100,26 +95,19 @@ def project_name_of(record: dict) -> str | None:
     return name if isinstance(name, str) else None
 
 
-def check_app_name(
-    project: str, app_name: str, environments: list[str] | None = None
-) -> list[str]:
+def check_app_name(project: str, app_name: str) -> list[str]:
     errors: list[str] = []
     if app_name == "system":
         errors.append(
             f"app 'system' is reserved: namespace '{project}-system' "
             "belongs to the project itself"
         )
-    namespace = max(
-        (
-            f"{project}-{app_name}{ENVIRONMENT_SUFFIX[env]}"
-            for env in app_environments({"environments": environments})
-        ),
-        key=len,
-    )
-    if len(namespace) > MAX_LABEL_LENGTH:
+    namespace = f"{project}-{app_name}"
+    staging = f"{namespace}{ENVIRONMENT_SUFFIX['staging']}"
+    if len(staging) > MAX_LABEL_LENGTH:
         errors.append(
-            f"app '{app_name}' gives namespace '{namespace}' of "
-            f"{len(namespace)} characters, the limit is {MAX_LABEL_LENGTH}"
+            f"app '{app_name}' gives staging namespace '{staging}' of "
+            f"{len(staging)} characters, the limit is {MAX_LABEL_LENGTH}"
         )
     elif not DNS_LABEL.match(namespace):
         errors.append(
@@ -173,7 +161,7 @@ def check_app(project: str, app: dict, existing: list[dict]) -> list[str]:
     Apps already in the project's record are not re-checked: only the new
     entry is, against every other project and against the project's other apps.
     """
-    errors = check_app_name(project, app["name"], app.get("environments"))
+    errors = check_app_name(project, app["name"])
     claims = _claims(existing, project)
     for record in existing:
         if project_name_of(record) != project:
