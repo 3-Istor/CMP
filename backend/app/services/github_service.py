@@ -582,7 +582,11 @@ async def get_latest_artifact(
 
 
 async def dispatch_workflow(
-    installation_token: str, repo_full_name: str, workflow: str, ref: str
+    installation_token: str,
+    repo_full_name: str,
+    workflow: str,
+    ref: str,
+    inputs: dict[str, str] | None = None,
 ) -> None:
     """
     Raises:
@@ -594,7 +598,7 @@ async def dispatch_workflow(
             response = await client.post(
                 f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/workflows/{workflow}/dispatches",
                 headers=_api_headers(installation_token),
-                json={"ref": ref},
+                json={"ref": ref, **({"inputs": inputs} if inputs else {})},
                 timeout=15.0,
             )
     except httpx.HTTPError as exc:
@@ -604,5 +608,163 @@ async def dispatch_workflow(
     if response.status_code >= 400:
         raise GitHubAppError(
             f"Failed to start '{workflow}' on '{repo_full_name}': "
+            f"{_github_error_message(response)}"
+        )
+
+
+class StaleBranchError(GitHubAppError):
+    """The branch moved since it was read: re-read and recompute the change."""
+
+
+async def get_branch_head(
+    installation_token: str, repo_full_name: str, branch: str = "main"
+) -> str:
+    """The commit SHA a branch points at."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}/git/ref/heads/{branch}",
+                headers=_api_headers(installation_token),
+                timeout=15.0,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to read {branch} of '{repo_full_name}': {exc}"
+        ) from exc
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to read {branch} of '{repo_full_name}': "
+            f"{_github_error_message(response)}"
+        )
+    return response.json()["object"]["sha"]
+
+
+async def commit_files(
+    installation_token: str,
+    repo_full_name: str,
+    files: dict[str, str | None],
+    message: str,
+    parent_sha: str,
+    branch: str = "main",
+) -> str:
+    """
+    Write several files in one commit on top of *parent_sha* (``None`` deletes).
+
+    The Contents API makes one commit per file: a promotion of a frontend and
+    a backend would reach Argo CD as two separate releases. The branch only
+    moves if it still points at *parent_sha*.
+
+    Raises:
+        StaleBranchError: The branch moved since *parent_sha* was read.
+        GitHubAppError: Any other GitHub failure.
+    """
+    headers = _api_headers(installation_token)
+    base = f"{GITHUB_API_BASE}/repos/{repo_full_name}/git"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            parent = await client.get(
+                f"{base}/commits/{parent_sha}", headers=headers
+            )
+            parent.raise_for_status()
+            tree = [
+                (
+                    {
+                        "path": path,
+                        "mode": "100644",
+                        "type": "blob",
+                        "content": content,
+                    }
+                    if content is not None
+                    else {
+                        "path": path,
+                        "mode": "100644",
+                        "type": "blob",
+                        "sha": None,
+                    }
+                )
+                for path, content in files.items()
+            ]
+            new_tree = await client.post(
+                f"{base}/trees",
+                headers=headers,
+                json={"base_tree": parent.json()["tree"]["sha"], "tree": tree},
+            )
+            new_tree.raise_for_status()
+            commit = await client.post(
+                f"{base}/commits",
+                headers=headers,
+                json={
+                    "message": message,
+                    "tree": new_tree.json()["sha"],
+                    "parents": [parent_sha],
+                },
+            )
+            commit.raise_for_status()
+            commit_sha = commit.json()["sha"]
+            moved = await client.patch(
+                f"{base}/refs/heads/{branch}",
+                headers=headers,
+                json={"sha": commit_sha, "force": False},
+            )
+    except httpx.HTTPStatusError as exc:
+        raise GitHubAppError(
+            f"Failed to commit to '{repo_full_name}': {_github_error_message(exc.response)}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to commit to '{repo_full_name}': {exc}"
+        ) from exc
+    # Not a fast-forward of the current head.
+    if moved.status_code == 422:
+        raise StaleBranchError(
+            f"{branch} of '{repo_full_name}' moved during the commit"
+        )
+    if moved.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to move {branch} of '{repo_full_name}': {_github_error_message(moved)}"
+        )
+    logger.info(
+        "Committed %d file(s) to '%s' (%.8s)",
+        len(files),
+        repo_full_name,
+        commit_sha,
+    )
+    return commit_sha
+
+
+async def create_release(
+    installation_token: str,
+    repo_full_name: str,
+    tag: str,
+    target_sha: str,
+    name: str,
+    body: str,
+) -> None:
+    """
+    Publish a GitHub Release on a new tag pointing at *target_sha*.
+
+    Callers pick a tag the app's CI does not build (release/X.Y.Z, not
+    vX.Y.Z): a tag pushed by the GitHub App does start workflows.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}/releases",
+                headers=_api_headers(installation_token),
+                json={
+                    "tag_name": tag,
+                    "target_commitish": target_sha,
+                    "name": name,
+                    "body": body,
+                },
+                timeout=15.0,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to publish release {tag}: {exc}"
+        ) from exc
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to publish release {tag} on '{repo_full_name}': "
             f"{_github_error_message(response)}"
         )

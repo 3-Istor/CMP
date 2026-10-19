@@ -840,3 +840,123 @@ export interface AgentPublicStats {
   apps_created_this_month: number;
   connected_assistants: number;
 }
+
+// ── Environments tab ──────────────────────────────────────────────────────────
+
+export type EnvironmentName = "prod" | "staging";
+
+export interface EnvironmentState {
+  name: EnvironmentName;
+  namespace: string;
+  hostname: string | null;
+  version: string | null;
+  digests: Record<string, string>;
+  converged: boolean;
+  asleep: boolean;
+  reachable: boolean;
+}
+
+export interface StagingStatus {
+  state: "provisioning" | "ready" | "failed" | "removing";
+  detail: string | null;
+  hostname: string | null;
+  updatedAt: string;
+}
+
+export type SuiteKind = "smoke" | "external" | "metrics";
+export type OnInconclusive = "fail" | "pass" | "ask";
+
+export interface SuiteSpec {
+  name: string;
+  kind: Exclude<SuiteKind, "smoke">;
+  workflow?: string | null;
+  timeoutMinutes?: number;
+  prodSafe?: boolean;
+  windowMinutes?: number;
+  minRequests?: number;
+  errorRateMax?: number;
+  p95Ms?: number | null;
+  onInconclusive?: OnInconclusive;
+}
+
+export interface PromotionPolicy {
+  suites: SuiteSpec[];
+  soakMinutes: number;
+  requireApproval: boolean;
+  autoPromote: boolean;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+}
+
+export type RunStatus = "running" | "passed" | "failed" | "inconclusive" | "cancelled" | "error";
+
+export interface VerificationRun {
+  id: number;
+  environment: EnvironmentName;
+  suite: string;
+  kind: SuiteKind;
+  version: string | null;
+  digests: Record<string, string>;
+  status: RunStatus;
+  summary: string | null;
+  detailsUrl: string | null;
+  measurements: Record<string, unknown> | null;
+  promotionId: number | null;
+  actor: string;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export type PromotionStatus = "running" | "waiting_approval" | "done" | "failed" | "cancelled";
+export type PromotionStepStatus =
+  | "pending"
+  | "running"
+  | "waiting"
+  | "passed"
+  | "accepted"
+  | "skipped"
+  | "failed";
+
+export interface PromotionStep {
+  name: string;
+  kind: "run" | "soak" | "approve" | "promote";
+  status: PromotionStepStatus;
+  detail: string | null;
+  runId?: number;
+  minutes?: number;
+}
+
+export interface Promotion {
+  id: number;
+  sourceEnv: EnvironmentName;
+  targetEnv: EnvironmentName;
+  version: string | null;
+  digests: Record<string, string>;
+  status: PromotionStatus;
+  steps: PromotionStep[];
+  emergency: boolean;
+  reason: string | null;
+  rollbackOf: number | null;
+  approvals: { by: string; at: string }[];
+  actor: string;
+  commitSha: string | null;
+  detail: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface EnvironmentsView {
+  staging: StagingStatus | null;
+  environments: EnvironmentState[];
+  policy: PromotionPolicy;
+  activePromotion: Promotion | null;
+  canOperate: boolean;
+  canAdminister: boolean;
+}
+
+export interface StagingOffhours {
+  enabled: boolean;
+  sleepAt: string;
+  wakeAt: string;
+  timezone: string;
+}

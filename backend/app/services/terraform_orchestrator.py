@@ -556,6 +556,9 @@ def run_deletion(deployment_id: int) -> None:
             logger.info(
                 "Running terraform destroy... (this may take several minutes)"
             )
+            from app.services.environments.activation import destroy_with_app
+
+            destroy_with_app(db, deployment)
             executor.destroy(app_config)
             logger.info("✅ Terraform destroy completed")
 

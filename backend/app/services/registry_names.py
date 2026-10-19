@@ -12,6 +12,15 @@ DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 MAX_LABEL_LENGTH = 63
 FULLSTACK_COMPONENTS = ("frontend", "backend")
 HOSTNAME_DOMAIN = "3istor.com"
+# Prod keeps the names apps had before environments; staging objects carry a
+# suffix. Must match the cnp-apps ApplicationSet and cnp-project-base.
+ENVIRONMENT_SUFFIX = {"prod": "", "staging": "-stg"}
+
+
+def app_environments(app: dict) -> list[str]:
+    environments = app.get("environments") or ["prod"]
+    return [env for env in environments if env in ENVIRONMENT_SUFFIX]
+
 
 DerivedName = tuple[str, str, str]
 
@@ -46,21 +55,24 @@ def app_names(project: str, app: dict) -> list[DerivedName]:
     components = (
         FULLSTACK_COMPONENTS if app.get("type") == "fullstack" else ("app",)
     )
-    names: list[DerivedName] = [
-        (
-            "namespace",
-            f"{project}-{app_name}",
-            f"the namespace of app '{app_name}'",
-        )
-    ]
-    for component in components:
+    names: list[DerivedName] = []
+    for environment in app_environments(app):
+        suffix = ENVIRONMENT_SUFFIX[environment]
         names.append(
             (
-                "application",
-                f"{project}-{app_name}-{component}",
-                f"the {component} Application of app '{app_name}'",
+                "namespace",
+                f"{project}-{app_name}{suffix}",
+                f"the {environment} namespace of app '{app_name}'",
             )
         )
+        for component in components:
+            names.append(
+                (
+                    "application",
+                    f"{project}-{app_name}-{component}{suffix}",
+                    f"the {environment} {component} Application of app '{app_name}'",
+                )
+            )
     for environment, hostname in (app.get("hostnames") or {}).items():
         names.append(
             (
@@ -88,14 +100,22 @@ def project_name_of(record: dict) -> str | None:
     return name if isinstance(name, str) else None
 
 
-def check_app_name(project: str, app_name: str) -> list[str]:
+def check_app_name(
+    project: str, app_name: str, environments: list[str] | None = None
+) -> list[str]:
     errors: list[str] = []
     if app_name == "system":
         errors.append(
             f"app 'system' is reserved: namespace '{project}-system' "
             "belongs to the project itself"
         )
-    namespace = f"{project}-{app_name}"
+    namespace = max(
+        (
+            f"{project}-{app_name}{ENVIRONMENT_SUFFIX[env]}"
+            for env in app_environments({"environments": environments})
+        ),
+        key=len,
+    )
     if len(namespace) > MAX_LABEL_LENGTH:
         errors.append(
             f"app '{app_name}' gives namespace '{namespace}' of "
@@ -153,7 +173,7 @@ def check_app(project: str, app: dict, existing: list[dict]) -> list[str]:
     Apps already in the project's record are not re-checked: only the new
     entry is, against every other project and against the project's other apps.
     """
-    errors = check_app_name(project, app["name"])
+    errors = check_app_name(project, app["name"], app.get("environments"))
     claims = _claims(existing, project)
     for record in existing:
         if project_name_of(record) != project:
