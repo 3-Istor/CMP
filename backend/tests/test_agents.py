@@ -224,6 +224,44 @@ def test_authorize_sends_the_user_to_the_cmp_consent_page(platform):
     assert "/connect/authorize?request=" in response.headers["location"]
 
 
+def test_user_can_grant_write_even_when_the_client_asked_for_read(platform):
+    client_id = _register(platform).json()["client_id"]
+    verifier, challenge = _pkce()
+    authorize = platform.get(
+        "/authorize",
+        params={
+            "client_id": client_id,
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "scope": store.READ_SCOPE,
+        },
+        follow_redirects=False,
+    )
+    request_id = parse_qs(urlparse(authorize.headers["location"]).query)[
+        "request"
+    ][0]
+    approved = platform.post(
+        f"/api/agents/requests/{request_id}/approve",
+        json={"scopes": store.SCOPES},
+        headers={"Authorization": "Bearer human"},
+    )
+    code = parse_qs(urlparse(approved.json()["redirect_url"]).query)["code"]
+    tokens = platform.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code[0],
+            "code_verifier": verifier,
+            "redirect_uri": REDIRECT,
+            "client_id": client_id,
+        },
+    ).json()
+
+    assert tokens["scope"] == "cnp:read cnp:write"
+
+
 def test_approved_connection_yields_tokens_carrying_the_user(platform):
     tokens = _connect(platform)
 

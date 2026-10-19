@@ -85,7 +85,10 @@ def get_auth_request(request_id: str, _: Human) -> AuthRequestView:
     request = _pending_or_404(request_id)
     return AuthRequestView(
         client_name=request.client_name,
-        scopes=request.params.get("scopes") or list(store.SCOPES),
+        # The user picks, whatever the client asked: clients request the
+        # resource's scopes_supported, which only names the read scope
+        # required on every call.
+        scopes=list(store.SCOPES),
         redirect_host=urlparse(request.params["redirect_uri"]).netloc
         or request.params["redirect_uri"].split(":", 1)[0],
     )
@@ -96,8 +99,7 @@ def approve_auth_request(
     request_id: str, body: ApproveRequest, token: Human
 ) -> RedirectView:
     request = _pending_or_404(request_id)
-    requested = request.params.get("scopes") or list(store.SCOPES)
-    scopes = [s for s in requested if s in body.scopes and s in store.SCOPES]
+    scopes = [s for s in store.SCOPES if s in body.scopes]
     if store.READ_SCOPE not in scopes:
         raise HTTPException(
             status_code=400, detail="Read access is the minimum."
