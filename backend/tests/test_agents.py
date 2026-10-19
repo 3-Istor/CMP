@@ -20,7 +20,14 @@ import app.models.deployment  # noqa: F401
 from app import mcp_server
 from app.core.database import Base, get_db
 from app.routers import agents as agents_router
-from app.services.agents import internal_api, policy, repo, skills, store
+from app.services.agents import (
+    internal_api,
+    policy,
+    ratelimit,
+    repo,
+    skills,
+    store,
+)
 from app.services.keycloak_service import (
     decode_platform_token,
     get_current_user,
@@ -536,3 +543,11 @@ def test_a_committed_token_is_detected():
 )
 def test_next_version_follows_semver(current, bump, expected):
     assert repo.next_version(current, bump) == expected
+
+
+def test_an_assistant_is_slowed_down_past_its_write_budget():
+    for _ in range(ratelimit.WRITES_PER_MINUTE):
+        ratelimit.check(424242, "write")
+
+    with pytest.raises(ratelimit.RateLimited):
+        ratelimit.check(424242, "write")

@@ -31,7 +31,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.roles import ProjectRole
 from app.services import audit
-from app.services.agents import internal_api, policy
+from app.services.agents import internal_api, policy, ratelimit
 from app.services.agents import repo as repo_ops
 from app.services.agents import skills, store
 from app.services.agents.provider import CmpAuthProvider
@@ -140,6 +140,7 @@ class Caller:
         self.username = claims.get("preferred_username", "")
         self.grant_id = claims["cnp_agent"]["grant_id"]
         self.scopes = claims["cnp_agent"]["scopes"]
+        ratelimit.check(self.grant_id, "read")
 
     def require_write(self) -> None:
         if store.WRITE_SCOPE not in self.scopes:
@@ -147,6 +148,7 @@ class Caller:
                 "This assistant was connected read-only. The user can "
                 f"reconnect it with write access from {PUBLIC_URL}/account."
             )
+        ratelimit.check(self.grant_id, "write")
 
     async def api(self, method: str, path: str, **kwargs) -> Any:
         return await internal_api.call(self.token, method, path, **kwargs)
@@ -181,6 +183,7 @@ def tool_errors(func):
             repo_ops.RepoError,
             GitHubAppError,
             ValueError,
+            ratelimit.RateLimited,
         ) as exc:
             return _error(exc)
 
