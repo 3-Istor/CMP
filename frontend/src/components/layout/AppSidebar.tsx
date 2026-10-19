@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   BellRing,
   BookOpen,
+  Bot,
   Boxes,
   ChevronLeft,
   Crown,
@@ -169,6 +170,13 @@ export function AppSidebar() {
           collapsed={collapsed}
           icon={<BellRing className="h-4 w-4 shrink-0" />}
           label="Alertes"
+        />
+        <NavLink
+          href="/connect-ai"
+          active={pathname.startsWith("/connect-ai")}
+          collapsed={collapsed}
+          icon={<Bot className="h-4 w-4 shrink-0" />}
+          label="Assistants IA"
         />
         <ExternalNavLink
           href="https://3-istor.github.io/cnp-docs/"

@@ -88,6 +88,14 @@ export function AppCard({ app, projectName }: Props) {
               <CardTitle className="text-base leading-tight truncate">
                 {app.name}
               </CardTitle>
+              {app.created_via && (
+                <span
+                  className="shrink-0 rounded-full border border-primary/40 px-1.5 text-[10px] text-primary"
+                  title={`Created through ${app.created_via}`}
+                >
+                  AI
+                </span>
+              )}
             </div>
             <Badge
               variant={STATUS_VARIANT[app.status]}

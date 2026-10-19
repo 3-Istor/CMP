@@ -6,6 +6,22 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isAuthPage = pathname.startsWith("/auth");
   const isWelcomePage = pathname === "/welcome";
+  const destination = pathname + req.nextUrl.search;
+
+  // How to connect an AI assistant: public, it is linked from the assistants'
+  // own connector settings.
+  if (pathname === "/connect-ai") {
+    return NextResponse.next();
+  }
+
+  // Someone approving an AI assistant comes straight from that assistant:
+  // send them to the login, not to the marketing page, and keep the request
+  // id in the return URL.
+  if (pathname.startsWith("/connect/") && !isLoggedIn) {
+    const signIn = new URL("/auth/signin", req.url);
+    signIn.searchParams.set("callbackUrl", destination);
+    return NextResponse.redirect(signIn);
+  }
 
   // Auth pages (Keycloak redirect dance) are always reachable.
   if (isAuthPage) {
@@ -26,7 +42,7 @@ export default auth((req) => {
   // once they log in.
   if (!isLoggedIn) {
     const welcomeUrl = new URL("/welcome", req.url);
-    welcomeUrl.searchParams.set("callbackUrl", pathname);
+    welcomeUrl.searchParams.set("callbackUrl", destination);
     return NextResponse.redirect(welcomeUrl);
   }
 
