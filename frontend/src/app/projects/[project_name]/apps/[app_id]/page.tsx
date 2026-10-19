@@ -378,6 +378,15 @@ export default function AppControlCenterPage() {
                                 >
                                     {current.status}
                                 </Badge>
+                                {current.created_via && (
+                                    <Badge
+                                        variant="outline"
+                                        className="border-primary/40 text-primary"
+                                        title="Created by an AI assistant on behalf of a user"
+                                    >
+                                        via {current.created_via}
+                                    </Badge>
+                                )}
                                 <Badge variant="outline" className="capitalize text-xs">
                                     {current.provider_type === "kubernetes" ? "Kubernetes" : "Legacy"}
                                 </Badge>

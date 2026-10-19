@@ -10,11 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
 
+from app import mcp_server
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import (
     account,
     activity,
+    agents,
     alerting,
     catalog,
     deployments,
@@ -28,6 +30,7 @@ from app.routers import (
 )
 from app.services import health_poller
 from app.services.activity_collector import activity_collector_loop
+from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
 from app.services.finops import alert_poller
 from app.services.release.recorder import release_recorder_loop
@@ -239,9 +242,15 @@ async def lifespan(app: FastAPI):
     activity_collector_task = asyncio.create_task(activity_collector_loop())
     release_recorder_task = asyncio.create_task(release_recorder_loop())
 
+    # Last, so it only gets the paths no router claimed: /mcp, the OAuth
+    # endpoints (/authorize, /token, /register, /revoke) and their
+    # /.well-known metadata.
+    app.mount("/", mcp_server.mcp.streamable_http_app())
+
     logger.info("✅ Application startup complete")
 
-    yield
+    async with mcp_server.mcp.session_manager.run():
+        yield
 
     # Shutdown: cancel background tasks
     logger.info("Shutting down application...")
@@ -302,6 +311,8 @@ app.add_middleware(
 )
 
 app.include_router(account.router, prefix="/api")
+app.include_router(agents.router, prefix="/api")
+app.include_router(agents.projects_router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(alerting.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
@@ -313,6 +324,9 @@ app.include_router(finops.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")
+
+
+internal_api.bind(app)
 
 
 @app.get("/health", tags=["Health"])

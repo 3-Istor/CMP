@@ -134,3 +134,21 @@
   background-color: rgb(253 224 71); /* yellow-300 */
   color: black;
 }
+
+/* Nimbus, the assistant mascot, and the welcome page chat demo */
+@keyframes nimbus-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes nimbus-spark {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+@keyframes nimbus-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+@keyframes chat-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

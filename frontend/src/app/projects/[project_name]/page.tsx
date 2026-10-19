@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
 import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
+import { ProjectAgentPanel } from "@/components/agents/ProjectAgentPanel";
 import { ROLE_LABEL } from "@/lib/permissions";
 import type { CatalogTemplate } from "@/types";
 import {
@@ -50,6 +51,7 @@ import {
   BellRing,
   History,
   Wallet,
+  Bot,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -416,7 +418,18 @@ export default function ProjectPage() {
                 Alerts
               </TabsTrigger>
             )}
+            <TabsTrigger value="assistants" className="gap-2">
+              <Bot className="h-4 w-4" />
+              AI assistants
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="assistants" className="mt-6">
+            <ProjectAgentPanel
+              project={projectName}
+              canConfigure={can("agents.configure")}
+            />
+          </TabsContent>
 
           {/* ── Applications tab ── */}
           <TabsContent value="apps" className="mt-6 space-y-6">

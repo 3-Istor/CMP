@@ -37,7 +37,8 @@ export type Capability =
   | "members.manage"
   | "finops.view"
   | "finops.act"
-  | "finops.editBudget";
+  | "finops.editBudget"
+  | "agents.configure";
 
 /**
  * The weakest role that holds each capability.
@@ -63,6 +64,7 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "finops.view": "guest",
   "finops.act": "admin",
   "finops.editBudget": "owner",
+  "agents.configure": "admin",
 };
 
 /**

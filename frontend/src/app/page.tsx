@@ -1,5 +1,7 @@
 "use client";
 
+import { AssistantCard } from "@/components/agents/AssistantCard";
+import Link from "next/link";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { UserNav } from "@/components/layout/UserNav";
@@ -61,6 +63,8 @@ export default function Home() {
       </header>
 
       <main className="px-6 py-8 space-y-10 max-w-7xl mx-auto">
+        <AssistantCard />
+
         <GlobalInfraHealth />
 
         {/* ── Projects Section ── */}
@@ -90,7 +94,12 @@ export default function Home() {
               <span className="text-4xl mb-3">🗂️</span>
               <p className="font-medium">No projects yet</p>
               <p className="text-sm mt-1">
-                Create your first project to start deploying applications.
+                Create your first project to start deploying applications,
+                or{" "}
+                <Link href="/connect-ai" className="text-primary hover:underline">
+                  ask your AI assistant
+                </Link>{" "}
+                to do it.
               </p>
               <Button
                 variant="outline"

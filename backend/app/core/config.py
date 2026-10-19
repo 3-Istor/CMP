@@ -113,6 +113,26 @@ class Settings(BaseSettings):
 
     GRAFANA_ADMIN_PASSWORD: str = ""
 
+    # AI assistants (MCP server on /mcp, OAuth served by the CMP itself)
+    AGENT_ACCESS_TOKEN_TTL_SECONDS: int = 900
+    AGENT_REFRESH_TTL_DAYS: int = 30
+    # Redirect URIs an assistant may register, comma-separated fnmatch
+    # patterns. Loopback URIs (Claude Code, Codex, OpenCode) are always
+    # allowed.
+    AGENT_REDIRECT_URI_PATTERNS: str = (
+        "https://claude.ai/api/mcp/auth_callback,"
+        "https://claude.com/api/mcp/auth_callback,"
+        "https://chatgpt.com/connector_platform_oauth_redirect,"
+        "https://chatgpt.com/connector/oauth/*,"
+        "https://vscode.dev/redirect,"
+        "cursor://anysphere.cursor-mcp/*,"
+        "vscode://*"
+    )
+    # Repository holding the skills the MCP server shares with assistants.
+    AGENT_KIT_REPO: str = "3-Istor/cnp-agent-kit"
+    AGENT_KIT_BRANCH: str = "main"
+    AGENT_KIT_SKILLS_PATH: str = "plugins/cnp/skills"
+
 
 settings = Settings()
 

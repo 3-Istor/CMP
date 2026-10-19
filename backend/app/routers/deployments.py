@@ -244,6 +244,7 @@ async def create_deployment(
         app_config=json.dumps(payload.app_config),
         status=DeploymentStatus.PENDING,
         step_message="Queued...",
+        created_via=(token.get("cnp_agent") or {}).get("client"),
     )
     db.add(deployment)
     db.commit()

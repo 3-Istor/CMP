@@ -1,3 +1,5 @@
+import { AgentChatDemo } from "@/components/agents/AgentChatDemo";
+import { AgentLiveStats } from "@/components/agents/AgentLiveStats";
 import { Logo } from "@/components/brand/Logo";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -5,6 +7,7 @@ import {
   Activity,
   ArrowRight,
   BookOpen,
+  Bot,
   CheckCircle2,
   DollarSign,
   Eye,
@@ -159,12 +162,14 @@ export default async function WelcomePage({
           <div className="mx-auto max-w-6xl px-6 pt-20 pb-16 text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Self-service deployments on OpenStack + AWS
+              Self-service deployments on OpenStack + AWS, now from your AI
+              assistant
             </span>
 
-            <h1 className="mx-auto mt-6 max-w-3xl font-heading text-4xl font-bold tracking-tight sm:text-6xl">
+            <h1 className="mx-auto mt-6 max-w-3xl font-heading text-4xl font-bold tracking-tight text-balance sm:text-6xl">
               Ship your apps to the cloud in{" "}
-              <span className="text-primary">a few clicks</span>
+              <span className="text-primary">a few clicks</span>, or one
+              sentence to your AI assistant
             </h1>
 
             <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground sm:text-lg">
@@ -182,30 +187,19 @@ export default async function WelcomePage({
                 <Rocket className="h-4 w-4" />
                 Get started — log in
               </Link>
-              <a
-                href="#services"
+              <Link
+                href="/connect-ai"
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-border bg-card px-7 text-sm font-medium text-foreground transition-colors hover:bg-muted sm:w-auto"
               >
-                Explore the platform
-              </a>
+                <Bot className="h-4 w-4 text-primary" />
+                Connect your AI assistant
+              </Link>
             </div>
 
-            {/* Stats */}
-            <dl className="mx-auto mt-16 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-4">
-              {STATS.map((s) => (
-                <div key={s.label} className="bg-card px-4 py-6">
-                  <dt className="font-heading text-3xl font-bold text-primary">
-                    {s.value}
-                  </dt>
-                  <dd className="mt-1 text-xs text-muted-foreground">
-                    {s.label}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <p className="mt-3 text-[11px] text-muted-foreground/70">
-              Illustrative figures based on typical platform usage.
-            </p>
+            {/* What a non-developer sees on their laptop */}
+            <div className="mt-14">
+              <AgentChatDemo />
+            </div>
           </div>
         </section>
 
@@ -291,6 +285,29 @@ export default async function WelcomePage({
               </ul>
             </div>
           </div>
+        </section>
+
+        {/* ── By the numbers ── */}
+        <section className="mx-auto max-w-6xl px-6 pt-20 text-center">
+          <h2 className="font-heading text-2xl font-bold tracking-tight">
+            By the numbers
+          </h2>
+          <dl className="mx-auto mt-8 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-4">
+            {STATS.map((s) => (
+              <div key={s.label} className="bg-card px-4 py-6">
+                <dt className="font-heading text-3xl font-bold text-primary">
+                  {s.value}
+                </dt>
+                <dd className="mt-1 text-xs text-muted-foreground">
+                  {s.label}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 text-[11px] text-muted-foreground/70">
+            Illustrative figures based on typical platform usage.
+          </p>
+          <AgentLiveStats />
         </section>
 
         {/* ── Final CTA ── */}

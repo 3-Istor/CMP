@@ -31,6 +31,8 @@ export interface Deployment {
   github_repo_url: string | null;
   argocd_app_name: string | null;
   k8s_namespace: string | null;
+  /** The AI assistant that created the app, null when a person did. */
+  created_via?: string | null;
 }
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────
@@ -781,4 +783,60 @@ export interface TrafficFrame {
   startedBy?: string;
   counts?: { stable: number; canary: number; error: number };
   events?: TrafficEvent[];
+}
+
+// ── AI assistants (MCP) ──────────────────────────────────────────────────────
+
+export interface AgentAuthRequest {
+  client_name: string;
+  scopes: string[];
+  redirect_host: string;
+}
+
+export interface AgentGrant {
+  id: number;
+  client_name: string;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string;
+}
+
+export interface AgentSummary {
+  assistants: AgentGrant[];
+  apps_created: number;
+  last_action_at: string | null;
+  last_action: string | null;
+  pending_confirmations: number;
+}
+
+export interface AgentConfirmation {
+  id: string;
+  username: string;
+  project: string;
+  deployment_id: number | null;
+  tool: string;
+  summary: string;
+  status: "pending" | "approved" | "denied" | "expired" | "used";
+  created_at: string;
+  expires_at: string;
+  decided_by: string | null;
+}
+
+export type StakeLevel = "sandbox" | "demo" | "standard" | "critical";
+
+export interface AgentSettings {
+  project: string;
+  level: StakeLevel;
+  effective_level: StakeLevel;
+  autonomous_until: string | null;
+  suggested_level: StakeLevel;
+  suggestion_reason: string;
+  rules: Record<string, "allow" | "ask" | "pr" | "confirm" | "deny">;
+  levels: StakeLevel[];
+}
+
+export interface AgentPublicStats {
+  apps_created_this_month: number;
+  connected_assistants: number;
 }

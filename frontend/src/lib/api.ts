@@ -892,3 +892,68 @@ export async function streamRelease(
     }
   }
 }
+
+// AI assistants (MCP)
+
+export const getAgentAuthRequest = (requestId: string) =>
+  request<import("@/types").AgentAuthRequest>(
+    `/agents/requests/${encodeURIComponent(requestId)}`,
+  );
+
+export const approveAgentAuthRequest = (requestId: string, scopes: string[]) =>
+  request<{ redirect_url: string }>(
+    `/agents/requests/${encodeURIComponent(requestId)}/approve`,
+    { method: "POST", body: JSON.stringify({ scopes }) },
+  );
+
+export const denyAgentAuthRequest = (requestId: string) =>
+  request<{ redirect_url: string }>(
+    `/agents/requests/${encodeURIComponent(requestId)}/deny`,
+    { method: "POST" },
+  );
+
+export const getAgentGrants = () =>
+  request<import("@/types").AgentGrant[]>("/agents/grants");
+
+export const revokeAgentGrant = (grantId: number) =>
+  request<void>(`/agents/grants/${grantId}`, { method: "DELETE" });
+
+export const getAgentSummary = () =>
+  request<import("@/types").AgentSummary>("/agents/summary");
+
+export const getAgentConfirmation = (id: string) =>
+  request<import("@/types").AgentConfirmation>(
+    `/agents/confirmations/${encodeURIComponent(id)}`,
+  );
+
+export const decideAgentConfirmation = (
+  id: string,
+  decision: "approve" | "deny",
+) =>
+  request<import("@/types").AgentConfirmation>(
+    `/agents/confirmations/${encodeURIComponent(id)}/${decision}`,
+    { method: "POST" },
+  );
+
+export const getProjectAgentConfirmations = (project: string) =>
+  request<import("@/types").AgentConfirmation[]>(
+    `/agents/confirmations?project=${encodeURIComponent(project)}`,
+  );
+
+export const getAgentSettings = (project: string) =>
+  request<import("@/types").AgentSettings>(
+    `/projects/${encodeURIComponent(project)}/agent-settings`,
+  );
+
+export const updateAgentSettings = (
+  project: string,
+  body: { level?: import("@/types").StakeLevel; autonomous_hours?: number },
+) =>
+  request<import("@/types").AgentSettings>(
+    `/projects/${encodeURIComponent(project)}/agent-settings`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+
+
+export const getAgentPublicStats = () =>
+  request<import("@/types").AgentPublicStats>("/agents/stats");

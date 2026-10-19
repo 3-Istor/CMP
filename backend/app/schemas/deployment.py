@@ -32,6 +32,7 @@ class DeploymentRead(BaseModel):
     github_repo_url: str | None
     argocd_app_name: str | None
     k8s_namespace: str | None
+    created_via: str | None = None
 
     terraform_outputs: str | None  # JSON string
     resource_count: int | None

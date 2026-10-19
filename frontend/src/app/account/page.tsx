@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { GitHubLinkButton } from "@/components/account/GitHubLinkButton";
+import { ConnectedAssistants } from "@/components/agents/ConnectedAssistants";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -367,6 +368,8 @@ export default function AccountPage() {
 
           {/* GitHub Integration Card */}
           <GitHubLinkButton />
+
+          <ConnectedAssistants />
         </div>
       </main>
     </div>

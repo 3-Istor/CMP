@@ -1,0 +1,45 @@
+# What an AI assistant may do on its own, per project stake level.
+#
+#   allow    runs, journaled
+#   ask      the assistant must ask the user in the conversation first and
+#            call again with user_confirmed=true
+#   pr       the change goes to a branch and a pull request a human merges
+#   confirm  a human approves it in the CMP; the model cannot do it
+#   deny     not through an assistant: use the CMP
+#
+# Levels: sandbox (personal, no real users), demo (no real users),
+# standard (real internal users, the default), critical (business data,
+# external users, availability commitment).
+#
+# Changing this file changes what every assistant may do: it goes through a
+# pull request like any code.
+
+levels: [sandbox, demo, standard, critical]
+
+actions:
+  read:                 {sandbox: allow, demo: allow, standard: allow, critical: allow}
+  project.create:       {sandbox: ask,   demo: ask,   standard: ask,   critical: ask}
+  app.create:           {sandbox: allow, demo: allow, standard: allow, critical: confirm}
+  code.push:            {sandbox: allow, demo: allow, standard: allow, critical: pr}
+  code.push_sensitive:  {sandbox: deny,  demo: ask,   standard: pr,    critical: pr}
+  release.cut:          {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  release.promote:      {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  release.retry:        {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  release.skip:         {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  release.abort:        {sandbox: allow, demo: allow, standard: allow, critical: ask}
+  release.settings:     {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  app.delete:           {sandbox: ask,   demo: ask,   standard: deny,  critical: deny}
+
+# While an alert fires on the app, stopping or retrying a release is never
+# slowed down: whoever is putting the fire out goes first.
+incident:
+  release.abort: allow
+  release.retry: allow
+
+# A standard project whose owner opened an autonomous window is treated as
+# this level until the window closes.
+autonomous_as: demo
+
+# Hard limits that hold whatever the level.
+limits:
+  sandbox_max_apps: 3

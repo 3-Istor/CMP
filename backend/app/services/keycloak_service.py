@@ -45,6 +45,7 @@ from app.core.roles import (
     ProjectRole,
     rank,
 )
+from app.services.agents import store as agent_store
 
 logger = logging.getLogger(__name__)
 
@@ -624,6 +625,17 @@ def decode_platform_token(token: str) -> dict:
         HTTPException 401: Invalid or expired token.
         HTTPException 503: The realm's signing keys could not be fetched.
     """
+    if token.startswith(agent_store.ACCESS_PREFIX):
+        # An assistant's token, issued by the CMP's own OAuth server. It
+        # carries the user's identity, so every RBAC check below applies.
+        claims = agent_store.token_claims(token)
+        if claims is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: unknown, expired or revoked.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return claims
     try:
         signing_key = _jwks_client.get_signing_key_from_jwt(token)
         return jwt.decode(
