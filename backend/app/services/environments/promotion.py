@@ -115,26 +115,17 @@ async def start(
         raise PromotionRefused("An emergency promotion needs a reason.")
 
     policy = policy_of(db, deployment.id)
-    kind = gitops.app_type(deployment)
     if rollback_of is not None:
         digests, version = rollback_of.digests, rollback_of.version
     else:
-        staging = await asyncio.to_thread(
-            observe.observe,
-            deployment.project_id,
-            deployment.name,
-            kind,
-            "staging",
-        )
+        staging = await asyncio.to_thread(observe.of, deployment, "staging")
         if not staging.converged:
             raise PromotionRefused(
                 "Staging is not up with a single version (asleep, rolling out or failing): "
                 "nothing can be promoted from it now."
             )
         digests, version = staging.digests, staging.version
-    prod = await asyncio.to_thread(
-        observe.observe, deployment.project_id, deployment.name, kind, "prod"
-    )
+    prod = await asyncio.to_thread(observe.of, deployment, "prod")
     if prod.digests == digests:
         raise PromotionRefused("Prod already runs this version.")
 
@@ -299,13 +290,7 @@ async def _advance_run(db, deployment, promotion, step) -> bool:
 
 async def _advance_soak(deployment, promotion, step, tick_seconds) -> bool:
     """Count time only while staging is up and runs the promoted digests."""
-    state = await asyncio.to_thread(
-        observe.observe,
-        deployment.project_id,
-        deployment.name,
-        gitops.app_type(deployment),
-        "staging",
-    )
+    state = await asyncio.to_thread(observe.of, deployment, "staging")
     if state.converged and state.digests != promotion.digests:
         step["status"] = "failed"
         step["detail"] = (
@@ -373,7 +358,9 @@ async def _commit(
             await create_release(
                 token,
                 repo,
-                f"release/{core}",
+                # The full version: several candidates of one X.Y.Z can reach
+                # prod, and a tag already taken refuses the release.
+                f"release/{layout.version_of(version)}",
                 sha,
                 f"{core} ({version})",
                 f"Promoted from staging by {promotion.actor}.\n\n{_trailers(promotion)}",

@@ -40,11 +40,7 @@ async def _auto_promote(db) -> None:
             continue
         try:
             staging = await asyncio.to_thread(
-                observe.observe,
-                deployment.project_id,
-                deployment.name,
-                gitops.app_type(deployment),
-                "staging",
+                observe.of, deployment, "staging"
             )
         except KubeUnavailableError:
             continue

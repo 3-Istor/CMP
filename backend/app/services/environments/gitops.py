@@ -39,6 +39,13 @@ def app_type(deployment: Deployment) -> str:
     )
 
 
+def target_cloud(deployment: Deployment) -> str:
+    return (
+        json.loads(deployment.app_config or "{}").get("target_cloud")
+        or "onprem"
+    )
+
+
 def repo_of(deployment: Deployment) -> str:
     if not deployment.github_repo_url:
         raise GitOpsError("This app has no GitHub repository linked yet.")
