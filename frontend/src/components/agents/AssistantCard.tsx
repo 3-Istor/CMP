@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { getAgentSummary } from "@/lib/api";
 import type { AgentSummary } from "@/types";
 
+import { InstallButtons } from "./InstallButtons";
 import { Mascot } from "./Mascot";
 
 const ASKS = [
@@ -109,6 +110,8 @@ export function AssistantCard() {
             )}
           </div>
         )}
+
+        {!connected && <InstallButtons />}
 
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs text-muted-foreground">Try asking:</span>
