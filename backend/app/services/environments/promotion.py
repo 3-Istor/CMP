@@ -358,7 +358,9 @@ async def _commit(
             await create_release(
                 token,
                 repo,
-                f"release/{core}",
+                # The full version: several candidates of one X.Y.Z can reach
+                # prod, and a tag already taken refuses the release.
+                f"release/{layout.version_of(version)}",
                 sha,
                 f"{core} ({version})",
                 f"Promoted from staging by {promotion.actor}.\n\n{_trailers(promotion)}",
