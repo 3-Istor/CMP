@@ -332,8 +332,8 @@ async def disable_staging(
         _app, db, token, deployment_id, ProjectRole.ADMIN
     )
     try:
-        row = activation.start_disable(db, deployment)
-    except activation.ActivationRefused as exc:
+        row = await activation.start_disable(db, deployment)
+    except (activation.ActivationRefused, gitops.GitOpsError) as exc:
         raise _conflict(exc) from exc
     return StagingRead.model_validate(row, from_attributes=True)
 

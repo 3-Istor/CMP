@@ -21,7 +21,7 @@ from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, Promotion, VerificationRun
 from app.services import project_registry
-from app.services.environments import gitops, layout
+from app.services.environments import gitops, layout, registry
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
 
@@ -131,10 +131,16 @@ def start_enable(
     return row
 
 
-def start_disable(db: Session, deployment: Deployment) -> AppEnvironment:
+async def start_disable(db: Session, deployment: Deployment) -> AppEnvironment:
     row = check_can_disable(db, deployment)
-    _set(db, row, "removing", "Writing prod's image back to the shared files")
-    _spawn(_disable(deployment.id))
+    images = await final_versions(deployment)
+    _set(
+        db,
+        row,
+        "removing",
+        "Writing prod's final version back to the shared files",
+    )
+    _spawn(_disable(deployment.id, images))
     return row
 
 
@@ -225,12 +231,14 @@ async def _write_env_files(
     )
 
 
-async def _disable(deployment_id: int) -> None:
+async def _disable(
+    deployment_id: int, images: dict[str, dict[str, str]]
+) -> None:
     with SessionLocal() as db:
         deployment = db.get(Deployment, deployment_id)
         row = db.get(AppEnvironment, (deployment_id, STAGING))
         try:
-            await _restore_shared_files(deployment)
+            await _restore_shared_files(deployment, images)
             _set(
                 db,
                 row,
@@ -258,10 +266,57 @@ async def _disable(deployment_id: int) -> None:
             _set(db, row, "failed", f"Turning staging off failed: {exc}")
 
 
-async def _restore_shared_files(deployment: Deployment) -> None:
+def final_of(tag: str) -> str:
+    """1.2.0 for 1.2.0-rc.1 or 1.2.0-rc.1@sha256:..., the tag itself for a final."""
+    return layout.version_of(tag).split("-", 1)[0]
+
+
+async def final_versions(deployment: Deployment) -> dict[str, dict[str, str]]:
     """
-    Put prod's image back where the prod image updater writes, and drop
-    deploy/env/: without staging, the Applications read only the shared files.
+    component -> the image the shared files get when staging is turned off.
+
+    Prod runs a release candidate (promotions only carry those), but the prod
+    image updater only takes final versions, the highest one: left on the
+    candidate, it moves prod back to the last final version (found live,
+    1.2.0-rc.1 went back to 1.1.0). The shared files therefore get the final
+    build of the version prod runs, which must exist.
+
+    Raises:
+        ActivationRefused: That final version was never pushed.
+    """
+    kind = gitops.app_type(deployment)
+    token = await gitops.token_for(deployment)
+    repo = gitops.repo_of(deployment)
+    images: dict[str, dict[str, str]] = {}
+    for component in layout.components(kind):
+        prod = await gitops.read_values(
+            token, repo, layout.env_values_file("prod", component), "main"
+        )
+        image = (prod or {}).get("image") or {}
+        if not image.get("repository") or not image.get("tag"):
+            continue
+        final = final_of(str(image["tag"]))
+        try:
+            await asyncio.to_thread(
+                registry.resolve, image["repository"], final
+            )
+        except registry.RegistryLookupError as exc:
+            raise ActivationRefused(
+                f"Prod runs {layout.version_of(str(image['tag']))}. Without staging, "
+                f"prod follows the highest final version, so push v{final} first: "
+                "otherwise prod would go back to an older one."
+            ) from exc
+        images[component] = {"repository": image["repository"], "tag": final}
+    return images
+
+
+async def _restore_shared_files(
+    deployment: Deployment, images: dict[str, dict[str, str]]
+) -> None:
+    """
+    Put the final version of prod's release where the prod image updater
+    writes, and drop deploy/env/: without staging, the Applications read only
+    the shared files.
     """
     kind = gitops.app_type(deployment)
     token = await gitops.token_for(deployment)
@@ -271,17 +326,8 @@ async def _restore_shared_files(deployment: Deployment) -> None:
         base = await gitops.read_base(token, repo, kind, head)
         files: dict[str, str | None] = {}
         for component, values in base.items():
-            prod = await gitops.read_values(
-                token, repo, layout.env_values_file("prod", component), head
-            )
-            if prod and prod.get("image"):
-                # The pinned tag as is: prod keeps the exact digest it runs. The
-                # prod updater takes over from there with the next final vX.Y.Z
-                # (lab L-P1: it must not pick an older final over an rc).
-                values.setdefault("image", {})["repository"] = prod[
-                    "image"
-                ].get("repository")
-                values["image"]["tag"] = prod["image"].get("tag")
+            if component in images:
+                values.setdefault("image", {}).update(images[component])
                 files[layout.base_values_file(kind, component)] = gitops.dump(
                     values
                 )

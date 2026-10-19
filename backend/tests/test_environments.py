@@ -20,6 +20,7 @@ from app.models.environment import (
 )
 from app.routers import environments as router
 from app.services.environments import (
+    activation,
     gitops,
     layout,
     observe,
@@ -707,3 +708,60 @@ class TestCloudObservation:
             assert observe.of(deployment, "staging") == "argo"
 
         through.assert_called_once_with("shop", "web", "static", "staging")
+
+
+class TestTurningStagingOff:
+    def test_prod_moves_to_the_final_build_of_its_candidate(self, db):
+        async def prod_values(token, repo, path, ref):
+            return {
+                "image": {
+                    "repository": "ghcr.io/3-istor/web",
+                    "tag": "1.2.0-rc.1@sha256:" + "1" * 64,
+                }
+            }
+
+        with mock.patch.object(
+            activation.gitops, "token_for", return_value=_async("t")
+        ), mock.patch.object(
+            activation.gitops, "read_values", side_effect=prod_values
+        ), mock.patch.object(
+            activation.registry,
+            "resolve",
+            return_value="ghcr.io/3-istor/web@sha256:x",
+        ):
+            images = asyncio.run(
+                activation.final_versions(db.get(Deployment, 7))
+            )
+
+        assert images == {
+            "app": {"repository": "ghcr.io/3-istor/web", "tag": "1.2.0"}
+        }
+
+    def test_refuses_when_the_final_version_was_never_pushed(self, db):
+        async def prod_values(token, repo, path, ref):
+            return {
+                "image": {
+                    "repository": "ghcr.io/3-istor/web",
+                    "tag": "1.2.0-rc.1@sha256:" + "1" * 64,
+                }
+            }
+
+        with mock.patch.object(
+            activation.gitops, "token_for", return_value=_async("t")
+        ), mock.patch.object(
+            activation.gitops, "read_values", side_effect=prod_values
+        ), mock.patch.object(
+            activation.registry,
+            "resolve",
+            side_effect=activation.registry.RegistryLookupError("404"),
+        ), pytest.raises(
+            activation.ActivationRefused, match="push v1.2.0 first"
+        ):
+            asyncio.run(activation.final_versions(db.get(Deployment, 7)))
+
+
+def _async(value):
+    async def _value(*args, **kwargs):
+        return value
+
+    return _value()
