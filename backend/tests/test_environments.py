@@ -220,6 +220,19 @@ class TestObservation:
     def test_an_environment_scaled_to_zero_is_asleep(self):
         assert _state(RC2, "x", pods=0).asleep
 
+    def test_an_environment_with_one_component_scaled_to_zero_is_asleep(self):
+        state = EnvironmentState(
+            namespace="n",
+            components={
+                "frontend": ComponentState(
+                    pods=1, ready=1, digest="f", version="1.2.0-rc.2"
+                ),
+                "backend": ComponentState(pods=0),
+            },
+        )
+
+        assert state.asleep
+
 
 class TestStagingValues:
     def test_staging_never_reuses_prod_secrets_identity_or_backups(self):

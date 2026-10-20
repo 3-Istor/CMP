@@ -90,16 +90,46 @@ def test_logs_in_through_the_realm_form_and_keeps_only_the_sso_cookies():
     ]
 
 
-def test_refuses_an_app_without_sso_login_page():
+def test_refuses_an_sso_redirect_without_login_form():
     def handler(request):
-        if "/admin/realms/" in str(request.url) or "/token" in str(
-            request.url
-        ):
-            return _fake_sso([])(request)
-        return httpx.Response(200, text="<html>no sso</html>")
+        if str(request.url) == AUTH:
+            return httpx.Response(200, text="<html>no form</html>")
+        return _fake_sso([])(request)
 
     with _client_with(handler), pytest.raises(traffic.TrafficError):
         asyncio.run(traffic.login(APP, "shop"))
+
+
+def test_a_public_app_needs_no_login():
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        return httpx.Response(200, text="<html>public</html>")
+
+    with _client_with(handler):
+        cookie = asyncio.run(traffic.login(APP, "shop"))
+
+    assert (cookie, seen) == ("", [APP])
+
+
+def test_a_public_app_gets_visitors_without_cookie():
+    sent = []
+    session = _session()
+
+    def handler(request):
+        sent.append(request.headers.get("cookie"))
+        return httpx.Response(200)
+
+    async def visit():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as c:
+            await traffic._visit(c, session, "")
+
+    asyncio.run(visit())
+
+    assert sent == [None]
 
 
 def _session():
@@ -183,9 +213,17 @@ def test_asks_for_a_new_login_when_the_sso_session_expired():
     assert asyncio.run(visit()) is False
 
 
+def _logged_in():
+    return mock.patch.object(
+        traffic, "login", mock.AsyncMock(return_value="AccessToken-1=a")
+    )
+
+
 def test_runs_one_traffic_session_per_app():
     async def scenario():
-        with mock.patch.object(traffic, "_run", mock.AsyncMock()):
+        with _logged_in(), mock.patch.object(
+            traffic, "_run", mock.AsyncMock()
+        ):
             await traffic.start(9, APP, "shop", 5, 1, "dev")
             with pytest.raises(traffic.TrafficError):
                 await traffic.start(9, APP, "shop", 5, 1, "dev")
@@ -196,12 +234,27 @@ def test_runs_one_traffic_session_per_app():
 
 def test_caps_the_request_rate():
     async def scenario():
-        with mock.patch.object(traffic, "_run", mock.AsyncMock()):
+        with _logged_in(), mock.patch.object(
+            traffic, "_run", mock.AsyncMock()
+        ):
             session = await traffic.start(8, APP, "shop", 500, 1, "dev")
         traffic._sessions.clear()
         return session.rps
 
     assert asyncio.run(scenario()) == traffic.MAX_RPS
+
+
+def test_a_failed_login_refuses_the_start_and_frees_the_app():
+    async def scenario():
+        with mock.patch.object(
+            traffic,
+            "login",
+            mock.AsyncMock(side_effect=traffic.TrafficError("no login")),
+        ), pytest.raises(traffic.TrafficError):
+            await traffic.start(6, APP, "shop", 5, 1, "dev")
+        return traffic.session_for(6)
+
+    assert asyncio.run(scenario()) is None
 
 
 from app.models.deployment import Deployment  # noqa: E402
