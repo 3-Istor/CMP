@@ -47,9 +47,11 @@ class EnvironmentState:
 
     @property
     def asleep(self) -> bool:
-        return bool(self.components) and all(
-            c.pods == 0 for c in self.components.values()
-        )
+        """
+        Any component scaled to zero: each has its own offhours schedule, and
+        one created after a wake keeps sleeping while the others run.
+        """
+        return any(c.pods == 0 for c in self.components.values())
 
     @property
     def digests(self) -> dict[str, str]:

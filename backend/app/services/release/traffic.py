@@ -5,8 +5,9 @@ A canary is judged on the requests its version serves; a demo app has nobody
 using it, so the analysis stays inconclusive. The CMP plays the visitors.
 
 It goes through the app's real route, SSO included: a technical user of the
-project realm logs in like a browser, and each request then comes from a
-fresh visitor (no cnp-track cookie), so Envoy splits by the canary weights.
+project realm logs in like a browser (a public app needs no login), and each
+request then comes from a fresh visitor (no cnp-track cookie), so Envoy splits
+by the canary weights.
 The cnp-track cookie of the answer says which version served it.
 """
 
@@ -158,6 +159,12 @@ async def _prepare_user(client: httpx.AsyncClient, realm: str) -> str:
     return password
 
 
+def _asks_for_sso(response: httpx.Response) -> bool:
+    return response.status_code in (302, 303) and "openid-connect" in (
+        response.headers.get("location", "")
+    )
+
+
 async def _follow(
     client: httpx.AsyncClient, response: httpx.Response
 ) -> httpx.Response:
@@ -171,11 +178,17 @@ async def _follow(
 
 
 async def login(app_url: str, realm: str) -> str:
-    """Log the traffic user into the app, return its session as a Cookie header."""
+    """
+    Log the traffic user into the app, return its session as a Cookie header,
+    empty for a public app.
+    """
     host = httpx.URL(app_url).host
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        first = await client.get(app_url)
+        if not _asks_for_sso(first):
+            return ""
         password = await _prepare_user(client, realm)
-        page = await _follow(client, await client.get(app_url))
+        page = await _follow(client, first)
         match = _LOGIN_ACTION.search(page.text)
         if match is None:
             raise TrafficError(
@@ -210,15 +223,15 @@ async def _visit(
     started = time.monotonic()
     try:
         response = await client.get(
-            session.app_url, headers={"Cookie": cookie}, follow_redirects=False
+            session.app_url,
+            headers={"Cookie": cookie} if cookie else None,
+            follow_redirects=False,
         )
     except httpx.HTTPError:
         session.record("error", 0, int((time.monotonic() - started) * 1000))
         return True
     millis = int((time.monotonic() - started) * 1000)
-    if response.status_code in (302, 303) and "openid-connect" in (
-        response.headers.get("location", "")
-    ):
+    if _asks_for_sso(response):
         return False
     track = response.cookies.get("cnp-track")
     version = "error" if response.status_code >= 500 else (track or "stable")
@@ -226,9 +239,8 @@ async def _visit(
     return True
 
 
-async def _run(session: TrafficSession, realm: str) -> None:
+async def _run(session: TrafficSession, realm: str, cookie: str) -> None:
     try:
-        cookie = await login(session.app_url, realm)
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             pending: set[asyncio.Task] = set()
             while not session.stopped and time.time() < session.until:
@@ -271,8 +283,19 @@ async def start(
         until=time.time() + 60 * min(max(minutes, 1), MAX_MINUTES),
         started_by=started_by,
     )
+    # Held during the login so that a second click cannot start a second run.
     _sessions[deployment_id] = session
-    session.task = asyncio.create_task(_run(session, realm))
+    try:
+        cookie = await login(app_url, realm)
+    except httpx.HTTPError as exc:
+        del _sessions[deployment_id]
+        raise TrafficError(
+            f"The traffic user could not log in: {exc}"
+        ) from exc
+    except TrafficError:
+        del _sessions[deployment_id]
+        raise
+    session.task = asyncio.create_task(_run(session, realm, cookie))
     return session
 
 
