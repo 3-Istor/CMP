@@ -28,7 +28,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createDeployment, deleteProject, getCatalog } from "@/lib/api";
+import {
+  createDeployment,
+  deleteProject,
+  getCatalog,
+  getProjectGrafanaUrl,
+} from "@/lib/api";
 import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
 import { ProjectAgentPanel } from "@/components/agents/ProjectAgentPanel";
 import { ROLE_LABEL } from "@/lib/permissions";
@@ -37,6 +42,7 @@ import {
   Activity,
   AlarmClock,
   ArrowLeft,
+  BarChart3,
   ExternalLink,
   FileCode,
   FolderKanban,
@@ -126,6 +132,15 @@ export default function ProjectPage() {
       return () => clearTimeout(timer);
     }
   }, [appsError, router]);
+
+  // The project's own Grafana org; null until Terraform has created it.
+  const [grafanaUrl, setGrafanaUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canViewObservability) return;
+    getProjectGrafanaUrl(projectName)
+      .then((r) => setGrafanaUrl(r.url))
+      .catch(() => setGrafanaUrl(null));
+  }, [projectName, canViewObservability]);
 
   // Catalog for deploy modal
   const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
@@ -373,6 +388,20 @@ export default function ProjectPage() {
               Status
               <ExternalLink className="ml-auto h-3 w-3" />
             </a>
+
+            {/* Grafana — opens on the project's own org */}
+            {grafanaUrl && (
+              <a
+                href={grafanaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
+              >
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Grafana
+                <ExternalLink className="ml-auto h-3 w-3" />
+              </a>
+            )}
           </CardContent>
         </Card>
         )}

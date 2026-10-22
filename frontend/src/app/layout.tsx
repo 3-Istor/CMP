@@ -27,12 +27,20 @@ export default function RootLayout({
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
   return (
-    <html lang="en" className="dark">
+    // The theme class is set by the script below, before first paint.
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Inject runtime config inline */}
         <script
           dangerouslySetInnerHTML={{
             __html: `window.__RUNTIME_CONFIG__ = { apiUrl: '${apiUrl}' };`,
+          }}
+        />
+        {/* Follows the browser unless the user picked light or dark on
+            /account (ThemeCard, which calls __applyTheme after a change). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var m=matchMedia('(prefers-color-scheme: dark)');window.__applyTheme=function(){var t;try{t=localStorage.getItem('cnp-theme')}catch(e){}document.documentElement.classList.toggle('dark',t==='dark'||(t!=='light'&&m.matches))};m.addEventListener('change',window.__applyTheme);window.__applyTheme()})()`,
           }}
         />
       </head>

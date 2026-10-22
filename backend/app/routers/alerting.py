@@ -218,6 +218,22 @@ async def list_alerts(
     )
 
 
+class GrafanaLink(BaseModel):
+    url: str | None
+
+
+@router.get("/grafana", response_model=GrafanaLink)
+async def grafana_link(token: CurrentUser, project: str) -> GrafanaLink:
+    """The project's Grafana org: ?orgId= switches the viewer onto it."""
+    await _role(token, project)
+    try:
+        org = await grafana.org_id(project)
+    except Exception:  # pylint: disable=broad-exception-caught
+        # No org yet (Terraform creates it) or Grafana unreachable.
+        return GrafanaLink(url=None)
+    return GrafanaLink(url=f"{GRAFANA_BASE_URL}/?orgId={org}")
+
+
 @router.put("/{alert_id}", response_model=AlertRead)
 async def update_alert(
     alert_id: str,
