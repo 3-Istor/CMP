@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,39 +10,67 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 
 // Read before first paint by the inline script in app/layout.tsx.
 const STORAGE_KEY = "cnp-theme";
 
-export function ThemeCard() {
-  const [light, setLight] = useState(false);
+type Theme = "system" | "light" | "dark";
 
-  // The layout script has already set the class: mirror it.
+const OPTIONS: { value: Theme; label: string }[] = [
+  { value: "system", label: "Navigateur" },
+  { value: "light", label: "Clair" },
+  { value: "dark", label: "Sombre" },
+];
+
+declare global {
+  interface Window {
+    __applyTheme?: () => void;
+  }
+}
+
+export function ThemeCard() {
+  const [theme, setTheme] = useState<Theme>("system");
+
   useEffect(() => {
-    setLight(!document.documentElement.classList.contains("dark"));
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === "light" || stored === "dark") setTheme(stored);
+    } catch {
+      // Storage blocked: the browser's theme applies.
+    }
   }, []);
 
-  const toggle = (checked: boolean) => {
-    setLight(checked);
-    document.documentElement.classList.toggle("dark", !checked);
+  const choose = (value: Theme) => {
+    setTheme(value);
     try {
-      localStorage.setItem(STORAGE_KEY, checked ? "light" : "dark");
+      if (value === "system") localStorage.removeItem(STORAGE_KEY);
+      else localStorage.setItem(STORAGE_KEY, value);
     } catch {
-      // Storage blocked: the choice lasts for this page only.
+      // Storage blocked: the choice is not kept.
     }
+    window.__applyTheme?.();
   };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Apparence</CardTitle>
-        <CardDescription>Thème de l&apos;interface, gardé sur ce navigateur.</CardDescription>
+        <CardDescription>
+          Par défaut, le thème suit celui du navigateur. Choix gardé sur ce navigateur.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex items-center justify-between">
-        <Label htmlFor="light-mode">Mode clair</Label>
-        <Switch id="light-mode" checked={light} onCheckedChange={toggle} />
+      <CardContent className="flex gap-2">
+        {OPTIONS.map(({ value, label }) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={theme === value ? "default" : "outline"}
+            aria-pressed={theme === value}
+            onClick={() => choose(value)}
+          >
+            {label}
+          </Button>
+        ))}
       </CardContent>
     </Card>
   );

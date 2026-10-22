@@ -36,10 +36,11 @@ export default function RootLayout({
             __html: `window.__RUNTIME_CONFIG__ = { apiUrl: '${apiUrl}' };`,
           }}
         />
-        {/* Dark unless the user picked light on /account (ThemeCard) */}
+        {/* Follows the browser unless the user picked light or dark on
+            /account (ThemeCard, which calls __applyTheme after a change). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem('cnp-theme')!=='light')document.documentElement.classList.add('dark')}catch(e){document.documentElement.classList.add('dark')}`,
+            __html: `(function(){var m=matchMedia('(prefers-color-scheme: dark)');window.__applyTheme=function(){var t;try{t=localStorage.getItem('cnp-theme')}catch(e){}document.documentElement.classList.toggle('dark',t==='dark'||(t!=='light'&&m.matches))};m.addEventListener('change',window.__applyTheme);window.__applyTheme()})()`,
           }}
         />
       </head>
