@@ -738,6 +738,9 @@ function alertingQuery(project: string, app?: string | null) {
 export const getAlertCatalog = (project: string, app?: string | null) =>
   request<import("@/types").AlertCatalog>(`/alerting?${alertingQuery(project, app)}`);
 
+export const getProjectGrafanaUrl = (project: string) =>
+  request<{ url: string | null }>(`/alerting/grafana?${alertingQuery(project)}`);
+
 export const updateCatalogAlert = (
   project: string,
   app: string | null | undefined,
