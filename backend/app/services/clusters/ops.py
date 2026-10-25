@@ -7,8 +7,7 @@ import os
 import shutil
 import tempfile
 import time
-from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import settings
@@ -42,7 +41,6 @@ class _Ctx:
     cwd: Path
     env: dict
     log: object
-    tail: deque = field(default_factory=lambda: deque(maxlen=500))
     step: str = ""
     done: int = 0
 
@@ -75,17 +73,20 @@ def _env(cloud: TargetCloud, kubeconfig: str) -> dict:
         "VAULT_ADDR": settings.VAULT_URL,
         "VAULT_TOKEN": settings.CLUSTER_OPS_VAULT_TOKEN,
     }
+    # The GKE root also uses the AWS provider (S3 endpoint registry): AWS creds for both.
+    env |= {
+        "AWS_ACCESS_KEY_ID": settings.CLUSTER_OPS_AWS_ACCESS_KEY_ID,
+        "AWS_SECRET_ACCESS_KEY": settings.CLUSTER_OPS_AWS_SECRET_ACCESS_KEY,
+        "AWS_REGION": "eu-west-3",
+        "AWS_PAGER": "",
+    }
     if cloud == TargetCloud.AWS:
-        env |= {
-            "AWS_ACCESS_KEY_ID": settings.CLUSTER_OPS_AWS_ACCESS_KEY_ID,
-            "AWS_SECRET_ACCESS_KEY": settings.CLUSTER_OPS_AWS_SECRET_ACCESS_KEY,
-            "AWS_REGION": "eu-west-3",
-            "AWS_PAGER": "",
-        }
         tf_vars = settings.CLUSTER_TF_VARS_AWS
     else:
         env |= {
             "GOOGLE_APPLICATION_CREDENTIALS": settings.CLUSTER_OPS_GCP_SA_KEY_PATH,
+            # gcloud ignores GOOGLE_APPLICATION_CREDENTIALS; this authenticates it without activation.
+            "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE": settings.CLUSTER_OPS_GCP_SA_KEY_PATH,
             "CLOUDSDK_CORE_PROJECT": settings.CLUSTER_OPS_GCP_PROJECT,
         }
         tf_vars = settings.CLUSTER_TF_VARS_GCP
@@ -95,20 +96,21 @@ def _env(cloud: TargetCloud, kubeconfig: str) -> dict:
 
 
 async def cluster_exists(cloud: TargetCloud) -> bool | None:
-    """None when the describe call itself failed (not a "not found")."""
+    """None when the lookup itself failed (not a "not found")."""
     name = _CLUSTER_NAMES[cloud]
     cmd = (
         ["aws", "eks", "describe-cluster", "--name", name]
         if cloud == TargetCloud.AWS
-        else ["gcloud", "container", "clusters", "describe", name,
-              "--zone", "europe-west9-a"]
+        else ["gcloud", "container", "clusters", "list",
+              f"--filter=name={name}", "--format=value(name)"]
     )
     out: list[str] = []
     rc = await _stream(cmd, Path(settings.CLUSTER_TF_ROOT), _env(cloud, ""), None, out.append)
+    if cloud == TargetCloud.GCP:  # list exits 0 with empty output when absent
+        return None if rc else bool("".join(out).strip())
     if rc == 0:
         return True
-    text = "\n".join(out)
-    return False if ("ResourceNotFoundException" in text or "was not found" in text) else None
+    return False if "ResourceNotFoundException" in "\n".join(out) else None
 
 
 def affected_apps(db, cloud: TargetCloud) -> list[dict]:
@@ -133,7 +135,6 @@ async def _run(ctx: _Ctx, cmd: list[str], cwd: Path | None = None, on_line=None,
 
     def collect(line: str) -> None:
         lines.append(line)
-        ctx.tail.append(line)
         if on_line:
             on_line(line)
 
@@ -252,9 +253,6 @@ async def run_operation(cloud: TargetCloud, operation: str) -> None:
         log = log_path.open("a")
         ctx = _Ctx(cloud, operation, Path(settings.CLUSTER_TF_ROOT) / _DIRS[cloud],
                    _env(cloud, f"{tmp}/kubeconfig"), log)
-        if cloud == TargetCloud.GCP:
-            await _run(ctx, ["gcloud", "auth", "activate-service-account",
-                             "--key-file", settings.CLUSTER_OPS_GCP_SA_KEY_PATH])
         await (_up if operation == "up" else _down)(ctx)
         error = None
     except _StepError as exc:

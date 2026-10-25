@@ -158,3 +158,23 @@ def test_affected_apps(session_factory):
         db.commit()
         apps = ops.affected_apps(db, AWS)
     assert apps == [{"project": "demo", "app": "shop", "deployment_id": 1}]
+
+
+def test_gcp_env_has_aws_credentials_and_gcloud_auth(monkeypatch):
+    monkeypatch.setattr(ops.settings, "CLUSTER_OPS_AWS_ACCESS_KEY_ID", "AK")
+    monkeypatch.setattr(ops.settings, "CLUSTER_OPS_GCP_SA_KEY_PATH", "/k.json")
+    env = ops._env(TargetCloud.GCP, "/kc")
+    assert env["AWS_ACCESS_KEY_ID"] == "AK" and env["AWS_REGION"] == "eu-west-3"
+    assert env["CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE"] == "/k.json"
+
+
+@pytest.mark.parametrize("out,rc,expected", [(["cnp-gke"], 0, True), ([], 0, False), (["denied"], 1, None)])
+def test_gcp_cluster_exists(monkeypatch, out, rc, expected):
+    monkeypatch.setattr(ops, "_stream", Fake({"gcloud container": out}, {"gcloud container": rc}))
+    assert asyncio.run(ops.cluster_exists(TargetCloud.GCP)) is expected
+
+
+def test_aws_cluster_exists_not_found(monkeypatch):
+    fake = Fake({"aws eks": ["An error occurred (ResourceNotFoundException)"]}, {"aws eks": 254})
+    monkeypatch.setattr(ops, "_stream", fake)
+    assert asyncio.run(ops.cluster_exists(AWS)) is False
