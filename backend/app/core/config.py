@@ -120,6 +120,7 @@ class Settings(BaseSettings):
     CLUSTER_OPS_GCP_SA_KEY_PATH: str = ""  # gcp-sa-key mounted as a file
     CLUSTER_OPS_GCP_PROJECT: str = "project-94dabc15-3981-4317-8da"
     CLUSTER_OPS_VAULT_TOKEN: str = ""
+    CLUSTER_OPS_POD_PREFIX: str = "arcl-cmp-backend-"  # Deployment pod-name prefix, to tell our own stale locks
     # JSON objects exported as TF_VAR_<key>; lists/objects are JSON-encoded.
     CLUSTER_TF_VARS_AWS: str = "{}"
     CLUSTER_TF_VARS_GCP: str = "{}"

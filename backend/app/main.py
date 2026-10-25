@@ -211,6 +211,10 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ready")
 
+    from app.services.clusters.recovery import resume_interrupted
+
+    resume_task = asyncio.create_task(resume_interrupted())
+
     # Backfill github_repo_url for GitOps apps created before it was persisted
     from app.services.terraform_orchestrator import backfill_gitops_repo_urls
 
@@ -264,6 +268,7 @@ async def lifespan(app: FastAPI):
     activity_collector_task.cancel()
     release_recorder_task.cancel()
     environment_task.cancel()
+    resume_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
