@@ -1,8 +1,9 @@
+import re
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -28,6 +29,7 @@ class ImportRequest(BaseModel):
     project_name: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
     app_name: str = Field(pattern=r"^[a-z][a-z0-9-]{0,40}[a-z0-9]$")
     repository_url: str = Field(max_length=255)
+    source_branch: str = Field(default="main", min_length=1, max_length=100)
     project_path: str = Field(
         default=".", max_length=200, pattern=r"^[A-Za-z0-9_./-]+$"
     )
@@ -39,6 +41,99 @@ class ImportRequest(BaseModel):
         default="/", max_length=200, pattern=r"^/[A-Za-z0-9_./-]*$"
     )
     allow_changes: bool = False
+    runtime_environment: dict[str, str] = Field(
+        default_factory=dict, max_length=50
+    )
+    smoke_environment: dict[str, str] = Field(
+        default_factory=dict, max_length=50
+    )
+    runtime_secret_keys: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("source_branch")
+    @classmethod
+    def validate_source_branch(cls, value):
+        if (
+            not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_./-]*", value)
+            or ".." in value
+            or "//" in value
+            or value.endswith((".", "/"))
+            or any(
+                part.startswith(".") or part.endswith(".lock")
+                for part in value.split("/")
+            )
+        ):
+            raise ValueError("Nom de branche Git invalide")
+        return value
+
+    @field_validator("runtime_environment", "smoke_environment")
+    @classmethod
+    def validate_environment(cls, values, info):
+        for name, value in values.items():
+            if (
+                not re.fullmatch(r"[A-Z_][A-Z0-9_]{0,63}", name)
+                or len(value) > 2048
+                or any(character in value for character in "\0\r\n")
+            ):
+                raise ValueError("Variable d’environnement invalide")
+            sensitive = re.search(
+                r"SECRET|PASSWORD|TOKEN|PRIVATE_KEY|API_KEY", name
+            )
+            if re.search(
+                r"[a-zA-Z][a-zA-Z0-9+.-]*://[^/@\s]+:[^/@\s]+@|-----BEGIN .*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}",
+                value,
+            ):
+                raise ValueError("Les identifiants doivent rester dans Vault")
+            if sensitive:
+                if info.field_name == "runtime_environment":
+                    raise ValueError(
+                        "Les secrets de déploiement doivent être configurés dans Vault"
+                    )
+                if value != "__CNP_RANDOM_SECRET__" and not value.startswith(
+                    "cnp-smoke-"
+                ):
+                    raise ValueError(
+                        "Le test utilise seulement des valeurs cnp-smoke-* ou __CNP_RANDOM_SECRET__"
+                    )
+        if (
+            sum(len(name) + len(value) for name, value in values.items())
+            > 16384
+        ):
+            raise ValueError("Configuration d’environnement trop volumineuse")
+        return values
+
+    @model_validator(mode="after")
+    def validate_runtime_contract(self):
+        if set(self.runtime_secret_keys) & self.runtime_environment.keys():
+            raise ValueError(
+                "Une variable doit être publique ou provenir de Vault, pas les deux"
+            )
+        merged = {**self.runtime_environment, **self.smoke_environment}
+        if (
+            len(merged) > 50
+            or sum(len(key) + len(value) for key, value in merged.items())
+            > 16384
+        ):
+            raise ValueError("Configuration de test trop volumineuse")
+        for key in self.runtime_secret_keys:
+            sample = self.smoke_environment.get(key, "")
+            if not (
+                sample == "__CNP_RANDOM_SECRET__"
+                or sample.startswith("cnp-smoke-")
+                or sample.startswith("sqlite:///")
+            ):
+                raise ValueError(
+                    "Chaque secret Vault exige une valeur de test non sensible"
+                )
+        return self
+
+    @field_validator("runtime_secret_keys")
+    @classmethod
+    def validate_secret_keys(cls, keys):
+        if len(set(keys)) != len(keys) or any(
+            not re.fullmatch(r"[A-Z_][A-Z0-9_]{0,63}", key) for key in keys
+        ):
+            raise ValueError("Noms de secrets Vault invalides ou dupliqués")
+        return keys
 
 
 def owned(db, import_id, claims):

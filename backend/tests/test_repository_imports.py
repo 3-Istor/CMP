@@ -171,6 +171,118 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.db.query(Deployment).count(), 1)
         self.assertEqual(len(self.tasks.tasks), 1)
 
+    async def test_branch_recipe_runs_pr_resume_scan_publish_and_single_deployment(
+        self,
+    ):
+        self.db.add(Project(project_name="sandbox", owner_username="joe"))
+        self.job.status, self.job.run_id = "queued", None
+        self.job.configuration = {
+            **self.job.configuration,
+            "source_branch": "import-fichier-joe-raph",
+            "runtime_environment": {"APP_ENV": "test", "AUTH_MODE": "demo"},
+            "runtime_secret_keys": [],
+        }
+        self.db.commit()
+        pr = {
+            "head": {"ref": f"cnp-import/{self.job.id}", "sha": "c" * 40},
+            "base": {"ref": "import-fichier-joe-raph"},
+            "state": "open",
+            "user": {"id": 1},
+        }
+        reviews = [
+            {"user": {"id": 2}, "state": "APPROVED", "commit_id": "c" * 40}
+        ]
+        with patch.object(
+            service, "authorize", AsyncMock(return_value="test")
+        ), patch.object(
+            service, "head", AsyncMock(return_value="a" * 40)
+        ) as head, patch.object(
+            service,
+            "platform_chart_token",
+            AsyncMock(return_value="test-chart"),
+        ), patch.object(
+            service, "scoped_token", AsyncMock(return_value="test-write")
+        ), patch.object(
+            service,
+            "github",
+            AsyncMock(
+                side_effect=[
+                    pr,
+                    {**pr, "merged": True},
+                    reviews,
+                    {**pr, "merged": True},
+                    reviews,
+                ]
+            ),
+        ), patch.object(
+            service, "dispatch", AsyncMock()
+        ) as dispatch:
+
+            async def step(action, payload=None):
+                return await service.worker(
+                    self.db,
+                    self.job,
+                    self.claims,
+                    action,
+                    payload or {},
+                    self.tasks,
+                )
+
+            contract = await step("claim")
+            self.assertEqual(
+                contract["source_branch"], "import-fichier-joe-raph"
+            )
+            self.assertEqual(
+                contract["runtime_environment"]["AUTH_MODE"], "demo"
+            )
+            await step("write")
+            await step("prepared", {"pull_request": 7, "report": {}})
+            self.assertEqual(self.job.status, "waiting_pr")
+            self.assertEqual(self.db.query(Deployment).count(), 0)
+            self.assertEqual(len(self.tasks.tasks), 0)
+            await service.resume(self.db, self.job)
+            dispatch.assert_awaited_once()
+            self.assertEqual(self.job.status, "queued")
+            self.claims = {"run_id": "456"}
+            head.return_value = "c" * 40
+            await step("claim")
+            await step(
+                "validated",
+                {
+                    "source_sha": "c" * 40,
+                    "report": {
+                        "security": {"blocked": False},
+                        "deployment": {"blocked": False},
+                        "rendered_deployment": {"blocked": False},
+                    },
+                },
+            )
+            self.assertEqual(self.job.status, "building")
+            await step(
+                "publish",
+                {
+                    "image": self.job.configuration["image"],
+                    "source_sha": "c" * 40,
+                    "image_size": 1234,
+                    "image_scan_passed": True,
+                    "http_check_passed": True,
+                },
+            )
+            payload = {
+                "digest": "sha256:" + "d" * 64,
+                "image": self.job.configuration["image"],
+            }
+            await step("complete", payload)
+            with self.assertRaises(HTTPException):
+                await step("complete", payload)
+        self.assertEqual(self.job.status, "deploying")
+        self.assertEqual(self.job.source_sha, "c" * 40)
+        self.assertEqual(self.db.query(Project).count(), 1)
+        deployment = self.db.query(Deployment).one()
+        self.assertEqual(deployment.project_id, "sandbox")
+        self.assertEqual(deployment.github_repo_url, self.job.repository_url)
+        self.assertEqual(len(self.tasks.tasks), 1)
+
     async def test_unmerged_pr_prevents_resume_and_dispatch(self):
         self.job.status = "waiting_pr"
         self.job.pull_request = 7
@@ -492,7 +604,11 @@ class SignedIdentityTests(unittest.TestCase):
             "iss": "https://token.actions.githubusercontent.com",
             "aud": settings.IMPORT_OIDC_AUDIENCE,
             "repository": settings.IMPORT_WORKFLOW_REPO,
-            "workflow_ref": f"{settings.IMPORT_WORKFLOW_REPO}/.github/workflows/import-project.yml@refs/heads/main",
+            "workflow_ref": f"{settings.IMPORT_WORKFLOW_REPO}/.github/workflows/{settings.IMPORT_DISPATCH_WORKFLOW}@refs/heads/main",
+            "job_workflow_ref": f"{settings.IMPORT_WORKFLOW_REPO}/.github/workflows/import-project.yml@refs/heads/main",
+            "job_workflow_sha": "a" * 40,
+            "sha": "a" * 40,
+            "ref": "refs/heads/main",
             "workflow_sha": "a" * 40,
             "event_name": "workflow_dispatch",
             "run_attempt": "1",
@@ -512,6 +628,10 @@ class SignedIdentityTests(unittest.TestCase):
             for changes in (
                 {"workflow_ref": "attacker/workflow"},
                 {"workflow_sha": "b" * 40},
+                {"job_workflow_ref": "attacker/workflow"},
+                {"job_workflow_sha": "b" * 40},
+                {"sha": "b" * 40},
+                {"ref": "refs/heads/another-branch"},
                 {"exp": now - timedelta(seconds=1)},
                 {"run_attempt": "2"},
             ):

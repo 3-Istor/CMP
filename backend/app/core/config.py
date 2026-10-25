@@ -5,7 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=os.environ.get("CMP_ENV_FILE", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     # App
@@ -21,6 +23,7 @@ class Settings(BaseSettings):
     IMPORT_ENABLED: bool = False
     IMPORT_WORKFLOW_REPO: str = "3-Istor/extern-project-analyzer"
     IMPORT_WORKFLOW_REF: str = "main"
+    IMPORT_DISPATCH_WORKFLOW: str = "docker-image.yml"
     IMPORT_CHART_SHA: str = ""  # Reviewed infra-templates commit.
     IMPORT_WORKFLOW_SHA: str = ""  # Immutable commit of the trusted workflow.
     IMPORT_OIDC_AUDIENCE: str = "cnp-repository-import"
@@ -28,6 +31,9 @@ class Settings(BaseSettings):
     IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/cnp-imports"
     IMPORT_MAX_IMAGE_BYTES: int = 1024 * 1024 * 1024
     IMPORT_DOMAIN: str = "3istor.com"
+    # Optional restriction for a branch recipe.
+    IMPORT_ALLOWED_PROJECT: str = ""
+    IMPORT_CALLBACK_URL: str = ""
     IMPORT_ARGOCD_URL: str = ""
     IMPORT_ARGOCD_TOKEN: str = ""
 

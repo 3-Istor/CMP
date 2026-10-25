@@ -1,102 +1,108 @@
-# Tester le bouton d’import sur la branche locale
+# Tester l’import de repo depuis CMP local
 
-Actualisation du 25 octobre 2026. Travailler dans **CMP-import-fichier-joe-raph**,
-sur **import-fichier-joe-raph**. Les changements de main ont été récupérés dans les
-cinq repos puis intégrés uniquement à nos branches. Aucun push ni déploiement.
+La branche de travail est `import-fichier-joe-raph`, dans le worktree
+`CMP-import-fichier-joe-raph`. Le parcours utilise un projet CMP **déjà actif**.
+Le schéma, les fichiers par repo, les prérequis de recette et l’exemple démo sont
+dans [le guide joetest](../../extern-project-analyzer/docs/import-recipe-joetest.md).
 
-## Lancer CMP
+## Démarrage local
 
-Les commandes dédiées évitent le tunnel OpenStack et les états Terraform distants.
-Elles utilisent la branche locale d’app-templates, une base SQLite dédiée et
-gardent l’import réel désactivé. Les collecteurs cloud/cluster ne démarrent pas.
+```sh
+cd /home/joebuntu/Desktop/SIGL/CNP/CMP-import-fichier-joe-raph
+make import-setup
+make import-doctor
+make import-local BACKEND_PORT=8001
+```
 
-    cd /home/joebuntu/Desktop/SIGL/CNP/CMP-import-fichier-joe-raph
-    make import-setup
+L’interface est sur http://localhost:3000 ; l’API écoute sur 127.0.0.1:8001.
+Le lanceur utilise une base SQLite dédiée et l’app-templates voisin. Les collecteurs
+sont désactivés. Il respecte les paramètres S3 et IMPORT_ENABLED du `.env`
+backend ; **l’import reste désactivé par défaut**, sans activation implicite.
+Après une modification de `.env`, arrêter puis relancer le backend.
 
-La préparation a déjà été exécutée pendant cette session. Elle installe les
-dépendances des lockfiles, prépare les fichiers ignorés backend/.env et
-frontend/.env.local sans écraser des valeurs existantes, génère un secret de
-session local et applique les migrations à backend/data/import-local.db.
-Node 22 est utilisé temporairement si le Node système est trop ancien.
+Le compte SSO et le secret du client Keycloak `3-istor-openid` sont nécessaires
+à l’authentification locale. Si l’accès cluster est disponible :
 
-La connexion CNP reste obligatoire. Renseigner le secret du client Keycloak
-**3-istor-openid** dans les deux fichiers locaux. Si un accès kubectl CNP est
-déjà disponible, la commande suivante copie uniquement ce secret, sans l’afficher :
+```sh
+make import-tunnel
+# Dans un autre terminal :
+make import-auth KUBE_CONTEXT=3istor
+```
 
-    make import-auth
+`import-auth` copie uniquement le secret client dans les fichiers locaux ignorés,
+sans l’afficher. Le tunnel SSH utilise 127.0.0.1:6443 vers l’API K3s et conserve
+le port 3000 libre. Le contexte Kubernetes est `3istor`, avec le plugin OIDC.
+Le VPN concerne l’accès réseau au cluster ; le site public et le SSO peuvent
+fonctionner sans ce VPN.
 
-Elle utilise le contexte KUBE_CONTEXT du Makefile et le secret arcl-cmp-secret,
-clé keycloak-client-secret, namespace arcl-cmp. Elle ne copie pas les autres
-credentials de production et ne les écrit pas dans Git. Sans accès cluster,
-faire renseigner la configuration locale par un administrateur CNP.
+La commande standard `make env` de CMP synchronise aussi les credentials des
+services CNP dans le `.env`. Elle a été exécutée manuellement par l’utilisateur.
+Si Vault public est inaccessible, laisser dans un terminal dédié :
 
-    make import-doctor
-    make import-local
+```sh
+make import-vault-tunnel KUBE_CONTEXT=3istor
+```
 
-Le diagnostic s’arrête si le secret, le client ou le realm ne correspond pas.
-L’interface est sur http://localhost:3000 et le backend sur http://127.0.0.1:8000.
-Ouvrir un projet sur lequel le compte est admin/propriétaire, puis **Applications
-→ Importer un repo**. Le bouton est absent pour les membres/invités.
+Configurer alors `VAULT_URL=http://127.0.0.1:18200` dans le `.env` backend ignoré.
+Le port-forward expose Vault uniquement sur loopback. Ces accès utilisent les
+services réels de CNP ; le fonctionnement local concerne le frontend/backend.
 
-Les deux serveurs peuvent aussi être lancés séparément :
+## Formulaire et vrai import
 
-    make import-backend
-    make import-frontend
+Ouvrir joetest → Applications → **Importer un repo**, avec le compte propriétaire
+ou admin du projet. Le bouton n’est pas affiché aux invités/membres.
+Le formulaire permet de choisir le repo, sa branche, le dossier, le port HTTP,
+le chemin de santé et la configuration de l’application.
 
-Dans ce lanceur, le formulaire est consultable, les champs et le consentement
-fonctionnent, mais l’envoi réel est désactivé avec un message explicite. Les noms
-d’application invalides sont refusés côté navigateur et API.
-Aucune modification de repo ni opération de cloud ne part de ce mode local.
-Si l’un des serveurs du lancement groupé s’arrête, l’autre est également arrêté.
+Pour Session Manager : branche `import-fichier-joe-raph`, dossier `.`, port `8000`,
+santé `/api/health`, mode démo selon le guide joetest. Les variables publiques sont
+proposées dans la PR ; les secrets éventuels restent dans Vault.
 
-## État des accès vérifié ici
+Un formulaire consultable ne signifie pas que l’import réel est activé. Celui-ci
+exige aussi les deux liaisons GitHub, l’App installée sur les repos, le workflow
+et le chart publiés à leurs SHA approuvés, le callback HTTPS, le registre et le
+profil Argo compatibles, ainsi que les accès Terraform/GHCR/Vault.
 
-L’endpoint public Keycloak répond et publie le realm 3istor. Aucun secret du client
-n’a été trouvé dans la copie locale ou l’environnement de cette session. Les
-exemples GitHub référencent le gestionnaire de secrets, pas une valeur à récupérer
-dans le code.
+Le 25 octobre, les contrôles en lecture ont confirmé le projet actif joetest et
+les droits de son propriétaire. La liaison GitHub dans la base du CMP local est
+absente ; Joe a demandé de reporter la réparation de cette liaison. Aucun import
+connecté de Session Manager n’a donc été lancé et aucun contrôle d’identité n’a
+été contourné. L’import reste désactivé dans le `.env` local.
 
-kubectl n’est pas installé sur la machine. La configuration SSH contient
-pae-node-1, mais la tentative en mode non interactif échoue sur 10.0.0.1 avec
-« no route to host ». Il faut rétablir cet accès ou faire fournir la configuration
-locale par le PO/admin pour tester la vraie connexion SSO. Le diagnostic actuel
-indique exactement les deux champs KEYCLOAK_CLIENT_SECRET manquants.
+Après publication et configuration autorisées, vérifier sans muter les services :
 
-## Ce qui a été testé
+```sh
+make import-readiness
+make import-readiness ARGS=--live
+```
 
-- Backend CMP : **526 tests réussis** ; vrais JWT de test signés, autorisations,
-  absence de doublon, PR, refus release/staging/MCP et catalogue local sans clone/pull.
-- Analyzer : 41 tests ; registre : 3 tests et 3 records valides ; K3s : 5 tests des
-  expressions Go/Sprig et des ImageUpdaters ; Terraform : 3 tests à providers simulés.
-- **578 tests automatisés** au total, plus **3 scénarios navigateur** sur le vrai
-  frontend local : import désactivé, consentement puis refus d’accès sans
-  continuation, et bouton absent pour un invité. Session et API simulées pour ces
-  scénarios ; aucune connexion SSO réelle ni mutation distante.
-- Lint/types/build Next 16.4.2 réussis. Black/isort passent et Pylint est à 9.92/10,
-  au-dessus du seuil du repo. Les avertissements existants sont détaillés dans
-  le compte rendu de l’analyzer.
-- Migration de jonction f71a0c9e2b46 : une tête, upgrade/downgrade/upgrade vérifiés
-  sur une base temporaire et upgrade sur la base dédiée au lancement local.
-- Backend démarré sans clone du catalogue ni appels cloud ; health répond 200.
-  Frontend démarré et page welcome répond 200. Serveurs de test arrêtés ensuite.
+Le second contrôle lit GitHub et Argo : commit du dispatcher, callback, audience,
+provenance du registre, pins source/chart/digest et protection ImageUpdater.
+Il n’active pas l’import et ne clone, ne dispatch ni ne déploie rien.
 
-## Ce qui demande encore une recette connectée
+Une fois les prérequis validés, l’utilisateur lance l’import et donne son
+consentement dans le portail. Si des fichiers manquent, la CI propose une PR et
+s’arrête. Il faut une approbation indépendante du dernier commit, la fusion sur
+la branche source choisie puis **Reprendre** dans CMP. Le nouveau run rescanne
+la version finale avant build et déploiement.
 
-La base locale ne reprend pas automatiquement les projets/déploiements de production.
-Les groupes existants peuvent être listés après connexion ; un import réel exige
-un projet actif correspondant dans la base de l’environnement de recette.
+## Isolation et vérification
 
-Pour lancer les vrais scans et déployer : workflow central publié/approuvé,
-backend HTTPS joignable depuis GitHub, accès GitHub liés et App installée, chart
-privé approuvé, registre, Argo et credentials cloud nécessaires. Le lanceur local
-conserve IMPORT_ENABLED=false même si le fichier .env contient une autre valeur.
-Ce comportement permet de tester le formulaire sans déclencher une ancienne CI.
+En recette avec `IMPORT_ALLOWED_PROJECT=joetest` et
+`CNP_REGISTRY_BRANCH=import-fichier-joe-raph`, les imports des autres projets sont
+refusés. La création/suppression de projet et les déploiements catalogue sont
+aussi refusés sur cette instance, pour éviter d’écrire leur état dans le registre
+de test. Le profil K3s ne change la branche de registre que pour joetest.
 
-Les modifications d’une app déjà importée via configuration, sécurité, FinOps,
-release, staging et MCP sont refusées pour préserver la version scannée. Le
-générateur Argo conserve le staging catalogue et limite les imports à prod ;
-les ImageUpdaters ne sont pas créés pour les imports.
+Le premier refus, timeout, scan bloquant ou contrôle manquant arrête le parcours.
+Une PR en attente ne permet aucun build ni déploiement. Seuls le rapport, le statut
+et le nettoyage temporaire peuvent continuer. Le déploiement réutilise le projet
+et le repo existants ; les tfvars se trouvent dans un workdir propre à l’app,
+jamais dans le template partagé. Les modifications directes du repo importé par
+les écrans configuration/sécurité/FinOps/release/MCP sont bloquées.
 
-Le schéma et le guide inter-repos sont aussi dans
-extern-project-analyzer/docs/import-repository-implementation.md et le compte rendu
-du 25 octobre dans extern-project-analyzer/docs/import-oct25-analysis.md.
+Les tests backend utilisent des JWT signés de test et une base SQL temporaire,
+avec les services externes simulés. Le frontend a passé lint, TypeScript et build.
+Le script inter-repos `extern-project-analyzer/scripts/check-import-local.sh`
+regroupe les tests analyzer, CMP, registre, K3s, chart et Terraform simulé.
+Ces résultats ne remplacent pas la recette connectée avec SSO/GitHub/Argo réels.

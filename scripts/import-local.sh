@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Local UI on the import branches. Never dispatches CI or applies Terraform.
+# Local CMP on the import branches. Import activation follows the backend .env.
+# Project creation uses the backend configuration prepared with make env.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
@@ -48,6 +49,28 @@ PY
     (cd frontend && frontend ci)
     echo "Ready to start the UI. Run make import-doctor to check login settings."
     ;;
+  tunnel)
+    mkdir -p .dev
+    python3 - <<'PYS'
+from pathlib import Path
+import os
+import subprocess
+host = os.environ.get("CMP_SSH_HOST", "pae-node-1")
+result = subprocess.run(["ssh", "-G", host], capture_output=True, text=True, check=True)
+# Preserve the user's effective SSH settings, but avoid forwards occupying CMP :3000.
+lines = [line for line in result.stdout.splitlines()
+         if line.split(None, 1)[0].lower() not in {"localforward", "remoteforward", "dynamicforward"}]
+path = Path(".dev/k3s-ssh.conf")
+path.write_text("\n".join(lines) + "\n")
+path.chmod(0o600)
+PYS
+    exec ssh -F .dev/k3s-ssh.conf -N -T -o ExitOnForwardFailure=yes -o ConnectTimeout=8 \
+      -L 127.0.0.1:6443:192.168.1.212:6443 "${CMP_SSH_HOST:-pae-node-1}"
+    ;;
+  vault-tunnel)
+    exec kubectl --context "${KUBE_CONTEXT:-3istor}" -n vault port-forward \
+      --address 127.0.0.1 service/vault "${VAULT_LOCAL_PORT:-18200}:8200"
+    ;;
   auth)
     command -v kubectl >/dev/null || { echo "kubectl missing: ask a CNP admin for local Keycloak configuration." >&2; exit 1; }
     (cd backend && poetry run python - <<'PY'
@@ -61,7 +84,7 @@ paths = [Path(".env"), Path("../frontend/.env.local")]
 if not all(path.is_file() for path in paths):
     sys.exit("Run make import-setup first.")
 result = subprocess.run(
-    ["kubectl", "--context", os.environ.get("KUBE_CONTEXT", "3-istor-k3s"),
+    ["kubectl", "--context", os.environ.get("KUBE_CONTEXT", "3istor"),
      "-n", "arcl-cmp", "get", "secret", "arcl-cmp-secret",
      "-o", "jsonpath={.data.keycloak-client-secret}"],
     capture_output=True, text=True, timeout=20,
@@ -111,23 +134,25 @@ if problems:
     sys.exit(1)
 print("Login settings present and consistent. No secret was printed.")
 print("Use an existing project where your CNP account is admin/owner.")
-print("Import stays disabled here: the form is inspectable, CI/deploy are not dispatched.")
+print("Repository import follows IMPORT_ENABLED in backend/.env; it is disabled by default.")
 PY
     )
     ;;
   backend)
     mkdir -p backend/data
     cd backend
-    export DEBUG=false IMPORT_ENABLED=false TF_BACKEND_S3_ENABLED=false
+    export DEBUG=false
     export BACKGROUND_COLLECTORS_ENABLED=false
     export DATABASE_URL=sqlite:///./data/import-local.db
     export TEMPLATE_REPOSITORY_PATH
     TEMPLATE_REPOSITORY_PATH=$(cd "$repo_root/../app-templates" && pwd)
     poetry run alembic upgrade head
-    exec poetry run uvicorn app.main:app --host 127.0.0.1 --port 8000
+    exec poetry run uvicorn app.main:app --host 127.0.0.1 --port "${BACKEND_PORT:-8000}"
     ;;
   frontend)
     cd frontend
+    export NEXT_PUBLIC_API_URL="http://localhost:${BACKEND_PORT:-8000}/api"
+    export API_URL="$NEXT_PUBLIC_API_URL"
     frontend run dev -- --hostname 127.0.0.1 --port 3000
     ;;
   dev)
@@ -139,5 +164,5 @@ PY
     trap 'kill "$backend_pid" "$frontend_pid" 2>/dev/null || true' EXIT INT TERM
     wait -n "$backend_pid" "$frontend_pid"
     ;;
-  *) echo "Usage: $0 setup|auth|doctor|backend|frontend|dev" >&2; exit 2 ;;
+  *) echo "Usage: $0 setup|tunnel|vault-tunnel|auth|doctor|backend|frontend|dev" >&2; exit 2 ;;
 esac

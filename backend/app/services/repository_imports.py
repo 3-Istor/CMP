@@ -1,11 +1,13 @@
 """Portal-authorized import protocol. Every external gate fails closed."""
 
 import asyncio
+import base64
 import json
 import re
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
@@ -39,10 +41,18 @@ def enabled():
     if not settings.IMPORT_ENABLED:
         stop("L’import de repos n’est pas activé", 503)
     if not (
-        SHA.fullmatch(settings.IMPORT_WORKFLOW_SHA)
+        settings.IMPORT_DISPATCH_WORKFLOW
+        in {"docker-image.yml", "import-project.yml"}
+        and SHA.fullmatch(settings.IMPORT_WORKFLOW_SHA)
         and SHA.fullmatch(settings.IMPORT_CHART_SHA)
+        and (
+            settings.CNP_REGISTRY_BRANCH == "main"
+            or settings.IMPORT_ALLOWED_PROJECT
+        )
         and settings.IMPORT_OIDC_AUDIENCE
         and settings.IMPORT_IMAGE_PREFIX.startswith("ghcr.io/")
+        and settings.IMPORT_CALLBACK_URL.startswith("https://")
+        and settings.IMPORT_CALLBACK_URL.rstrip("/").endswith("/api")
         and settings.IMPORT_ARGOCD_URL.startswith("https://")
         and settings.IMPORT_ARGOCD_TOKEN
         and settings.GITHUB_APP_PRIVATE_KEY
@@ -87,11 +97,25 @@ def verify_token(token, worker=False):
     except Exception:
         stop("Authentification invalide", 401)
     if worker:
-        expected = f"{settings.IMPORT_WORKFLOW_REPO}/.github/workflows/import-project.yml@refs/heads/{settings.IMPORT_WORKFLOW_REF}"
+        prefix = f"{settings.IMPORT_WORKFLOW_REPO}/.github/workflows/"
+        suffix = f"@refs/heads/{settings.IMPORT_WORKFLOW_REF}"
+        expected = prefix + settings.IMPORT_DISPATCH_WORKFLOW + suffix
+        reusable = prefix + "import-project.yml" + suffix
         if (
             claims.get("repository") != settings.IMPORT_WORKFLOW_REPO
             or claims.get("workflow_ref") != expected
             or claims.get("workflow_sha") != settings.IMPORT_WORKFLOW_SHA
+            or claims.get("sha") != settings.IMPORT_WORKFLOW_SHA
+            or claims.get("ref")
+            != f"refs/heads/{settings.IMPORT_WORKFLOW_REF}"
+            or (
+                settings.IMPORT_DISPATCH_WORKFLOW != "import-project.yml"
+                and (
+                    claims.get("job_workflow_ref") != reusable
+                    or claims.get("job_workflow_sha")
+                    != settings.IMPORT_WORKFLOW_SHA
+                )
+            )
             or claims.get("event_name") != "workflow_dispatch"
             or str(claims.get("run_attempt")) != "1"
             or not str(claims.get("run_id", "")).isdigit()
@@ -191,8 +215,121 @@ async def require_gitops_consumer():
             503,
         )
 
+    if settings.CNP_REGISTRY_BRANCH != "main":
+        annotations = (
+            response.json().get("metadata", {}).get("annotations", {})
+        )
+        if (
+            annotations.get("cnp.3istor.com/import-test-project")
+            != settings.IMPORT_ALLOWED_PROJECT
+            or annotations.get("cnp.3istor.com/import-test-registry")
+            != settings.CNP_REGISTRY_BRANCH
+        ):
+            stop(
+                "L’ApplicationSet n’est pas configuré pour ce projet et ce registre de recette",
+                503,
+            )
+    await require_registry_contract()
+    await require_image_updater_consumer()
+
+
+async def require_registry_contract():
+    token = await get_installation_token(settings.GITHUB_INSTALLATION_ID)
+    result = await github(
+        "GET",
+        f"/repos/{settings.CNP_REGISTRY_REPO}/contents/registry/schema.json",
+        token,
+        params={"ref": settings.CNP_REGISTRY_BRANCH},
+    )
+    try:
+        schema = json.loads(base64.b64decode(result["content"]))
+        properties = schema["properties"]["spec"]["properties"]["apps"][
+            "items"
+        ]["properties"]
+    except (KeyError, TypeError, ValueError):
+        stop("Le schéma du registre d’import ne peut pas être vérifié", 503)
+    if (
+        not isinstance(properties, dict)
+        or not {"sourceRevision", "chartRevision", "imageTag", "imageDigest"}
+        <= properties.keys()
+    ):
+        stop(
+            "Le registre doit accepter les révisions et le digest avant d’activer l’import",
+            503,
+        )
+
+
+async def require_image_updater_consumer():
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(
+            settings.IMPORT_ARGOCD_URL.rstrip("/")
+            + "/api/v1/applicationsets/cnp-image-updaters",
+            headers={
+                "Authorization": f"Bearer {settings.IMPORT_ARGOCD_TOKEN}"
+            },
+        )
+    response.raise_for_status()
+    data = response.json()
+    source = (
+        data.get("spec", {})
+        .get("template", {})
+        .get("spec", {})
+        .get("source", {})
+    )
+    revision = source.get("targetRevision", "HEAD")
+    if settings.CNP_REGISTRY_BRANCH != "main":
+        annotations = data.get("metadata", {}).get("annotations", {})
+        revision = annotations.get(
+            "cnp.3istor.com/import-test-k3s-revision", ""
+        )
+        expected = (
+            '{{ if eq .metadata.name "'
+            + settings.IMPORT_ALLOWED_PROJECT
+            + '" }}'
+            + revision
+            + "{{ else }}HEAD{{ end }}"
+        )
+        if (
+            not SHA.fullmatch(revision)
+            or source.get("targetRevision") != expected
+        ):
+            stop(
+                "Le contrôleur d’images de recette n’utilise pas la révision K3s approuvée",
+                503,
+            )
+    if (
+        source.get("repoURL", "").removesuffix(".git")
+        != "https://github.com/3-Istor/K3s"
+        or source.get("path") != "k8s/helm/cnp-image-updaters"
+    ):
+        stop(
+            "Le contrôleur d’images ne correspond pas au contrat de plateforme",
+            503,
+        )
+    token = await get_installation_token(settings.GITHUB_INSTALLATION_ID)
+    result = await github(
+        "GET",
+        "/repos/3-Istor/K3s/contents/k8s/helm/cnp-image-updaters/templates/imageupdaters.yaml",
+        token,
+        params={"ref": revision},
+    )
+    try:
+        template = base64.b64decode(result["content"]).decode()
+    except (KeyError, TypeError, ValueError):
+        stop("La protection des repos importés ne peut pas être vérifiée", 503)
+    if 'if not (hasKey $app "sourceRevision")' not in template:
+        stop(
+            "Déployez la protection ImageUpdater des imports avant de continuer",
+            503,
+        )
+
 
 def fresh_project(db, project_name, sub, username):
+    if (
+        settings.IMPORT_ALLOWED_PROJECT
+        and project_name != settings.IMPORT_ALLOWED_PROJECT
+    ):
+        stop("Cet environnement de recette est limité au projet autorisé", 403)
     project = (
         db.query(Project).filter_by(project_name=project_name).one_or_none()
     )
@@ -259,6 +396,34 @@ async def repository_user_permission(job, token, write=False):
         )
 
 
+async def require_runtime_secrets(job):
+    keys = job.configuration.get("runtime_secret_keys", [])
+    if not keys:
+        return
+    if not settings.VAULT_URL or not settings.VAULT_TOKEN:
+        stop("Vault est requis pour les secrets de l’application", 503)
+    path = f"project-{job.project_name}/data/{job.app_name}/runtime"
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(
+            settings.VAULT_URL.rstrip("/") + "/v1/" + path,
+            headers={"X-Vault-Token": settings.VAULT_TOKEN},
+        )
+    if response.status_code == 404:
+        stop(
+            "Configurez les secrets requis dans Vault avant de lancer l’import",
+            422,
+        )
+    response.raise_for_status()
+    data = response.json().get("data", {}).get("data", {})
+    if not isinstance(data, dict) or any(
+        not isinstance(data.get(key), str) or not data[key] for key in keys
+    ):
+        stop(
+            "Des secrets requis de l’application sont absents ou vides dans Vault",
+            422,
+        )
+
+
 async def authorize(db, job, write=False):
     enabled()
     if job.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
@@ -291,6 +456,7 @@ async def authorize(db, job, write=False):
     if job.configuration["chart_sha"] != settings.IMPORT_CHART_SHA:
         stop("La version approuvée du chart a changé", 403)
     await require_gitops_consumer()
+    await require_runtime_secrets(job)
     await project_registry.ensure_app_names_free(
         job.project_name, job.app_name, "static", job.configuration["hostname"]
     )
@@ -307,12 +473,6 @@ async def authorize(db, job, write=False):
         or repo.get("disabled")
     ):
         stop("Le repo demandé n’est plus accessible", 403)
-    # Current ApplicationSets consume deploy/values.yaml on main. Never silently create another branch.
-    if repo.get("default_branch") != "main":
-        stop(
-            "Ce premier parcours nécessite un repo dont la branche par défaut est main",
-            422,
-        )
     existing_apps = record[0]["spec"].get("apps", [])
     for app in existing_apps:
         if app.get("name") == job.app_name and (
@@ -334,7 +494,8 @@ async def head(job, token):
         "GET",
         "/repos/"
         + job.repository_url.removeprefix("https://github.com/")
-        + "/commits/main",
+        + "/commits/"
+        + quote(job.configuration.get("source_branch", "main"), safe=""),
         token,
     )
     if not SHA.fullmatch(data.get("sha", "")):
@@ -359,7 +520,7 @@ def transition(db, job, expected, status, **changes):
     db.refresh(job)
 
 
-async def dispatch(job):
+async def require_workflow_configuration():
     token = await get_installation_token(settings.GITHUB_INSTALLATION_ID)
     revision = await github(
         "GET",
@@ -368,9 +529,28 @@ async def dispatch(job):
     )
     if revision.get("sha") != settings.IMPORT_WORKFLOW_SHA:
         stop("La CI centrale ne correspond plus à la version approuvée", 503)
+    for name, expected in (
+        ("CMP_IMPORT_API_URL", settings.IMPORT_CALLBACK_URL.rstrip("/")),
+        ("CMP_IMPORT_OIDC_AUDIENCE", settings.IMPORT_OIDC_AUDIENCE),
+    ):
+        variable = await github(
+            "GET",
+            f"/repos/{settings.IMPORT_WORKFLOW_REPO}/actions/variables/{name}",
+            token,
+        )
+        if variable.get("value", "").rstrip("/") != expected:
+            stop(
+                "La CI ne cible pas ce CMP ou son audience ; corrigez les variables GitHub avant de lancer l’import",
+                503,
+            )
+    return token
+
+
+async def dispatch(job):
+    token = await require_workflow_configuration()
     await github(
         "POST",
-        f"/repos/{settings.IMPORT_WORKFLOW_REPO}/actions/workflows/import-project.yml/dispatches",
+        f"/repos/{settings.IMPORT_WORKFLOW_REPO}/actions/workflows/{settings.IMPORT_DISPATCH_WORKFLOW}/dispatches",
         token,
         json={
             "ref": settings.IMPORT_WORKFLOW_REF,
@@ -453,19 +633,24 @@ async def create(db, claims, payload):
         expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(hours=1),
         configuration={
+            "source_branch": getattr(payload, "source_branch", "main"),
             "project_path": payload.project_path,
             "port": payload.port,
             "health_path": payload.health_path,
             "stack": payload.stack,
+            "runtime_environment": getattr(payload, "runtime_environment", {}),
+            "smoke_environment": getattr(payload, "smoke_environment", {}),
+            "runtime_secret_keys": getattr(payload, "runtime_secret_keys", []),
             "target_cloud": project.target_cloud.value,
             "chart_sha": settings.IMPORT_CHART_SHA,
             "image": f"{settings.IMPORT_IMAGE_PREFIX.lower()}/{payload.app_name}:import-{import_id}",
             "hostname": f"{payload.app_name}-{payload.project_name}.{settings.IMPORT_DOMAIN}",
         },
     )
-    await authorize(
+    token = await authorize(
         db, job
     )  # No clone, commit or dispatch before permission checks.
+    await head(job, token)  # Refuse missing branches before dispatch.
     db.add(job)
     try:
         db.commit()
@@ -488,7 +673,8 @@ async def approved_pr(job, token):
     pr = await github("GET", path + f"/pulls/{job.pull_request}", token)
     if (
         not pr.get("merged")
-        or pr.get("base", {}).get("ref") != "main"
+        or pr.get("base", {}).get("ref")
+        != job.configuration.get("source_branch", "main")
         or pr.get("head", {}).get("ref") != f"cnp-import/{job.id}"
     ):
         stop("La PR doit être validée et fusionnée avant de reprendre")
@@ -570,7 +756,7 @@ async def retry(db, job):
         params={
             "state": "all",
             "head": f"{owner}:cnp-import/{job.id}",
-            "base": "main",
+            "base": job.configuration.get("source_branch", "main"),
         },
     )
     if prs:
@@ -688,7 +874,8 @@ async def worker(db, job, claims, action, payload, tasks):
             )
             if (
                 pr.get("head", {}).get("ref") != f"cnp-import/{job.id}"
-                or pr.get("base", {}).get("ref") != "main"
+                or pr.get("base", {}).get("ref")
+                != job.configuration.get("source_branch", "main")
                 or pr.get("state") != "open"
             ):
                 stop("La PR ne correspond pas à ce parcours", 403)
@@ -787,6 +974,9 @@ async def worker(db, job, claims, action, payload, tasks):
                         "github_installation_id": job.installation_id,
                         "project_name": job.project_name,
                         "domain": settings.IMPORT_DOMAIN,
+                        "runtime_secret_keys": job.configuration.get(
+                            "runtime_secret_keys", []
+                        ),
                     }
                 ),
             )

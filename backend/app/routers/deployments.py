@@ -37,7 +37,10 @@ from app.services.github_service import (
     get_installation_token,
     put_file_content,
 )
-from app.services.import_policy import require_mutable_source
+from app.services.import_policy import (
+    require_mutable_source,
+    require_standard_platform_mode,
+)
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
@@ -193,6 +196,7 @@ async def create_deployment(
     from the request body, so it is checked here rather than through a path
     dependency.
     """
+    require_standard_platform_mode()
     if not payload.project_id:
         raise HTTPException(
             status_code=400,

@@ -8,7 +8,7 @@ BACKEND_PORT ?= 8000
 DEV_DIR := .dev
 SSHUTTLE_PID := $(DEV_DIR)/sshuttle.pid
 
-export CMP_SSH_HOST KUBE_CONTEXT
+export CMP_SSH_HOST KUBE_CONTEXT BACKEND_PORT
 
 .PHONY: help setup env network network-stop backend frontend dev doctor
 
@@ -56,23 +56,34 @@ doctor: ## Check the tools and access the dev env needs
 	@kubectl --context $(KUBE_CONTEXT) -n arcl-cmp get secret arcl-cmp-secret >/dev/null 2>&1 && echo "ok      cluster access (make env works)" || echo "missing cluster access: open the k3s tunnel to run make env"
 	@curl -s -o /dev/null --max-time 3 $(KEYSTONE_URL) && echo "ok      Keystone reachable" || echo "missing Keystone (make network)"
 
-# Local import UI: no OpenStack tunnel, cloud state or CI dispatch.
-.PHONY: import-auth import-setup import-doctor import-backend import-frontend import-local
+# Local CMP: dedicated DB and local templates; import is disabled by default.
+.PHONY: import-readiness import-tunnel import-vault-tunnel import-auth import-setup import-doctor import-backend import-frontend import-local
 
 import-setup: ## Prepare import UI, env examples, dependencies and dedicated DB
 	./scripts/import-local.sh setup
 
+import-tunnel: ## Open only the K3s SSH forward on :6443, keeping :3000 free
+	./scripts/import-local.sh tunnel
+
+import-vault-tunnel: KUBE_CONTEXT = 3istor
+import-vault-tunnel: ## Forward Vault API to 127.0.0.1:18200 for local project creation
+	./scripts/import-local.sh vault-tunnel
+
+import-auth: KUBE_CONTEXT = 3istor
 import-auth: ## With cluster access, copy only the Keycloak secret into ignored env files
 	./scripts/import-local.sh auth
 
 import-doctor: ## Check Keycloak login config without showing secrets
 	./scripts/import-local.sh doctor
 
-import-backend: ## API on :8000, local DB and sibling app-templates; import disabled
+import-backend: ## API on BACKEND_PORT (8000), local DB and sibling app-templates; follows IMPORT_ENABLED
 	./scripts/import-local.sh backend
 
 import-frontend: ## UI on :3000, uses temporary Node 22 when needed
 	./scripts/import-local.sh frontend
 
-import-local: ## Authenticated local UI; no cloud tunnel
+import-local: ## Local CMP; make env configuration is used for project creation
 	./scripts/import-local.sh dev
+
+import-readiness: ## Check import config and remote readiness without dispatching CI
+	cd backend && DEBUG=false poetry run python ../scripts/import-readiness.py $(ARGS)

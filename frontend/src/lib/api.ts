@@ -28,8 +28,10 @@ export function getRepositoryImports(project: string) {
 }
 
 export function createRepositoryImport(payload: {
-  project_name: string; app_name: string; repository_url: string;
+  project_name: string; app_name: string; repository_url: string; source_branch?: string;
   project_path: string; port: number; health_path: string; allow_changes: boolean;
+  runtime_environment?: Record<string, string>; smoke_environment?: Record<string, string>;
+  runtime_secret_keys?: string[];
 }) {
   return request<RepositoryImport>("/repository-imports", { method: "POST", body: JSON.stringify(payload) });
 }
