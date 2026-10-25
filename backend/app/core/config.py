@@ -124,6 +124,8 @@ class Settings(BaseSettings):
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
+    # Enable the account-link action only after the broker is configured and tested.
+    GITHUB_ACCOUNT_LINK_URL: str = ""
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
     # Installation ID of the GitHub App on the 3-Istor org — used to mint
     # installation tokens for org-level Terraform operations (e.g. project bootstrap)

@@ -63,8 +63,10 @@ export function GitHubLinkButton() {
           {status.identity_linked ? `Identité GitHub liée : @${status.github_login}` : "Votre identité GitHub doit d’abord être liée à votre compte CNP."}
         </p>
         {!status.identity_linked && <>
-          <Button variant="outline" disabled={saving || loading} onClick={() => window.open(status.account_url, "_blank", "noopener,noreferrer")}>Lier mon compte GitHub dans CNP</Button>
-          <p className="text-sm text-muted-foreground">La page CNP ouvre directement « Comptes liés / Linked accounts ». Cliquez sur « Lier / Link » à côté de GitHub, puis revenez ici et actualisez.</p>
+          {status.account_url ? <>
+            <Button variant="outline" disabled={saving || loading} onClick={() => { if (status.account_url) window.open(status.account_url, "_blank", "noopener,noreferrer"); }}>Lier mon compte GitHub dans CNP</Button>
+            <p className="text-sm text-muted-foreground">La page CNP ouvre « Comptes liés / Linked accounts ». Cliquez sur « Lier / Link » à côté de GitHub, puis revenez ici et actualisez.</p>
+          </> : <p role="status" className="rounded border p-3 text-sm">La liaison GitHub n’est pas configurée sur le SSO CNP. Un administrateur doit configurer le fournisseur GitHub dans Keycloak avant de poursuivre.</p>}
         </>}
         {linked ? <p className="flex items-center gap-2 font-medium text-green-600"><CheckCircle2 className="h-5 w-5" />Installation CNP rattachée à votre compte</p> : <>
           <Button onClick={() => void connect()} disabled={!status.identity_linked || saving || loading}>

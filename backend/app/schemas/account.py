@@ -40,4 +40,4 @@ class GitHubConnectionStatus(BaseModel):
     github_installation_id: str | None
     identity_linked: bool
     github_login: str | None
-    account_url: str
+    account_url: str | None

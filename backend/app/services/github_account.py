@@ -188,7 +188,7 @@ async def connection_status(db, claims):
         "github_installation_id": selected,
         "identity_linked": identity is not None,
         "github_login": identity["login"] if identity else None,
-        "account_url": f"{settings.KEYCLOAK_URL.rstrip('/')}/realms/{settings.KEYCLOAK_REALM}/account/account-security/linked-accounts",
+        "account_url": settings.GITHUB_ACCOUNT_LINK_URL or None,
     }
 
 

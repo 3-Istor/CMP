@@ -12,7 +12,20 @@ avec accès à Session Manager. Le compte GitHub JoeBejjani est membre de 3-Isto
 Le diagnostic a utilisé seulement members:read, sans modifier de rôle, de permission
 ni d’installation. À ce moment, son identité GitHub n’était pas liée dans Keycloak.
 
-## Nouveau parcours
+## Prérequis réellement manquant
+
+La vérification d’administration a confirmé qu’il n’existe aucun Identity Provider
+dans le realm 3istor. Le menu Linked accounts est donc indisponible. Le lien direct
+renvoyait un HTTP 200 mais échouait dans la console authentifiée : sa réponse HTTP
+et sa présence dans le JavaScript ne prouvaient pas que la page était disponible.
+La configuration et le callback à préparer par l’administrateur sont décrits dans
+K3s/k8s/config/keycloak/GITHUB_IDENTITY_PROVIDER.md, avec un exemple inactif.
+
+CMP ne propose plus le lien tant que GITHUB_ACCOUNT_LINK_URL est vide. Après
+configuration et test OAuth du provider, cette variable peut recevoir l’URL des
+comptes liés. Elle ne donne aucun droit et ne remplace aucune vérification.
+
+## Nouveau parcours (après configuration du provider)
 
 ```mermaid
 flowchart TD
@@ -87,9 +100,9 @@ de ses autres consommateurs ; il n’a pas été effectué ici.
 
 ## Validation
 
-Backend : 579 tests réussis, dont 23 nouveaux tests de liaison GitHub. Lint/types
-et build frontend réussis. Cinq scénarios Chromium avec session/API simulées :
-identité absente, rattachement existant, connecté, refus, callback non fiable.
+Backend : 581 tests réussis, dont 25 tests de liaison GitHub. Lint/types
+et build frontend réussis. Six scénarios Chromium avec session/API simulées :
+provider non configuré, identité absente, rattachement existant, connecté, refus, callback non fiable.
 Le test réel en lecture a confirmé le compte et l’installation existante. La
 connexion OAuth et le clic de rattachement doivent être terminés par l’utilisateur.
 

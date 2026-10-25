@@ -114,3 +114,8 @@ Le bouton Compte réutilise maintenant l’installation CNP existante après vé
 de l’identité GitHub liée dans Keycloak et de l’appartenance à l’organisation.
 La page d’installation réservée aux administrateurs ne fait plus partie de la
 connexion courante. Voir [le parcours et les permissions](github-connection.md).
+
+Le diagnostic Keycloak a confirmé l’absence de fournisseur GitHub. La liaison
+utilisateur est bloquée jusqu’à sa configuration par l’administrateur. Le bouton
+CMP explique désormais ce prérequis ; GITHUB_ACCOUNT_LINK_URL reste vide jusqu’à
+la validation du provider et du parcours OAuth réellement connecté.

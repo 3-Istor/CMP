@@ -323,3 +323,24 @@ def test_installation_token_can_be_restricted_without_changing_existing_callers(
         assert client.post.call_args.kwargs["json"] == {
             "permissions": {"members": "read"}
         }
+
+
+@pytest.mark.parametrize(
+    "link_url",
+    [
+        "",
+        "https://sso.example.org/realms/cnp/account/account-security/linked-accounts",
+    ],
+)
+def test_account_link_is_only_offered_after_operator_configuration(
+    db, link_url
+):
+    with patch.object(
+        settings, "GITHUB_ACCOUNT_LINK_URL", link_url
+    ), patch.object(
+        service, "identity_for_user", return_value=("user-id", None)
+    ):
+        status = asyncio.run(service.connection_status(db, claims()))
+    assert status["account_url"] == (link_url or None)
+    assert status["github_installation_id"] is None
+    assert db.query(UserGitHubInstallation).count() == 0
