@@ -313,7 +313,7 @@ async def enable_staging(
     deployment = await run_in_threadpool(
         _app, db, token, deployment_id, ProjectRole.ADMIN
     )
-    ensure_cluster_up(db, TargetCloud(gitops.target_cloud(deployment)))
+    await ensure_cluster_up(TargetCloud(gitops.target_cloud(deployment)))
     try:
         row = activation.start_enable(
             db, deployment, payload.offhours.values()
@@ -625,7 +625,7 @@ async def start_promotion(
             status_code=409,
             detail="This app has no staging environment to promote from.",
         )
-    ensure_cluster_up(db, TargetCloud(gitops.target_cloud(deployment)))
+    await ensure_cluster_up(TargetCloud(gitops.target_cloud(deployment)))
     try:
         item = await promotion.start(
             db,

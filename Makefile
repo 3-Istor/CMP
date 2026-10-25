@@ -10,7 +10,7 @@ SSHUTTLE_PID := $(DEV_DIR)/sshuttle.pid
 
 export CMP_SSH_HOST KUBE_CONTEXT
 
-.PHONY: help cloud setup env network network-stop backend frontend dev doctor
+.PHONY: help setup env network network-stop backend frontend dev doctor
 
 help: ## List the targets
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -55,8 +55,3 @@ doctor: ## Check the tools and access the dev env needs
 	@[[ -f frontend/.env.local ]] && echo "ok      frontend/.env.local" || echo "missing frontend/.env.local (make setup)"
 	@kubectl --context $(KUBE_CONTEXT) -n arcl-cmp get secret arcl-cmp-secret >/dev/null 2>&1 && echo "ok      cluster access (make env works)" || echo "missing cluster access: open the k3s tunnel to run make env"
 	@curl -s -o /dev/null --max-time 3 $(KEYSTONE_URL) && echo "ok      Keystone reachable" || echo "missing Keystone (make network)"
-
-cloud: ## Fetch the cluster terraform roots into backend/cloud-src (needed by the backend image)
-	rm -rf backend/cloud-src
-	git clone --depth 1 --filter=blob:none --sparse git@github.com:3-Istor/Cloud.git backend/cloud-src
-	git -C backend/cloud-src sparse-checkout set terraform/public

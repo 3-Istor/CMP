@@ -12,7 +12,6 @@ bypassing unreliable Terraform state for auto-scaling resources.
 import asyncio
 import logging
 import time
-from datetime import datetime
 from typing import Any
 
 import boto3
@@ -36,7 +35,7 @@ OPENSTACK_UNREACHABLE = (
 # ── Pydantic Models for Response Schemas ──────────────────────────────────
 
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class HypervisorStatus(BaseModel):
@@ -47,26 +46,13 @@ class HypervisorStatus(BaseModel):
 
 
 class ClusterStatus(BaseModel):
-    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
-
     cloud: str
-    state: str  # up | down | starting | stopping | error
-    operation: str | None = None
-    step: str | None = None
-    done: int = 0
-    total: int = 0
-    started_at: datetime | None = None
-    started_by: str | None = None
-    last_error: str | None = None
-    wireguard_running: bool | None = None  # only meaningful when up
+    state: str  # up | down | starting | unknown
 
 
 class GlobalHealthResponse(BaseModel):
     openstack_hypervisors: list[HypervisorStatus]
-    clusters: list[ClusterStatus] = (
-        []
-    )  # filled by the router, not by get_global_health
-    can_operate_clusters: bool = False
+    clusters: list[ClusterStatus] = []  # filled by the router
 
 
 class VMInstance(BaseModel):

@@ -6,74 +6,19 @@ Provides real-time health monitoring endpoints for:
 - Application-specific resources (per deployment)
 """
 
-import asyncio
-import logging
-import time
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal, get_db
-from app.models.cluster import Cluster, ClusterState
+from app.core.database import get_db
 from app.models.deployment import Deployment
 from app.services import monitoring_service
-from app.services.authz import is_cnp_admin
-from app.services.clusters.ops import wireguard_cached, wireguard_running
-from app.services.clusters.recovery import reconcile
-from app.services.clusters.state import PUBLIC_CLOUDS
+from app.services.clusters.state import cluster_states
 from app.services.keycloak_service import get_current_user
 from app.services.monitoring_service import (
     AppHealthResponse,
     ClusterStatus,
     GlobalHealthResponse,
 )
-
-logger = logging.getLogger(__name__)
-
-REFRESH_INTERVAL = 60
-_last_refresh: float | None = (
-    None  # set when a refresh is scheduled: at most one per interval
-)
-_refresh_running = False
-_refresh_tasks: set[asyncio.Task] = (
-    set()
-)  # strong refs: the loop only keeps weak ones
-
-
-async def _refresh_clusters() -> None:
-    """Background: reconcile DB with reality, then re-check WireGuard on the up clusters."""
-    global _refresh_running
-    try:
-        with SessionLocal() as db:
-            await reconcile(db)
-            up = [
-                r.cloud
-                for r in db.query(Cluster).filter(
-                    Cluster.state == ClusterState.UP
-                )
-            ]
-        for cloud in up:
-            await wireguard_running(cloud)
-    except Exception:  # noqa: BLE001
-        logger.warning("Cluster refresh failed", exc_info=True)
-    finally:
-        _refresh_running = False
-
-
-def _schedule_refresh() -> None:
-    global _last_refresh, _refresh_running
-    now = time.monotonic()
-    if _refresh_running or (
-        _last_refresh is not None and now - _last_refresh < REFRESH_INTERVAL
-    ):
-        return
-    _refresh_running = True
-    _last_refresh = now
-    task = asyncio.create_task(_refresh_clusters())
-    _refresh_tasks.add(task)
-    task.add_done_callback(_refresh_tasks.discard)
-
 
 router = APIRouter(
     prefix="/infra",
@@ -83,13 +28,10 @@ router = APIRouter(
 
 
 @router.get("/health", response_model=GlobalHealthResponse)
-async def get_global_infrastructure_health(
-    token: Annotated[dict, Depends(get_current_user)],
-    db: Session = Depends(get_db),
-):
+async def get_global_infrastructure_health():
     """
     Get health status of the global infrastructure: OpenStack hypervisors
-    and the public clusters (EKS/GKE) with their up/down state.
+    and the public clusters (EKS/GKE) state as seen by Argo CD.
     """
     try:
         health = await monitoring_service.get_global_health()
@@ -98,26 +40,10 @@ async def get_global_infrastructure_health(
             status_code=503,
             detail=f"Failed to retrieve infrastructure health: {str(exc)}",
         ) from exc
-    # Cluster info is best effort: hypervisors are returned whatever happens.
-    health.can_operate_clusters = is_cnp_admin(token)
-    # Never awaits a cloud CLI: DB rows + cached WireGuard result, refreshed in the background.
-    clusters = []
-    try:
-        _schedule_refresh()
-        rows = {r.cloud: r for r in db.query(Cluster).all()}
-        for cloud in PUBLIC_CLOUDS:
-            row = rows.get(cloud)
-            status = (
-                ClusterStatus.model_validate(row)
-                if row
-                else ClusterStatus(cloud=cloud.value, state="down")
-            )
-            if row and row.state == ClusterState.UP:
-                status.wireguard_running = wireguard_cached(cloud)
-            clusters.append(status)
-    except Exception:  # noqa: BLE001
-        logger.warning("Cluster status unavailable", exc_info=True)
-    health.clusters = clusters
+    health.clusters = [
+        ClusterStatus(cloud=cloud.value, state=state)
+        for cloud, state in (await cluster_states()).items()
+    ]
     return health
 
 

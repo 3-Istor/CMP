@@ -123,8 +123,6 @@ ACTIONS: dict[tuple[str, str], str] = {
         "POST",
         "/api/account/github-installation",
     ): "account.github.link",
-    ("POST", "/api/clusters/{cloud}/up"): "cluster.up",
-    ("POST", "/api/clusters/{cloud}/down"): "cluster.down",
 }
 
 # Matched on the raw path rather than on the route FastAPI selected: since
@@ -154,8 +152,6 @@ def match_action(method: str, path: str) -> tuple[str | None, dict]:
 
 # A change worth a second look, shown with a badge in the activity feed.
 NOTABLE = {
-    "cluster.up",
-    "cluster.down",
     "project.delete",
     "project.member.add",
     "project.member.remove",

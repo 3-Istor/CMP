@@ -166,19 +166,17 @@ class Caller:
             raise internal_api.ApiError(exc.status_code, exc.detail) from exc
 
     async def require_cluster_up(self, project: str) -> None:
-        def check() -> None:
+        def cloud() -> TargetCloud:
             with SessionLocal() as db:
                 row = (
                     db.query(Project)
                     .filter(Project.project_name == project)
                     .first()
                 )
-                ensure_cluster_up(
-                    db, row.target_cloud if row else TargetCloud.ONPREM
-                )
+                return row.target_cloud if row else TargetCloud.ONPREM
 
         try:
-            await to_thread.run_sync(check)
+            await ensure_cluster_up(await to_thread.run_sync(cloud))
         except HTTPException as exc:
             raise internal_api.ApiError(exc.status_code, exc.detail) from exc
 

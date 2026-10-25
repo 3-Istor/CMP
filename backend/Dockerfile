@@ -34,32 +34,12 @@ RUN poetry config virtualenvs.create false \
 FROM python:3.14-slim
 
 WORKDIR /app
-# The pod runs as a uid without a passwd entry: HOME would be / (not writable).
-ENV HOME=/tmp
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     git \
     sqlite3 \
     curl \
-    unzip \
-    gnupg \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Cloud CLIs used by cluster up/down (pinned)
-ARG AWSCLI_VERSION=2.34.0
-ARG KUBECTL_VERSION=v1.35.9
-ARG GCLOUD_VERSION=590.0.0-0
-RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-${AWSCLI_VERSION}.zip" -o /tmp/awscli.zip \
-    && unzip -q /tmp/awscli.zip -d /tmp && /tmp/aws/install && rm -rf /tmp/aws /tmp/awscli.zip \
-    && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
-    && chmod +x /usr/local/bin/kubectl \
-    && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
-    google-cloud-cli=${GCLOUD_VERSION} \
-    google-cloud-cli-gke-gcloud-auth-plugin=${GCLOUD_VERSION} \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Terraform from builder
@@ -69,20 +49,8 @@ COPY --from=builder /usr/local/bin/terraform /usr/local/bin/terraform
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Cluster terraform roots (from `make cloud` / CI checkout), providers pre-cached.
-# Before `COPY . .` so code changes do not re-download providers.
-# World-writable: the pod runs as uid 1000 and terraform writes .terraform/ state there.
-COPY cloud-src/terraform/public /app/cloud
-RUN find /app/cloud \( -name .runtime -o -name '*.tfvars' \) -prune -exec rm -rf {} + \
-    && mkdir /app/cloud/.plugin-cache \
-    && for d in aws/EKS gcp/GKE; do \
-        (cd /app/cloud/$d && TF_PLUGIN_CACHE_DIR=/app/cloud/.plugin-cache terraform init -backend=false -input=false); \
-    done \
-    && chmod -R a+rwX /app/cloud
-
-# Copy application code (cloud-src is a duplicate of /app/cloud by now)
+# Copy application code
 COPY . .
-RUN rm -rf /app/cloud-src
 
 # Make entrypoint executable
 RUN chmod +x /app/docker-entrypoint.sh

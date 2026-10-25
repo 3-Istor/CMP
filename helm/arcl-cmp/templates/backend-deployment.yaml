@@ -78,25 +78,6 @@ spec:
               key: {{ $key }}
         {{- end }}
         {{- end }}
-        {{- range $env, $key := dict
-              "CLUSTER_OPS_AWS_ACCESS_KEY_ID" "aws-access-key-id"
-              "CLUSTER_OPS_AWS_SECRET_ACCESS_KEY" "aws-secret-access-key"
-              "CLUSTER_OPS_VAULT_TOKEN" "vault-token" }}
-        - name: {{ $env }}
-          valueFrom:
-            secretKeyRef:
-              name: {{ $.Values.clusterOps.secretName }}
-              key: {{ $key }}
-              optional: true  # pod starts without it; cluster ops then fail with a clear error
-        {{- end }}
-        - name: CLUSTER_OPS_GCP_SA_KEY_PATH
-          value: /var/run/cluster-ops/gcp-sa-key.json
-        - name: CLUSTER_OPS_POD_PREFIX
-          value: {{ include "arcl-cmp.fullname" . }}-backend-
-        - name: CLUSTER_TF_VARS_AWS
-          value: {{ .Values.clusterOps.tfVars.aws | toJson | quote }}
-        - name: CLUSTER_TF_VARS_GCP
-          value: {{ .Values.clusterOps.tfVars.gcp | toJson | quote }}
         {{- with .Values.extraEnv }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -125,9 +106,6 @@ spec:
           mountPath: /app/db
         - name: logs-storage
           mountPath: /app/logs
-        - name: cluster-ops
-          mountPath: /var/run/cluster-ops
-          readOnly: true
       volumes:
       - name: data
         persistentVolumeClaim:
@@ -137,13 +115,6 @@ spec:
           claimName: {{ include "arcl-cmp.fullname" . }}-backend-db
       - name: logs-storage
         emptyDir: {}
-      - name: cluster-ops
-        secret:
-          secretName: {{ .Values.clusterOps.secretName }}
-          optional: true
-          items:
-          - key: gcp-sa-key
-            path: gcp-sa-key.json
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -990,58 +990,6 @@ export async function streamRelease(
   }
 }
 
-// Clusters (EKS / GKE)
-
-export const startCluster = (cloud: import("@/types").ClusterCloud) =>
-  request<import("@/types").ClusterStatus>(`/clusters/${cloud}/up`, {
-    method: "POST",
-  });
-
-export const getClusterAffectedApps = (cloud: import("@/types").ClusterCloud) =>
-  request<import("@/types").ClusterDownPreview>(`/clusters/${cloud}/affected-apps`);
-
-export const stopCluster = (cloud: import("@/types").ClusterCloud) =>
-  request<import("@/types").ClusterStatus>(`/clusters/${cloud}/down`, {
-    method: "POST",
-  });
-
-/** Stream cluster operation log lines until the server closes or `signal` aborts. */
-export async function streamClusterLogs(
-  cloud: import("@/types").ClusterCloud,
-  onLine: (line: string) => void,
-  signal: AbortSignal,
-): Promise<void> {
-  const token = await getAccessToken();
-  const res = await fetch(`${BASE}/clusters/${cloud}/logs/stream`, {
-    headers: {
-      Accept: "text/event-stream",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: "include",
-    cache: "no-store",
-    signal,
-  });
-  if (!res.ok || !res.body) {
-    throw new ApiError(res.status, res.ok ? "empty stream" : await res.text());
-  }
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) return;
-    buffer += value.replace(/\r\n?/g, "\n");
-    let boundary = buffer.indexOf("\n\n");
-    while (boundary !== -1) {
-      const frame = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      for (const l of frame.split("\n")) {
-        if (l.startsWith("data:")) onLine(l.slice(5).replace(/^ /, ""));
-      }
-      boundary = buffer.indexOf("\n\n");
-    }
-  }
-}
-
 // AI assistants (MCP)
 
 export const getAgentAuthRequest = (requestId: string) =>

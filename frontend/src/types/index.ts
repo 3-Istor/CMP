@@ -199,26 +199,11 @@ export interface HypervisorStatus {
 export interface GlobalHealthResponse {
   openstack_hypervisors: HypervisorStatus[];
   clusters: ClusterStatus[];
-  can_operate_clusters: boolean;
 }
-
-export type ClusterCloud = "aws" | "gcp";
 
 export interface ClusterStatus {
-  cloud: ClusterCloud;
-  state: "up" | "down" | "starting" | "stopping" | "error";
-  operation: "up" | "down" | null;
-  step: string | null;
-  done: number;
-  total: number;
-  started_at: string | null;
-  started_by: string | null;
-  last_error: string | null;
-  wireguard_running: boolean | null;
-}
-
-export interface ClusterDownPreview {
-  affected_apps: { project: string; app: string; deployment_id: number }[];
+  cloud: "aws" | "gcp";
+  state: "up" | "down" | "starting" | "unknown";
 }
 
 export interface VMInstance {

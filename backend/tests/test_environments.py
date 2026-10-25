@@ -18,9 +18,8 @@ from app.models.environment import (
     PromotionPolicy,
     VerificationRun,
 )
-from app.models.cluster import Cluster, ClusterState
-from app.models.project import TargetCloud
 from app.routers import environments as router
+from app.services.clusters import state
 from app.services.environments import (
     activation,
     gitops,
@@ -626,12 +625,11 @@ class TestEnvironmentsApi:
         db.get(Deployment, 7).app_config = json.dumps(
             {"github_installation_id": "42", "target_cloud": "aws"}
         )
-        db.add(Cluster(cloud=TargetCloud.AWS, state=ClusterState.DOWN))
         db.commit()
 
         with mock.patch.object(router, "_holds", return_value=True), (
             mock.patch.object(router, "_app", return_value=db.get(Deployment, 7))
-        ):
+        ), mock.patch.object(state, "fresh_state", lambda cloud: "down"):
             response = getattr(client("dev"), method)(path, json=body)
 
         assert response.status_code == 409

@@ -1,89 +1,78 @@
-"""Cluster state machine: up/down transitions on the public clouds."""
+"""Read-only state of the public clusters, from Argo CD's wireguard-<cloud> Applications."""
 
-from datetime import datetime, timezone
+import asyncio
+import time
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from app.models.cluster import Cluster, ClusterState
 from app.models.project import TargetCloud
+from app.services.kube_client import KubeUnavailableError, kube_get
 
 PUBLIC_CLOUDS = (TargetCloud.AWS, TargetCloud.GCP)
+APP_PATH = (
+    "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/wireguard-{}"
+)
+CACHE_TTL = 60
+GUARD_RETRIES = 4  # unknown is re-read every GUARD_DELAY s, ~20 s in all
+GUARD_DELAY = 5
 
-_ALLOWED = {
-    "up": (ClusterState.DOWN, ClusterState.ERROR),
-    "down": (ClusterState.UP, ClusterState.ERROR),
-}
-_BUSY = {"up": ClusterState.STARTING, "down": ClusterState.STOPPING}
-_DONE = {"up": ClusterState.UP, "down": ClusterState.DOWN}
-
-
-class TransitionError(Exception):
-    """Operation not allowed from the current state (maps to HTTP 409)."""
-
-
-def _row(
-    db: Session, cloud: TargetCloud, lock: bool = False
-) -> Cluster | None:
-    q = db.query(Cluster).filter(Cluster.cloud == cloud)
-    return (q.with_for_update() if lock else q).one_or_none()
+_HEALTH = {"Healthy": "up", "Progressing": "starting"}
+_cache: dict[TargetCloud, str] = {}
+_cached_at: float | None = None
+_refresh_task: asyncio.Task | None = None
 
 
-def begin(
-    db: Session, cloud: TargetCloud, operation: str, user: str
-) -> Cluster:
-    if cloud not in PUBLIC_CLOUDS:
-        raise TransitionError(f"{cloud.value} is not a public cloud")
-    if operation not in _ALLOWED:
-        raise ValueError(f"unknown operation {operation!r}")
-    row = _row(db, cloud, lock=True)
-    if row is None:
-        row = Cluster(cloud=cloud, state=ClusterState.DOWN)
-        db.add(row)
-    if row.state not in _ALLOWED[operation]:
-        raise TransitionError(
-            f"cannot {operation} {cloud.value} while {row.state.value}"
-        )
-    now = datetime.now(timezone.utc)
-    row.state = _BUSY[operation]
-    row.operation = operation
-    row.step = None
-    row.done = row.total = 0
-    row.started_at = now.replace(tzinfo=None)
-    row.started_by = user
-    row.attempts = 1
-    row.last_error = None
-    row.log_path = f"data/cluster_ops/{cloud.value}-{now:%Y%m%dT%H%M%SZ}.log"
-    db.commit()
-    return row
+def fresh_state(cloud: TargetCloud) -> str:
+    """up | starting | down from the Application health; unknown if absent or unreadable."""
+    try:
+        app = kube_get(APP_PATH.format(cloud.value))
+    except (KubeUnavailableError, ValueError):
+        return "unknown"
+    if app is None:
+        return "unknown"
+    health = (app.get("status") or {}).get("health") or {}
+    return _HEALTH.get(health.get("status"), "down")
 
 
-def set_step(
-    db: Session, cloud: TargetCloud, step: str, done: int = 0, total: int = 0
-) -> None:
-    row = _row(db, cloud)
-    row.step, row.done, row.total = step, done, total
-    db.commit()
+async def _refresh() -> None:
+    global _cache, _cached_at
+    _cache = {
+        c: await run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS
+    }
+    _cached_at = time.monotonic()
 
 
-def finish(
-    db: Session, cloud: TargetCloud, ok: bool, error: str | None = None
-) -> None:
-    row = _row(db, cloud)
-    row.state = _DONE[row.operation] if ok else ClusterState.ERROR
-    row.last_error = None if ok else error
-    db.commit()
+async def cluster_states() -> dict[TargetCloud, str]:
+    """Cached states, never awaiting a read: a stale cache is refreshed in the background."""
+    global _refresh_task
+    stale = _cached_at is None or time.monotonic() - _cached_at >= CACHE_TTL
+    if stale and (_refresh_task is None or _refresh_task.done()):
+        _refresh_task = asyncio.create_task(_refresh())
+    return {c: _cache.get(c, "unknown") for c in PUBLIC_CLOUDS}
 
 
-def ensure_cluster_up(db: Session, cloud: TargetCloud) -> None:
-    """409 unless the cloud's cluster is up; on-prem is always available."""
+async def ensure_cluster_up(cloud: TargetCloud) -> None:
+    """409/503 unless the cloud's cluster is up (read fresh); on-prem always passes."""
     if cloud not in PUBLIC_CLOUDS:
         return
-    row = _row(db, cloud)
-    state = row.state if row else ClusterState.DOWN
-    if state != ClusterState.UP:
+    state = await run_in_threadpool(fresh_state, cloud)
+    for _ in range(GUARD_RETRIES):
+        if state != "unknown":
+            break
+        await asyncio.sleep(GUARD_DELAY)
+        state = await run_in_threadpool(fresh_state, cloud)
+    name = cloud.value.upper()
+    if state == "down":
         raise HTTPException(
             409,
-            f"The {cloud.value.upper()} cluster is {state.value}; "
-            "deployments resume once it is up.",
+            f"The {name} cluster is down; deployments resume once it is up.",
+        )
+    if state == "starting":
+        raise HTTPException(
+            409, f"The {name} cluster is starting; retry in a few minutes."
+        )
+    if state == "unknown":
+        raise HTTPException(
+            503, f"The {name} cluster state is unknown; retry later."
         )

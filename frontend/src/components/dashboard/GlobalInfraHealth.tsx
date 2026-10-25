@@ -1,6 +1,5 @@
 "use client";
 
-import { ClusterCard } from "@/components/dashboard/ClusterCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,8 +12,18 @@ import {
     XCircle,
 } from "lucide-react";
 
+const CLUSTER_BADGE = {
+  up: { variant: "default", className: "" },
+  down: { variant: "secondary", className: "text-muted-foreground" },
+  starting: {
+    variant: "secondary",
+    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  },
+  unknown: { variant: "outline", className: "text-muted-foreground" },
+} as const;
+
 export function GlobalInfraHealth() {
-  const { health, loading, error, refresh } = useGlobalHealth(15000);
+  const { health, loading, error } = useGlobalHealth(15000);
 
   if (loading) {
     return (
@@ -117,11 +126,17 @@ export function GlobalInfraHealth() {
                   <Cloud className="h-4 w-4 text-muted-foreground" />
                   {c.cloud === "aws" ? "EKS" : "GKE"}
                 </div>
-                <ClusterCard
-                  cluster={c}
-                  canOperate={health.can_operate_clusters}
-                  onChanged={refresh}
-                />
+                <div className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1.5">
+                  <span className="font-mono text-[10px]">
+                    {c.cloud === "aws" ? "EKS" : "GKE"}
+                  </span>
+                  <Badge
+                    variant={CLUSTER_BADGE[c.state].variant}
+                    className={`text-[10px] h-4 px-1.5 ${CLUSTER_BADGE[c.state].className}`}
+                  >
+                    {c.state}
+                  </Badge>
+                </div>
               </div>
             ))}
         </div>

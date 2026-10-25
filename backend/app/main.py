@@ -19,7 +19,6 @@ from app.routers import (
     agents,
     alerting,
     catalog,
-    clusters,
     deployments,
     environments,
     finops,
@@ -212,10 +211,6 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ready")
 
-    from app.services.clusters.recovery import resume_interrupted
-
-    resume_task = asyncio.create_task(resume_interrupted())
-
     # Backfill github_repo_url for GitOps apps created before it was persisted
     from app.services.terraform_orchestrator import backfill_gitops_repo_urls
 
@@ -269,7 +264,6 @@ async def lifespan(app: FastAPI):
     activity_collector_task.cancel()
     release_recorder_task.cancel()
     environment_task.cancel()
-    resume_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
@@ -327,7 +321,6 @@ app.include_router(agents.projects_router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(alerting.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
-app.include_router(clusters.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")

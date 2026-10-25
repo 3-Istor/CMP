@@ -211,7 +211,7 @@ async def create_deployment(
             .first()
         )
         cloud = project_row.target_cloud if project_row else TargetCloud.ONPREM
-        ensure_cluster_up(db, cloud)
+        await ensure_cluster_up(cloud)
         payload.app_config["target_cloud"] = cloud.value
         if project_name:
             try:
