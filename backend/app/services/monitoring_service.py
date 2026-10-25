@@ -2,7 +2,7 @@
 Real-time Infrastructure Monitoring Service
 
 Provides health monitoring for:
-- Global infrastructure (VPNs, OpenStack hypervisors)
+- Global infrastructure (OpenStack hypervisors)
 - Application-specific resources (AWS ASGs, OpenStack VMs)
 
 Uses direct SDK calls (boto3, openstacksdk) to get real-time status,
@@ -11,6 +11,7 @@ bypassing unreliable Terraform state for auto-scaling resources.
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any
 
 import boto3
@@ -34,13 +35,7 @@ OPENSTACK_UNREACHABLE = (
 # ── Pydantic Models for Response Schemas ──────────────────────────────────
 
 
-from pydantic import BaseModel
-
-
-class VPNStatus(BaseModel):
-    name: str
-    status: str
-    ip: str | None
+from pydantic import BaseModel, ConfigDict
 
 
 class HypervisorStatus(BaseModel):
@@ -50,10 +45,25 @@ class HypervisorStatus(BaseModel):
     ip: str | None
 
 
+class ClusterStatus(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+    cloud: str
+    state: str  # up | down | starting | stopping | error
+    operation: str | None = None
+    step: str | None = None
+    done: int = 0
+    total: int = 0
+    started_at: datetime | None = None
+    started_by: str | None = None
+    last_error: str | None = None
+    wireguard_running: bool | None = None  # only meaningful when up
+
+
 class GlobalHealthResponse(BaseModel):
-    openstack_vpn: VPNStatus | None
-    aws_vpns: list[VPNStatus]
     openstack_hypervisors: list[HypervisorStatus]
+    clusters: list[ClusterStatus] = []  # filled by the router, not by get_global_health
+    can_operate_clusters: bool = False
 
 
 class VMInstance(BaseModel):
@@ -131,157 +141,19 @@ def _get_boto3_client(service: str):
 
 async def get_global_health() -> GlobalHealthResponse:
     """
-    Get health status of the base infrastructure:
-    - OpenStack VPN gateway
-    - AWS VPN instances
-    - OpenStack hypervisors
+    Get health status of the base infrastructure (OpenStack hypervisors).
     """
-    logger.debug("Starting global health check...")
     try:
-        # Run all checks concurrently with timeout
-        os_vpn_task = asyncio.create_task(_get_openstack_vpn_status())
-        aws_vpns_task = asyncio.create_task(_get_aws_vpn_status())
-        hypervisors_task = asyncio.create_task(_get_openstack_hypervisors())
-
-        # Add timeout to prevent hanging (30 seconds total)
-        try:
-            os_vpn, aws_vpns, hypervisors = await asyncio.wait_for(
-                asyncio.gather(
-                    os_vpn_task,
-                    aws_vpns_task,
-                    hypervisors_task,
-                    return_exceptions=True,
-                ),
-                timeout=30.0,
-            )
-        except asyncio.TimeoutError:
-            logger.error("Global health check timed out after 30 seconds")
-            # Return empty results on timeout
-            return GlobalHealthResponse(
-                openstack_vpn=None,
-                aws_vpns=[],
-                openstack_hypervisors=[],
-            )
-
-        # Handle exceptions gracefully
-        if isinstance(os_vpn, Exception):
-            logger.error("Failed to get OpenStack VPN status: %s", os_vpn)
-            os_vpn = None
-        if isinstance(aws_vpns, Exception):
-            logger.error("Failed to get AWS VPN status: %s", aws_vpns)
-            aws_vpns = []
-        if isinstance(hypervisors, Exception):
-            logger.error("Failed to get hypervisor status: %s", hypervisors)
-            hypervisors = []
-
-        logger.debug("Global health check completed successfully")
-        return GlobalHealthResponse(
-            openstack_vpn=os_vpn,
-            aws_vpns=aws_vpns,
-            openstack_hypervisors=hypervisors,
+        hypervisors = await asyncio.wait_for(
+            _get_openstack_hypervisors(), timeout=30.0
         )
+    except asyncio.TimeoutError:
+        logger.error("Global health check timed out after 30 seconds")
+        hypervisors = []
     except Exception as exc:
-        logger.error("Failed to get global health: %s", exc, exc_info=True)
-        raise
-
-
-async def _get_openstack_vpn_status() -> VPNStatus | None:
-    """
-    Get status of the OpenStack VPN gateway (server named 'vpn-gateway').
-
-    Searches across all projects to ensure the VM is found regardless of current scope.
-    """
-
-    def _fetch():
-        logger.debug("Fetching OpenStack VPN status...")
-        try:
-            conn = _get_openstack_connection()
-            logger.debug(
-                "Searching for vpn-gateway server across all projects..."
-            )
-
-            # List all servers across all projects and find vpn-gateway
-            # This is more reliable than find_server() which can hang
-            for server in conn.compute.servers(all_projects=True):
-                if server.name == "vpn-gateway":
-                    # Extract fixed IP
-                    fixed_ip = None
-                    for network_addresses in server.addresses.values():
-                        for addr in network_addresses:
-                            if addr.get("OS-EXT-IPS:type") == "fixed":
-                                fixed_ip = addr["addr"]
-                                break
-
-                    logger.debug(
-                        "Found VPN gateway: %s (IP: %s)", server.name, fixed_ip
-                    )
-                    return VPNStatus(
-                        name=server.name,
-                        status=server.status.lower(),
-                        ip=fixed_ip,
-                    )
-
-        except openstack.exceptions.HttpException as e:
-            if "ServiceUnavailable" in str(e) or "500" in str(e):
-                logger.warning(
-                    "OpenStack compute service unavailable, VPN status unknown: %s",
-                    str(e)[:200],
-                )
-                return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
-            logger.warning("VPN gateway server not found")
-            return None
-        except OPENSTACK_UNREACHABLE as exc:
-            logger.warning(
-                "OpenStack unreachable, VPN status unknown: %s", str(exc)[:200]
-            )
-            return VPNStatus(name="vpn-gateway", status="unknown", ip=None)
-        except Exception as exc:
-            logger.error(
-                "Error fetching OpenStack VPN: %s", exc, exc_info=True
-            )
-            return None
-
-    try:
-        return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10.0)
-    except asyncio.TimeoutError:
-        logger.error("OpenStack VPN status check timed out after 10 seconds")
-        return None
-
-
-async def _get_aws_vpn_status() -> list[VPNStatus]:
-    """Get status of AWS VPN instances (tagged with Role=vpn)."""
-
-    def _fetch():
-        logger.debug("Fetching AWS VPN status...")
-        try:
-            ec2 = _get_boto3_client("ec2")
-            response = ec2.describe_instances(
-                Filters=[{"Name": "tag:Role", "Values": ["vpn"]}]
-            )
-
-            vpns = []
-            for reservation in response.get("Reservations", []):
-                for instance in reservation.get("Instances", []):
-                    vpns.append(
-                        VPNStatus(
-                            name=instance.get("InstanceId", "unknown"),
-                            status=instance.get("State", {})
-                            .get("Name", "unknown")
-                            .lower(),
-                            ip=instance.get("PrivateIpAddress"),
-                        )
-                    )
-            logger.debug("Found %d AWS VPN instances", len(vpns))
-            return vpns
-        except Exception as exc:
-            logger.error("Error fetching AWS VPN: %s", exc, exc_info=True)
-            return []
-
-    try:
-        return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10.0)
-    except asyncio.TimeoutError:
-        logger.error("AWS VPN status check timed out after 10 seconds")
-        return []
+        logger.error("Failed to get hypervisor status: %s", exc)
+        hypervisors = []
+    return GlobalHealthResponse(openstack_hypervisors=hypervisors)
 
 
 async def _get_openstack_hypervisors() -> list[HypervisorStatus]:

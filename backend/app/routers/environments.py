@@ -29,7 +29,7 @@ from app.routers.deployments import (
     _authorize_app,
     _get_kubernetes_deployment_or_404,
 )
-from app.routers.finops import is_cnp_admin
+from app.services.authz import is_cnp_admin
 from app.schemas.release import _Camel
 from app.services import project_registry
 from app.services.environments import (

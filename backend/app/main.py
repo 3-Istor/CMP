@@ -19,6 +19,7 @@ from app.routers import (
     agents,
     alerting,
     catalog,
+    clusters,
     deployments,
     environments,
     finops,
@@ -326,6 +327,7 @@ app.include_router(agents.projects_router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(alerting.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
+app.include_router(clusters.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")

@@ -36,6 +36,7 @@ import requests
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import ProjectRole, at_least
 from app.models.project import Project
@@ -187,3 +188,17 @@ RequireAdmin = Annotated[
 RequireOwner = Annotated[
     ProjectContext, Depends(require_project_role(ProjectRole.OWNER))
 ]
+
+
+def is_cnp_admin(token: dict) -> bool:
+    """Global CNP admin: configured username (FINOPS_ADMIN_USERS) or a ``cnp-admin`` realm role."""
+    admins = {
+        u.strip().lower()
+        for u in settings.FINOPS_ADMIN_USERS.split(",")
+        if u.strip()
+    }
+    username = token.get("preferred_username") or token.get("sub", "")
+    if username.lower() in admins:
+        return True
+    roles = (token.get("realm_access") or {}).get("roles", [])
+    return "cnp-admin" in roles

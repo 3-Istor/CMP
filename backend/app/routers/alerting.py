@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.database import get_db
 from app.models.alerting import AlertSetting
 from app.models.deployment import Deployment
-from app.routers.finops import is_cnp_admin
+from app.services.authz import is_cnp_admin
 from app.services import alerts_grafana as grafana
 from app.services.activity_sources import PROJECT_NAME, namespace_projects
 from app.services.alerts_catalog import BY_ID, CATALOG, AlertTemplate

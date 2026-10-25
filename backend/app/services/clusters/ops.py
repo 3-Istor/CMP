@@ -203,14 +203,36 @@ async def _wait_argocd(ctx: _Ctx) -> None:
 
 
 async def _wait_wireguard(ctx: _Ctx) -> None:
-    cmd = ["kubectl", "-n", "cnp-vpn", "get", "pod", "-l", "app=wireguard",
-           "-o", "jsonpath={.items[*].status.phase}"]
-
     async def running() -> bool:
-        phases = (await _run(ctx, cmd, log=False)).split()
+        phases = (await _run(ctx, _WG_CMD, log=False)).split()
         return bool(phases) and all(p == "Running" for p in phases)
 
     await _poll("the WireGuard pod", running)
+
+
+_WG_CMD = ["kubectl", "-n", "cnp-vpn", "get", "pod", "-l", "app=wireguard",
+           "-o", "jsonpath={.items[*].status.phase}"]
+_wg_cache: dict = {}
+
+
+async def wireguard_running(cloud: TargetCloud) -> bool | None:
+    """Standalone WireGuard pod check (fetches a throwaway kubeconfig); cached 60 s. None if unknown."""
+    hit = _wg_cache.get(cloud)
+    if hit and time.monotonic() - hit[0] < 60:
+        return hit[1]
+    tmp = tempfile.mkdtemp(prefix="cluster-wg-")
+    try:
+        ctx = _Ctx(cloud, "up", Path(settings.CLUSTER_TF_ROOT) / _DIRS[cloud],
+                   _env(cloud, f"{tmp}/kubeconfig"), None, step="wireguard")
+        await asyncio.wait_for(_fetch_kubeconfig(ctx), timeout=20)
+        phases = (await asyncio.wait_for(_run(ctx, _WG_CMD, log=False), timeout=20)).split()
+        result: bool | None = bool(phases) and all(p == "Running" for p in phases)
+    except Exception:  # noqa: BLE001 - health must not depend on it
+        result = None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    _wg_cache[cloud] = (time.monotonic(), result)
+    return result
 
 
 async def _up(ctx: _Ctx) -> None:
