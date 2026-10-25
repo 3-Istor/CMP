@@ -125,3 +125,22 @@ secrets:
     s3KeyPrefix: ""
   discord:
     webhookUrl: "" # Optional: Discord webhook for health alerts
+
+# Cluster up/down (EKS/GKE terraform run by the backend)
+clusterOps:
+  # Created out of band: aws-access-key-id, aws-secret-access-key, gcp-sa-key (JSON), vault-token
+  secretName: arcl-cmp-cluster-ops
+  tfVars:
+    aws:
+      api_allowed_cidrs: ["83.204.156.137/32", "163.5.3.41/32", "83.204.193.186/32", "176.186.130.237/32", "81.255.19.185/32"]
+      # Must keep the human admin: dropping it destroys its EKS access entry
+      admin_principal_arns:
+        - arn:aws:iam::947554757826:user/Hugo
+        - arn:aws:iam::947554757826:user/cnp-cmp-operator
+      service_cidr: "10.100.0.0/16"
+      vpn_source_cidrs: ["176.186.130.237/32"]
+      node_instance_type: "m7i-flex.large"
+    gcp:
+      api_allowed_cidrs: ["83.204.156.137/32", "176.186.130.237/32"]
+      vpn_source_cidrs: ["176.186.130.237/32"]
+      node_machine_type: "e2-standard-2"
