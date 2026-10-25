@@ -12,7 +12,13 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.cluster import Cluster, ClusterState
 from app.services.clusters import state
-from app.services.clusters.ops import _DIRS, _env, _stream, cluster_exists, run_operation
+from app.services.clusters.ops import (
+    _DIRS,
+    _env,
+    _stream,
+    cluster_exists,
+    run_operation,
+)
 from app.services.state_lock import format_state_lock_message, parse_state_lock
 
 logger = logging.getLogger(__name__)
@@ -41,7 +47,9 @@ async def renew_vault_token(force: bool = False) -> None:
     global _last_renew
     now = time.monotonic()
     if not settings.CLUSTER_OPS_VAULT_TOKEN or (
-        not force and _last_renew is not None and now - _last_renew < VAULT_RENEW_INTERVAL
+        not force
+        and _last_renew is not None
+        and now - _last_renew < VAULT_RENEW_INTERVAL
     ):
         return
     _last_renew = now
@@ -69,25 +77,50 @@ async def _release_stale_lock_in(row: Cluster, env: dict) -> str | None:
     cwd = Path(settings.CLUSTER_TF_ROOT) / _DIRS[row.cloud]
     out: list[str] = []
     # .terraform is ephemeral: plan and force-unlock need an initialised backend.
-    rc = await _stream(["terraform", "init", "-no-color", "-input=false"],
-                       cwd, env, None, out.append, out.append)
+    rc = await _stream(
+        ["terraform", "init", "-no-color", "-input=false"],
+        cwd,
+        env,
+        None,
+        out.append,
+        out.append,
+    )
     if rc:
         _append_log(row, "\n".join(out))
         return f"terraform init failed (exit {rc})"
     out.clear()
     rc = await _stream(
-        ["terraform", "plan", "-no-color", "-lock-timeout=0s", "-input=false", "-refresh=false"],
-        cwd, env, None, out.append, out.append,
+        [
+            "terraform",
+            "plan",
+            "-no-color",
+            "-lock-timeout=0s",
+            "-input=false",
+            "-refresh=false",
+        ],
+        cwd,
+        env,
+        None,
+        out.append,
+        out.append,
     )
     lock = parse_state_lock("\n".join(out))
     if lock is None:
-        if rc:  # not a lock problem: the resumed operation will surface the real error
+        if (
+            rc
+        ):  # not a lock problem: the resumed operation will surface the real error
             _append_log(row, "\n".join(out))
         return None
     if not (lock.lock_id and is_own_stale_lock(lock.who)):
         return format_state_lock_message(lock)
-    await _stream(["terraform", "force-unlock", "-no-color", "-force", lock.lock_id],
-                  cwd, env, None, out.append, out.append)
+    await _stream(
+        ["terraform", "force-unlock", "-no-color", "-force", lock.lock_id],
+        cwd,
+        env,
+        None,
+        out.append,
+        out.append,
+    )
     _append_log(row, f"Released stale lock {lock.lock_id} from {lock.who}")
     return None
 
@@ -95,9 +128,15 @@ async def _release_stale_lock_in(row: Cluster, env: dict) -> str | None:
 async def resume_interrupted() -> None:
     await renew_vault_token(force=True)
     with SessionLocal() as db:
-        rows = db.query(Cluster).filter(
-            Cluster.state.in_([ClusterState.STARTING, ClusterState.STOPPING])
-        ).all()
+        rows = (
+            db.query(Cluster)
+            .filter(
+                Cluster.state.in_(
+                    [ClusterState.STARTING, ClusterState.STOPPING]
+                )
+            )
+            .all()
+        )
         for row in rows:
             cloud = row.cloud
             if row.attempts >= 2:
@@ -126,7 +165,10 @@ async def reconcile(db) -> None:
             if row and row.state not in (ClusterState.UP, ClusterState.DOWN):
                 continue
             now = time.monotonic()
-            if now - _last_reconcile.get(cloud, -RECONCILE_INTERVAL) < RECONCILE_INTERVAL:
+            if (
+                now - _last_reconcile.get(cloud, -RECONCILE_INTERVAL)
+                < RECONCILE_INTERVAL
+            ):
                 continue
             _last_reconcile[cloud] = now
             exists = await cluster_exists(cloud)

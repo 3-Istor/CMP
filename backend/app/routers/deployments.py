@@ -23,13 +23,12 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
-from app.services.authz import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
-from app.services.authz import assert_project_role
-from app.services.clusters.state import ensure_cluster_up
+from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.catalog_service import get_template_by_id
+from app.services.clusters.state import ensure_cluster_up
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,

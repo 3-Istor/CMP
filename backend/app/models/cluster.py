@@ -20,7 +20,12 @@ class ClusterState(str, enum.Enum):
 
 def _enum(cls):
     # VARCHAR + value storage: no Postgres enum type to migrate.
-    return Enum(cls, native_enum=False, length=16, values_callable=lambda e: [m.value for m in e])
+    return Enum(
+        cls,
+        native_enum=False,
+        length=16,
+        values_callable=lambda e: [m.value for m in e],
+    )
 
 
 class Cluster(Base):
@@ -28,15 +33,21 @@ class Cluster(Base):
 
     __tablename__ = "cluster_state"
 
-    cloud: Mapped[TargetCloud] = mapped_column(_enum(TargetCloud), primary_key=True)
+    cloud: Mapped[TargetCloud] = mapped_column(
+        _enum(TargetCloud), primary_key=True
+    )
     state: Mapped[ClusterState] = mapped_column(
         _enum(ClusterState), nullable=False, default=ClusterState.DOWN
     )
-    operation: Mapped[str | None] = mapped_column(String(8), nullable=True)  # up | down
+    operation: Mapped[str | None] = mapped_column(
+        String(8), nullable=True
+    )  # up | down
     step: Mapped[str | None] = mapped_column(String(100), nullable=True)
     done: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
     started_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     log_path: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -25,13 +25,15 @@ from app.models.environment import (
     PromotionPolicy,
     VerificationRun,
 )
+from app.models.project import TargetCloud
 from app.routers.deployments import (
     _authorize_app,
     _get_kubernetes_deployment_or_404,
 )
-from app.services.authz import is_cnp_admin
 from app.schemas.release import _Camel
 from app.services import project_registry
+from app.services.authz import is_cnp_admin
+from app.services.clusters.state import ensure_cluster_up
 from app.services.environments import (
     activation,
     gitops,
@@ -42,8 +44,6 @@ from app.services.environments import (
     suites,
 )
 from app.services.environments.suites import SuiteSpec
-from app.models.project import TargetCloud
-from app.services.clusters.state import ensure_cluster_up
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
 

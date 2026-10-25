@@ -32,9 +32,13 @@ from app.services.monitoring_service import (
 logger = logging.getLogger(__name__)
 
 REFRESH_INTERVAL = 60
-_last_refresh: float | None = None  # set when a refresh is scheduled: at most one per interval
+_last_refresh: float | None = (
+    None  # set when a refresh is scheduled: at most one per interval
+)
 _refresh_running = False
-_refresh_tasks: set[asyncio.Task] = set()  # strong refs: the loop only keeps weak ones
+_refresh_tasks: set[asyncio.Task] = (
+    set()
+)  # strong refs: the loop only keeps weak ones
 
 
 async def _refresh_clusters() -> None:
@@ -43,7 +47,12 @@ async def _refresh_clusters() -> None:
     try:
         with SessionLocal() as db:
             await reconcile(db)
-            up = [r.cloud for r in db.query(Cluster).filter(Cluster.state == ClusterState.UP)]
+            up = [
+                r.cloud
+                for r in db.query(Cluster).filter(
+                    Cluster.state == ClusterState.UP
+                )
+            ]
         for cloud in up:
             await wireguard_running(cloud)
     except Exception:  # noqa: BLE001
@@ -55,7 +64,9 @@ async def _refresh_clusters() -> None:
 def _schedule_refresh() -> None:
     global _last_refresh, _refresh_running
     now = time.monotonic()
-    if _refresh_running or (_last_refresh is not None and now - _last_refresh < REFRESH_INTERVAL):
+    if _refresh_running or (
+        _last_refresh is not None and now - _last_refresh < REFRESH_INTERVAL
+    ):
         return
     _refresh_running = True
     _last_refresh = now
@@ -98,7 +109,8 @@ async def get_global_infrastructure_health(
             row = rows.get(cloud)
             status = (
                 ClusterStatus.model_validate(row)
-                if row else ClusterStatus(cloud=cloud.value, state="down")
+                if row
+                else ClusterStatus(cloud=cloud.value, state="down")
             )
             if row and row.state == ClusterState.UP:
                 status.wireguard_running = wireguard_cached(cloud)

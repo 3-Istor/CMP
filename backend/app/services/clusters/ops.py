@@ -49,11 +49,16 @@ class _Ctx:
         return Path(self.env["KUBECONFIG"])
 
 
-async def _stream(cmd: list[str], cwd: Path, env: dict, log, on_line, on_err=None) -> int:
+async def _stream(
+    cmd: list[str], cwd: Path, env: dict, log, on_line, on_err=None
+) -> int:
     """stdout goes to on_line, stderr to on_err: CLIs print warnings on stderr. Both are logged."""
     proc = await asyncio.create_subprocess_exec(
-        *cmd, cwd=cwd, env=env,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        *cmd,
+        cwd=cwd,
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
 
     async def pump(stream, callback) -> None:
@@ -66,9 +71,13 @@ async def _stream(cmd: list[str], cwd: Path, env: dict, log, on_line, on_err=Non
                 callback(line)
 
     try:
-        await asyncio.gather(pump(proc.stdout, on_line), pump(proc.stderr, on_err))
+        await asyncio.gather(
+            pump(proc.stdout, on_line), pump(proc.stderr, on_err)
+        )
         return await proc.wait()
-    except BaseException:  # incl. cancellation (timeouts): do not orphan the process
+    except (
+        BaseException
+    ):  # incl. cancellation (timeouts): do not orphan the process
         if proc.returncode is None:
             proc.kill()
         raise
@@ -114,16 +123,28 @@ async def cluster_exists(cloud: TargetCloud) -> bool | None:
     cmd = (
         ["aws", "eks", "describe-cluster", "--name", name]
         if cloud == TargetCloud.AWS
-        else ["gcloud", "container", "clusters", "list",
-              f"--filter=name={name}", "--format=value(name)"]
+        else [
+            "gcloud",
+            "container",
+            "clusters",
+            "list",
+            f"--filter=name={name}",
+            "--format=value(name)",
+        ]
     )
     out: list[str] = []
     err: list[str] = []
     try:
         with tempfile.TemporaryDirectory(prefix="cluster-exists-") as tmp:
             rc = await asyncio.wait_for(
-                _stream(cmd, Path(settings.CLUSTER_TF_ROOT), _env(cloud, tmp), None,
-                        out.append, err.append),
+                _stream(
+                    cmd,
+                    Path(settings.CLUSTER_TF_ROOT),
+                    _env(cloud, tmp),
+                    None,
+                    out.append,
+                    err.append,
+                ),
                 timeout=30,
             )
     except asyncio.TimeoutError:
@@ -139,7 +160,10 @@ def affected_apps(db, cloud: TargetCloud) -> list[dict]:
     rows = (
         db.query(Project.project_name, Deployment.name, Deployment.id)
         .join(Deployment, Deployment.project_id == Project.project_name)
-        .filter(Project.target_cloud == cloud, Deployment.status != DeploymentStatus.DELETED)
+        .filter(
+            Project.target_cloud == cloud,
+            Deployment.status != DeploymentStatus.DELETED,
+        )
         .all()
     )
     return [{"project": p, "app": a, "deployment_id": d} for p, a, d in rows]
@@ -151,7 +175,9 @@ def _set_step(ctx: _Ctx, step: str, done: int = 0, total: int = 0) -> None:
         state.set_step(db, ctx.cloud, step, done, total)
 
 
-async def _run(ctx: _Ctx, cmd: list[str], cwd: Path | None = None, on_line=None, log=True) -> str:
+async def _run(
+    ctx: _Ctx, cmd: list[str], cwd: Path | None = None, on_line=None, log=True
+) -> str:
     """Run a command, return its stdout; raise _StepError on non-zero exit."""
     lines: list[str] = []
     err: list[str] = []
@@ -161,11 +187,19 @@ async def _run(ctx: _Ctx, cmd: list[str], cwd: Path | None = None, on_line=None,
         if on_line:
             on_line(line)
 
-    rc = await _stream(cmd, cwd or ctx.cwd, ctx.env, ctx.log if log else None, collect, err.append)
+    rc = await _stream(
+        cmd,
+        cwd or ctx.cwd,
+        ctx.env,
+        ctx.log if log else None,
+        collect,
+        err.append,
+    )
     if rc:
         lock = parse_state_lock("\n".join(lines + err))
         raise _StepError(
-            format_state_lock_message(lock) if lock
+            format_state_lock_message(lock)
+            if lock
             else f"{ctx.step} failed (exit {rc}): {' '.join(cmd[:2])}"
         )
     return "\n".join(lines)
@@ -188,15 +222,34 @@ async def _terraform(ctx: _Ctx, verb: str) -> None:
 
 async def _fetch_kubeconfig(ctx: _Ctx) -> None:
     if ctx.cloud == TargetCloud.AWS:
-        cmd = ["aws", "ssm", "get-parameter", "--name", "/cnp/eks/kubeconfig",
-               "--query", "Parameter.Value", "--output", "text"]
+        cmd = [
+            "aws",
+            "ssm",
+            "get-parameter",
+            "--name",
+            "/cnp/eks/kubeconfig",
+            "--query",
+            "Parameter.Value",
+            "--output",
+            "text",
+        ]
         # Not logged: it holds credentials.
         out = await _run(ctx, cmd, log=False)
         ctx.kubeconfig.write_text(out + "\n")
         ctx.kubeconfig.chmod(0o600)
     else:
-        await _run(ctx, ["gcloud", "container", "clusters", "get-credentials",
-                         "cnp-gke", "--zone", "europe-west9-a"])
+        await _run(
+            ctx,
+            [
+                "gcloud",
+                "container",
+                "clusters",
+                "get-credentials",
+                "cnp-gke",
+                "--zone",
+                "europe-west9-a",
+            ],
+        )
 
 
 async def _poll(ctx: _Ctx, what: str, check) -> None:
@@ -215,13 +268,20 @@ async def _poll(ctx: _Ctx, what: str, check) -> None:
 
 
 def _argocd_server(cloud: TargetCloud) -> str | None:
-    secret = kube_get(f"/api/v1/namespaces/argocd/secrets/cluster-{cloud.value}")
+    secret = kube_get(
+        f"/api/v1/namespaces/argocd/secrets/cluster-{cloud.value}"
+    )
     server = ((secret or {}).get("data") or {}).get("server")
     return base64.b64decode(server).decode() if server else None
 
 
 async def _wait_argocd(ctx: _Ctx) -> None:
-    endpoint = (await _run(ctx, ["terraform", "output", "-no-color", "-raw", "cluster_endpoint"])).strip()
+    endpoint = (
+        await _run(
+            ctx,
+            ["terraform", "output", "-no-color", "-raw", "cluster_endpoint"],
+        )
+    ).strip()
     if not endpoint.startswith("https://"):
         endpoint = "https://" + endpoint  # GKE output has no scheme
 
@@ -239,8 +299,17 @@ async def _wait_wireguard(ctx: _Ctx) -> None:
     await _poll(ctx, "the WireGuard pod", running)
 
 
-_WG_CMD = ["kubectl", "-n", "cnp-vpn", "get", "pod", "-l", "app=wireguard",
-           "-o", "jsonpath={.items[*].status.phase}"]
+_WG_CMD = [
+    "kubectl",
+    "-n",
+    "cnp-vpn",
+    "get",
+    "pod",
+    "-l",
+    "app=wireguard",
+    "-o",
+    "jsonpath={.items[*].status.phase}",
+]
 _wg_cache: dict = {}
 
 
@@ -248,11 +317,21 @@ async def wireguard_running(cloud: TargetCloud) -> bool | None:
     """Standalone WireGuard pod check (fetches a throwaway kubeconfig); stores the result in the cache."""
     tmp = tempfile.mkdtemp(prefix="cluster-wg-")
     try:
-        ctx = _Ctx(cloud, "up", Path(settings.CLUSTER_TF_ROOT) / _DIRS[cloud],
-                   _env(cloud, tmp), None, step="wireguard")
+        ctx = _Ctx(
+            cloud,
+            "up",
+            Path(settings.CLUSTER_TF_ROOT) / _DIRS[cloud],
+            _env(cloud, tmp),
+            None,
+            step="wireguard",
+        )
         await asyncio.wait_for(_fetch_kubeconfig(ctx), timeout=20)
-        phases = (await asyncio.wait_for(_run(ctx, _WG_CMD, log=False), timeout=20)).split()
-        result: bool | None = bool(phases) and all(p == "Running" for p in phases)
+        phases = (
+            await asyncio.wait_for(_run(ctx, _WG_CMD, log=False), timeout=20)
+        ).split()
+        result: bool | None = bool(phases) and all(
+            p == "Running" for p in phases
+        )
     except Exception:  # noqa: BLE001 - health must not depend on it
         result = None
     finally:
@@ -275,8 +354,17 @@ async def _up(ctx: _Ctx) -> None:
         elif step == "kubeconfig":
             await _fetch_kubeconfig(ctx)
         elif step == "nodes":
-            await _run(ctx, ["kubectl", "wait", "--for=condition=Ready",
-                             "nodes", "--all", "--timeout=10m"])
+            await _run(
+                ctx,
+                [
+                    "kubectl",
+                    "wait",
+                    "--for=condition=Ready",
+                    "nodes",
+                    "--all",
+                    "--timeout=10m",
+                ],
+            )
         elif step == "argocd":
             await _wait_argocd(ctx)
         else:
@@ -285,24 +373,39 @@ async def _up(ctx: _Ctx) -> None:
 
 async def _down(ctx: _Ctx) -> None:
     _set_step(ctx, "checks")
-    await _run(ctx, ["terraform", "init", "-no-color", "-input=false"])  # .terraform is ephemeral
+    await _run(
+        ctx, ["terraform", "init", "-no-color", "-input=false"]
+    )  # .terraform is ephemeral
     if await cluster_exists(ctx.cloud) is not False:
         await _fetch_kubeconfig(ctx)
-        out = await _run(ctx, ["kubectl", "get", "svc", "-A", "-o", f"jsonpath={_LB_JSONPATH}"])
+        out = await _run(
+            ctx,
+            ["kubectl", "get", "svc", "-A", "-o", f"jsonpath={_LB_JSONPATH}"],
+        )
         if out.strip():
-            raise _StepError(f"Delete LoadBalancer Services first: {out.strip()}")
+            raise _StepError(
+                f"Delete LoadBalancer Services first: {out.strip()}"
+            )
     _set_step(ctx, "destroy")
     await _terraform(ctx, "destroy")
 
 
 def _check_credentials(cloud: TargetCloud) -> None:
     # The arcl-cmp-cluster-ops secret is optional in the chart: the pod starts without it.
-    missing = not (settings.CLUSTER_OPS_VAULT_TOKEN and settings.CLUSTER_OPS_AWS_ACCESS_KEY_ID
-                   and settings.CLUSTER_OPS_AWS_SECRET_ACCESS_KEY)
-    if cloud == TargetCloud.GCP and not Path(settings.CLUSTER_OPS_GCP_SA_KEY_PATH).is_file():
+    missing = not (
+        settings.CLUSTER_OPS_VAULT_TOKEN
+        and settings.CLUSTER_OPS_AWS_ACCESS_KEY_ID
+        and settings.CLUSTER_OPS_AWS_SECRET_ACCESS_KEY
+    )
+    if (
+        cloud == TargetCloud.GCP
+        and not Path(settings.CLUSTER_OPS_GCP_SA_KEY_PATH).is_file()
+    ):
         missing = True
     if missing:
-        raise _StepError("Cluster credentials are not configured (secret arcl-cmp-cluster-ops)")
+        raise _StepError(
+            "Cluster credentials are not configured (secret arcl-cmp-cluster-ops)"
+        )
 
 
 async def run_operation(cloud: TargetCloud, operation: str) -> None:
@@ -315,13 +418,20 @@ async def run_operation(cloud: TargetCloud, operation: str) -> None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log = log_path.open("a")
         _check_credentials(cloud)
-        ctx = _Ctx(cloud, operation, Path(settings.CLUSTER_TF_ROOT) / _DIRS[cloud],
-                   _env(cloud, tmp), log)
+        ctx = _Ctx(
+            cloud,
+            operation,
+            Path(settings.CLUSTER_TF_ROOT) / _DIRS[cloud],
+            _env(cloud, tmp),
+            log,
+        )
         await (_up if operation == "up" else _down)(ctx)
         error = None
     except _StepError as exc:
         error = str(exc)
-    except Exception as exc:  # noqa: BLE001 - the state must always leave "busy"
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - the state must always leave "busy"
         error = f"Unexpected error: {exc}"
     finally:
         if log:

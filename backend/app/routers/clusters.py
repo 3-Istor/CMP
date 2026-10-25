@@ -40,14 +40,22 @@ def _admin_cloud(token: dict, cloud: str) -> TargetCloud:
     return parsed
 
 
-def _start(db: Session, token: dict, cloud: TargetCloud, operation: str) -> ClusterStatus:
+def _start(
+    db: Session, token: dict, cloud: TargetCloud, operation: str
+) -> ClusterStatus:
     user = token.get("preferred_username") or token.get("sub", "")
     try:
         row = begin(db, cloud, operation, user)
     except (TransitionError, IntegrityError) as exc:
         db.rollback()  # the pending row must not leak into the session
-        raise HTTPException(409, str(exc) if isinstance(exc, TransitionError)
-                            else "Another operation just started") from exc
+        raise HTTPException(
+            409,
+            (
+                str(exc)
+                if isinstance(exc, TransitionError)
+                else "Another operation just started"
+            ),
+        ) from exc
     task = asyncio.create_task(run_operation(cloud, operation))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
@@ -55,29 +63,41 @@ def _start(db: Session, token: dict, cloud: TargetCloud, operation: str) -> Clus
 
 
 @router.post("/{cloud}/up", status_code=202, response_model=ClusterStatus)
-async def cluster_up(cloud: str, token: CurrentUser, db: Session = Depends(get_db)):
+async def cluster_up(
+    cloud: str, token: CurrentUser, db: Session = Depends(get_db)
+):
     return _start(db, token, _admin_cloud(token, cloud), "up")
 
 
 @router.get("/{cloud}/affected-apps")
-async def cluster_affected_apps(cloud: str, token: CurrentUser, db: Session = Depends(get_db)):
+async def cluster_affected_apps(
+    cloud: str, token: CurrentUser, db: Session = Depends(get_db)
+):
     return {"affected_apps": affected_apps(db, _admin_cloud(token, cloud))}
 
 
 @router.post("/{cloud}/down", status_code=202, response_model=ClusterStatus)
-async def cluster_down(cloud: str, token: CurrentUser, db: Session = Depends(get_db)):
+async def cluster_down(
+    cloud: str, token: CurrentUser, db: Session = Depends(get_db)
+):
     return _start(db, token, _admin_cloud(token, cloud), "down")
 
 
 def _busy(cloud: TargetCloud) -> bool:
     with SessionLocal() as db:
         row = db.get(Cluster, cloud)
-        return bool(row) and row.state in (ClusterState.STARTING, ClusterState.STOPPING)
+        return bool(row) and row.state in (
+            ClusterState.STARTING,
+            ClusterState.STOPPING,
+        )
 
 
 @router.get("/{cloud}/logs/stream")
 async def stream_cluster_logs(
-    cloud: str, request: Request, token: CurrentUser, db: Session = Depends(get_db)
+    cloud: str,
+    request: Request,
+    token: CurrentUser,
+    db: Session = Depends(get_db),
 ):
     parsed = _admin_cloud(token, cloud)
     row = db.get(Cluster, parsed)
@@ -95,7 +115,9 @@ async def stream_cluster_logs(
                     yield f"data: {line.rstrip()}\n\n"
                     continue
                 if not await run_in_threadpool(_busy, parsed):
-                    for line in f:  # drain what was written since the last read
+                    for (
+                        line
+                    ) in f:  # drain what was written since the last read
                         yield f"data: {line.rstrip()}\n\n"
                     break
                 await asyncio.sleep(0.5)
