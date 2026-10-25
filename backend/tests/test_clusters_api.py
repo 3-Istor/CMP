@@ -83,32 +83,31 @@ def test_double_up_conflicts(session_factory, run_op):  # noqa: F811
     run_op.assert_called_once()
 
 
-def test_down_without_confirm_lists_apps(session_factory, run_op):  # noqa: F811
+def test_affected_apps_lists_apps_without_stopping(session_factory, run_op):  # noqa: F811
     set_state(session_factory, ClusterState.UP)
     with session_factory() as db:
         db.add(Project(project_name="demo", owner_username="u", target_cloud=TargetCloud.AWS))
         db.add(Deployment(name="shop", project_id="demo", template_id="t",
                           status=DeploymentStatus.PENDING))
         db.commit()
-    c = make_client(session_factory, ADMIN)
-    r = c.post("/api/clusters/aws/down")
+    r = make_client(session_factory, ADMIN).get("/api/clusters/aws/affected-apps")
     assert r.status_code == 200
     assert [(a["project"], a["app"]) for a in r.json()["affected_apps"]] == [("demo", "shop")]
-    assert c.post("/api/clusters/aws/down", json={"confirm": False}).status_code == 200
+    assert make_client(session_factory, USER).get("/api/clusters/aws/affected-apps").status_code == 403
     assert read_state(session_factory) == ClusterState.UP
     run_op.assert_not_called()
 
 
-def test_down_confirmed_starts(session_factory, run_op):  # noqa: F811
+def test_down_starts(session_factory, run_op):  # noqa: F811
     set_state(session_factory, ClusterState.UP)
-    r = make_client(session_factory, ADMIN).post("/api/clusters/aws/down", json={"confirm": True})
+    r = make_client(session_factory, ADMIN).post("/api/clusters/aws/down")
     assert r.status_code == 202
     assert r.json()["state"] == "stopping"
     run_op.assert_called_once_with(TargetCloud.AWS, "down")
 
 
 def test_down_when_already_down_conflicts(session_factory, run_op):  # noqa: F811
-    r = make_client(session_factory, ADMIN).post("/api/clusters/gcp/down", json={"confirm": True})
+    r = make_client(session_factory, ADMIN).post("/api/clusters/gcp/down")
     assert r.status_code == 409
     run_op.assert_not_called()
 
@@ -191,3 +190,16 @@ def test_concurrent_stale_health_calls_schedule_one_refresh():
     with mock.patch.object(infra, "_refresh_clusters", slow_refresh):
         asyncio.run(call())
     started.assert_called_once()
+
+
+def test_global_health_caches_hypervisor_listing(monkeypatch):
+    fetch = mock.AsyncMock(return_value=[])
+    monkeypatch.setattr(infra.monitoring_service, "_get_openstack_hypervisors", fetch)
+    monkeypatch.setattr(infra.monitoring_service, "_hypervisors_cache", None)
+
+    async def twice():
+        await infra.monitoring_service.get_global_health()
+        await infra.monitoring_service.get_global_health()
+
+    asyncio.run(twice())
+    fetch.assert_awaited_once()

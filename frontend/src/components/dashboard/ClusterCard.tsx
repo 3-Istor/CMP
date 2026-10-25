@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ApiError, startCluster, stopCluster } from "@/lib/api";
+import { ApiError, getClusterAffectedApps, startCluster, stopCluster } from "@/lib/api";
 import type { ClusterDownPreview, ClusterStatus } from "@/types";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -114,10 +114,10 @@ export function ClusterCard({
 
   const up = () => run(() => startCluster(cluster.cloud));
   const askDown = () =>
-    run(async () => setPreview(await stopCluster(cluster.cloud, false)));
+    run(async () => setPreview(await getClusterAffectedApps(cluster.cloud)));
   const confirmDown = () =>
     run(async () => {
-      await stopCluster(cluster.cloud, true);
+      await stopCluster(cluster.cloud);
       setPreview(null);
     });
 
@@ -146,7 +146,8 @@ export function ClusterCard({
             UP
           </Button>
         )}
-        {canOperate && cluster.state === "up" && (
+        {/* DOWN from error too: a failed UP can leave a billable cluster behind. */}
+        {canOperate && (cluster.state === "up" || cluster.state === "error") && (
           <Button size="xs" variant="destructive" disabled={busy} onClick={askDown}>
             DOWN
           </Button>

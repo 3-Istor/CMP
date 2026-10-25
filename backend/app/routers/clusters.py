@@ -5,10 +5,9 @@ import logging
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,10 +26,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clusters", tags=["Clusters"])
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]
-
-
-class DownBody(BaseModel):
-    confirm: bool = False
 
 
 def _admin_cloud(token: dict, cloud: str) -> TargetCloud:
@@ -64,19 +59,14 @@ async def cluster_up(cloud: str, token: CurrentUser, db: Session = Depends(get_d
     return _start(db, token, _admin_cloud(token, cloud), "up")
 
 
-@router.post("/{cloud}/down", status_code=202)
-async def cluster_down(
-    cloud: str,
-    token: CurrentUser,
-    response: Response,
-    body: DownBody | None = None,
-    db: Session = Depends(get_db),
-):
-    parsed = _admin_cloud(token, cloud)
-    if not (body and body.confirm):
-        response.status_code = 200
-        return {"affected_apps": affected_apps(db, parsed)}
-    return _start(db, token, parsed, "down")
+@router.get("/{cloud}/affected-apps")
+async def cluster_affected_apps(cloud: str, token: CurrentUser, db: Session = Depends(get_db)):
+    return {"affected_apps": affected_apps(db, _admin_cloud(token, cloud))}
+
+
+@router.post("/{cloud}/down", status_code=202, response_model=ClusterStatus)
+async def cluster_down(cloud: str, token: CurrentUser, db: Session = Depends(get_db)):
+    return _start(db, token, _admin_cloud(token, cloud), "down")
 
 
 def _busy(cloud: TargetCloud) -> bool:

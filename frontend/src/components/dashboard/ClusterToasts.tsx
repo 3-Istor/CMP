@@ -2,6 +2,7 @@
 
 import { useGlobalHealth } from "@/lib/hooks";
 import type { ClusterStatus } from "@/types";
+import { useSession } from "next-auth/react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +10,12 @@ const LABELS = { aws: "EKS", gcp: "GKE" };
 
 /** Fires a toast when a cluster finishes or fails a transition, on any page. */
 export function ClusterToasts() {
+  const { status } = useSession();
+  // /infra/health needs a token: do not poll before sign-in.
+  return status === "authenticated" ? <ClusterTransitionWatcher /> : null;
+}
+
+function ClusterTransitionWatcher() {
   const { health } = useGlobalHealth(15000);
   const prev = useRef<Map<string, ClusterStatus>>(new Map());
 

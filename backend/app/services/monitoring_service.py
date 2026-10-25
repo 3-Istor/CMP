@@ -11,6 +11,7 @@ bypassing unreliable Terraform state for auto-scaling resources.
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -139,10 +140,18 @@ def _get_boto3_client(service: str):
 # ── Global Infrastructure Health ───────────────────────────────────────────
 
 
+HYPERVISORS_TTL = 15
+_hypervisors_cache: tuple[float, list] | None = None  # (monotonic time, hypervisors)
+
+
 async def get_global_health() -> GlobalHealthResponse:
     """
     Get health status of the base infrastructure (OpenStack hypervisors).
+    The listing (a Keystone login each time) is cached for HYPERVISORS_TTL seconds.
     """
+    global _hypervisors_cache
+    if _hypervisors_cache and time.monotonic() - _hypervisors_cache[0] < HYPERVISORS_TTL:
+        return GlobalHealthResponse(openstack_hypervisors=list(_hypervisors_cache[1]))
     try:
         hypervisors = await asyncio.wait_for(
             _get_openstack_hypervisors(), timeout=30.0
@@ -153,7 +162,8 @@ async def get_global_health() -> GlobalHealthResponse:
     except Exception as exc:
         logger.error("Failed to get hypervisor status: %s", exc)
         hypervisors = []
-    return GlobalHealthResponse(openstack_hypervisors=hypervisors)
+    _hypervisors_cache = (time.monotonic(), hypervisors)
+    return GlobalHealthResponse(openstack_hypervisors=list(hypervisors))
 
 
 async def _get_openstack_hypervisors() -> list[HypervisorStatus]:

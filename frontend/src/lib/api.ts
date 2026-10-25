@@ -997,17 +997,12 @@ export const startCluster = (cloud: import("@/types").ClusterCloud) =>
     method: "POST",
   });
 
-export const stopCluster = <C extends boolean>(
-  cloud: import("@/types").ClusterCloud,
-  confirm: C,
-) =>
-  request<
-    C extends true
-      ? import("@/types").ClusterStatus
-      : import("@/types").ClusterDownPreview
-  >(`/clusters/${cloud}/down`, {
+export const getClusterAffectedApps = (cloud: import("@/types").ClusterCloud) =>
+  request<import("@/types").ClusterDownPreview>(`/clusters/${cloud}/affected-apps`);
+
+export const stopCluster = (cloud: import("@/types").ClusterCloud) =>
+  request<import("@/types").ClusterStatus>(`/clusters/${cloud}/down`, {
     method: "POST",
-    body: JSON.stringify({ confirm }),
   });
 
 /** Stream cluster operation log lines until the server closes or `signal` aborts. */
