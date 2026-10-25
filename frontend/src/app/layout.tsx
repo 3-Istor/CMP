@@ -1,3 +1,4 @@
+import { ClusterToasts } from "@/components/dashboard/ClusterToasts";
 import { AppShell } from "@/components/layout/AppShell";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { Toaster } from "@/components/ui/sonner";
@@ -49,6 +50,7 @@ export default function RootLayout({
       >
         <SessionProvider>
           <AppShell>{children}</AppShell>
+          <ClusterToasts />
           <Toaster richColors position="bottom-right" />
         </SessionProvider>
       </body>

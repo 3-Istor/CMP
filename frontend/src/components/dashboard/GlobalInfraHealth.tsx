@@ -1,5 +1,6 @@
 "use client";
 
+import { ClusterCard } from "@/components/dashboard/ClusterCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,13 +8,13 @@ import { useGlobalHealth } from "@/lib/hooks";
 import {
     AlertTriangle,
     CheckCircle2,
+    Cloud,
     Server,
-    Shield,
     XCircle,
 } from "lucide-react";
 
 export function GlobalInfraHealth() {
-  const { health, loading, error } = useGlobalHealth(15000);
+  const { health, loading, error, refresh } = useGlobalHealth(15000);
 
   if (loading) {
     return (
@@ -107,96 +108,22 @@ export function GlobalInfraHealth() {
             </div>
           </div>
 
-          {/* AWS VPNs */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              AWS VPNs
-            </div>
-            <div className="space-y-1.5">
-              {health.aws_vpns.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No AWS VPNs found
-                </p>
-              ) : (
-                health.aws_vpns.map((vpn) => (
-                  <div
-                    key={vpn.name}
-                    className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1.5"
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-[10px]">{vpn.name}</span>
-                      {vpn.ip && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {vpn.ip}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {vpn.status === "running" ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                      )}
-                      <Badge
-                        variant={
-                          vpn.status === "running" ? "default" : "secondary"
-                        }
-                        className="text-[10px] h-4 px-1.5"
-                      >
-                        {vpn.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* OpenStack VPN */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              OpenStack VPN
-            </div>
-            <div className="space-y-1.5">
-              {!health.openstack_vpn ? (
-                <p className="text-xs text-muted-foreground">
-                  VPN gateway not found
-                </p>
-              ) : (
-                <div className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1.5">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-mono text-[10px]">
-                      {health.openstack_vpn.name}
-                    </span>
-                    {health.openstack_vpn.ip && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {health.openstack_vpn.ip}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {health.openstack_vpn.status === "active" ? (
-                      <CheckCircle2 className="h-3 w-3 text-green-500" />
-                    ) : (
-                      <XCircle className="h-3 w-3 text-red-500" />
-                    )}
-                    <Badge
-                      variant={
-                        health.openstack_vpn.status === "active"
-                          ? "default"
-                          : "destructive"
-                      }
-                      className="text-[10px] h-4 px-1.5"
-                    >
-                      {health.openstack_vpn.status}
-                    </Badge>
-                  </div>
+          {health.clusters
+            .slice()
+            .sort((x, y) => x.cloud.localeCompare(y.cloud))
+            .map((c) => (
+              <div key={c.cloud} className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Cloud className="h-4 w-4 text-muted-foreground" />
+                  {c.cloud === "aws" ? "EKS" : "GKE"}
                 </div>
-              )}
-            </div>
-          </div>
+                <ClusterCard
+                  cluster={c}
+                  canOperate={health.can_operate_clusters}
+                  onChanged={refresh}
+                />
+              </div>
+            ))}
         </div>
       </CardContent>
     </Card>
