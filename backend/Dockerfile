@@ -55,7 +55,7 @@ RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-${AWSCLI_VE
     && chmod +x /usr/local/bin/kubectl \
     && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list \
-    && apt-get update && apt-get install -y \
+    && apt-get update && apt-get install -y --no-install-recommends \
     google-cloud-cli=${GCLOUD_VERSION} \
     google-cloud-cli-gke-gcloud-auth-plugin=${GCLOUD_VERSION} \
     && rm -rf /var/lib/apt/lists/*
@@ -67,21 +67,23 @@ COPY --from=builder /usr/local/bin/terraform /usr/local/bin/terraform
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code
-COPY . .
-
-# Make entrypoint executable
-RUN chmod +x /app/docker-entrypoint.sh
-
 # Cluster terraform roots (from `make cloud` / CI checkout), providers pre-cached.
+# Before `COPY . .` so code changes do not re-download providers.
 # World-writable: the pod runs as uid 1000 and terraform writes .terraform/ state there.
-RUN mv /app/cloud-src/terraform/public /app/cloud && rm -rf /app/cloud-src \
-    && find /app/cloud \( -name .runtime -o -name '*.tfvars' \) -prune -exec rm -rf {} + \
+COPY cloud-src/terraform/public /app/cloud
+RUN find /app/cloud \( -name .runtime -o -name '*.tfvars' \) -prune -exec rm -rf {} + \
     && mkdir /app/cloud/.plugin-cache \
     && for d in aws/EKS gcp/GKE; do \
         (cd /app/cloud/$d && TF_PLUGIN_CACHE_DIR=/app/cloud/.plugin-cache terraform init -backend=false -input=false); \
     done \
     && chmod -R a+rwX /app/cloud
+
+# Copy application code (cloud-src is a duplicate of /app/cloud by now)
+COPY . .
+RUN rm -rf /app/cloud-src
+
+# Make entrypoint executable
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Create data directories
 RUN mkdir -p /app/data/templates /app/data/terraform_states
