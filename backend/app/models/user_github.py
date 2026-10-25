@@ -20,7 +20,7 @@ class UserGitHubInstallation(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
-    # Keycloak preferred_username (falls back to the JWT 'sub' claim)
+    # Canonical Keycloak UUID; legacy records may contain preferred_username.
     user_sub: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
     )

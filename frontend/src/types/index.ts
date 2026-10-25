@@ -255,9 +255,17 @@ export interface GitHubStatus {
   github_installation_id: string | null;
 }
 
+export interface GitHubConnectionStatus extends GitHubStatus {
+  identity_linked: boolean;
+  github_login: string | null;
+  account_url: string;
+}
+
 export interface GitHubInstallationResponse {
   message: string;
   installation_id: string;
+  github_login: string;
+  account: string;
 }
 
 export interface PictureUploadResponse {

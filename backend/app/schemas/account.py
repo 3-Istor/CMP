@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UserProfile(BaseModel):
@@ -24,7 +24,7 @@ class PictureUploadResponse(BaseModel):
 class GitHubInstallationRequest(BaseModel):
     """Request to save GitHub App installation ID."""
 
-    installation_id: str
+    installation_id: str = Field(pattern=r"^[1-9][0-9]{0,19}$")
 
 
 class GitHubInstallationResponse(BaseModel):
@@ -32,3 +32,12 @@ class GitHubInstallationResponse(BaseModel):
 
     message: str
     installation_id: str
+    github_login: str
+    account: str
+
+
+class GitHubConnectionStatus(BaseModel):
+    github_installation_id: str | None
+    identity_linked: bool
+    github_login: str | None
+    account_url: str

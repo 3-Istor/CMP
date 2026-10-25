@@ -325,17 +325,11 @@ export const getGitHubStatus = async (): Promise<
   return { github_installation_id: profile.github_installation_id ?? null };
 };
 
-export const saveGitHubInstallationId = async (
-  installation_id: string,
-): Promise<import("@/types").GitHubInstallationResponse> => {
-  return request<import("@/types").GitHubInstallationResponse>(
-    "/account/github-installation",
-    {
-      method: "POST",
-      body: JSON.stringify({ installation_id }),
-    },
-  );
-};
+export const getGitHubConnectionStatus = () =>
+  request<import("@/types").GitHubConnectionStatus>("/account/github");
+
+export const connectGitHubAccount = () =>
+  request<import("@/types").GitHubInstallationResponse>("/account/github-connect", {method: "POST"});
 
 // Projects (Phase 4)
 export const getProjects = () =>

@@ -64,10 +64,11 @@ et le chart publiés à leurs SHA approuvés, le callback HTTPS, le registre et 
 profil Argo compatibles, ainsi que les accès Terraform/GHCR/Vault.
 
 Le 25 octobre, les contrôles en lecture ont confirmé le projet actif joetest et
-les droits de son propriétaire. La liaison GitHub dans la base du CMP local est
-absente ; Joe a demandé de reporter la réparation de cette liaison. Aucun import
-connecté de Session Manager n’a donc été lancé et aucun contrôle d’identité n’a
-été contourné. L’import reste désactivé dans le `.env` local.
+les droits de son propriétaire. Le parcours de connexion GitHub a été corrigé
+pour réutiliser l’installation existante ; la liaison d’identité et le rattachement
+restent à terminer par l’utilisateur dans Compte. Aucun import connecté de Session
+Manager n’a été lancé et aucun contrôle d’identité n’a été contourné. L’import
+reste désactivé dans le `.env` local.
 
 Après publication et configuration autorisées, vérifier sans muter les services :
 
@@ -106,3 +107,10 @@ avec les services externes simulés. Le frontend a passé lint, TypeScript et bu
 Le script inter-repos `extern-project-analyzer/scripts/check-import-local.sh`
 regroupe les tests analyzer, CMP, registre, K3s, chart et Terraform simulé.
 Ces résultats ne remplacent pas la recette connectée avec SSO/GitHub/Argo réels.
+
+## Correction de la connexion GitHub
+
+Le bouton Compte réutilise maintenant l’installation CNP existante après vérification
+de l’identité GitHub liée dans Keycloak et de l’appartenance à l’organisation.
+La page d’installation réservée aux administrateurs ne fait plus partie de la
+connexion courante. Voir [le parcours et les permissions](github-connection.md).

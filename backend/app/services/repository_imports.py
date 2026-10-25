@@ -24,6 +24,7 @@ from app.models.project import Project, ProjectStatus
 from app.models.repository_import import RepositoryImport
 from app.models.user_github import UserGitHubInstallation
 from app.services import keycloak_service, project_registry
+from app.services.github_account import linked_identity
 from app.services.github_service import generate_jwt, get_installation_token
 
 TERMINAL = {"completed", "failed", "cancelled"}
@@ -64,7 +65,9 @@ def enabled():
 
 @lru_cache(maxsize=4)
 def jwks(url):
-    return jwt.PyJWKClient(url, timeout=10)
+    return jwt.PyJWKClient(
+        url, timeout=10, headers={"User-Agent": "cnp-backend"}
+    )
 
 
 def verify_token(token, worker=False):
@@ -357,29 +360,15 @@ def fresh_project(db, project_name, sub, username):
 
 async def repository_user_permission(job, token, write=False):
     """An installation ID is not proof that the portal user owns its repositories."""
-    admin = keycloak_service._get_admin_token()
-    response = requests.get(
-        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{job.user_sub}/federated-identity",
-        headers={"Authorization": f"Bearer {admin}"},
-        timeout=10,
-    )
-    response.raise_for_status()
-    identities = [
-        identity
-        for identity in response.json()
-        if identity.get("identityProvider") == "github"
-    ]
-    if len(identities) != 1:
+    identity = await run_in_threadpool(linked_identity, job.user_sub)
+    if identity is None:
         stop(
             "Liez votre identité GitHub à votre compte CNP dans les comptes liés Keycloak",
             403,
         )
-    identity = identities[0]
-    login = identity.get("userName", "")
-    if not re.fullmatch(r"[A-Za-z0-9-]{1,39}", login):
-        stop("L’identité GitHub du portail est invalide", 403)
+    login = identity["login"]
     user = await github("GET", f"/users/{login}", token)
-    if str(user.get("id")) != identity.get("userId"):
+    if str(user.get("id")) != identity["id"]:
         stop("L’identité GitHub liée a changé", 403)
     permission = await github(
         "GET",
