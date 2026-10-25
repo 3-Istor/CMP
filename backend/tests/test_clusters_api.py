@@ -1,3 +1,4 @@
+import asyncio
 from unittest import mock
 
 import pytest
@@ -40,6 +41,13 @@ def set_state(session_factory, state, cloud=TargetCloud.AWS):  # noqa: F811
 def read_state(session_factory):  # noqa: F811
     with session_factory() as db:
         return db.get(Cluster, TargetCloud.AWS).state
+
+
+@pytest.fixture(autouse=True)
+def reset_refresh():
+    infra._last_refresh, infra._refresh_running = None, False
+    yield
+    infra._last_refresh, infra._refresh_running = None, False
 
 
 @pytest.fixture
@@ -109,8 +117,8 @@ def test_down_when_already_down_conflicts(session_factory, run_op):  # noqa: F81
 def test_health_exposes_clusters_and_admin_flag(session_factory, token, expected):  # noqa: F811
     set_state(session_factory, ClusterState.UP)
     with (
-        mock.patch.object(infra, "reconcile", mock.AsyncMock()),
-        mock.patch.object(infra, "wireguard_running", mock.AsyncMock(return_value=True)),
+        mock.patch.object(infra, "_schedule_refresh"),
+        mock.patch.object(infra, "wireguard_cached", lambda cloud: True),
         mock.patch.object(infra.monitoring_service, "get_global_health",
                           mock.AsyncMock(return_value=infra.GlobalHealthResponse(openstack_hypervisors=[]))),
     ):
@@ -124,7 +132,7 @@ def test_health_exposes_clusters_and_admin_flag(session_factory, token, expected
 
 def test_health_survives_cluster_failure(session_factory):  # noqa: F811
     with (
-        mock.patch.object(infra, "reconcile", mock.AsyncMock(side_effect=RuntimeError)),
+        mock.patch.object(infra, "_schedule_refresh", mock.Mock(side_effect=RuntimeError)),
         mock.patch.object(infra.monitoring_service, "get_global_health",
                           mock.AsyncMock(return_value=infra.GlobalHealthResponse(openstack_hypervisors=[]))),
     ):
@@ -142,3 +150,44 @@ def test_logs_stream_drains_file(session_factory, tmp_path):  # noqa: F811
         r = make_client(session_factory, ADMIN).get("/api/clusters/aws/logs/stream")
         assert r.text == "data: one\n\ndata: two\n\n"
         assert make_client(session_factory, USER).get("/api/clusters/aws/logs/stream").status_code == 403
+
+
+def test_health_does_not_wait_for_the_refresh(session_factory):  # noqa: F811
+    async def slow_refresh():
+        await asyncio.Event().wait()  # never set
+
+    async def call():
+        with session_factory() as db:
+            health = await asyncio.wait_for(
+                infra.get_global_infrastructure_health(ADMIN, db), timeout=2
+            )
+        for t in list(infra._refresh_tasks):
+            t.cancel()
+        return health
+
+    with (
+        mock.patch.object(infra, "_refresh_clusters", slow_refresh),
+        mock.patch.object(infra.monitoring_service, "get_global_health",
+                          mock.AsyncMock(return_value=infra.GlobalHealthResponse(openstack_hypervisors=[]))),
+    ):
+        health = asyncio.run(call())
+    assert [c.cloud for c in health.clusters] == ["aws", "gcp"]
+
+
+def test_concurrent_stale_health_calls_schedule_one_refresh():
+    started = mock.Mock()
+
+    async def slow_refresh():
+        started()
+        await asyncio.Event().wait()
+
+    async def call():
+        infra._schedule_refresh()
+        infra._schedule_refresh()
+        await asyncio.sleep(0)
+        for t in list(infra._refresh_tasks):
+            t.cancel()
+
+    with mock.patch.object(infra, "_refresh_clusters", slow_refresh):
+        asyncio.run(call())
+    started.assert_called_once()

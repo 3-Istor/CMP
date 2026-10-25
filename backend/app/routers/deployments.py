@@ -23,7 +23,7 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
-from app.routers.finops import is_cnp_admin
+from app.services.authz import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator

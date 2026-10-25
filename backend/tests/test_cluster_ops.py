@@ -180,3 +180,13 @@ def test_aws_cluster_exists_not_found(monkeypatch):
     fake = Fake({"aws eks": ["An error occurred (ResourceNotFoundException)"]}, {"aws eks": 254})
     monkeypatch.setattr(ops, "_stream", fake)
     assert asyncio.run(ops.cluster_exists(AWS)) is False
+
+
+def test_cluster_exists_times_out_to_none(monkeypatch):
+    async def hang(*args):
+        await asyncio.sleep(60)
+
+    real_wait_for = asyncio.wait_for
+    monkeypatch.setattr(ops, "_stream", hang)
+    monkeypatch.setattr(ops.asyncio, "wait_for", lambda coro, timeout: real_wait_for(coro, 0.05))
+    assert asyncio.run(ops.cluster_exists(AWS)) is None

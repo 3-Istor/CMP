@@ -54,13 +54,18 @@ async def _stream(cmd: list[str], cwd: Path, env: dict, log, on_line) -> int:
         *cmd, cwd=cwd, env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
-    async for raw in proc.stdout:
-        line = raw.decode(errors="replace").rstrip("\n")
-        if log:
-            log.write(line + "\n")
-            log.flush()
-        on_line(line)
-    return await proc.wait()
+    try:
+        async for raw in proc.stdout:
+            line = raw.decode(errors="replace").rstrip("\n")
+            if log:
+                log.write(line + "\n")
+                log.flush()
+            on_line(line)
+        return await proc.wait()
+    except BaseException:  # incl. cancellation (timeouts): do not orphan the process
+        if proc.returncode is None:
+            proc.kill()
+        raise
 
 
 def _env(cloud: TargetCloud, kubeconfig: str) -> dict:
@@ -105,7 +110,13 @@ async def cluster_exists(cloud: TargetCloud) -> bool | None:
               f"--filter=name={name}", "--format=value(name)"]
     )
     out: list[str] = []
-    rc = await _stream(cmd, Path(settings.CLUSTER_TF_ROOT), _env(cloud, ""), None, out.append)
+    try:
+        rc = await asyncio.wait_for(
+            _stream(cmd, Path(settings.CLUSTER_TF_ROOT), _env(cloud, ""), None, out.append),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        return None
     if cloud == TargetCloud.GCP:  # list exits 0 with empty output when absent
         return None if rc else bool("".join(out).strip())
     if rc == 0:
@@ -216,10 +227,7 @@ _wg_cache: dict = {}
 
 
 async def wireguard_running(cloud: TargetCloud) -> bool | None:
-    """Standalone WireGuard pod check (fetches a throwaway kubeconfig); cached 60 s. None if unknown."""
-    hit = _wg_cache.get(cloud)
-    if hit and time.monotonic() - hit[0] < 60:
-        return hit[1]
+    """Standalone WireGuard pod check (fetches a throwaway kubeconfig); stores the result in the cache."""
     tmp = tempfile.mkdtemp(prefix="cluster-wg-")
     try:
         ctx = _Ctx(cloud, "up", Path(settings.CLUSTER_TF_ROOT) / _DIRS[cloud],
@@ -231,8 +239,12 @@ async def wireguard_running(cloud: TargetCloud) -> bool | None:
         result = None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    _wg_cache[cloud] = (time.monotonic(), result)
+    _wg_cache[cloud] = result
     return result
+
+
+def wireguard_cached(cloud: TargetCloud) -> bool | None:
+    return _wg_cache.get(cloud)
 
 
 async def _up(ctx: _Ctx) -> None:
