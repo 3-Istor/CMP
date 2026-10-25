@@ -17,15 +17,15 @@ FOREIGN_LOCK = OWN_LOCK.replace("root@arcl-cmp-backend-old", "hugo@laptop")
 
 
 def test_own_stale_lock():
-    assert recovery.is_own_stale_lock("root@arcl-cmp-backend-7f9-abc", "arcl-cmp-backend-7f9-xyz")
+    assert recovery.is_own_stale_lock("root@arcl-cmp-backend-7f9-abc")
 
 
 def test_foreign_lock():
-    assert not recovery.is_own_stale_lock("hugo@laptop", "arcl-cmp-backend-7f9-xyz")
+    assert not recovery.is_own_stale_lock("hugo@laptop")
 
 
-def test_same_pod_lock_not_stale():
-    assert not recovery.is_own_stale_lock("root@arcl-cmp-backend-1", "arcl-cmp-backend-1")
+def test_same_pod_lock_is_stale_at_startup():
+    assert recovery.is_own_stale_lock("root@arcl-cmp-backend-1")
 
 
 @pytest.fixture
@@ -35,7 +35,6 @@ def env(session_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(recovery.settings, "CLUSTER_OPS_VAULT_TOKEN", "")
     monkeypatch.setattr(recovery, "_last_reconcile", {})
     monkeypatch.setattr(recovery, "_last_renew", None)
-    monkeypatch.setattr(recovery.socket, "gethostname", lambda: "arcl-cmp-backend-new")
     calls = {"run": [], "cmds": []}
 
     async def run_operation(cloud, op):
@@ -43,13 +42,14 @@ def env(session_factory, tmp_path, monkeypatch):
 
     monkeypatch.setattr(recovery, "run_operation", run_operation)
 
-    def script(plan_output):
+    def script(plan_output, plan_rc=0, init_rc=0):
         async def stream(cmd, cwd, env, log, on_line):
             calls["cmds"].append(cmd)
             if cmd[1] == "plan":
                 for line in plan_output.splitlines():
                     on_line(line)
-            return 0
+                return plan_rc
+            return init_rc if cmd[1] == "init" else 0
 
         monkeypatch.setattr(recovery, "_stream", stream)
 
@@ -114,11 +114,37 @@ def test_resume_foreign_lock_goes_error(env):
     assert calls["run"] == []
 
 
-def _reconcile(factory, exists):
+def test_resume_inits_before_probe(env):
+    factory, tmp, calls, _ = env
+    _add(factory, tmp, ClusterState.STARTING, 1)
+    _resume()
+    assert [c[1] for c in calls["cmds"][:2]] == ["init", "plan"]
+
+
+def test_resume_init_failure_goes_error(env):
+    factory, tmp, calls, script = env
+    script("", init_rc=1)
+    _add(factory, tmp, ClusterState.STARTING, 1)
+    _resume()
+    row = _row(factory)
+    assert row.state == ClusterState.ERROR and "init failed" in row.last_error
+    assert calls["run"] == []
+
+
+def test_resume_probe_error_logged_and_resumed(env):
+    factory, tmp, calls, script = env
+    script("Error: bad credentials", plan_rc=1)
+    _add(factory, tmp, ClusterState.STARTING, 1)
+    _resume()
+    assert "bad credentials" in (tmp / "op.log").read_text()
+    assert calls["run"]
+
+
+def _reconcile(factory, exists, monkeypatch):
     async def fake(cloud):
         return exists
 
-    recovery.cluster_exists = fake
+    monkeypatch.setattr(recovery, "cluster_exists", fake)
     with factory() as db:
         asyncio.run(recovery.reconcile(db))
 
@@ -126,25 +152,22 @@ def _reconcile(factory, exists):
 def test_reconcile_skips_in_flight(env, monkeypatch):
     factory, tmp, *_ = env
     _add(factory, tmp, ClusterState.STARTING, 1)
-    monkeypatch.setattr(recovery, "cluster_exists", None)
-    _reconcile(factory, False)
+    _reconcile(factory, False, monkeypatch)
     assert _row(factory).state == ClusterState.STARTING
 
 
 def test_reconcile_fixes_drift(env, monkeypatch):
     factory, tmp, *_ = env
-    monkeypatch.setattr(recovery, "cluster_exists", None)
     _add(factory, tmp, ClusterState.UP, 0)
-    _reconcile(factory, False)
+    _reconcile(factory, False, monkeypatch)
     assert _row(factory).state == ClusterState.DOWN
     assert _row(factory, GCP).state == ClusterState.DOWN  # missing row created
 
 
 def test_reconcile_unknown_keeps_state(env, monkeypatch):
     factory, tmp, *_ = env
-    monkeypatch.setattr(recovery, "cluster_exists", None)
     _add(factory, tmp, ClusterState.UP, 0)
-    _reconcile(factory, None)
+    _reconcile(factory, None, monkeypatch)
     assert _row(factory).state == ClusterState.UP
 
 

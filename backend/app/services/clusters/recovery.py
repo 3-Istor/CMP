@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import socket
 import time
 from pathlib import Path
 
@@ -24,9 +23,16 @@ _last_renew: float | None = None
 _tasks: set[asyncio.Task] = set()  # strong refs: the loop only keeps weak ones
 
 
-def is_own_stale_lock(who: str, current_host: str) -> bool:
-    host = who.rpartition("@")[2]
-    return host.startswith(settings.CLUSTER_OPS_POD_PREFIX) and host != current_host
+def is_own_stale_lock(who: str) -> bool:
+    # Called at startup with a single replica: any backend-pod lock, same hostname included
+    # (container restart), belongs to a dead process.
+    return who.rpartition("@")[2].startswith(settings.CLUSTER_OPS_POD_PREFIX)
+
+
+def _append_log(row: Cluster, text: str) -> None:
+    if row.log_path:
+        with open(row.log_path, "a") as log:
+            log.write(text if text.endswith("\n") else text + "\n")
 
 
 async def renew_vault_token(force: bool = False) -> None:
@@ -45,8 +51,10 @@ async def renew_vault_token(force: bool = False) -> None:
                 headers={"X-Vault-Token": settings.CLUSTER_OPS_VAULT_TOKEN},
             )
         if resp.status_code != 200:
+            _last_renew = None  # retry on the next call
             logger.warning("Vault token renewal failed (%s)", resp.status_code)
     except Exception:  # noqa: BLE001
+        _last_renew = None
         logger.warning("Vault token renewal failed", exc_info=True)
 
 
@@ -55,16 +63,25 @@ async def _release_stale_lock(row: Cluster) -> str | None:
     cwd = Path(settings.CLUSTER_TF_ROOT) / _DIRS[row.cloud]
     env = _env(row.cloud, "")
     out: list[str] = []
-    await _stream(["terraform", "plan", "-lock-timeout=0s", "-input=false"], cwd, env, None, out.append)
+    # .terraform is ephemeral: plan and force-unlock need an initialised backend.
+    rc = await _stream(["terraform", "init", "-input=false"], cwd, env, None, out.append)
+    if rc:
+        _append_log(row, "\n".join(out))
+        return f"terraform init failed (exit {rc})"
+    out.clear()
+    rc = await _stream(
+        ["terraform", "plan", "-lock-timeout=0s", "-input=false", "-refresh=false"],
+        cwd, env, None, out.append,
+    )
     lock = parse_state_lock("\n".join(out))
     if lock is None:
+        if rc:  # not a lock problem: the resumed operation will surface the real error
+            _append_log(row, "\n".join(out))
         return None
-    if not (lock.lock_id and is_own_stale_lock(lock.who, socket.gethostname())):
+    if not (lock.lock_id and is_own_stale_lock(lock.who)):
         return format_state_lock_message(lock)
     await _stream(["terraform", "force-unlock", "-force", lock.lock_id], cwd, env, None, out.append)
-    if row.log_path:
-        with open(row.log_path, "a") as log:
-            log.write(f"Released stale lock {lock.lock_id} from {lock.who}\n")
+    _append_log(row, f"Released stale lock {lock.lock_id} from {lock.who}")
     return None
 
 

@@ -124,6 +124,8 @@ def test_down_skips_checks_when_cluster_gone(env, monkeypatch):
     _begin(factory, tmp_path, "down", ClusterState.UP)
     asyncio.run(ops.run_operation(AWS, "down"))
     assert steps == ["checks", "destroy"] and _row(factory).state == ClusterState.DOWN
+    verbs = [c[1] for c in fake.cmds if c[0] == "terraform"]
+    assert verbs.index("init") < verbs.index("destroy")
     assert not any(c[0] == "kubectl" for c in fake.cmds)
 
 

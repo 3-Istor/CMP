@@ -233,6 +233,7 @@ async def _up(ctx: _Ctx) -> None:
 
 async def _down(ctx: _Ctx) -> None:
     _set_step(ctx, "checks")
+    await _run(ctx, ["terraform", "init", "-input=false"])  # .terraform is ephemeral
     if await cluster_exists(ctx.cloud) is not False:
         await _fetch_kubeconfig(ctx)
         out = await _run(ctx, ["kubectl", "get", "svc", "-A", "-o", f"jsonpath={_LB_JSONPATH}"])
