@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { cancelRepositoryImport, createRepositoryImport, getRepositoryImports, resumeRepositoryImport, retryRepositoryImport, type RepositoryImport } from "@/lib/api";
+import { cancelRepositoryImport, createRepositoryImport, getRepositoryImportAvailability, getRepositoryImports, resumeRepositoryImport, retryRepositoryImport, type RepositoryImport, type RepositoryImportAvailability } from "@/lib/api";
 
 const terminal = new Set(["completed", "failed", "cancelled"]);
 const labels: Record<string, string> = {
@@ -16,6 +16,7 @@ const labels: Record<string, string> = {
 
 export function RepositoryImports({ projectName, onDeploymentChange }: { projectName: string; onDeploymentChange: () => void }) {
   const [open, setOpen] = useState(false);
+  const [availability, setAvailability] = useState<RepositoryImportAvailability | null>(null);
   const [jobs, setJobs] = useState<RepositoryImport[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,13 @@ export function RepositoryImports({ projectName, onDeploymentChange }: { project
 
   const reload = useCallback(async () => {
     try {
+      const status = await getRepositoryImportAvailability();
+      setAvailability(status);
+      if (!status.ready) {
+        setJobs([]);
+        setError("");
+        return;
+      }
       const imports = await getRepositoryImports(projectName);
       setJobs(imports);
       if (imports.some((job) => job.deployment_id)) onDeploymentChange();
@@ -50,6 +58,7 @@ export function RepositoryImports({ projectName, onDeploymentChange }: { project
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!availability?.ready) return;
     setBusy(true); setError("");
     try {
       await createRepositoryImport({ project_name: projectName, app_name: name, repository_url: url,
@@ -88,14 +97,15 @@ export function RepositoryImports({ projectName, onDeploymentChange }: { project
         <DialogHeader><DialogTitle>Importer dans {projectName}</DialogTitle></DialogHeader>
         <form className="space-y-4" onSubmit={submit}>
           <p className="text-sm text-muted-foreground">Le portail vérifie vos droits avant tout accès au repo. Votre identité GitHub doit être liée au compte CNP. Les fichiers nécessaires sont proposés par PR, à faire approuver et fusionner avant de reprendre ici. Le déploiement utilise ce projet existant après validation complète.</p>
-          <div className="space-y-1"><Label htmlFor="import-name">Nom de l’application</Label><Input id="import-name" value={name} onChange={(e) => setName(e.target.value)} required pattern="[a-z][a-z0-9-]{0,40}[a-z0-9]" /></div>
+          <div className="space-y-1"><Label htmlFor="import-name">Nom de l’application</Label><Input id="import-name" value={name} onChange={(e) => setName(e.target.value)} required pattern="[a-z](?:[a-z0-9]|-){0,40}[a-z0-9]" /></div>
           <div className="space-y-1"><Label htmlFor="import-url">Repo GitHub (branche principale main)</Label><Input id="import-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="https://github.com/organisation/application" /></div>
           <div className="space-y-1"><Label htmlFor="import-path">Dossier de l’application</Label><Input id="import-path" value={path} onChange={(e) => setPath(e.target.value)} required /></div>
           <div className="space-y-1"><Label htmlFor="import-port">Port HTTP du conteneur</Label><Input id="import-port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} required /></div>
           <div className="space-y-1"><Label htmlFor="import-health">Chemin HTTP pour vérifier le démarrage</Label><Input id="import-health" value={healthPath} onChange={(e) => setHealthPath(e.target.value)} required placeholder="/ ou /health" /></div>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required /><span>J’autorise CNP à cloner ce repo et à proposer les fichiers nécessaires sur une branche par PR. Je validerai la PR avant le déploiement.</span></label>
+          {availability && !availability.ready && <p role="status" className="text-sm text-muted-foreground">{availability.message}</p>}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" disabled={busy || !consent}>{busy ? "Vérification…" : "Vérifier les droits et lancer l’import"}</Button>
+          <Button type="submit" disabled={busy || !consent || !availability?.ready}>{busy ? "Vérification…" : "Vérifier les droits et lancer l’import"}</Button>
         </form>
       </DialogContent>
     </Dialog>

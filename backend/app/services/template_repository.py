@@ -7,13 +7,13 @@ Templates are cached and synced every 24 hours.
 
 import json
 import logging
-import os
-import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import git
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +26,23 @@ class TemplateRepository:
     """Manages the local clone of the template repository."""
 
     def __init__(self):
-        self.repo_path = REPO_LOCAL_PATH
+        self.local_only = bool(settings.TEMPLATE_REPOSITORY_PATH)
+        self.repo_path = (
+            Path(settings.TEMPLATE_REPOSITORY_PATH).expanduser().resolve()
+            if self.local_only
+            else REPO_LOCAL_PATH
+        )
         self.last_sync: datetime | None = None
         self._ensure_repo()
 
     def _ensure_repo(self) -> None:
         """Clone the repository if it doesn't exist, or pull latest changes."""
+        if self.local_only:
+            if not (self.repo_path / "templates").is_dir():
+                raise ValueError(
+                    "TEMPLATE_REPOSITORY_PATH must contain templates/"
+                )
+            return
         if not self.repo_path.exists():
             logger.info("Cloning template repository from %s", REPO_URL)
             self.repo_path.parent.mkdir(parents=True, exist_ok=True)
@@ -42,6 +53,8 @@ class TemplateRepository:
 
     def _sync_if_needed(self) -> None:
         """Pull latest changes if sync interval has passed."""
+        if self.local_only:
+            return
         if self.last_sync and datetime.now() - self.last_sync < timedelta(
             hours=SYNC_INTERVAL_HOURS
         ):
@@ -124,9 +137,16 @@ class TemplateRepository:
         return Path(template["_template_path"])
 
     def force_sync(self) -> None:
-        """Force an immediate sync of the repository."""
-        self.last_sync = None
-        self._sync_if_needed()
+        """
+        Force an immediate sync of the repository.
+
+        Raises on failure, unlike the lazy sync, so the caller can report it.
+        """
+        if self.local_only:
+            self._ensure_repo()
+            return
+        git.Repo(self.repo_path).remotes.origin.pull()
+        self.last_sync = datetime.now()
 
 
 # Global singleton instance

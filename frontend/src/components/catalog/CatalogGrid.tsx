@@ -15,11 +15,16 @@ import Image from "next/image";
 interface Props {
   templates: CatalogTemplate[];
   onDeploy: (template: CatalogTemplate) => void;
+  /**
+   * Whether the viewer may deploy. Defaults to true so callers that render the
+   * catalogue outside a project context are unaffected.
+   */
+  canDeploy?: boolean;
 }
 
-export function CatalogGrid({ templates, onDeploy }: Props) {
+export function CatalogGrid({ templates, onDeploy, canDeploy = true }: Props) {
   const handleClick = (t: CatalogTemplate) => {
-    console.log("Button clicked for:", t.name);
+    if (!canDeploy) return;
     onDeploy(t);
   };
 
@@ -58,9 +63,15 @@ export function CatalogGrid({ templates, onDeploy }: Props) {
             <div className="mb-3 text-xs text-muted-foreground">
               <span className="font-medium">Template:</span> {t.id}
             </div>
-            <Button size="sm" className="w-full" onClick={() => handleClick(t)}>
-              Deploy
-            </Button>
+            {canDeploy && (
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={() => handleClick(t)}
+              >
+                Deploy
+              </Button>
+            )}
           </CardContent>
         </Card>
       ))}

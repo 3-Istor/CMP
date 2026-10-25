@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.core.database import Base
@@ -26,7 +27,11 @@ from app.services.terraform_executor import TerraformExecutor, create_executor
 
 class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.engine = create_engine("sqlite://")
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
         Base.metadata.create_all(self.engine)
         self.db = sessionmaker(bind=self.engine)()
         self.job = RepositoryImport(
@@ -292,14 +297,14 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
         ), patch.object(
             service.keycloak_service, "get_project_role", return_value="admin"
         ), patch(
-            "app.routers.deployments.update_file_content", AsyncMock()
+            "app.routers.deployments.put_file_content", AsyncMock()
         ) as commit:
             with self.assertRaises(HTTPException) as error:
                 await update_deployment_config(
                     deployment_id=deployment.id,
                     request=Mock(),
                     payload={"_sha": "old", "replicaCount": 3},
-                    token_payload={"sub": "user-id"},
+                    token={"sub": "user-id"},
                     component=None,
                     db=self.db,
                     credentials=None,
@@ -327,7 +332,7 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
             "app.routers.deployments._get_github_token_for_deployment",
             AsyncMock(),
         ) as token, patch(
-            "app.routers.deployments.update_file_content", AsyncMock()
+            "app.routers.deployments.put_file_content", AsyncMock()
         ) as commit:
             with self.assertRaises(HTTPException) as error:
                 await update_security_data(
@@ -355,7 +360,7 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
         )
         deployment = self.db.query(Deployment).one()
         with patch(
-            "app.services.github_service.update_file_content", AsyncMock()
+            "app.services.github_service.put_file_content", AsyncMock()
         ) as commit:
             with self.assertRaises(HTTPException) as error:
                 await _apply_patch_to_gitops(
@@ -398,6 +403,77 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result)
         token.assert_not_called()
         commit.assert_not_called()
+
+    async def _completed_deployment(self):
+        self.job.status = "publishing"
+        self.db.commit()
+        await self.invoke(
+            "complete",
+            {
+                "image": self.job.configuration["image"],
+                "digest": "sha256:" + "b" * 64,
+            },
+        )
+        return self.db.query(Deployment).one()
+
+    async def test_release_operations_cannot_bypass_the_import(self):
+        from app.routers import releases
+
+        deployment = await self._completed_deployment()
+        source, decide = Mock(), Mock()
+        with patch.object(
+            releases, "_get_app_or_404", return_value=deployment
+        ):
+            with self.assertRaises(HTTPException) as error:
+                releases._act(self.db, {}, deployment.id, source, decide, None)
+        self.assertEqual(error.exception.status_code, 409)
+        decide.assert_not_called()
+        source.patch_status.assert_not_called()
+
+    async def test_release_settings_stop_before_read_or_write(self):
+        from app.routers import releases
+
+        deployment = await self._completed_deployment()
+        payload = releases.release_settings.ReleaseSettingsUpdate(
+            **releases.release_settings.read({}).model_dump()
+        )
+        with patch.object(
+            releases,
+            "_get_kubernetes_deployment_or_404",
+            return_value=deployment,
+        ), patch.object(releases, "_load_all", AsyncMock()) as files:
+            with self.assertRaises(HTTPException) as error:
+                await releases.update_release_settings(
+                    deployment.id, payload, Mock(), {}, Mock(), self.db
+                )
+        self.assertEqual(error.exception.status_code, 409)
+        files.assert_not_called()
+
+    async def test_staging_stops_before_creating_resources(self):
+        from app.routers import environments
+
+        deployment = await self._completed_deployment()
+        with patch.object(
+            environments,
+            "_get_kubernetes_deployment_or_404",
+            return_value=deployment,
+        ), patch.object(environments.activation, "start_enable") as create:
+            with self.assertRaises(HTTPException) as error:
+                await environments.enable_staging(
+                    deployment.id, environments.EnableRequest(), {}, self.db
+                )
+        self.assertEqual(error.exception.status_code, 409)
+        create.assert_not_called()
+
+    async def test_mcp_source_write_gate_preserves_the_import(self):
+        from app import mcp_server
+
+        deployment = await self._completed_deployment()
+        factory = sessionmaker(bind=self.engine)
+        with patch.object(mcp_server, "SessionLocal", factory):
+            with self.assertRaises(HTTPException) as error:
+                mcp_server._require_mutable_import(deployment.id)
+        self.assertEqual(error.exception.status_code, 409)
 
 
 class SignedIdentityTests(unittest.TestCase):

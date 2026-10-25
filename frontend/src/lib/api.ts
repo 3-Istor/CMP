@@ -1,6 +1,15 @@
 import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
 import { getSession, signIn } from "next-auth/react";
 
+export interface RepositoryImportAvailability {
+  ready: boolean;
+  message: string;
+}
+
+export function getRepositoryImportAvailability() {
+  return request<RepositoryImportAvailability>("/repository-imports/availability");
+}
+
 export interface RepositoryImport {
   id: string;
   project_name: string;
@@ -55,6 +64,26 @@ export const getApiUrl = () => {
 };
 
 const BASE = getApiUrl();
+
+/**
+ * A non-2xx response from the backend.
+ *
+ * Extends Error, so existing `err instanceof Error` / `err.message` handling
+ * keeps working — but carries the status, so callers can tell a 403 (role
+ * changed under them) from a 409 (the project's guests group does not exist
+ * yet) without matching on the message text.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(body || `HTTP ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
 
 // ── Access-token cache ────────────────────────────────────────────────────────
 // `getSession()` performs a network round-trip to `/api/auth/session` on every
@@ -121,7 +150,7 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || `HTTP ${res.status}`);
+    throw new ApiError(res.status, err);
   }
 
   // 204 No Content (e.g. DELETE endpoints) and empty bodies have no JSON to
@@ -333,10 +362,17 @@ export const getProjectMembers = (project_name: string) =>
     `/projects/${project_name}/members`,
   );
 
+/**
+ * Add a user to a project, or change the role they already hold.
+ *
+ * Throws an ApiError with status 409 when the project has no
+ * `project-<name>-guests` group yet; its message is written for the user and
+ * can be shown as-is.
+ */
 export const addProjectMember = (
   project_name: string,
   username: string,
-  role: "admin" | "member" = "member",
+  role: import("@/types").AssignableRole = "member",
 ) =>
   request<import("@/types").AddMemberResponse>(
     `/projects/${project_name}/members`,
@@ -362,7 +398,7 @@ export const removeProjectMember = async (
     },
   );
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, await res.text());
   return Promise.resolve();
 };
 
@@ -433,7 +469,7 @@ export const uploadProfilePicture = async (file: File) => {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || `HTTP ${res.status}`);
+    throw new ApiError(res.status, err);
   }
 
   return res.json() as Promise<import("@/types").PictureUploadResponse>;
@@ -747,6 +783,9 @@ function alertingQuery(project: string, app?: string | null) {
 export const getAlertCatalog = (project: string, app?: string | null) =>
   request<import("@/types").AlertCatalog>(`/alerting?${alertingQuery(project, app)}`);
 
+export const getProjectGrafanaUrl = (project: string) =>
+  request<{ url: string | null }>(`/alerting/grafana?${alertingQuery(project)}`);
+
 export const updateCatalogAlert = (
   project: string,
   app: string | null | undefined,
@@ -758,3 +797,305 @@ export const updateCatalogAlert = (
     `/alerting/${alertId}?${alertingQuery(project, app)}`,
     { method: "PUT", body: JSON.stringify({ enabled, params }) },
   );
+
+// ── Environments tab ──────────────────────────────────────────────────────────
+
+export const getEnvironments = (deploymentId: number) =>
+  request<import("@/types").EnvironmentsView>(`/deployments/${deploymentId}/environments`);
+
+export const enableStaging = (deploymentId: number, offhours: import("@/types").StagingOffhours) =>
+  request<import("@/types").StagingStatus>(`/deployments/${deploymentId}/environments/staging`, {
+    method: "POST",
+    body: JSON.stringify({ offhours }),
+  });
+
+export const disableStaging = (deploymentId: number) =>
+  request<import("@/types").StagingStatus>(`/deployments/${deploymentId}/environments/staging`, {
+    method: "DELETE",
+  });
+
+export const getStagingOffhours = (deploymentId: number) =>
+  request<import("@/types").StagingOffhours>(
+    `/deployments/${deploymentId}/environments/staging/offhours`,
+  );
+
+export const updateStagingOffhours = (
+  deploymentId: number,
+  offhours: import("@/types").StagingOffhours,
+) =>
+  request<{ commit: string }>(`/deployments/${deploymentId}/environments/staging/offhours`, {
+    method: "PUT",
+    body: JSON.stringify(offhours),
+  });
+
+export const wakeStaging = (deploymentId: number) =>
+  request<{ woken: number }>(`/deployments/${deploymentId}/environments/staging/wake`, {
+    method: "POST",
+  });
+
+export const updatePromotionPolicy = (
+  deploymentId: number,
+  policy: import("@/types").PromotionPolicy,
+) =>
+  request<import("@/types").PromotionPolicy>(`/deployments/${deploymentId}/promotion-policy`, {
+    method: "PUT",
+    body: JSON.stringify(policy),
+  });
+
+export const listRuns = (deploymentId: number, environment: import("@/types").EnvironmentName) =>
+  request<import("@/types").VerificationRun[]>(
+    `/deployments/${deploymentId}/environments/${environment}/runs`,
+  );
+
+export const startRun = (
+  deploymentId: number,
+  environment: import("@/types").EnvironmentName,
+  suite: string,
+) =>
+  request<import("@/types").VerificationRun>(
+    `/deployments/${deploymentId}/environments/${environment}/runs`,
+    { method: "POST", body: JSON.stringify({ suite }) },
+  );
+
+export const cancelRun = (deploymentId: number, runId: number) =>
+  request<import("@/types").VerificationRun>(`/deployments/${deploymentId}/runs/${runId}/cancel`, {
+    method: "POST",
+  });
+
+export const listPromotions = (deploymentId: number) =>
+  request<import("@/types").Promotion[]>(`/deployments/${deploymentId}/promotions`);
+
+export const startPromotion = (
+  deploymentId: number,
+  body: { emergency?: boolean; reason?: string | null; rollbackTo?: number | null },
+) =>
+  request<import("@/types").Promotion>(`/deployments/${deploymentId}/promotions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const approvePromotion = (deploymentId: number, promotionId: number) =>
+  request<import("@/types").Promotion>(
+    `/deployments/${deploymentId}/promotions/${promotionId}/approve`,
+    { method: "POST" },
+  );
+
+export const acceptPromotionStep = (deploymentId: number, promotionId: number, index: number) =>
+  request<import("@/types").Promotion>(
+    `/deployments/${deploymentId}/promotions/${promotionId}/steps/${index}/accept`,
+    { method: "POST" },
+  );
+
+export const cancelPromotion = (deploymentId: number, promotionId: number) =>
+  request<import("@/types").Promotion>(
+    `/deployments/${deploymentId}/promotions/${promotionId}/cancel`,
+    { method: "POST" },
+  );
+
+// ── Release tab ───────────────────────────────────────────────────────────────
+
+export const getRelease = (deploymentId: number) =>
+  request<import("@/types").ReleaseView>(`/deployments/${deploymentId}/release`);
+
+export const getReleaseHistory = (deploymentId: number) =>
+  request<import("@/types").ReleaseEvent[]>(`/deployments/${deploymentId}/releases`);
+
+export const promoteRelease = (
+  deploymentId: number,
+  mode: "next" | "full",
+  reason: string | null,
+) =>
+  request<import("@/types").ReleaseView>(
+    `/deployments/${deploymentId}/release/promote`,
+    { method: "POST", body: JSON.stringify({ mode, reason }) },
+  );
+
+export const skipReleaseStep = (deploymentId: number, reason: string) =>
+  request<import("@/types").ReleaseView>(
+    `/deployments/${deploymentId}/release/skip`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+
+export const abortRelease = (deploymentId: number, reason: string | null) =>
+  request<import("@/types").ReleaseView>(
+    `/deployments/${deploymentId}/release/abort`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+
+export const getReleaseSettings = (deploymentId: number) =>
+  request<import("@/types").ReleaseSettingsRead>(
+    `/deployments/${deploymentId}/release/settings`,
+  );
+
+export const updateReleaseSettings = (
+  deploymentId: number,
+  settings: import("@/types").ReleaseSettings,
+  migrationsCommand: string[] | null = null,
+) =>
+  request<import("@/types").ReleaseSettingsSaved>(
+    `/deployments/${deploymentId}/release/settings`,
+    { method: "PUT", body: JSON.stringify({ ...settings, migrationsCommand }) },
+  );
+
+export const startTraffic = (deploymentId: number, rps: number, minutes: number) =>
+  request<import("@/types").TrafficFrame>(`/deployments/${deploymentId}/release/traffic`, {
+    method: "POST",
+    body: JSON.stringify({ rps, minutes }),
+  });
+
+export const stopTraffic = (deploymentId: number) =>
+  request<{ stopped: boolean }>(`/deployments/${deploymentId}/release/traffic`, {
+    method: "DELETE",
+  });
+
+/** Read the demo traffic stream until the run ends or `signal` aborts. */
+export async function streamTraffic(
+  deploymentId: number,
+  onFrame: (frame: import("@/types").TrafficFrame) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${deploymentId}/release/traffic/stream`, {
+    headers: {
+      Accept: "text/event-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.status, res.ok ? "empty stream" : await res.text());
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value.replace(/\r\n?/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const data = buffer
+        .slice(0, boundary)
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n");
+      buffer = buffer.slice(boundary + 2);
+      if (data) onFrame(JSON.parse(data));
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+}
+
+/**
+ * Read the release SSE stream until it ends or `signal` aborts.
+ *
+ * Uses fetch rather than EventSource: the backend authenticates with a Bearer
+ * header, which EventSource cannot send. Resolves when the server closes the
+ * stream; rejects on a non-2xx answer or a network error.
+ */
+export async function streamRelease(
+  deploymentId: number,
+  onView: (view: import("@/types").ReleaseView) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${deploymentId}/release/stream`, {
+    headers: {
+      Accept: "text/event-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.status, res.ok ? "empty stream" : await res.text());
+  }
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value.replace(/\r\n?/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const data = frame
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n");
+      if (data) onView(JSON.parse(data));
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+}
+
+// AI assistants (MCP)
+
+export const getAgentAuthRequest = (requestId: string) =>
+  request<import("@/types").AgentAuthRequest>(
+    `/agents/requests/${encodeURIComponent(requestId)}`,
+  );
+
+export const approveAgentAuthRequest = (requestId: string, scopes: string[]) =>
+  request<{ redirect_url: string }>(
+    `/agents/requests/${encodeURIComponent(requestId)}/approve`,
+    { method: "POST", body: JSON.stringify({ scopes }) },
+  );
+
+export const denyAgentAuthRequest = (requestId: string) =>
+  request<{ redirect_url: string }>(
+    `/agents/requests/${encodeURIComponent(requestId)}/deny`,
+    { method: "POST" },
+  );
+
+export const getAgentGrants = () =>
+  request<import("@/types").AgentGrant[]>("/agents/grants");
+
+export const revokeAgentGrant = (grantId: number) =>
+  request<void>(`/agents/grants/${grantId}`, { method: "DELETE" });
+
+export const getAgentSummary = () =>
+  request<import("@/types").AgentSummary>("/agents/summary");
+
+export const getAgentConfirmation = (id: string) =>
+  request<import("@/types").AgentConfirmation>(
+    `/agents/confirmations/${encodeURIComponent(id)}`,
+  );
+
+export const decideAgentConfirmation = (
+  id: string,
+  decision: "approve" | "deny",
+) =>
+  request<import("@/types").AgentConfirmation>(
+    `/agents/confirmations/${encodeURIComponent(id)}/${decision}`,
+    { method: "POST" },
+  );
+
+export const getProjectAgentConfirmations = (project: string) =>
+  request<import("@/types").AgentConfirmation[]>(
+    `/agents/confirmations?project=${encodeURIComponent(project)}`,
+  );
+
+export const getAgentSettings = (project: string) =>
+  request<import("@/types").AgentSettings>(
+    `/projects/${encodeURIComponent(project)}/agent-settings`,
+  );
+
+export const updateAgentSettings = (
+  project: string,
+  body: { level?: import("@/types").StakeLevel; autonomous_hours?: number },
+) =>
+  request<import("@/types").AgentSettings>(
+    `/projects/${encodeURIComponent(project)}/agent-settings`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+
+
+export const getAgentPublicStats = () =>
+  request<import("@/types").AgentPublicStats>("/agents/stats");

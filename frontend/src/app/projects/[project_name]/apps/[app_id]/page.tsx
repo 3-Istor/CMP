@@ -9,9 +9,11 @@ import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { ActivityTab } from "@/components/activity/ActivityTab";
 import { AlertsPanel } from "@/components/alerting/AlertsPanel";
-import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
-import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
+import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
+import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
+import { EnvironmentsTab } from "@/components/environments/EnvironmentsTab";
+import { ReleaseTab } from "@/components/release/ReleaseTab";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -34,26 +36,32 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deleteDeployment, getDeployment } from "@/lib/api";
-import { useDeploymentPolling } from "@/lib/hooks";
+import { useCan, useDeploymentPolling } from "@/lib/hooks";
 import { appUrlOf } from "@/lib/utils";
 import type { Deployment } from "@/types";
 import {
     ArrowLeft,
     CheckCircle2,
+    ChevronDown,
+    ChevronUp,
     ExternalLink,
     FileCode,
     Globe,
     Loader2,
     RefreshCw,
+    Search,
+    Settings,
     Shield,
     Trash2,
     Wallet,
     XCircle,
     BellRing,
     History,
+    Layers,
+    Rocket,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -108,6 +116,90 @@ function StatusDot({ status }: { status: Deployment["status"] }) {
     return null;
 }
 
+/**
+ * A search box over its children: every match of the typed text is
+ * highlighted (CSS Custom Highlight API, styled in globals.css) and the first
+ * one scrolled into view; Enter jumps to the next. Matches field labels and
+ * text, not values typed inside inputs.
+ */
+function SearchHighlight({ children }: { children: React.ReactNode }) {
+    const [query, setQuery] = useState("");
+    const [count, setCount] = useState(0);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const rangesRef = useRef<Range[]>([]);
+    const indexRef = useRef(0);
+
+    const scrollTo = (i: number) => {
+        const range = rangesRef.current[i];
+        range?.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        const root = containerRef.current;
+        if (!root || typeof CSS === "undefined" || !CSS.highlights) return;
+        const needle = query.trim().toLowerCase();
+
+        const apply = () => {
+            const ranges: Range[] = [];
+            if (needle) {
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                    const text = node.textContent?.toLowerCase() ?? "";
+                    for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + needle.length)) {
+                        const range = new Range();
+                        range.setStart(node, i);
+                        range.setEnd(node, i + needle.length);
+                        ranges.push(range);
+                    }
+                }
+            }
+            rangesRef.current = ranges;
+            setCount(ranges.length);
+            CSS.highlights.set("config-search", new Highlight(...ranges));
+        };
+
+        apply();
+        indexRef.current = 0;
+        scrollTo(0);
+        // Panels load and switch components after mount: re-match on changes.
+        const observer = new MutationObserver(apply);
+        observer.observe(root, { childList: true, subtree: true, characterData: true });
+        return () => {
+            observer.disconnect();
+            CSS.highlights.delete("config-search");
+        };
+    }, [query]);
+
+    return (
+        <div className="space-y-4">
+            <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key !== "Enter" || count === 0) return;
+                        indexRef.current = (indexRef.current + 1) % count;
+                        scrollTo(indexRef.current);
+                    }}
+                    placeholder="Rechercher une option…"
+                    aria-label="Rechercher une option"
+                    className="pl-8 pr-24"
+                />
+                {query.trim() && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                        {count} résultat{count > 1 ? "s" : ""}
+                    </span>
+                )}
+            </div>
+            <div ref={containerRef} className="space-y-6">
+                {children}
+            </div>
+        </div>
+    );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AppControlCenterPage() {
@@ -122,6 +214,26 @@ export default function AppControlCenterPage() {
     const [deleteConfirmName, setDeleteConfirmName] = useState("");
     const [deleting, setDeleting] = useState(false);
     const [tab, setTab] = useState("app");
+    // null = follow the status (collapsed once running) until the user toggles.
+    const [statusOpen, setStatusOpen] = useState<boolean | null>(null);
+
+    // Security findings link to "#security-data", which now lives in the
+    // Configuration tab.
+    useEffect(() => {
+        if (window.location.hash === "#security-data") setTab("config");
+    }, []);
+
+    // The app's project comes from the route, so the role is available here
+    // without an extra request.
+    const { can } = useCan(projectName);
+    const canDelete = can("app.delete");
+    const canViewLogs = can("app.viewLogs");
+    const canViewConfig = can("app.viewConfig");
+    const canEditConfig = can("app.editConfig");
+    const canViewFinops = can("finops.view");
+    // Security, activity and alerts carry findings and logs: members and up.
+    const canViewObservability = can("app.viewObservability");
+    const canViewRelease = can("release.view");
 
     // Poll only while in transient state
     const ACTIVE_STATUSES = new Set([
@@ -152,24 +264,30 @@ export default function AppControlCenterPage() {
     }, [fetchDeployment]);
 
     // The deployment row is kept (status=deleted), not removed, once
-    // teardown finishes — polling correctly stops (not in ACTIVE_STATUSES
-    // anymore), but nothing else takes the user off a page for an app that
-    // no longer exists. Bounce back to the project after a beat.
+    // teardown finishes — polling correctly stops, but nothing else takes the
+    // user off a page for an app that no longer exists. Bounce back to the
+    // project after a beat. Watches `current`: after a delete started here,
+    // the final "deleted" status only arrives through polling.
     useEffect(() => {
-        if (deployment?.status !== "deleted") return;
-        toast.info(`"${deployment.name}" has been deleted`);
+        if (current?.status !== "deleted") return;
+        toast.info(`"${current.name}" has been deleted`);
         const timer = setTimeout(
             () => router.push(`/projects/${projectName}`),
             2500,
         );
         return () => clearTimeout(timer);
-    }, [deployment?.status, deployment?.name, projectName, router]);
+    }, [current?.status, current?.name, projectName, router]);
 
     // Show the inline health panel only for running/degraded apps
     const shouldFetchHealth =
         current?.status === "running" || current?.status === "degraded";
 
     const handleDelete = async () => {
+        if (!canDelete) {
+            toast.error("Only project admins can delete an application");
+            setDeleteOpen(false);
+            return;
+        }
         if (!current || deleteConfirmName !== current.name) return;
         setDeleting(true);
         try {
@@ -262,6 +380,15 @@ export default function AppControlCenterPage() {
                                 >
                                     {current.status}
                                 </Badge>
+                                {current.created_via && (
+                                    <Badge
+                                        variant="outline"
+                                        className="border-primary/40 text-primary"
+                                        title="Created by an AI assistant on behalf of a user"
+                                    >
+                                        via {current.created_via}
+                                    </Badge>
+                                )}
                                 <Badge variant="outline" className="capitalize text-xs">
                                     {current.provider_type === "kubernetes" ? "Kubernetes" : "Legacy"}
                                 </Badge>
@@ -293,22 +420,24 @@ export default function AppControlCenterPage() {
                             <RefreshCw className="mr-2 h-4 w-4" />
                             Refresh
                         </Button>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                                setDeleteConfirmName("");
-                                setDeleteOpen(true);
-                            }}
-                            disabled={["deleting", "deleted"].includes(current.status)}
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete App
-                        </Button>
+                        {canDelete && (
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                    setDeleteConfirmName("");
+                                    setDeleteOpen(true);
+                                }}
+                                disabled={["deleting", "deleted"].includes(current.status)}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete App
+                            </Button>
+                        )}
                     </div>
                 </div>
 
-                {isKubernetes && (
+                {isKubernetes && canViewObservability && (
                     <SecurityAlert
                         project={projectName}
                         app={current.name}
@@ -324,23 +453,43 @@ export default function AppControlCenterPage() {
                         <FileCode className="h-4 w-4" />
                         Application
                     </TabsTrigger>
-                    {isKubernetes && (
+                    {isKubernetes && canViewRelease && (
+                        <TabsTrigger value="release" className="gap-2">
+                            <Rocket className="h-4 w-4" />
+                            Release
+                        </TabsTrigger>
+                    )}
+                    {isKubernetes && canViewRelease && (
+                        <TabsTrigger value="environments" className="gap-2">
+                            <Layers className="h-4 w-4" />
+                            Environnements
+                        </TabsTrigger>
+                    )}
+                    {isKubernetes && canViewObservability && (
                         <TabsTrigger value="security" className="gap-2">
                             <Shield className="h-4 w-4" />
                             Security
                         </TabsTrigger>
                     )}
-                    <TabsTrigger value="finops" className="gap-2">
-                        <Wallet className="h-4 w-4" />
-                        FinOps
-                    </TabsTrigger>
-                    {isKubernetes && (
+                    {isKubernetes && canViewConfig && (
+                        <TabsTrigger value="config" className="gap-2">
+                            <Settings className="h-4 w-4" />
+                            Configuration
+                        </TabsTrigger>
+                    )}
+                    {canViewFinops && (
+                        <TabsTrigger value="finops" className="gap-2">
+                            <Wallet className="h-4 w-4" />
+                            FinOps
+                        </TabsTrigger>
+                    )}
+                    {isKubernetes && canViewObservability && (
                         <TabsTrigger value="activity" className="gap-2">
                             <History className="h-4 w-4" />
                             Activity
                         </TabsTrigger>
                     )}
-                    {isKubernetes && (
+                    {isKubernetes && canViewObservability && (
                         <TabsTrigger value="alerts" className="gap-2">
                             <BellRing className="h-4 w-4" />
                             Alerts
@@ -348,103 +497,151 @@ export default function AppControlCenterPage() {
                     )}
                 </TabsList>
 
-                <TabsContent value="app" className="mt-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Quick links — ArgoCD, Vault and the live app follow the
+                    config/secrets permissions; the repo link is for everyone. */}
+                {(() => {
+                    const linkClass = buttonVariants({ variant: "outline", size: "sm" });
+                    const showK8sLinks = isKubernetes && canViewLogs && current.project_id && current.name;
+                    // Determine which ArgoCD app links to show based on template
+                    const templateId = (current.template_id ?? "").toLowerCase();
+                    const hasFrontend = templateId.includes("frontend") || templateId.includes("fullstack") || templateId.includes("full-stack") || templateId.includes("full_stack");
+                    const hasBackend = !templateId.includes("frontend-only");
+                    const base = `https://argocd.3istor.com/applications/argocd/${current.project_id}-${current.name}`;
+                    const links = [
+                        isKubernetes && canViewLogs && appUrl && { href: appUrl, icon: Globe, label: "Open Application" },
+                        current.github_repo_url && { href: current.github_repo_url, icon: Github, label: "GitHub Repository" },
+                        showK8sLinks && hasBackend && { href: `${base}-backend?resource=`, icon: FileCode, label: "ArgoCD — Backend" },
+                        showK8sLinks && hasFrontend && { href: `${base}-frontend?resource=`, icon: FileCode, label: "ArgoCD — Frontend" },
+                        // Vault is admin-only: only admins hold the project's
+                        // Vault policy, so for anyone else this link is a 403.
+                        showK8sLinks && can("app.viewSecretsLink") && {
+                            href: `https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`,
+                            icon: Shield,
+                            label: "Manage Secrets in Vault",
+                        },
+                    ].filter((l) => !!l);
+                    if (links.length === 0) return null;
+                    return (
+                        <div className="mt-4 flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium text-muted-foreground mr-1">
+                                Quick links
+                            </span>
+                            {links.map(({ href, icon: Icon, label }) => (
+                                <a
+                                    key={label}
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={linkClass}
+                                >
+                                    <Icon className="mr-2 h-4 w-4" />
+                                    {label}
+                                    <ExternalLink className="ml-2 h-3 w-3" />
+                                </a>
+                            ))}
+                        </div>
+                    );
+                })()}
 
-                    {/* ── Left column: status + quick actions ── */}
-                    <div className="lg:col-span-2 space-y-6">
-
-                        {/* Deployment progress */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Deployment Status</CardTitle>
-                            </CardHeader>
+                <TabsContent value="app" className="mt-6 space-y-6">
+                    {/* Deployment progress — collapsed by default once running */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle className="text-base">Deployment Status</CardTitle>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setStatusOpen(!(statusOpen ?? !isRunning))}
+                                className="h-8 w-8"
+                                title={(statusOpen ?? !isRunning) ? "Collapse" : "Expand"}
+                            >
+                                {(statusOpen ?? !isRunning) ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                )}
+                            </Button>
+                        </CardHeader>
+                        {(statusOpen ?? !isRunning) && (
                             <CardContent>
                                 <DeploymentStepper deployment={current} />
                             </CardContent>
-                        </Card>
+                        )}
+                    </Card>
 
-                        {/* Live deployment log streaming */}
+                    {/* Live deployment log streaming — members and up.
+                        A guest sees the status badge and the stepper, not
+                        the build output. */}
+                    {canViewLogs && (
                         <DeploymentLogs deploymentId={appId} deploymentStatus={current.status} />
+                    )}
 
-                        {/* Quick Actions (Kubernetes only) */}
-                        {isKubernetes && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base">Quick Actions</CardTitle>
-                                </CardHeader>
-                                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {appUrl && (
-                                        <a
-                                            href={appUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <Globe className="mr-2 h-4 w-4" />
-                                            Open Application
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
+                    {/* Health summary (inline, collapsible like the logs) */}
+                    {shouldFetchHealth && canViewLogs && (
+                        <DeploymentHealth deploymentId={appId} />
+                    )}
 
-                                    {current.github_repo_url && (
-                                        <a
-                                            href={current.github_repo_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <Github className="mr-2 h-4 w-4" />
-                                            Open GitHub Repository
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
+                    {/* Legacy deployments: show Terraform outputs */}
+                    {!isKubernetes && canViewConfig && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Terraform Outputs</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {current.terraform_outputs ? (
+                                    <div className="space-y-1.5 text-xs font-mono">
+                                        {Object.entries(
+                                            (() => {
+                                                try {
+                                                    return JSON.parse(current.terraform_outputs) as Record<string, unknown>;
+                                                } catch {
+                                                    return {};
+                                                }
+                                            })(),
+                                        ).map(([key, value]) => (
+                                            <div key={key} className="flex gap-2 flex-wrap">
+                                                <span className="text-muted-foreground shrink-0">{key}:</span>
+                                                {typeof value === "string" &&
+                                                    value.startsWith("http") ? (
+                                                    <a
+                                                        href={value}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="text-primary underline break-all"
+                                                    >
+                                                        {value}
+                                                    </a>
+                                                ) : (
+                                                    <span className="break-all">{String(value)}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                        No outputs yet.
+                                    </p>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
+                </TabsContent>
 
-                                    {current.argocd_app_name && (
-                                        <a
-                                            href={`https://argocd.3istor.com/applications/${current.argocd_app_name}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <FileCode className="mr-2 h-4 w-4" />
-                                            View in ArgoCD
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
-
-                                    {current.project_id && current.name && (
-                                        <a
-                                            href={`https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-                                        >
-                                            <Shield className="mr-2 h-4 w-4" />
-                                            Manage Secrets in Vault
-                                            <ExternalLink className="ml-auto h-3 w-3" />
-                                        </a>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {/* Health summary (inline, collapsible like the logs) */}
-                        {shouldFetchHealth && (
-                            <DeploymentHealth deploymentId={appId} />
-                        )}
-                    </div>
-
-                    {/* ── Right column: Day-2 config ── */}
-                    <div className="space-y-6">
-                        {isKubernetes && isRunning ? (
-                            <>
+                {/* Day-2 config — members see the values read-only, admins
+                    can change them, guests get no tab at all. */}
+                {isKubernetes && canViewConfig && (
+                    <TabsContent value="config" className="mt-6">
+                        {isRunning ? (
+                            <SearchHighlight>
                                 <div id="security-data" className="scroll-mt-24">
                                     <SecurityDataPanel deploymentId={appId} />
                                 </div>
-                                <AppConfigPanel deploymentId={appId} />
-                            </>
-                        ) : isKubernetes && !isRunning ? (
+                                <AppConfigPanel
+                                    deploymentId={appId}
+                                    readOnly={!canEditConfig}
+                                />
+                            </SearchHighlight>
+                        ) : (
                             <Card>
                                 <CardContent className="pt-6">
                                     <p className="text-sm text-muted-foreground text-center">
@@ -453,85 +650,23 @@ export default function AppControlCenterPage() {
                                     </p>
                                 </CardContent>
                             </Card>
-                        ) : (
-                            /* Legacy deployments: show Terraform outputs */
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base">Terraform Outputs</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {current.terraform_outputs ? (
-                                        <div className="space-y-1.5 text-xs font-mono">
-                                            {Object.entries(
-                                                (() => {
-                                                    try {
-                                                        return JSON.parse(current.terraform_outputs) as Record<string, unknown>;
-                                                    } catch {
-                                                        return {};
-                                                    }
-                                                })(),
-                                            ).map(([key, value]) => (
-                                                <div key={key} className="flex gap-2 flex-wrap">
-                                                    <span className="text-muted-foreground shrink-0">{key}:</span>
-                                                    {typeof value === "string" &&
-                                                        value.startsWith("http") ? (
-                                                        <a
-                                                            href={value}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="text-primary underline break-all"
-                                                        >
-                                                            {value}
-                                                        </a>
-                                                    ) : (
-                                                        <span className="break-all">{String(value)}</span>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground">
-                                            No outputs yet.
-                                        </p>
-                                    )}
-                                </CardContent>
-                            </Card>
                         )}
+                    </TabsContent>
+                )}
 
-                        {/* GitHub Repository (just below Terraform Outputs) */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <Github className="h-4 w-4" />
-                                    GitHub Repository
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {current.github_repo_url ? (
-                                    <a
-                                        href={current.github_repo_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-sm text-primary underline break-all inline-flex items-center gap-1.5"
-                                    >
-                                        {current.github_repo_url.replace(
-                                            "https://github.com/",
-                                            "",
-                                        )}
-                                        <ExternalLink className="h-3 w-3 shrink-0" />
-                                    </a>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">
-                                        No GitHub repository linked for this deployment.
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-                </TabsContent>
+                {isKubernetes && canViewRelease && (
+                    <TabsContent value="release" className="mt-6">
+                        <ReleaseTab deploymentId={appId} projectName={projectName} />
+                    </TabsContent>
+                )}
 
-                {isKubernetes && (
+                {isKubernetes && canViewRelease && (
+                    <TabsContent value="environments" className="mt-6">
+                        <EnvironmentsTab deploymentId={appId} />
+                    </TabsContent>
+                )}
+
+                {isKubernetes && canViewObservability && (
                     <TabsContent value="security" className="mt-6">
                         <SecurityDashboard
                             project={projectName}
@@ -541,24 +676,26 @@ export default function AppControlCenterPage() {
                     </TabsContent>
                 )}
 
-                {isKubernetes && (
+                {isKubernetes && canViewObservability && (
                     <TabsContent value="activity" className="mt-6">
                         <ActivityTab project={projectName} app={current.name} />
                     </TabsContent>
                 )}
 
-                {isKubernetes && (
+                {isKubernetes && canViewObservability && (
                     <TabsContent value="alerts" className="mt-6">
                         <AlertsPanel project={projectName} app={current.name} />
                     </TabsContent>
                 )}
 
-                <TabsContent value="finops" className="mt-6 space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                        Les coûts sont suivis au niveau du projet.
-                    </p>
-                    <ProjectFinopsPanel project={projectName} />
-                </TabsContent>
+                {canViewFinops && (
+                    <TabsContent value="finops" className="mt-6 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                            Les coûts sont suivis au niveau du projet.
+                        </p>
+                        <ProjectFinopsPanel project={projectName} />
+                    </TabsContent>
+                )}
                 </Tabs>
             </main>
 

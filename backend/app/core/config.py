@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # App
     APP_NAME: str = "CMP API"
     DEBUG: bool = True
+    BACKGROUND_COLLECTORS_ENABLED: bool = True
 
     # FinOps — comma-separated Keycloak usernames granted the global
     # "Admin CNP" role (visibility over every project's costs).
@@ -23,12 +24,14 @@ class Settings(BaseSettings):
     IMPORT_CHART_SHA: str = ""  # Reviewed infra-templates commit.
     IMPORT_WORKFLOW_SHA: str = ""  # Immutable commit of the trusted workflow.
     IMPORT_OIDC_AUDIENCE: str = "cnp-repository-import"
-    IMPORT_USER_AUDIENCE: str = "3-istor-openid"
+    IMPORT_USER_AUDIENCE: str = "account"
     IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/cnp-imports"
     IMPORT_MAX_IMAGE_BYTES: int = 1024 * 1024 * 1024
     IMPORT_DOMAIN: str = "3istor.com"
     IMPORT_ARGOCD_URL: str = ""
     IMPORT_ARGOCD_TOKEN: str = ""
+
+    TEMPLATE_REPOSITORY_PATH: str = ""
 
     # Database
     DATABASE_URL: str = "sqlite:///./arcl.db"
@@ -75,6 +78,7 @@ class Settings(BaseSettings):
 
     # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
+    KEYCLOAK_REALM: str = "3istor"
     KEYCLOAK_CLIENT_ID: str = "3-istor-openid"
     KEYCLOAK_CLIENT_SECRET: str = ""
     # Admin credentials used by Terraform k3s-project-bootstrap module
@@ -125,6 +129,26 @@ class Settings(BaseSettings):
     GITHUB_REGISTRY_TOKEN: str = ""
 
     GRAFANA_ADMIN_PASSWORD: str = ""
+
+    # AI assistants (MCP server on /mcp, OAuth served by the CMP itself)
+    AGENT_ACCESS_TOKEN_TTL_SECONDS: int = 900
+    AGENT_REFRESH_TTL_DAYS: int = 30
+    # Redirect URIs an assistant may register, comma-separated fnmatch
+    # patterns. Loopback URIs (Claude Code, Codex, OpenCode) are always
+    # allowed.
+    AGENT_REDIRECT_URI_PATTERNS: str = (
+        "https://claude.ai/api/mcp/auth_callback,"
+        "https://claude.com/api/mcp/auth_callback,"
+        "https://chatgpt.com/connector_platform_oauth_redirect,"
+        "https://chatgpt.com/connector/oauth/*,"
+        "https://vscode.dev/redirect,"
+        "cursor://anysphere.cursor-mcp/*,"
+        "vscode://*"
+    )
+    # Repository holding the skills the MCP server shares with assistants.
+    AGENT_KIT_REPO: str = "3-Istor/cnp-agent-kit"
+    AGENT_KIT_BRANCH: str = "main"
+    AGENT_KIT_SKILLS_PATH: str = "plugins/cnp/skills"
 
 
 settings = Settings()

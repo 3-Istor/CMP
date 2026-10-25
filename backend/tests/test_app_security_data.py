@@ -181,7 +181,7 @@ def make_client(session_factory, repo: FakeRepo, role: str | None):
 
     patches = [
         mock.patch.object(deployments_router, "get_file_content", repo.get),
-        mock.patch.object(deployments_router, "update_file_content", repo.put),
+        mock.patch.object(deployments_router, "put_file_content", repo.put),
         mock.patch.object(
             deployments_router,
             "get_installation_token",

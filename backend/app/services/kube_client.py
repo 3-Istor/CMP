@@ -12,20 +12,40 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
 
 SERVICE_ACCOUNT_DIR = Path("/var/run/secrets/kubernetes.io/serviceaccount")
 REQUEST_TIMEOUT = 10
+
+# Kept alive across calls: a fresh TLS handshake per read was the bulk of the
+# release poller's CPU.
+_session = requests.Session()
+_session.mount("https://", HTTPAdapter(pool_maxsize=16))
 
 
 class KubeUnavailableError(Exception):
     """Raised when the Kubernetes API cannot be reached or refuses the read."""
 
 
+OUTSIDE_CLUSTER_NOTICE = (
+    "not running inside a Kubernetes cluster: cluster data is not collected. "
+    "Expected when the backend runs locally."
+)
+
+
+def in_cluster() -> bool:
+    """True when the pod's service account is mounted (never in local dev)."""
+    return (
+        bool(os.environ.get("KUBERNETES_SERVICE_HOST"))
+        and (SERVICE_ACCOUNT_DIR / "token").exists()
+    )
+
+
 def _api_base() -> str:
-    host = os.environ.get("KUBERNETES_SERVICE_HOST")
-    port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
-    if not host or not (SERVICE_ACCOUNT_DIR / "token").exists():
+    if not in_cluster():
         raise KubeUnavailableError("not running inside a Kubernetes cluster")
+    host = os.environ["KUBERNETES_SERVICE_HOST"]
+    port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
     return f"https://{host}:{port}"
 
 
@@ -43,7 +63,7 @@ def kube_get(
     base = _api_base()
     token = (SERVICE_ACCOUNT_DIR / "token").read_text().strip()
     try:
-        response = requests.get(
+        response = _session.get(
             f"{base}{path}",
             headers={"Authorization": f"Bearer {token}"},
             params=params,
@@ -76,7 +96,7 @@ def _request(
     base = _api_base()
     token = (SERVICE_ACCOUNT_DIR / "token").read_text().strip()
     try:
-        response = requests.request(
+        response = _session.request(
             method,
             f"{base}{path}",
             headers={"Authorization": f"Bearer {token}", **(headers or {})},

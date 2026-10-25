@@ -101,9 +101,9 @@ APP_CASES = [
         "foo",
         app("a" * 60),
         [record("foo")],
-        ["64 characters"],
+        ["68 characters"],
     ),
-    ("namespace at 63 characters", "p" * 40, app("a" * 22), [], []),
+    ("staging namespace at 63 characters", "p" * 40, app("a" * 18), [], []),
     ("uppercase app name", "foo", app("Web"), [record("foo")], ["DNS-1123"]),
     ("dotted app name", "foo", app("web.v2"), [record("foo")], ["DNS-1123"]),
     (
@@ -149,3 +149,25 @@ def test_check_app(description, project, new_app, existing, fragments):
     assert bool(errors) == bool(fragments)
     for fragment in fragments:
         assert fragment in text
+
+
+def test_staging_namespace_collides_with_another_apps_prod_namespace():
+    staged = {**app("web"), "environments": ["prod", "staging"]}
+
+    errors = check_app("foo", staged, [record("foo-web", app("stg"))])
+
+    assert any("namespace 'foo-web-stg'" in error for error in errors)
+
+
+def test_staging_namespace_counts_against_the_length_limit():
+    staged = {**app("a" * 20), "environments": ["prod", "staging"]}
+
+    errors = check_app("p" * 40, staged, [])
+
+    assert any("65 characters" in error for error in errors)
+
+
+def test_a_prod_only_app_reserves_its_staging_name():
+    errors = check_app("foo", app("web"), [record("foo-web", app("stg"))])
+
+    assert any("namespace 'foo-web-stg'" in error for error in errors)

@@ -21,7 +21,7 @@ interface Props {
 
 /**
  * Validates an app name against the backend / GitHub repository rule:
- * only alphanumeric characters, underscores or hyphens, and 100 chars or less.
+ * only alphanumeric characters, underscores or hyphens, and 45 chars or less.
  */
 function validateAppName(name: string): string | null {
   if (!name) return null; // empty handled by the required/disabled state
@@ -136,9 +136,11 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                   <h2 className="text-base font-semibold">
                     Deploy {template.name}
                   </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    2 OpenStack VMs + 2 AWS instances via ASG
-                  </p>
+                  {!isKubernetes && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      2 OpenStack VMs + 2 AWS instances via ASG
+                    </p>
+                  )}
                 </div>
               </div>
               <button
@@ -318,10 +320,6 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
                         2× AWS t3.micro - stateless web layer (ASG + ALB)
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
-                        Auto-rollback if AWS step fails
                       </div>
                     </>
                   )}

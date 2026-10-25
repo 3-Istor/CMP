@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,28 +7,34 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.staticfiles import StaticFiles
 
+from app import mcp_server
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import (
     account,
     activity,
+    agents,
     alerting,
     catalog,
     deployments,
+    environments,
     finops,
     infra,
     projects,
+    releases,
     security,
     security_alerts,
     security_databases,
 )
 from app.services import health_poller
 from app.services.activity_collector import activity_collector_loop
-from app.services.audit import audit_middleware, audit_retention_loop
+from app.services.agents import internal_api
+from app.services.audit import AuditMiddleware, audit_retention_loop
+from app.services.environments.loop import environment_loop
 from app.services.finops import alert_poller
+from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
 from app.services.template_repository import get_repository
 
@@ -127,15 +132,9 @@ logger = logging.getLogger(__name__)
 # OPENAPI OAUTH2 CONFIGURATION (Keycloak OIDC)
 # ══════════════════════════════════════════════════════════════════════════
 
-# Define Keycloak OAuth2 Flow for Swagger UI
-oauth2_scheme = OAuth2AuthorizationCodeBearer(
-    authorizationUrl="https://auth.3istor.com/realms/3istor/protocol/openid-connect/auth",
-    tokenUrl="https://auth.3istor.com/realms/3istor/protocol/openid-connect/token",
-    scopes={
-        "openid": "Required for authentication",
-        "profile": "Access user profile metadata",
-        "groups": "Project boundary mappings",
-    },
+_OIDC_BASE = (
+    f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
+    "/protocol/openid-connect"
 )
 
 
@@ -164,8 +163,8 @@ def custom_openapi():
             "type": "oauth2",
             "flows": {
                 "authorizationCode": {
-                    "authorizationUrl": "https://auth.3istor.com/realms/3istor/protocol/openid-connect/auth",
-                    "tokenUrl": "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token",
+                    "authorizationUrl": f"{_OIDC_BASE}/auth",
+                    "tokenUrl": f"{_OIDC_BASE}/token",
                     "scopes": {
                         "openid": "Required for authentication",
                         "profile": "Access user profile metadata",
@@ -177,7 +176,8 @@ def custom_openapi():
         }
     }
 
-    # Enforce global security on all non-public endpoints (except /health)
+    # Document the Keycloak scheme on every endpoint except /health. This is
+    # OpenAPI metadata only: enforcement is each router's get_current_user.
     for path_name, path_obj in openapi_schema["paths"].items():
         # Skip health check endpoint
         if path_name == "/health":
@@ -216,50 +216,47 @@ async def lifespan(app: FastAPI):
     backfill_gitops_repo_urls()
 
     # Mount static files after repository is cloned
-    if os.path.exists("data/templates/templates"):
+    templates_directory = repo.repo_path / "templates"
+    if templates_directory.is_dir():
         logger.info("Mounting static files...")
         app.mount(
             "/static/templates",
-            StaticFiles(directory="data/templates/templates"),
+            StaticFiles(directory=str(templates_directory)),
             name="templates",
         )
         logger.info("Static files mounted")
 
-    # Start background health poller
-    logger.info("Starting health poller...")
-    health_poller_task = asyncio.create_task(
-        health_poller.health_poller_loop()
-    )
-    logger.info("Health poller started")
+    # The local import UI has no cloud/cluster data to collect.
+    tasks = []
+    if settings.BACKGROUND_COLLECTORS_ENABLED:
+        tasks = [
+            asyncio.create_task(collector())
+            for collector in (
+                health_poller.health_poller_loop,
+                alert_poller.finops_alert_loop,
+                security_collector_loop,
+                audit_retention_loop,
+                activity_collector_loop,
+                release_recorder_loop,
+                environment_loop,
+            )
+        ]
 
-    # Start background FinOps budget/consumption alert poller
-    logger.info("Starting FinOps alert poller...")
-    finops_poller_task = asyncio.create_task(alert_poller.finops_alert_loop())
-    logger.info("FinOps alert poller started")
-
-    logger.info("Starting security collector...")
-    security_collector_task = asyncio.create_task(security_collector_loop())
-    audit_retention_task = asyncio.create_task(audit_retention_loop())
-    activity_collector_task = asyncio.create_task(activity_collector_loop())
+    # Last, so it only gets the paths no router claimed: /mcp, the OAuth
+    # endpoints (/authorize, /token, /register, /revoke) and their
+    # /.well-known metadata.
+    app.mount("/", mcp_server.mcp.streamable_http_app())
 
     logger.info("✅ Application startup complete")
 
-    yield
+    async with mcp_server.mcp.session_manager.run():
+        yield
 
     # Shutdown: cancel background tasks
     logger.info("Shutting down application...")
-    health_poller_task.cancel()
-    finops_poller_task.cancel()
-    security_collector_task.cancel()
-    audit_retention_task.cancel()
-    activity_collector_task.cancel()
-    for task in (
-        health_poller_task,
-        finops_poller_task,
-        security_collector_task,
-        audit_retention_task,
-        activity_collector_task,
-    ):
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
         try:
             await task
         except asyncio.CancelledError:
@@ -285,7 +282,7 @@ app = FastAPI(
 # Apply custom OpenAPI schema with OAuth2
 app.openapi = custom_openapi
 
-app.middleware("http")(audit_middleware)
+app.add_middleware(AuditMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -306,16 +303,25 @@ from app.routers import repository_imports
 
 app.include_router(repository_imports.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
+app.include_router(agents.router, prefix="/api")
+app.include_router(agents.projects_router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(alerting.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
+app.include_router(releases.router, prefix="/api")
+app.include_router(environments.router, prefix="/api")
+app.include_router(environments.callbacks, prefix="/api")
+app.include_router(environments.projects, prefix="/api")
 app.include_router(finops.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")
+
+
+internal_api.bind(app)
 
 
 @app.get("/health", tags=["Health"])

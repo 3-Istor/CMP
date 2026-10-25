@@ -11,11 +11,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { createProject, deleteProject } from "@/lib/api";
-import type { Project } from "@/types";
+import { GROUP_SUFFIX, ROLE_BLURB } from "@/lib/permissions";
+import type { Project, ProjectRole } from "@/types";
 import { isProjectFailed, isProjectInFlight } from "@/types";
 import {
     AlertTriangle,
     Crown,
+    Eye,
     FolderKanban,
     Loader2,
     RotateCw,
@@ -32,10 +34,18 @@ interface Props {
     onRetried?: () => void;
 }
 
+const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
+    owner: Crown,
+    admin: ShieldCheck,
+    member: Users,
+    guest: Eye,
+};
+
 export function ProjectCard({ project, onRetried }: Props) {
     const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
+    const RoleIcon = ROLE_ICON[project.role] ?? Users;
     const isCreating = project.status === "provisioning";
     const isDeleting = project.status === "decommissioning";
     const isFailed = isProjectFailed(project);
@@ -94,16 +104,16 @@ export function ProjectCard({ project, onRetried }: Props) {
                         </Badge>
                     ) : (
                         <Badge
-                            variant={isAdmin ? "default" : "secondary"}
+                            variant={
+                                isAdmin
+                                    ? "default"
+                                    : project.role === "guest"
+                                      ? "outline"
+                                      : "secondary"
+                            }
                             className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
                         >
-                            {isOwner ? (
-                                <Crown className="mr-1 h-3 w-3" />
-                            ) : project.role === "admin" ? (
-                                <ShieldCheck className="mr-1 h-3 w-3" />
-                            ) : (
-                                <Users className="mr-1 h-3 w-3" />
-                            )}
+                            <RoleIcon className="mr-1 h-3 w-3" />
                             {project.role}
                         </Badge>
                     )}
@@ -112,7 +122,7 @@ export function ProjectCard({ project, onRetried }: Props) {
                     {project.name}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                    {`Kubernetes project · ${isOwner ? "Owner" : isAdmin ? "Full access" : "Read & deploy"}`}
+                    {`Kubernetes project · ${ROLE_BLURB[project.role]}`}
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-0 space-y-1.5">
@@ -152,7 +162,7 @@ export function ProjectCard({ project, onRetried }: Props) {
                     </>
                 ) : (
                     <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
-                        project-{project.name}-{isAdmin ? "admins" : "members"}
+                        project-{project.name}-{GROUP_SUFFIX[project.role]}
                     </div>
                 )}
             </CardContent>

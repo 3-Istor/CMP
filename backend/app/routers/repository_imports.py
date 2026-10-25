@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.repository_import import RepositoryImport
 from app.services import repository_imports as service
+from app.services.keycloak_service import get_current_user
 
 router = APIRouter(prefix="/repository-imports", tags=["Repository imports"])
 bearer = HTTPBearer()
@@ -46,6 +47,24 @@ def owned(db, import_id, claims):
         raise HTTPException(404, "Import introuvable")
     service.fresh_project(db, job.project_name, job.user_sub, job.username)
     return job
+
+
+@router.get("/availability")
+def availability(claims=Depends(get_current_user)):
+    """Authenticated status only; never grants access to a source repository."""
+    if not service.settings.IMPORT_ENABLED:
+        return {
+            "ready": False,
+            "message": "L’import est désactivé sur cet environnement. Le formulaire reste consultable.",
+        }
+    try:
+        service.enabled()
+    except HTTPException:
+        return {
+            "ready": False,
+            "message": "L’import n’est pas encore configuré sur cet environnement.",
+        }
+    return {"ready": True, "message": ""}
 
 
 @router.post("", status_code=201)

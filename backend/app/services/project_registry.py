@@ -236,7 +236,8 @@ async def publish_record(
     created_at: datetime | None = None,
 ) -> None:
     """
-    Create or refresh a project's registry record.
+    Create a project's registry record, or overwrite an existing one with a
+    fresh record: its ``apps`` list and ``createdAt`` are reset.
 
     Raises:
         ImmutableCloudError: If a record already exists on a different cloud.
@@ -515,4 +516,150 @@ async def write_security_policy(
     except GitHubAppError as exc:
         raise RegistryError(
             f"Could not write the security policy of '{project_name}': {exc}"
+        ) from exc
+
+
+async def set_app_environments(
+    project_name: str,
+    app_name: str,
+    environments: list[str],
+    staging_hostname: str | None,
+) -> None:
+    """
+    Turn an app's staging environment on or off in the registry record.
+
+    This is what makes Argo CD create (or prune) the staging namespace,
+    Applications, tunnel route and image updater.
+
+    Raises:
+        RegistryError: No record or no such app, staging not allowed by the
+            project or over its cap, or the registry cannot be written.
+    """
+    existing = await read_record(project_name)
+    if existing is None:
+        raise RegistryError(
+            f"Project '{project_name}' has no registry record."
+        )
+    record, sha = existing
+    spec = record.setdefault("spec", {})
+    apps = spec.get("apps") or []
+    entry = next((app for app in apps if app.get("name") == app_name), None)
+    if entry is None:
+        raise RegistryError(
+            f"App '{app_name}' is not in project '{project_name}'."
+        )
+
+    if "staging" in environments:
+        allowed = {
+            env.get("name"): env
+            for env in spec.get("environments") or [{"name": "prod"}]
+            if isinstance(env, dict)
+        }
+        if "staging" not in allowed:
+            raise RegistryError(
+                f"Project '{project_name}' does not allow staging environments: "
+                "a platform admin has to enable them first."
+            )
+        cap = allowed["staging"].get("maxApps", 1)
+        others = [
+            app.get("name")
+            for app in apps
+            if app.get("name") != app_name
+            and "staging" in (app.get("environments") or [])
+        ]
+        if len(others) >= cap:
+            raise RegistryError(
+                f"Project '{project_name}' already has {len(others)} app(s) with staging, "
+                f"its limit is {cap}: {', '.join(others)}."
+            )
+        problems = check_app(
+            project_name,
+            {**dict(entry), "environments": environments},
+            await list_records(),
+        )
+        if problems:
+            raise NameCollisionError(problems)
+
+    if environments == ["prod"]:
+        entry.pop("environments", None)
+    else:
+        entry["environments"] = list(environments)
+    hostnames = entry.setdefault("hostnames", {})
+    if staging_hostname:
+        hostnames["staging"] = staging_hostname
+    else:
+        hostnames.pop("staging", None)
+
+    buffer = StringIO()
+    _yaml.dump(record, buffer)
+    token = await _installation_token()
+    verb = "enable" if "staging" in environments else "disable"
+    try:
+        await put_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            record_path(project_name),
+            buffer.getvalue(),
+            message=f"feat(registry): {verb} staging for {app_name} on {project_name} [skip ci]",
+            sha=sha,
+            branch=settings.CNP_REGISTRY_BRANCH,
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not update the environments of '{app_name}': {exc}"
+        ) from exc
+
+
+async def set_project_staging(project_name: str, max_apps: int) -> None:
+    """
+    Allow (max_apps > 0) or forbid staging environments for a project.
+
+    Raises:
+        RegistryError: No record, apps still use staging beyond the new cap,
+            or the registry cannot be written.
+    """
+    existing = await read_record(project_name)
+    if existing is None:
+        raise RegistryError(
+            f"Project '{project_name}' has no registry record."
+        )
+    record, sha = existing
+    spec = record.setdefault("spec", {})
+    using = [
+        app.get("name")
+        for app in spec.get("apps") or []
+        if "staging" in (app.get("environments") or [])
+    ]
+    if len(using) > max_apps:
+        raise RegistryError(
+            f"{len(using)} app(s) use staging ({', '.join(using)}): turn it off on "
+            f"them before lowering the limit to {max_apps}."
+        )
+    environments = [
+        env
+        for env in spec.get("environments") or [{"name": "prod"}]
+        if env.get("name") != "staging"
+    ]
+    if max_apps > 0:
+        environments.append(
+            {"name": "staging", "offhours": True, "maxApps": max_apps}
+        )
+    spec["environments"] = environments
+
+    buffer = StringIO()
+    _yaml.dump(record, buffer)
+    token = await _installation_token()
+    try:
+        await put_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            record_path(project_name),
+            buffer.getvalue(),
+            message=f"feat(registry): staging for up to {max_apps} app(s) on {project_name} [skip ci]",
+            sha=sha,
+            branch=settings.CNP_REGISTRY_BRANCH,
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not update project '{project_name}': {exc}"
         ) from exc

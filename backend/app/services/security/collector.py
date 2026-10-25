@@ -33,7 +33,13 @@ from app.services.github_service import (
     get_installation_token,
     get_latest_artifact,
 )
-from app.services.kube_client import KubeUnavailableError, kube_get, kube_list
+from app.services.kube_client import (
+    OUTSIDE_CLUSTER_NOTICE,
+    KubeUnavailableError,
+    in_cluster,
+    kube_get,
+    kube_list,
+)
 from app.services.project_registry import RegistryError, read_record
 from app.services.security import alerts
 from app.services.security import settings as app_settings
@@ -482,10 +488,13 @@ async def collect_once(cluster: bool, github: bool) -> None:
 
 async def security_collector_loop() -> None:
     logger.info("Security collector started")
+    has_cluster = in_cluster()
+    if not has_cluster:
+        logger.warning("Security collector: %s", OUTSIDE_CLUSTER_NOTICE)
     last_cluster = last_github = float("-inf")
     while True:
         started = time.monotonic()
-        cluster = started - last_cluster >= CLUSTER_INTERVAL
+        cluster = has_cluster and started - last_cluster >= CLUSTER_INTERVAL
         github = started - last_github >= GITHUB_INTERVAL
         try:
             await collect_once(cluster, github)

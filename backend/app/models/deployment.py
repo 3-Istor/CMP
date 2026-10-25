@@ -52,6 +52,9 @@ class Deployment(Base):
     # ── Kubernetes GitOps Fields ──────────────────────────────────────────
     github_repo_url: Mapped[str | None] = mapped_column(String(255))
     argocd_app_name: Mapped[str | None] = mapped_column(String(100))
+    # Name of the AI assistant that created the app, None when a person did
+    # it in the CMP.
+    created_via: Mapped[str | None] = mapped_column(String(255))
     k8s_namespace: Mapped[str | None] = mapped_column(String(100))
 
     # ── Terraform State & Outputs ─────────────────────────────────────────

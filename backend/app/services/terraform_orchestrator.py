@@ -636,6 +636,9 @@ def run_deletion(deployment_id: int) -> None:
             logger.info(
                 "Running terraform destroy... (this may take several minutes)"
             )
+            from app.services.environments.activation import destroy_with_app
+
+            destroy_with_app(db, deployment)
             executor.destroy(app_config)
             logger.info("✅ Terraform destroy completed")
 
@@ -734,7 +737,7 @@ def _wait_for_url_ready(
     Returns True if the URL became accessible within the timeout.
     """
     logger.info(
-        f"⏳ Polling {url} for HTTP 200 (timeout={timeout_seconds}s, interval={poll_interval}s)"
+        f"⏳ Polling {url} for a non-error response (timeout={timeout_seconds}s, interval={poll_interval}s)"
     )
     start = time.monotonic()
     deadline = start + timeout_seconds
@@ -806,10 +809,7 @@ def _sanitize_config_for_logging(config: dict) -> dict:
 
     for key, value in config.items():
         if any(sensitive in key.lower() for sensitive in sensitive_keys):
-            if isinstance(value, str) and len(value) > 10:
-                sanitized[key] = f"{value[:8]}...[REDACTED]"
-            else:
-                sanitized[key] = "[REDACTED]"
+            sanitized[key] = "[REDACTED]"
         else:
             sanitized[key] = value
 

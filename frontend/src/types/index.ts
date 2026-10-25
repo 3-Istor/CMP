@@ -31,11 +31,22 @@ export interface Deployment {
   github_repo_url: string | null;
   argocd_app_name: string | null;
   k8s_namespace: string | null;
+  /** The AI assistant that created the app, null when a person did. */
+  created_via?: string | null;
 }
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────
 
-export type ProjectRole = "owner" | "admin" | "member";
+/**
+ * A user's role on one project, strongest first.
+ *
+ * `owner` is the creator and is stored in the database; the other three are
+ * Keycloak groups. See `src/lib/permissions.ts` for what each one may do.
+ */
+export type ProjectRole = "owner" | "admin" | "member" | "guest";
+
+/** The roles an admin can hand out. `owner` is not among them. */
+export type AssignableRole = Exclude<ProjectRole, "owner">;
 
 /** The cloud a project's workloads run on. Immutable after creation. */
 export type TargetCloud = "onprem" | "aws" | "gcp";
@@ -87,6 +98,12 @@ export interface ProjectMember {
 export interface ProjectMembersResponse {
   project_name: string;
   members: ProjectMember[];
+  /**
+   * False for projects bootstrapped before the `project-<name>-guests`
+   * Keycloak group existed. The Guest option is hidden when it is false,
+   * rather than offering a role the backend would reject with a 409.
+   */
+  guests_supported?: boolean;
 }
 
 export interface AddMemberResponse {
@@ -617,4 +634,329 @@ export interface AlertCatalog {
   notifies: "app" | "project" | "platform" | null;
   grafana_rules_url: string | null;
   grafana_new_rule_url: string | null;
+}
+
+// ── Release tab ───────────────────────────────────────────────────────────────
+
+export type ReleaseStrategy = "rolling" | "canary" | "bluegreen";
+
+export type ReleasePhase =
+  | "Progressing"
+  | "Paused"
+  | "Healthy"
+  | "Degraded"
+  | "Aborted";
+
+/** `scale` comes from setCanaryScale: canary pod preparation, not shown as a full step. */
+export type ReleaseStepKind = "analysis" | "setWeight" | "pause" | "scale";
+
+export type ReleaseStepStatus =
+  | "done"
+  | "active"
+  | "running"
+  | "pending"
+  | "failed"
+  | "skipped";
+
+export interface ReleaseMetric {
+  name: string;
+  value: number | null;
+  threshold: number | null;
+  unit: string | null;
+  /** AnalysisRun measurement phase: Successful, Failed, Error, Inconclusive, Running. */
+  phase: string;
+}
+
+export interface ReleaseStep {
+  index: number;
+  kind: ReleaseStepKind;
+  label: string;
+  description: string | null;
+  status: ReleaseStepStatus;
+  weight: number | null;
+  durationSeconds: number | null;
+  expectedSeconds: number | null;
+  metrics: ReleaseMetric[];
+  message: string | null;
+}
+
+export interface ReleaseRevision {
+  hash: string;
+  role: "stable" | "canary";
+  image: string;
+  ready: number;
+  desired: number;
+}
+
+export interface ReleaseView {
+  enabled: boolean;
+  strategy: ReleaseStrategy | null;
+  preset: string | null;
+  phase: ReleasePhase | null;
+  revision: number | null;
+  stableHash: string | null;
+  canaryHash: string | null;
+  stableImage: string | null;
+  canaryImage: string | null;
+  currentStepIndex: number | null;
+  weights: { stable: number; canary: number } | null;
+  forced: boolean;
+  startedAt: string | null;
+  etaSeconds: number | null;
+  steps: ReleaseStep[];
+  revisions: ReleaseRevision[];
+  actions: {
+    promote: boolean;
+    promoteFull: boolean;
+    skip: boolean;
+    abort: boolean;
+  };
+}
+
+export type ReleaseOutcome =
+  | "running"
+  | "promoted"
+  | "aborted_auto"
+  | "aborted_manual"
+  | "superseded";
+
+export interface ReleaseActor {
+  user: string;
+  action: string;
+  reason: string | null;
+  at: string;
+}
+
+export interface ReleaseEvent {
+  id: number | string;
+  deployment_id: number;
+  revision: number;
+  image: string;
+  strategy: string;
+  started_at: string;
+  finished_at: string | null;
+  outcome: ReleaseOutcome;
+  forced: boolean;
+  reached_step: number | null;
+  steps: ReleaseStep[] | null;
+  actors: ReleaseActor[] | null;
+}
+
+export interface ReleaseSettings {
+  strategy: "rolling" | "canary";
+  preset: "safe" | "fast" | "demo" | "manual";
+  stickiness: "none" | "cookie";
+  smokePath: string;
+  errorRateMax: number;
+  minRequests: number;
+  allowForce: boolean;
+}
+
+export type CanaryBlockerCode = "no_route" | "no_service" | "db_without_migrations";
+
+export interface ReleaseSettingsRead {
+  settings: ReleaseSettings;
+  files: string[];
+  canEdit: boolean;
+  declared: boolean;
+  canaryBlocker: { code: CanaryBlockerCode; message: string } | null;
+  migrationsCommand: string[] | null;
+}
+
+export interface ReleaseSettingsSaved {
+  repo: string;
+  commits: Record<string, string>;
+  strategies: Record<string, "rolling" | "canary">;
+}
+
+export interface TrafficEvent {
+  seq: number;
+  version: "stable" | "canary" | "error";
+  status: number;
+  ms: number;
+}
+
+export interface TrafficFrame {
+  running: boolean;
+  rps?: number;
+  remainingSeconds?: number;
+  startedBy?: string;
+  counts?: { stable: number; canary: number; error: number };
+  events?: TrafficEvent[];
+}
+
+// ── AI assistants (MCP) ──────────────────────────────────────────────────────
+
+export interface AgentAuthRequest {
+  client_name: string;
+  scopes: string[];
+  redirect_host: string;
+}
+
+export interface AgentGrant {
+  id: number;
+  client_name: string;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string;
+}
+
+export interface AgentSummary {
+  assistants: AgentGrant[];
+  apps_created: number;
+  last_action_at: string | null;
+  last_action: string | null;
+  pending_confirmations: number;
+}
+
+export interface AgentConfirmation {
+  id: string;
+  username: string;
+  project: string;
+  deployment_id: number | null;
+  tool: string;
+  summary: string;
+  status: "pending" | "approved" | "denied" | "expired" | "used";
+  created_at: string;
+  expires_at: string;
+  decided_by: string | null;
+}
+
+export type StakeLevel = "sandbox" | "demo" | "standard" | "critical";
+
+export interface AgentSettings {
+  project: string;
+  level: StakeLevel;
+  effective_level: StakeLevel;
+  autonomous_until: string | null;
+  suggested_level: StakeLevel;
+  suggestion_reason: string;
+  rules: Record<string, "allow" | "ask" | "pr" | "confirm" | "deny">;
+  levels: StakeLevel[];
+}
+
+export interface AgentPublicStats {
+  apps_created_this_month: number;
+  connected_assistants: number;
+}
+
+// ── Environments tab ──────────────────────────────────────────────────────────
+
+export type EnvironmentName = "prod" | "staging";
+
+export interface EnvironmentState {
+  name: EnvironmentName;
+  namespace: string;
+  hostname: string | null;
+  version: string | null;
+  digests: Record<string, string>;
+  converged: boolean;
+  asleep: boolean;
+  reachable: boolean;
+}
+
+export interface StagingStatus {
+  state: "provisioning" | "ready" | "failed" | "removing";
+  detail: string | null;
+  hostname: string | null;
+  updatedAt: string;
+}
+
+export type SuiteKind = "smoke" | "external" | "metrics";
+export type OnInconclusive = "fail" | "pass" | "ask";
+
+export interface SuiteSpec {
+  name: string;
+  kind: Exclude<SuiteKind, "smoke">;
+  workflow?: string | null;
+  timeoutMinutes?: number;
+  prodSafe?: boolean;
+  windowMinutes?: number;
+  minRequests?: number;
+  errorRateMax?: number;
+  p95Ms?: number | null;
+  onInconclusive?: OnInconclusive;
+}
+
+export interface PromotionPolicy {
+  suites: SuiteSpec[];
+  soakMinutes: number;
+  requireApproval: boolean;
+  autoPromote: boolean;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+}
+
+export type RunStatus = "running" | "passed" | "failed" | "inconclusive" | "cancelled" | "error";
+
+export interface VerificationRun {
+  id: number;
+  environment: EnvironmentName;
+  suite: string;
+  kind: SuiteKind;
+  version: string | null;
+  digests: Record<string, string>;
+  status: RunStatus;
+  summary: string | null;
+  detailsUrl: string | null;
+  measurements: Record<string, unknown> | null;
+  promotionId: number | null;
+  actor: string;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export type PromotionStatus = "running" | "waiting_approval" | "done" | "failed" | "cancelled";
+export type PromotionStepStatus =
+  | "pending"
+  | "running"
+  | "waiting"
+  | "passed"
+  | "accepted"
+  | "skipped"
+  | "failed";
+
+export interface PromotionStep {
+  name: string;
+  kind: "run" | "soak" | "approve" | "promote";
+  status: PromotionStepStatus;
+  detail: string | null;
+  runId?: number;
+  minutes?: number;
+}
+
+export interface Promotion {
+  id: number;
+  sourceEnv: EnvironmentName;
+  targetEnv: EnvironmentName;
+  version: string | null;
+  digests: Record<string, string>;
+  status: PromotionStatus;
+  steps: PromotionStep[];
+  emergency: boolean;
+  reason: string | null;
+  rollbackOf: number | null;
+  approvals: { by: string; at: string }[];
+  actor: string;
+  commitSha: string | null;
+  detail: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface EnvironmentsView {
+  staging: StagingStatus | null;
+  environments: EnvironmentState[];
+  policy: PromotionPolicy;
+  activePromotion: Promotion | null;
+  canOperate: boolean;
+  canAdminister: boolean;
+}
+
+export interface StagingOffhours {
+  enabled: boolean;
+  sleepAt: string;
+  wakeAt: string;
+  timezone: string;
 }

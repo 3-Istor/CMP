@@ -12,6 +12,7 @@ import httpx
 import jwt
 import requests
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
 
@@ -61,7 +62,7 @@ def verify_token(token, worker=False):
     issuer = (
         "https://token.actions.githubusercontent.com"
         if worker
-        else f"{settings.KEYCLOAK_URL.rstrip('/')}/realms/3istor"
+        else f"{settings.KEYCLOAK_URL.rstrip('/')}/realms/{settings.KEYCLOAK_REALM}"
     )
     uri = issuer + (
         "/.well-known/jwks" if worker else "/protocol/openid-connect/certs"
@@ -78,7 +79,10 @@ def verify_token(token, worker=False):
                 if worker
                 else settings.IMPORT_USER_AUDIENCE
             ),
-            options={"require": ["exp", "iat", "sub", "iss", "aud"]},
+            options={
+                "require": ["exp", "iat", "iss", "aud"]
+                + (["sub"] if worker else [])
+            },
         )
     except Exception:
         stop("Authentification invalide", 401)
@@ -93,8 +97,16 @@ def verify_token(token, worker=False):
             or not str(claims.get("run_id", "")).isdigit()
         ):
             stop("Cette CI n’est pas autorisée", 403)
-    elif not claims.get("preferred_username"):
-        stop("Identité du portail manquante", 401)
+    else:
+        if (
+            not claims.get("preferred_username")
+            or claims.get("azp") != settings.KEYCLOAK_CLIENT_ID
+        ):
+            stop("Identité ou client du portail invalide", 401)
+        # The platform realm can omit sub. Resolve it only after verifying the
+        # signature, expiry, issuer, audience and authorized portal client.
+        if not claims.get("sub"):
+            claims["sub"] = keycloak_service.get_user_id_from_token(claims)
     return claims
 
 
@@ -192,7 +204,7 @@ def fresh_project(db, project_name, sub, username):
     if not user or user.get("id") != sub or not user.get("enabled", False):
         stop("L’identité du portail n’est plus autorisée", 403)
     response = requests.get(
-        f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{sub}/groups",
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{sub}/groups",
         headers={"Authorization": f"Bearer {admin}"},
         timeout=10,
     )
@@ -210,7 +222,7 @@ async def repository_user_permission(job, token, write=False):
     """An installation ID is not proof that the portal user owns its repositories."""
     admin = keycloak_service._get_admin_token()
     response = requests.get(
-        f"{settings.KEYCLOAK_URL}/admin/realms/3istor/users/{job.user_sub}/federated-identity",
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{job.user_sub}/federated-identity",
         headers={"Authorization": f"Bearer {admin}"},
         timeout=10,
     )
@@ -251,7 +263,9 @@ async def authorize(db, job, write=False):
     enabled()
     if job.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
         stop("L’autorisation de ce parcours a expiré", 403)
-    project = fresh_project(db, job.project_name, job.user_sub, job.username)
+    project = await run_in_threadpool(
+        fresh_project, db, job.project_name, job.user_sub, job.username
+    )
     link = (
         db.query(UserGitHubInstallation)
         .filter(
@@ -384,8 +398,12 @@ def public(job):
 
 
 async def create(db, claims, payload):
-    project = fresh_project(
-        db, payload.project_name, claims["sub"], claims["preferred_username"]
+    project = await run_in_threadpool(
+        fresh_project,
+        db,
+        payload.project_name,
+        claims["sub"],
+        claims["preferred_username"],
     )
     if not payload.allow_changes:
         stop(

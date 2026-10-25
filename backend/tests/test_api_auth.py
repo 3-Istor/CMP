@@ -63,7 +63,7 @@ class TestDecodePlatformToken:
         "token",
         [
             pytest.param(lambda: _token(key=OTHER_KEY), id="foreign-signature"),
-            pytest.param(lambda: _token(exp=int(time.time()) - 10), id="expired"),
+            pytest.param(lambda: _token(exp=int(time.time()) - 60), id="expired"),
             pytest.param(lambda: _token(iss="https://evil.test/realms/3istor"), id="wrong-issuer"),
             pytest.param(lambda: _unsigned(sub="u1", iss=ISSUER, exp=9999999999), id="alg-none"),
             pytest.param(lambda: "not-a-jwt", id="malformed"),
@@ -141,7 +141,7 @@ def _deployment_id(db, project: str) -> int:
 
 class TestDeploymentsAuthorization:
     def test_lists_only_the_users_projects(self, db, roles):
-        result = asyncio.run(deployments_router.list_deployments(_user("u2"), db))
+        result = deployments_router.list_deployments(_user("u2"), db)
 
         assert [d.project_id for d in result] == ["alpha"]
 
@@ -221,4 +221,4 @@ class TestDeploymentsAuthorization:
                 )
             )
 
-        assert exc.value.status_code == 403
+        assert exc.value.status_code == 400

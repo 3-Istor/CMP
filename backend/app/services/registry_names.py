@@ -12,6 +12,9 @@ DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 MAX_LABEL_LENGTH = 63
 FULLSTACK_COMPONENTS = ("frontend", "backend")
 HOSTNAME_DOMAIN = "3istor.com"
+# Prod keeps the names apps had before environments; staging objects carry a
+# suffix. Must match the cnp-apps ApplicationSet and cnp-project-base.
+ENVIRONMENT_SUFFIX = {"prod": "", "staging": "-stg"}
 
 DerivedName = tuple[str, str, str]
 
@@ -46,21 +49,25 @@ def app_names(project: str, app: dict) -> list[DerivedName]:
     components = (
         FULLSTACK_COMPONENTS if app.get("type") == "fullstack" else ("app",)
     )
-    names: list[DerivedName] = [
-        (
-            "namespace",
-            f"{project}-{app_name}",
-            f"the namespace of app '{app_name}'",
-        )
-    ]
-    for component in components:
+    names: list[DerivedName] = []
+    # Both environments, staging or not: the AppProjects always permit both
+    # namespaces, so both names belong to this app.
+    for environment, suffix in ENVIRONMENT_SUFFIX.items():
         names.append(
             (
-                "application",
-                f"{project}-{app_name}-{component}",
-                f"the {component} Application of app '{app_name}'",
+                "namespace",
+                f"{project}-{app_name}{suffix}",
+                f"the {environment} namespace of app '{app_name}'",
             )
         )
+        for component in components:
+            names.append(
+                (
+                    "application",
+                    f"{project}-{app_name}-{component}{suffix}",
+                    f"the {environment} {component} Application of app '{app_name}'",
+                )
+            )
     for environment, hostname in (app.get("hostnames") or {}).items():
         names.append(
             (
@@ -96,10 +103,11 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             "belongs to the project itself"
         )
     namespace = f"{project}-{app_name}"
-    if len(namespace) > MAX_LABEL_LENGTH:
+    staging = f"{namespace}{ENVIRONMENT_SUFFIX['staging']}"
+    if len(staging) > MAX_LABEL_LENGTH:
         errors.append(
-            f"app '{app_name}' gives namespace '{namespace}' of "
-            f"{len(namespace)} characters, the limit is {MAX_LABEL_LENGTH}"
+            f"app '{app_name}' gives staging namespace '{staging}' of "
+            f"{len(staging)} characters, the limit is {MAX_LABEL_LENGTH}"
         )
     elif not DNS_LABEL.match(namespace):
         errors.append(

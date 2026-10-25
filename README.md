@@ -45,6 +45,17 @@ Python 3.12+, FastAPI, SQLAlchemy/Alembic ; TypeScript, Next.js 16, React 19, Ta
 
 ## Quick Start
 
+The Makefile wraps the steps below and works on Ubuntu and NixOS:
+
+```bash
+make doctor   # missing tools and access
+make setup    # dependencies, env files, migrations
+make env      # credentials from the cluster (same as prod)
+make dev      # OpenStack tunnel if needed, backend and frontend
+```
+
+`make help` lists every target. Set `CMP_SSH_HOST` to your SSH alias for the bastion if it is not `pae-node-1`.
+
 ### 1. Clone & Setup
 
 ```bash
@@ -73,32 +84,25 @@ OS_PASSWORD=your_password
 OS_PROJECT_NAME=your_project
 ```
 
-### 3. Configure Authentication (Optional)
-
-CMP supports two authentication modes:
-
-**Development Mode (Skip Auth)** - Recommended for local development:
+Credentials (AWS, Terraform state, Keycloak, Vault, Grafana, Loki, GitHub App...) come from the deployed CMP: the script copies every secret-backed variable of the `arcl-cmp-backend` deployment. With kubectl access to the k3s cluster:
 
 ```bash
-cd frontend
-echo "NEXT_PUBLIC_SKIP_AUTH=true" > .env.local
+./scripts/sync-local-env.sh
 ```
 
-**Production Mode (Keycloak)** - For production deployment:
+The local backend then shares the prod Terraform states in `istor-cnp-tfstate-757826`: only deploy or destroy throwaway projects.
 
-```bash
-cd frontend
-cat > .env.local << EOF
-NEXT_PUBLIC_SKIP_AUTH=false
-NEXTAUTH_URL=https://cmp.3istor.com
-NEXTAUTH_SECRET=$(openssl rand -base64 32)
-KEYCLOAK_CLIENT_ID=3-istor-openid
-KEYCLOAK_CLIENT_SECRET=your-secret
-KEYCLOAK_ISSUER=https://auth.3istor.com/realms/3istor
-EOF
-```
+### 3. Configure Authentication
 
-See [le guide des identités](https://github.com/3-Istor/cnp-docs/blob/main/docs/02-core-components/02-identity-keycloak.md) for complete authentication documentation.
+The UI and API require a valid Keycloak login. There is no skip-auth mode.
+For this import branch, use the dedicated local launcher described in
+[docs/repository-import.md](docs/repository-import.md): make import-setup,
+fill the Keycloak client secret in both ignored env files, make import-doctor,
+then make import-local. It uses a dedicated local database and the sibling
+app-templates branch, without the OpenStack tunnel or remote Terraform states.
+The import form is available to project admins/owners; actual CI/deployment
+stays disabled in this launcher.
+
 
 ### 4. Start Backend
 
@@ -108,6 +112,14 @@ poetry run uvicorn app.main:app --reload --port 8000
 ```
 
 Backend will be available at http://localhost:8000
+
+Without the WireGuard VPN, OpenStack (`192.168.1.x`) is unreachable. Route it through the bastion in a dedicated terminal, with `CMP_SSH_HOST` set to your SSH alias for the node:
+
+```bash
+CMP_SSH_HOST=pae-node-1 ./scripts/dev-network.sh
+```
+
+Locally the backend has no Kubernetes service account: the security and activity collectors log one warning at startup and leave cluster data unmeasured. This is expected.
 
 ### 5. Start Frontend (in a new terminal)
 
