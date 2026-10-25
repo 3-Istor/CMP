@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.database import get_db
+from app.models.cluster import Cluster, ClusterState
 from app.models.deployment import Deployment
 from app.models.project import Project, TargetCloud
 from app.routers import deployments as router
@@ -26,6 +27,7 @@ def test_app_config_gets_the_project_cloud(
 ):
     with session_factory() as db:
         db.add(Project(project_name="demo", owner_username="u", target_cloud=cloud))
+        db.add(Cluster(cloud=TargetCloud.AWS, state=ClusterState.UP))
         db.commit()
 
     app = FastAPI()
@@ -60,3 +62,48 @@ def test_app_config_gets_the_project_cloud(
     with session_factory() as db:
         row = db.query(Deployment).one()
         assert json.loads(row.app_config)["target_cloud"] == expected
+
+
+def _post_deploy(session_factory, project_cloud, cluster_state):  # noqa: F811
+    with session_factory() as db:
+        db.add(Project(project_name="demo", owner_username="u", target_cloud=project_cloud))
+        db.add(Cluster(cloud=TargetCloud.AWS, state=cluster_state))
+        db.commit()
+    app = FastAPI()
+    app.include_router(router.router, prefix="/api")
+
+    def override_db():
+        with session_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "u"}
+    with (
+        mock.patch.object(router, "is_cnp_admin", lambda token: True),
+        mock.patch.object(router, "ensure_app_names_free", mock.AsyncMock()),
+        mock.patch.object(router.terraform_orchestrator, "run_deployment"),
+    ):
+        return TestClient(app).post(
+            "/api/deployments/",
+            json={
+                "name": "shop",
+                "template_id": "k3s-gitops-app",
+                "project_id": "demo",
+                "app_config": {"app_type": "static"},
+            },
+        )
+
+
+def test_deploy_refused_when_cluster_down(session_factory):  # noqa: F811
+    r = _post_deploy(session_factory, TargetCloud.AWS, ClusterState.DOWN)
+    assert r.status_code == 409
+    assert "AWS cluster is down" in r.json()["detail"]
+
+
+def test_deploy_allowed_when_cluster_up(session_factory):  # noqa: F811
+    assert _post_deploy(session_factory, TargetCloud.AWS, ClusterState.UP).status_code == 202
+
+
+def test_onprem_ignores_cluster_state(session_factory):  # noqa: F811
+    r = _post_deploy(session_factory, TargetCloud.ONPREM, ClusterState.DOWN)
+    assert r.status_code == 202

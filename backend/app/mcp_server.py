@@ -35,7 +35,9 @@ from app.services.agents import internal_api, policy, ratelimit
 from app.services.agents import repo as repo_ops
 from app.services.agents import skills, store
 from app.services.agents.provider import CmpAuthProvider
+from app.models.project import TargetCloud
 from app.services.authz import assert_project_role
+from app.services.clusters.state import ensure_cluster_up
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
@@ -157,6 +159,19 @@ class Caller:
         def check() -> None:
             with SessionLocal() as db:
                 assert_project_role(db, self.claims, project, minimum)
+
+        try:
+            await to_thread.run_sync(check)
+        except HTTPException as exc:
+            raise internal_api.ApiError(exc.status_code, exc.detail) from exc
+
+    async def require_cluster_up(self, app: dict) -> None:
+        config = json.loads(app.get("app_config") or "{}")
+        cloud = TargetCloud(config.get("target_cloud") or "onprem")
+
+        def check() -> None:
+            with SessionLocal() as db:
+                ensure_cluster_up(db, cloud)
 
         try:
             await to_thread.run_sync(check)
@@ -821,6 +836,7 @@ async def cut_release(
     app = await caller.api("GET", f"/api/deployments/{app_id}")
     project = app["project_id"]
     await caller.require_role(project, ProjectRole.MEMBER)
+    await caller.require_cluster_up(app)
     token, repo = await _repo_token(caller, app)
     current = await repo_ops.latest_version(token, repo)
     version = repo_ops.next_version(current, bump)

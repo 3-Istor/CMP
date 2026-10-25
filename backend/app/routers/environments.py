@@ -42,6 +42,8 @@ from app.services.environments import (
     suites,
 )
 from app.services.environments.suites import SuiteSpec
+from app.models.project import TargetCloud
+from app.services.clusters.state import ensure_cluster_up
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
 
@@ -311,6 +313,7 @@ async def enable_staging(
     deployment = await run_in_threadpool(
         _app, db, token, deployment_id, ProjectRole.ADMIN
     )
+    ensure_cluster_up(db, TargetCloud(gitops.target_cloud(deployment)))
     try:
         row = activation.start_enable(
             db, deployment, payload.offhours.values()
@@ -622,6 +625,7 @@ async def start_promotion(
             status_code=409,
             detail="This app has no staging environment to promote from.",
         )
+    ensure_cluster_up(db, TargetCloud(gitops.target_cloud(deployment)))
     try:
         item = await promotion.start(
             db,

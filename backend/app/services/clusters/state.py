@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.cluster import Cluster, ClusterState
@@ -62,3 +63,17 @@ def finish(db: Session, cloud: TargetCloud, ok: bool, error: str | None = None) 
     row.state = _DONE[row.operation] if ok else ClusterState.ERROR
     row.last_error = None if ok else error
     db.commit()
+
+
+def ensure_cluster_up(db: Session, cloud: TargetCloud) -> None:
+    """409 unless the cloud's cluster is up; on-prem is always available."""
+    if cloud not in PUBLIC_CLOUDS:
+        return
+    row = _row(db, cloud)
+    state = row.state if row else ClusterState.DOWN
+    if state != ClusterState.UP:
+        raise HTTPException(
+            409,
+            f"The {cloud.value.upper()} cluster is {state.value}; "
+            "deployments resume once it is up.",
+        )
