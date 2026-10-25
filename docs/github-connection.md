@@ -29,7 +29,9 @@ flowchart TD
 Dans CMP local, ouvrir **Compte → Connexion GitHub** :
 
 1. Cliquer **Lier mon compte GitHub dans CNP** si l’identité est absente.
-2. Dans le compte CNP : **Comptes liés → GitHub**, terminer la connexion GitHub.
+2. Le bouton ouvre directement **Comptes liés / Linked accounts** : cliquer sur **Lier / Link** pour GitHub.
+   Chemin vérifié sur le Keycloak déployé : `/realms/3istor/account/account-security/linked-accounts`.
+   Dans les menus anglais, cette page se trouve sous **Account security → Linked accounts**.
 3. Revenir sur CMP et actualiser si nécessaire.
 4. Cliquer **Rattacher l’installation CNP existante**.
 
