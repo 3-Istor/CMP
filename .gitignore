@@ -87,3 +87,6 @@ values-secrets.yaml
 
 # make network state
 .dev/
+
+# Cloud terraform checkout (make cloud)
+backend/cloud-src/

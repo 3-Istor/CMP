@@ -8,6 +8,8 @@ Portail de gestion de la CNP : catalogue, projets, déploiements et suivi des re
 
 Python 3.12+, FastAPI, SQLAlchemy/Alembic ; TypeScript, Next.js 16, React 19, Tailwind CSS ; Terraform, Docker, Helm et GitHub Actions.
 
+L’image backend embarque les racines Terraform EKS/GKE du dépôt Cloud (`make cloud` avant `docker build`) ainsi que les CLI aws, gcloud et kubectl.
+
 ## Entrées
 
 | Origine / destinataire | Contenu et transmission |
