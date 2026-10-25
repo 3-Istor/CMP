@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import tempfile
 import time
 from pathlib import Path
 
@@ -60,18 +61,23 @@ async def renew_vault_token(force: bool = False) -> None:
 
 async def _release_stale_lock(row: Cluster) -> str | None:
     """Unlock our own dead pod's lock; return an error message if a foreign lock remains."""
+    with tempfile.TemporaryDirectory(prefix="cluster-recover-") as tmp:
+        return await _release_stale_lock_in(row, _env(row.cloud, tmp))
+
+
+async def _release_stale_lock_in(row: Cluster, env: dict) -> str | None:
     cwd = Path(settings.CLUSTER_TF_ROOT) / _DIRS[row.cloud]
-    env = _env(row.cloud, "")
     out: list[str] = []
     # .terraform is ephemeral: plan and force-unlock need an initialised backend.
-    rc = await _stream(["terraform", "init", "-input=false"], cwd, env, None, out.append)
+    rc = await _stream(["terraform", "init", "-no-color", "-input=false"],
+                       cwd, env, None, out.append, out.append)
     if rc:
         _append_log(row, "\n".join(out))
         return f"terraform init failed (exit {rc})"
     out.clear()
     rc = await _stream(
-        ["terraform", "plan", "-lock-timeout=0s", "-input=false", "-refresh=false"],
-        cwd, env, None, out.append,
+        ["terraform", "plan", "-no-color", "-lock-timeout=0s", "-input=false", "-refresh=false"],
+        cwd, env, None, out.append, out.append,
     )
     lock = parse_state_lock("\n".join(out))
     if lock is None:
@@ -80,7 +86,8 @@ async def _release_stale_lock(row: Cluster) -> str | None:
         return None
     if not (lock.lock_id and is_own_stale_lock(lock.who)):
         return format_state_lock_message(lock)
-    await _stream(["terraform", "force-unlock", "-force", lock.lock_id], cwd, env, None, out.append)
+    await _stream(["terraform", "force-unlock", "-no-color", "-force", lock.lock_id],
+                  cwd, env, None, out.append, out.append)
     _append_log(row, f"Released stale lock {lock.lock_id} from {lock.who}")
     return None
 

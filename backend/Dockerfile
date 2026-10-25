@@ -34,6 +34,8 @@ RUN poetry config virtualenvs.create false \
 FROM python:3.14-slim
 
 WORKDIR /app
+# The pod runs as a uid without a passwd entry: HOME would be / (not writable).
+ENV HOME=/tmp
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

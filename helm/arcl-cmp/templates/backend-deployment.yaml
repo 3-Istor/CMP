@@ -87,6 +87,7 @@ spec:
             secretKeyRef:
               name: {{ $.Values.clusterOps.secretName }}
               key: {{ $key }}
+              optional: true  # pod starts without it; cluster ops then fail with a clear error
         {{- end }}
         - name: CLUSTER_OPS_GCP_SA_KEY_PATH
           value: /var/run/cluster-ops/gcp-sa-key.json
@@ -139,6 +140,7 @@ spec:
       - name: cluster-ops
         secret:
           secretName: {{ .Values.clusterOps.secretName }}
+          optional: true
           items:
           - key: gcp-sa-key
             path: gcp-sa-key.json

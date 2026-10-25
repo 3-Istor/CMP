@@ -43,11 +43,11 @@ def env(session_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(recovery, "run_operation", run_operation)
 
     def script(plan_output, plan_rc=0, init_rc=0):
-        async def stream(cmd, cwd, env, log, on_line):
+        async def stream(cmd, cwd, env, log, on_line, on_err=None):
             calls["cmds"].append(cmd)
-            if cmd[1] == "plan":
+            if cmd[1] == "plan":  # terraform prints the lock error on stderr
                 for line in plan_output.splitlines():
-                    on_line(line)
+                    on_err(line)
                 return plan_rc
             return init_rc if cmd[1] == "init" else 0
 
@@ -90,7 +90,7 @@ def test_resume_releases_own_lock(env):
     script(OWN_LOCK)
     _add(factory, tmp, ClusterState.STARTING, 1)
     _resume()
-    assert ["terraform", "force-unlock", "-force", "abc"] in calls["cmds"]
+    assert ["terraform", "force-unlock", "-no-color", "-force", "abc"] in calls["cmds"]
     assert "Released stale lock abc" in (tmp / "op.log").read_text()
     assert calls["run"]
 
