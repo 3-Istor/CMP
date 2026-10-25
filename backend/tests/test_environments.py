@@ -18,6 +18,8 @@ from app.models.environment import (
     PromotionPolicy,
     VerificationRun,
 )
+from app.models.cluster import Cluster, ClusterState
+from app.models.project import TargetCloud
 from app.routers import environments as router
 from app.services.environments import (
     activation,
@@ -610,6 +612,30 @@ class TestEnvironmentsApi:
             "staging",
             "prod",
         ]
+
+    @pytest.mark.parametrize(
+        "method,path,body",
+        [
+            ("post", "/api/deployments/7/environments/staging", {}),
+            ("post", "/api/deployments/7/promotions", {}),
+        ],
+    )
+    def test_a_stopped_cluster_refuses_deploys(
+        self, client, db, method, path, body
+    ):
+        db.get(Deployment, 7).app_config = json.dumps(
+            {"github_installation_id": "42", "target_cloud": "aws"}
+        )
+        db.add(Cluster(cloud=TargetCloud.AWS, state=ClusterState.DOWN))
+        db.commit()
+
+        with mock.patch.object(router, "_holds", return_value=True), (
+            mock.patch.object(router, "_app", return_value=db.get(Deployment, 7))
+        ):
+            response = getattr(client("dev"), method)(path, json=body)
+
+        assert response.status_code == 409
+        assert "AWS cluster is down" in response.json()["detail"]
 
     def test_a_member_cannot_change_the_promotion_policy(self, client):
         response = client("dev").put(

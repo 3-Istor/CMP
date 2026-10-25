@@ -107,3 +107,21 @@ def test_deploy_allowed_when_cluster_up(session_factory):  # noqa: F811
 def test_onprem_ignores_cluster_state(session_factory):  # noqa: F811
     r = _post_deploy(session_factory, TargetCloud.ONPREM, ClusterState.DOWN)
     assert r.status_code == 202
+
+
+def test_mcp_release_guard_uses_the_project_cloud(session_factory):  # noqa: F811
+    import asyncio
+
+    from app import mcp_server
+    from app.services.agents import internal_api
+
+    with session_factory() as db:
+        db.add(Project(project_name="demo", owner_username="u", target_cloud=TargetCloud.AWS))
+        db.add(Cluster(cloud=TargetCloud.AWS, state=ClusterState.DOWN))
+        db.commit()
+
+    caller = object.__new__(mcp_server.Caller)
+    with mock.patch.object(mcp_server, "SessionLocal", session_factory):
+        with pytest.raises(internal_api.ApiError) as exc:
+            asyncio.run(caller.require_cluster_up("demo"))
+    assert exc.value.status_code == 409
