@@ -23,12 +23,12 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
-from app.routers.finops import is_cnp_admin
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
-from app.services.authz import assert_project_role
+from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.catalog_service import get_template_by_id
+from app.services.clusters.state import ensure_cluster_up
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
@@ -210,9 +210,9 @@ async def create_deployment(
             .filter(Project.project_name == project_name)
             .first()
         )
-        payload.app_config["target_cloud"] = (
-            project_row.target_cloud if project_row else TargetCloud.ONPREM
-        ).value
+        cloud = project_row.target_cloud if project_row else TargetCloud.ONPREM
+        await ensure_cluster_up(cloud)
+        payload.app_config["target_cloud"] = cloud.value
         if project_name:
             try:
                 await ensure_app_names_free(

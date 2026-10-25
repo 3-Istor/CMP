@@ -189,12 +189,6 @@ export interface CatalogTemplate {
 
 // ── Infrastructure Monitoring ─────────────────────────────────────────────────
 
-export interface VPNStatus {
-  name: string;
-  status: string;
-  ip: string | null;
-}
-
 export interface HypervisorStatus {
   name: string;
   state: string;
@@ -203,9 +197,13 @@ export interface HypervisorStatus {
 }
 
 export interface GlobalHealthResponse {
-  openstack_vpn: VPNStatus | null;
-  aws_vpns: VPNStatus[];
   openstack_hypervisors: HypervisorStatus[];
+  clusters: ClusterStatus[];
+}
+
+export interface ClusterStatus {
+  cloud: "aws" | "gcp";
+  state: "up" | "down" | "starting" | "unknown";
 }
 
 export interface VMInstance {

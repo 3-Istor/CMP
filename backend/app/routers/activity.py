@@ -27,9 +27,9 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.audit import ActivityCursor, ActivityRecord, AuditEvent
-from app.routers.finops import is_cnp_admin
 from app.services import activity_sources as sources
 from app.services.audit import NOTABLE
+from app.services.authz import is_cnp_admin
 from app.services.keycloak_service import (
     get_current_user,
     require_project_role,

@@ -108,7 +108,7 @@ async def check_app_health() -> None:
 
 async def check_infra_health() -> None:
     """
-    Check global infrastructure health (hypervisors, VPNs).
+    Check global infrastructure health (hypervisors).
     Send Discord alerts on state changes.
     """
     try:
@@ -127,38 +127,6 @@ async def check_infra_health() -> None:
                     previous_state=previous_state,
                     new_state=current_state,
                     component_type="hypervisor",
-                )
-
-            previous_infra_state[key] = current_state
-
-        # Check OpenStack VPN
-        if health.openstack_vpn:
-            key = f"vpn:{health.openstack_vpn.name}"
-            current_state = health.openstack_vpn.status
-            previous_state = previous_infra_state.get(key)
-
-            if previous_state and previous_state != current_state:
-                await discord_service.send_infra_alert(
-                    component_name=health.openstack_vpn.name,
-                    previous_state=previous_state,
-                    new_state=current_state,
-                    component_type="vpn",
-                )
-
-            previous_infra_state[key] = current_state
-
-        # Check AWS VPNs
-        for vpn in health.aws_vpns:
-            key = f"aws-vpn:{vpn.name}"
-            current_state = vpn.status
-            previous_state = previous_infra_state.get(key)
-
-            if previous_state and previous_state != current_state:
-                await discord_service.send_infra_alert(
-                    component_name=vpn.name,
-                    previous_state=previous_state,
-                    new_state=current_state,
-                    component_type="aws-vpn",
                 )
 
             previous_infra_state[key] = current_state

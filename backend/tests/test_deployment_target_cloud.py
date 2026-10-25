@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models.deployment import Deployment
 from app.models.project import Project, TargetCloud
 from app.routers import deployments as router
+from app.services.clusters import state
 from app.services.keycloak_service import get_current_user
 from tests.test_app_security_data import session_factory  # noqa: F401
 
@@ -45,6 +46,7 @@ def test_app_config_gets_the_project_cloud(
         mock.patch.object(router, "is_cnp_admin", lambda token: True),
         mock.patch.object(router, "ensure_app_names_free", mock.AsyncMock()),
         mock.patch.object(router.terraform_orchestrator, "run_deployment"),
+        mock.patch.object(state, "fresh_state", lambda cloud: "up"),
     ):
         response = TestClient(app).post(
             "/api/deployments/",
@@ -60,3 +62,68 @@ def test_app_config_gets_the_project_cloud(
     with session_factory() as db:
         row = db.query(Deployment).one()
         assert json.loads(row.app_config)["target_cloud"] == expected
+
+
+def _post_deploy(session_factory, project_cloud, cluster):  # noqa: F811
+    with session_factory() as db:
+        db.add(Project(project_name="demo", owner_username="u", target_cloud=project_cloud))
+        db.commit()
+    app = FastAPI()
+    app.include_router(router.router, prefix="/api")
+
+    def override_db():
+        with session_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "u"}
+    with (
+        mock.patch.object(router, "is_cnp_admin", lambda token: True),
+        mock.patch.object(router, "ensure_app_names_free", mock.AsyncMock()),
+        mock.patch.object(router.terraform_orchestrator, "run_deployment"),
+        mock.patch.object(state, "fresh_state", lambda cloud: cluster),
+    ):
+        return TestClient(app).post(
+            "/api/deployments/",
+            json={
+                "name": "shop",
+                "template_id": "k3s-gitops-app",
+                "project_id": "demo",
+                "app_config": {"app_type": "static"},
+            },
+        )
+
+
+def test_deploy_refused_when_cluster_down(session_factory):  # noqa: F811
+    r = _post_deploy(session_factory, TargetCloud.AWS, "down")
+    assert r.status_code == 409
+    assert "AWS cluster is down" in r.json()["detail"]
+
+
+def test_deploy_allowed_when_cluster_up(session_factory):  # noqa: F811
+    assert _post_deploy(session_factory, TargetCloud.AWS, "up").status_code == 202
+
+
+def test_onprem_ignores_cluster_state(session_factory):  # noqa: F811
+    r = _post_deploy(session_factory, TargetCloud.ONPREM, "down")
+    assert r.status_code == 202
+
+
+def test_mcp_release_guard_uses_the_project_cloud(session_factory):  # noqa: F811
+    import asyncio
+
+    from app import mcp_server
+    from app.services.agents import internal_api
+
+    with session_factory() as db:
+        db.add(Project(project_name="demo", owner_username="u", target_cloud=TargetCloud.AWS))
+        db.commit()
+
+    caller = object.__new__(mcp_server.Caller)
+    with (
+        mock.patch.object(mcp_server, "SessionLocal", session_factory),
+        mock.patch.object(state, "fresh_state", lambda cloud: "down"),
+    ):
+        with pytest.raises(internal_api.ApiError) as exc:
+            asyncio.run(caller.require_cluster_up("demo"))
+    assert exc.value.status_code == 409
