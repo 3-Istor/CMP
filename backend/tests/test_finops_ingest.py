@@ -247,21 +247,31 @@ def test_saas_lines_start_with_their_effective_month(data_dir):
     assert "Anthropic" in {l.provider_name for l in november}
 
 
-def test_days_to_ingest_replays_window_from_install_day(monkeypatch):
+def test_days_to_ingest_includes_today_and_the_replay_window(monkeypatch):
     monkeypatch.setattr(settings, "FINOPS_INGEST_SINCE", "2026-10-27")
     monkeypatch.setattr(settings, "FINOPS_REPLAY_DAYS", 3)
+    done = {date(2026, 10, d) for d in range(27, 32)} | {date(2026, 11, 1)}
 
-    assert ingest.days_to_ingest(date(2026, 10, 27)) == []
-    assert ingest.days_to_ingest(date(2026, 10, 29)) == [
-        date(2026, 10, 27),
-        date(2026, 10, 28),
-    ]
-    assert ingest.days_to_ingest(date(2026, 11, 5)) == [
+    assert ingest.days_to_ingest(date(2026, 10, 27)) == [date(2026, 10, 27)]
+    assert ingest.days_to_ingest(date(2026, 11, 5), done) == [
         date(2026, 11, 2),
         date(2026, 11, 3),
         date(2026, 11, 4),
+        date(2026, 11, 5),
     ]
     assert ingest.is_final(date(2026, 11, 2), date(2026, 11, 5)) is True
+    assert ingest.is_final(date(2026, 11, 5), date(2026, 11, 5)) is False
+
+
+def test_days_to_ingest_backfills_days_never_ingested(monkeypatch):
+    monkeypatch.setattr(settings, "FINOPS_INGEST_SINCE", "2026-10-20")
+    monkeypatch.setattr(settings, "FINOPS_REPLAY_DAYS", 3)
+
+    days = ingest.days_to_ingest(date(2026, 10, 26), {date(2026, 10, 21)})
+
+    assert date(2026, 10, 21) not in days
+    assert days[0] == date(2026, 10, 20)
+    assert days[-1] == date(2026, 10, 26)
 
 
 def test_ingest_once_keeps_going_when_one_source_fails(
@@ -282,7 +292,8 @@ def test_ingest_once_keeps_going_when_one_source_fails(
 
     written = ingest.ingest_once(date(2026, 10, 29))
 
-    assert written["opencost"] == 2
+    # 27, 28 and 29 (provisional)
+    assert written["opencost"] == 3
     assert written["ai_gateway"] == 0
     assert written["saas"] == 2
 

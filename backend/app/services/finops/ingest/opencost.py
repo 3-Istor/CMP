@@ -11,7 +11,7 @@ import httpx
 from app.core.config import settings
 from app.services.finops.ingest.inputs import OnPremTCO
 from app.services.finops.ingest.projects import owner_of
-from app.services.finops.ingest.store import CostLine
+from app.services.finops.ingest.store import CostLine, day_window
 
 SOURCE = "opencost"
 PROVIDER = "CNP on-prem"
@@ -39,8 +39,7 @@ def clusters() -> dict[str, str]:
 
 
 def fetch_day(day: date, base_url: str | None = None) -> dict[str, dict]:
-    start = datetime.combine(day, time.min)
-    end = start + timedelta(days=1)
+    start, end = day_window(day)
     response = httpx.get(
         f"{base_url or settings.OPENCOST_URL}/allocation",
         params={

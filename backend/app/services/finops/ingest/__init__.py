@@ -7,12 +7,14 @@ source's error.
 
 import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
+from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models.finops import CostLineItem
 from app.services.activity_sources import namespace_projects
 from app.services.finops.ingest import (
     ai_gateway,
@@ -32,10 +34,32 @@ from app.services.kube_client import KubeUnavailableError, in_cluster
 logger = logging.getLogger(__name__)
 
 
-def days_to_ingest(today: date) -> list[date]:
+def days_to_ingest(
+    today: date, ingested: set[date] | None = None
+) -> list[date]:
+    """
+    Today (provisional, refreshed every pass), the replay window, and any
+    earlier day since FINOPS_INGEST_SINCE that was never ingested: a first
+    run backfills what VictoriaMetrics still holds.
+    """
     since = date.fromisoformat(settings.FINOPS_INGEST_SINCE)
-    first = max(since, today - timedelta(days=settings.FINOPS_REPLAY_DAYS))
-    return [first + timedelta(days=i) for i in range((today - first).days)]
+    replay_from = today - timedelta(days=settings.FINOPS_REPLAY_DAYS)
+    ingested = ingested or set()
+    return [
+        since + timedelta(days=i)
+        for i in range((today - since).days + 1)
+        if since + timedelta(days=i) >= replay_from
+        or since + timedelta(days=i) not in ingested
+    ]
+
+
+def ingested_days(db) -> set[date]:
+    rows = db.scalars(
+        select(CostLineItem.charge_period_start)
+        .where(CostLineItem.x_source == opencost.SOURCE)
+        .distinct()
+    )
+    return {row.date() for row in rows}
 
 
 def is_final(day: date, today: date) -> bool:
@@ -44,8 +68,9 @@ def is_final(day: date, today: date) -> bool:
 
 
 def ingest_once(today: date | None = None) -> dict[str, int]:
-    today = today or date.today()
-    days = days_to_ingest(today)
+    today = today or datetime.now(timezone.utc).date()
+    with SessionLocal() as db:
+        days = days_to_ingest(today, ingested_days(db))
     written = {
         "opencost": 0,
         "ai_gateway": 0,
