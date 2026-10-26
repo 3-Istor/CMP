@@ -2,7 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getLogTargets, getProjectLogs } from "@/lib/api";
+import { getLogTargets, getProjectLogs, isNotConnected } from "@/lib/api";
+import { NotConnected } from "@/components/clusters/NotConnected";
 import { cn } from "@/lib/utils";
 import type { LogFilters, LogLine, LogTargets } from "@/types";
 import {
@@ -160,14 +161,14 @@ export function LogsView({
     anchor: string;
     lines: LogLine[];
   } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const newest = useRef<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
 
   useEffect(() => {
-    getLogTargets(project).then(setTargets, (e) => setError(errorMessage(e)));
+    getLogTargets(project).then(setTargets, (e) => setError(e));
   }, [project]);
 
   const load = useCallback(async () => {
@@ -186,7 +187,7 @@ export function LogsView({
       atBottom.current = true;
       setError(null);
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e);
     } finally {
       setLoading(false);
     }
@@ -215,7 +216,7 @@ export function LogsView({
         });
         newest.current = fresh[0].time;
       } catch (e) {
-        setError(errorMessage(e));
+        setError(e);
         setLive(false);
       }
     }, LIVE_MS);
@@ -249,7 +250,7 @@ export function LogsView({
       });
       setContext({ anchor: key(anchor), lines: [...around].reverse() });
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e);
     }
   };
 
@@ -499,11 +500,14 @@ export function LogsView({
         </div>
       )}
 
-      {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
-          <AlertTriangle className="h-4 w-4" /> {error}
-        </p>
-      )}
+      {error != null &&
+        (isNotConnected(error) ? (
+          <NotConnected cloud={isNotConnected(error)!.cloud} />
+        ) : (
+          <p className="flex items-center gap-2 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4" /> {errorMessage(error)}
+          </p>
+        ))}
 
       {context && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">

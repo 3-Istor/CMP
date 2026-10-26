@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NotConnected } from "@/components/clusters/NotConnected";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +34,7 @@ import {
   deleteProject,
   getCatalog,
   getProjectGrafanaUrl,
+  isNotConnected,
 } from "@/lib/api";
 import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
 import { ProjectAgentPanel } from "@/components/agents/ProjectAgentPanel";
@@ -557,6 +559,8 @@ export default function ProjectPage() {
                   <Skeleton key={i} className="h-40 rounded-xl" />
                 ))}
               </div>
+            ) : isNotConnected(appsError) ? (
+              <NotConnected cloud={isNotConnected(appsError)!.cloud} />
             ) : appsError ? (
               <div className="rounded-xl border border-destructive bg-destructive/5 p-6 text-destructive space-y-2">
                 <p className="font-medium">Failed to load applications</p>
