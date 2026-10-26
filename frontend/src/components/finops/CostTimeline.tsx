@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { RESOURCE_META, RESOURCES, formatEUR } from "./format";
+import { RESOURCE_META, formatEUR, visibleResources } from "./format";
 
 function CostTooltip({
   active,
@@ -65,6 +65,8 @@ export function CostTimeline({
       return next;
     });
   };
+
+  const RESOURCES = visibleResources(data.some((p) => (p.ai ?? 0) > 0));
 
   const isHidden = (r: FinopsResource) =>
     focus ? r !== focus : hidden.has(r);

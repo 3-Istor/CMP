@@ -49,6 +49,7 @@ class AppSpec:
     project_id: str | None
     created_at: datetime
     quota: Quota
+    namespace: str | None = None
 
 
 def _stable_unit(app_id: int, key: str) -> float:
@@ -109,6 +110,7 @@ def app_spec_from_deployment(deployment) -> AppSpec:
         project_id=deployment.project_id,
         created_at=created,
         quota=quota_from_deployment(deployment),
+        namespace=getattr(deployment, "k8s_namespace", None),
     )
 
 
@@ -181,7 +183,11 @@ def combined_series(apps: list[AppSpec], start: date, end: date) -> list[dict]:
     return out
 
 
-def aggregate_series(daily: list[dict], granularity: str) -> list[dict]:
+def aggregate_series(
+    daily: list[dict],
+    granularity: str,
+    resources: tuple[str, ...] = tuple(pricing.RESOURCES),
+) -> list[dict]:
     """Roll a daily series up to weekly / monthly buckets (daily = passthrough)."""
     if granularity == "daily" or not daily:
         return daily
@@ -196,9 +202,9 @@ def aggregate_series(daily: list[dict], granularity: str) -> list[dict]:
         else:  # monthly
             key = d.replace(day=1).isoformat()
         if key not in buckets:
-            buckets[key] = {r: 0.0 for r in pricing.RESOURCES}
+            buckets[key] = {r: 0.0 for r in resources}
             order.append(key)
-        for r in pricing.RESOURCES:
+        for r in resources:
             buckets[key][r] += point[r]
 
     out: list[dict] = []
@@ -207,7 +213,7 @@ def aggregate_series(daily: list[dict], granularity: str) -> list[dict]:
         out.append(
             {
                 "date": key,
-                **{r: round(slot[r], 4) for r in pricing.RESOURCES},
+                **{r: round(slot[r], 4) for r in resources},
                 "total": round(sum(slot.values()), 4),
             }
         )

@@ -2,7 +2,7 @@
 
 import type { CostBreakdown, FinopsResource } from "@/types";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { RESOURCE_META, RESOURCES, formatEUR } from "./format";
+import { RESOURCE_META, formatEUR, visibleResources } from "./format";
 
 /**
  * Donut de répartition des coûts par ressource. Un clic sur un segment appelle
@@ -18,7 +18,7 @@ export function CostDonut({
   selected?: FinopsResource | null;
   onSelect?: (r: FinopsResource | null) => void;
 }) {
-  const data = RESOURCES.map((r) => ({
+  const data = visibleResources((breakdown.ai ?? 0) > 0).map((r) => ({
     resource: r,
     name: RESOURCE_META[r].label,
     value: breakdown[r] ?? 0,

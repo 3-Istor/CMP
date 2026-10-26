@@ -336,6 +336,7 @@ export function useFinopsOverview(
   project?: string,
   period = "30d",
   granularity = "daily",
+  cloud?: string,
 ) {
   const [data, setData] = useState<import("@/types").FinopsOverview | null>(
     null,
@@ -348,7 +349,12 @@ export function useFinopsOverview(
     if (!initialLoadDone.current) setLoading(true);
     try {
       const { getFinopsOverview } = await import("./api");
-      const res = await getFinopsOverview({ project, period, granularity });
+      const res = await getFinopsOverview({
+        project,
+        period,
+        granularity,
+        cloud,
+      });
       setData(res);
       setError(null);
       initialLoadDone.current = true;
@@ -357,13 +363,33 @@ export function useFinopsOverview(
     } finally {
       setLoading(false);
     }
-  }, [project, period, granularity]);
+  }, [project, period, granularity, cloud]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   return { data, loading, error, refresh };
+}
+
+/** Nature (simulé / réel) and freshness of the FinOps data. */
+export function useFinopsMeta() {
+  const [meta, setMeta] = useState<import("@/types").FinopsMeta | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsMeta }) => getFinopsMeta())
+      .then((res) => {
+        if (!cancelled) setMeta(res);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return meta;
 }
 
 /** Fetch members of a specific project. */

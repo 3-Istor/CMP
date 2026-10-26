@@ -2,18 +2,24 @@
 CostProvider abstraction.
 
 The router and the alert poller talk only to a :class:`CostProvider`, never to
-the simulation internals. Today the only implementation is
-:class:`SimulatedCostProvider`; to move to real metrics later, implement a
-``PrometheusCostProvider`` and change :func:`get_cost_provider` — nothing else
-in the codebase needs to change.
+the simulation internals. :class:`SimulatedCostProvider` is the default;
+:class:`RealCostProvider` reads the ingested ``cost_line_items``.
+:func:`get_cost_provider` picks one from ``settings.FINOPS_PROVIDER``.
 """
 
 from __future__ import annotations
 
+import calendar
 from abc import ABC, abstractmethod
-from datetime import date, timedelta
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 
-from app.services.finops import engine, pricing
+from sqlalchemy import or_, select
+
+from app.core.config import settings
+from app.core.database import SessionLocal
+from app.models.finops import CostLineItem
+from app.services.finops import engine, pricing, recommendations_real
 from app.services.finops.engine import AppSpec
 from app.services.finops.recommendations import (
     Recommendation,
@@ -49,6 +55,13 @@ class CostProvider(ABC):
     def recommendations(
         self, apps: list[AppSpec], ref: date | None = None
     ) -> list[Recommendation]: ...
+
+    def by_cloud(
+        self, apps: list[AppSpec], ref: date | None = None
+    ) -> dict[str, float]:
+        """Month-to-date cost per cloud; everything is on-prem by default."""
+        total = self.summary(apps, ref)["month_to_date_eur"]
+        return {"onprem": total, "aws": 0.0, "gcp": 0.0}
 
 
 class SimulatedCostProvider(CostProvider):
@@ -111,15 +124,194 @@ class SimulatedCostProvider(CostProvider):
         return recommendations_for_apps(apps, ref)
 
 
-_provider: CostProvider | None = None
+REAL_RESOURCES = ("cpu", "ram", "storage", "network", "ai")
+_CLOUDS = ("onprem", "aws", "gcp")
+_BY_SERVICE = {
+    "Kubernetes CPU": "cpu",
+    "Kubernetes GPU": "cpu",
+    "Kubernetes memory": "ram",
+    "Persistent volumes": "storage",
+    "Network": "network",
+    "Load balancers": "network",
+}
+_BY_CATEGORY = {
+    "AI and Machine Learning": "ai",
+    "Storage": "storage",
+    "Networking": "network",
+}
+_NOT_A_PROJECT = ("platform", "__idle__")
+
+
+def resource_of(service_name: str, service_category: str) -> str:
+    """Breakdown key of a cost line; unknown compute-like lines count as cpu."""
+    return _BY_SERVICE.get(service_name) or _BY_CATEGORY.get(
+        service_category, "cpu"
+    )
+
+
+def _days_in_month(ref: date) -> int:
+    return calendar.monthrange(ref.year, ref.month)[1]
+
+
+class RealCostProvider(CostProvider):
+    """
+    Costs ingested into ``cost_line_items``. An application owns the OpenCost
+    lines of its namespace; AI gateway and cloud lines are attributed to the
+    projects of the applications asked for. Data stops at yesterday.
+    """
+
+    def __init__(self, session_factory=SessionLocal):
+        self._session_factory = session_factory
+
+    def specs(self, deployments):
+        return [engine.app_spec_from_deployment(d) for d in deployments]
+
+    def _lines(self, apps, start: date, end: date) -> list[tuple]:
+        namespaces = {a.namespace for a in apps if a.namespace}
+        projects = {
+            a.project_id
+            for a in apps
+            if a.project_id and a.project_id not in _NOT_A_PROJECT
+        }
+        if not namespaces and not projects:
+            return []
+        query = select(
+            CostLineItem.charge_period_start,
+            CostLineItem.resource_name,
+            CostLineItem.service_name,
+            CostLineItem.service_category,
+            CostLineItem.cloud,
+            CostLineItem.x_cost_eur,
+        ).where(
+            CostLineItem.charge_period_start
+            >= datetime.combine(start, datetime.min.time()),
+            CostLineItem.charge_period_start
+            < datetime.combine(end + timedelta(days=1), datetime.min.time()),
+            or_(
+                (CostLineItem.x_source == "opencost")
+                & CostLineItem.resource_name.in_(namespaces),
+                (CostLineItem.x_source != "opencost")
+                & CostLineItem.project.in_(projects),
+            ),
+        )
+        with self._session_factory() as db:
+            return [tuple(r) for r in db.execute(query).all()]
+
+    @staticmethod
+    def _daily(lines: list[tuple]) -> dict[date, dict[str, float]]:
+        days: dict[date, dict[str, float]] = defaultdict(
+            lambda: {r: 0.0 for r in REAL_RESOURCES}
+        )
+        for start, _name, service, category, _cloud, cost in lines:
+            days[start.date()][resource_of(service, category)] += cost
+        return days
+
+    @staticmethod
+    def _points(days: dict[date, dict[str, float]]) -> list[dict]:
+        return [
+            {
+                "date": day.isoformat(),
+                **{r: round(slot[r], 4) for r in REAL_RESOURCES},
+                "total": round(sum(slot.values()), 4),
+            }
+            for day, slot in sorted(days.items())
+        ]
+
+    def timeline(self, apps, start, end, granularity="daily"):
+        daily = self._points(self._daily(self._lines(apps, start, end)))
+        return engine.aggregate_series(daily, granularity, REAL_RESOURCES)
+
+    def breakdown(self, apps, ref=None):
+        ref = ref or date.today()
+        totals = {r: 0.0 for r in REAL_RESOURCES}
+        for slot in self._daily(
+            self._lines(apps, ref.replace(day=1), ref)
+        ).values():
+            for r in REAL_RESOURCES:
+                totals[r] += slot[r]
+        return {r: round(v, 2) for r, v in totals.items()}
+
+    def by_cloud(self, apps, ref=None):
+        ref = ref or date.today()
+        totals = {c: 0.0 for c in _CLOUDS}
+        for *_head, cloud, cost in self._lines(apps, ref.replace(day=1), ref):
+            totals[cloud] = totals.get(cloud, 0.0) + cost
+        return {c: round(v, 2) for c, v in totals.items()}
+
+    def summary(self, apps, ref=None):
+        ref = ref or date.today()
+        first = ref.replace(day=1)
+        last_prev = first - timedelta(days=1)
+        days = self._daily(self._lines(apps, first, ref))
+        mtd = sum(sum(slot.values()) for slot in days.values())
+        prev = sum(
+            sum(slot.values())
+            for slot in self._daily(
+                self._lines(apps, last_prev.replace(day=1), last_prev)
+            ).values()
+        )
+        projected = mtd / len(days) * _days_in_month(ref) if days else 0.0
+        recs = self.recommendations(apps, ref)
+        return {
+            "month_to_date_eur": round(mtd, 2),
+            "projected_month_eur": round(projected, 2),
+            "previous_month_eur": round(prev, 2),
+            "trend_pct": (
+                round((mtd - prev) / prev * 100, 1) if prev > 0 else None
+            ),
+            "breakdown": self.breakdown(apps, ref),
+            "potential_savings_eur": round(
+                sum(r.monthly_saving_eur for r in recs), 2
+            ),
+            "app_count": len(apps),
+            "currency": pricing.CURRENCY,
+        }
+
+    def app_rows(self, apps, ref=None):
+        ref = ref or date.today()
+        first = ref.replace(day=1)
+        rows: list[dict] = []
+        for app in apps:
+            days = self._daily(self._lines([app], first, ref))
+            totals = {d: sum(slot.values()) for d, slot in days.items()}
+            ordered = sorted(totals)
+            latest = totals[ordered[-1]] if ordered else 0.0
+            before = totals[ordered[-2]] if len(ordered) > 1 else 0.0
+            mtd = sum(totals.values())
+            rows.append(
+                {
+                    "app_id": app.id,
+                    "name": app.name,
+                    "project_id": app.project_id,
+                    "cost_per_day_eur": round(latest, 2),
+                    "cost_month_estimate_eur": round(
+                        (
+                            mtd / len(totals) * _days_in_month(ref)
+                            if totals
+                            else 0.0
+                        ),
+                        2,
+                    ),
+                    "month_to_date_eur": round(mtd, 2),
+                    "trend_pct": (
+                        round((latest - before) / before * 100, 1)
+                        if before > 0
+                        else None
+                    ),
+                }
+            )
+        rows.sort(key=lambda r: r["cost_month_estimate_eur"], reverse=True)
+        return rows
+
+    def recommendations(self, apps, ref=None):
+        return recommendations_real.recommendations_for_apps(apps, ref)
 
 
 def get_cost_provider() -> CostProvider:
-    """Return the process-wide cost provider (simulated by default)."""
-    global _provider
-    if _provider is None:
-        _provider = SimulatedCostProvider()
-    return _provider
+    """Return the provider selected by ``settings.FINOPS_PROVIDER``."""
+    if settings.FINOPS_PROVIDER == "real":
+        return RealCostProvider()
+    return SimulatedCostProvider()
 
 
 def period_to_range(period: str, ref: date | None = None) -> tuple[date, date]:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,7 @@ class Breakdown(BaseModel):
     ram: float = 0.0
     storage: float = 0.0
     network: float = 0.0
+    ai: float = 0.0
 
 
 class CostSummary(BaseModel):
@@ -32,6 +33,7 @@ class CostSeriesPoint(BaseModel):
     storage: float
     network: float
     total: float
+    ai: float = 0.0
 
 
 class AppCostRow(BaseModel):
@@ -49,6 +51,22 @@ class OverviewResponse(BaseModel):
     budget: "BudgetRead | None" = None
     apps: list[AppCostRow]
     timeline: list[CostSeriesPoint]
+    by_cloud: dict[str, float] = Field(
+        default_factory=lambda: {"onprem": 0.0, "aws": 0.0, "gcp": 0.0}
+    )
+
+
+class SourceMeta(BaseModel):
+    source: str
+    last_ingested_at: datetime | None = None
+    latest_day: date | None = None
+    final_through: date | None = None
+    has_estimate: bool = False
+
+
+class MetaResponse(BaseModel):
+    provider: str
+    sources: list[SourceMeta]
 
 
 class Recommendation(BaseModel):
