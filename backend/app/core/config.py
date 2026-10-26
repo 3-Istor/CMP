@@ -100,6 +100,26 @@ class Settings(BaseSettings):
     ACTIVITY_BACKFILL_DAYS: int = 7
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
 
+    # FinOps: "simulated" keeps the demo engine, "real" reads cost_line_items.
+    FINOPS_PROVIDER: str = "simulated"
+    FINOPS_INGEST_ENABLED: bool = False
+    FINOPS_INGEST_INTERVAL_SECONDS: int = 3600
+    # Days replayed on every run: OpenCost and billing exports revise them.
+    FINOPS_REPLAY_DAYS: int = 3
+    # First day ingested: OpenCost needs its own price metrics in
+    # VictoriaMetrics, which start the day it is installed.
+    FINOPS_INGEST_SINCE: str = "2026-10-27"
+    # Versioned prices (K3s repo finops/), mounted from a ConfigMap.
+    FINOPS_DATA_DIR: str = "/etc/cnp-finops"
+    OPENCOST_URL: str = "http://opencost.opencost.svc.cluster.local:9003"
+    # Namespaces that predate CMP projects and carry no project label: each is
+    # its own project. Any other unlabelled namespace is platform cost.
+    FINOPS_LEGACY_NAMESPACES: str = (
+        "qcm,mepa-app,roadmap,linmap-bot,3istor-sessions,dev-sandbox,demo-app"
+    )
+    # Token metrics of the AI gateway (OpenTelemetry GenAI conventions).
+    FINOPS_AI_TOKEN_METRIC: str = "gen_ai_client_token_usage_sum"
+
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
     # Installation ID of the GitHub App on the 3-Istor org — used to mint

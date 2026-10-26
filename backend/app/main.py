@@ -35,6 +35,7 @@ from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
 from app.services.environments.loop import environment_loop
 from app.services.finops import alert_poller
+from app.services.finops.ingest import finops_ingest_loop
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
 from app.services.template_repository import get_repository
@@ -237,6 +238,11 @@ async def lifespan(app: FastAPI):
     logger.info("Starting FinOps alert poller...")
     finops_poller_task = asyncio.create_task(alert_poller.finops_alert_loop())
     logger.info("FinOps alert poller started")
+    finops_ingest_task = (
+        asyncio.create_task(finops_ingest_loop())
+        if settings.FINOPS_INGEST_ENABLED
+        else None
+    )
 
     logger.info("Starting security collector...")
     security_collector_task = asyncio.create_task(security_collector_loop())
@@ -259,6 +265,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application...")
     health_poller_task.cancel()
     finops_poller_task.cancel()
+    if finops_ingest_task:
+        finops_ingest_task.cancel()
     security_collector_task.cancel()
     audit_retention_task.cancel()
     activity_collector_task.cancel()

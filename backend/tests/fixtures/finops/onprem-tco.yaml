@@ -1,0 +1,57 @@
+# Total cost of ownership of the on-prem cluster. `go -C finops run ./tco` turns it
+# into OpenCost's custom pricing (k8s/config/opencost/values-pricing.yaml); CI
+# fails when the two disagree. A price change is a PR with its effective date.
+#
+# Every value marked `mock: true` is a placeholder until it is measured or
+# confirmed. The CMP shows costs built on a mock value as "estimé".
+currency: EUR
+effective_from: "2026-10-26"
+
+hypervisors:
+  # Intel NUC7i7BNH (i7-7567U, 2 cores / 4 threads), gifted: no purchase cost.
+  - name: pae-node-1
+    purchase_eur: 0
+    amortization_months: 48
+  - name: pae-node-2
+    purchase_eur: 0
+    amortization_months: 48
+  - name: pae-node-3
+    purchase_eur: 0
+    amortization_months: 48
+
+power:
+  # Sum of the three nodes' mean draw, from /var/log/power_metrics.csv
+  # (powerstat every 10 min), October 2026: 35.2 + 42.4 + 63.7 W.
+  measured_watts: 141.3
+  source: "power_metrics.csv on pae-node-1..3, 2026-10-01 to 2026-10-26"
+  electricity_eur_per_kwh_ttc: 0.1845
+
+network:
+  internet_eur_per_month: 30
+  # Part of the home connection charged to the platform.
+  platform_share: 0.5
+  mock: true
+
+# OpenStack exists only to host K3s, so the cluster carries the hypervisors'
+# whole cost; OpenStack and Ceph overhead lands in OpenCost's idle cost.
+cluster:
+  vcpu: 8
+  ram_gib: 27.3
+  # Ceph raw capacity 1098 GiB with 3 replicas.
+  storage_gib: 366
+  # How the hourly cost splits over resources. CPU and RAM follow the ratio of
+  # OpenCost's default (GCP us-central1) prices for a node of this shape.
+  split:
+    cpu: 0.65
+    ram: 0.30
+    storage: 0.05
+
+# The homelab GPU server behind the AI gateway (Ollama). Not part of the K3s
+# cluster: its daily energy cost is split over the tokens it served that day.
+gpu_server:
+  gpu: "NVIDIA RTX 5080 (360 W TGP)"
+  purchase_eur: 0
+  # Whole-machine mean draw over a day, mostly idle with bursts of inference.
+  # To replace with nvidia-smi and wall-plug measurements.
+  mean_watts: 80
+  mock: true
