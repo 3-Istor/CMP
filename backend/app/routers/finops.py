@@ -36,6 +36,7 @@ from app.models.finops import (
     CostLineItem,
     ProjectBudget,
     RecommendationState,
+    SavingsEntry,
 )
 from app.models.project import Project
 from app.schemas.finops import (
@@ -50,6 +51,12 @@ from app.schemas.finops import (
     MetaResponse,
     OverviewResponse,
     Recommendation,
+    SavingsCategory,
+    SavingsDay,
+    SavingsResponse,
+    SavingsRow,
+    SavingsTotals,
+    SavingsYtd,
     SourceMeta,
 )
 from app.services.authz import assert_project_role, is_cnp_admin
@@ -172,6 +179,43 @@ def _budget_read(
     )
 
 
+# ── Savings helpers ───────────────────────────────────────────────────────────
+
+
+def _savings_since(period: str, today: date) -> date:
+    days = {"30d": 30, "90d": 90}.get(period)
+    if days is None:
+        return date(today.year, 1, 1)
+    return today - timedelta(days=days - 1)
+
+
+def _savings_query(db: Session, token: dict, project: str | None, since: date):
+    query = select(SavingsEntry).where(SavingsEntry.day >= since)
+    if project:
+        _require_project_role(db, token, project)
+        query = query.where(SavingsEntry.project == project)
+    elif not is_cnp_admin(token):
+        query = query.where(
+            SavingsEntry.project.in_(_user_project_names(token))
+        )
+    return query
+
+
+def _savings_ytd(db: Session, token: dict, project: str | None) -> SavingsYtd:
+    since = _savings_since("ytd", date.today())
+    entries = db.scalars(_savings_query(db, token, project, since)).all()
+    return SavingsYtd(
+        avoided_eur=round(sum(e.avoided_eur or 0.0 for e in entries), 2),
+        realized_eur=round(sum(e.realized_eur or 0.0 for e in entries), 2),
+    )
+
+
+def _rounded(model, *fields):
+    for field in fields:
+        setattr(model, field, round(getattr(model, field), 4))
+    return model
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -219,6 +263,97 @@ def get_overview(
         apps=app_rows,
         timeline=timeline,
         by_cloud=by_cloud,
+        savings_ytd=_savings_ytd(db, token, project),
+    )
+
+
+@router.get("/savings", response_model=SavingsResponse)
+def get_savings(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "ytd",
+):
+    """Savings ledger. Avoided and realized are never summed together."""
+    since = _savings_since(period, date.today())
+    entries = db.scalars(
+        _savings_query(db, token, project, since).order_by(SavingsEntry.day)
+    ).all()
+
+    totals = SavingsTotals()
+    categories: dict[str, SavingsCategory] = {}
+    days: dict[date, SavingsDay] = {}
+    rows: dict[tuple[str, str, str], SavingsRow] = {}
+    for e in entries:
+        avoided = e.avoided_eur or 0.0
+        realized = e.realized_eur or 0.0
+        kwh = e.energy_avoided_kwh or 0.0
+        totals.avoided_eur += avoided
+        totals.realized_eur += realized
+        totals.energy_avoided_kwh += kwh
+        totals.co2e_avoided_kg += e.co2e_avoided_kg or 0.0
+
+        cat = categories.setdefault(
+            e.category,
+            SavingsCategory(
+                category=e.category, avoided_eur=0, realized_eur=0
+            ),
+        )
+        cat.avoided_eur += avoided
+        cat.realized_eur += realized
+
+        day = days.setdefault(
+            e.day,
+            SavingsDay(date=e.day.isoformat(), avoided_eur=0, realized_eur=0),
+        )
+        day.avoided_eur += avoided
+        day.realized_eur += realized
+
+        row = rows.setdefault(
+            (e.project, e.app or "", e.category),
+            SavingsRow(
+                project=e.project,
+                app=e.app or "",
+                category=e.category,
+                avoided_eur=0,
+                realized_eur=0,
+                energy_avoided_kwh=0,
+                days=0,
+            ),
+        )
+        row.avoided_eur += avoided
+        row.realized_eur += realized
+        row.energy_avoided_kwh += kwh
+        row.days += 1
+
+    _rounded(
+        totals,
+        "avoided_eur",
+        "realized_eur",
+        "energy_avoided_kwh",
+        "co2e_avoided_kg",
+    )
+    return SavingsResponse(
+        totals=totals,
+        by_category=[
+            _rounded(c, "avoided_eur", "realized_eur")
+            for c in sorted(categories.values(), key=lambda c: c.category)
+        ],
+        timeline=[
+            _rounded(d, "avoided_eur", "realized_eur")
+            for _, d in sorted(days.items())
+        ],
+        rows=sorted(
+            (
+                _rounded(
+                    r, "avoided_eur", "realized_eur", "energy_avoided_kwh"
+                )
+                for r in rows.values()
+            ),
+            key=lambda r: r.avoided_eur,
+            reverse=True,
+        ),
+        since=entries[0].day if entries else None,
     )
 
 

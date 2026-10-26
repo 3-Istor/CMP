@@ -46,6 +46,48 @@ class AppCostRow(BaseModel):
     trend_pct: float | None = None
 
 
+class SavingsTotals(BaseModel):
+    avoided_eur: float = 0.0
+    realized_eur: float = 0.0
+    energy_avoided_kwh: float = 0.0
+    co2e_avoided_kg: float = 0.0
+
+
+class SavingsYtd(BaseModel):
+    avoided_eur: float = 0.0
+    realized_eur: float = 0.0
+
+
+class SavingsCategory(BaseModel):
+    category: str
+    avoided_eur: float
+    realized_eur: float
+
+
+class SavingsDay(BaseModel):
+    date: str
+    avoided_eur: float
+    realized_eur: float
+
+
+class SavingsRow(BaseModel):
+    project: str
+    app: str
+    category: str
+    avoided_eur: float
+    realized_eur: float
+    energy_avoided_kwh: float
+    days: int
+
+
+class SavingsResponse(BaseModel):
+    totals: SavingsTotals
+    by_category: list[SavingsCategory]
+    timeline: list[SavingsDay]
+    rows: list[SavingsRow]
+    since: date | None = None
+
+
 class OverviewResponse(BaseModel):
     summary: CostSummary
     budget: "BudgetRead | None" = None
@@ -54,6 +96,7 @@ class OverviewResponse(BaseModel):
     by_cloud: dict[str, float] = Field(
         default_factory=lambda: {"onprem": 0.0, "aws": 0.0, "gcp": 0.0}
     )
+    savings_ytd: SavingsYtd = Field(default_factory=SavingsYtd)
 
 
 class SourceMeta(BaseModel):
