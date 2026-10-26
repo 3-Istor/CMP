@@ -192,6 +192,91 @@ async def send_finops_recommendation(
         return False
 
 
+async def _post_finops_embed(embed: dict, what: str) -> bool:
+    if not settings.DISCORD_WEBHOOK_URL:
+        logger.debug("Discord webhook not configured, skipping %s", what)
+        return False
+    embed = {
+        **embed,
+        "timestamp": datetime.utcnow().isoformat(),
+        "footer": {"text": "CMP FinOps"},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                settings.DISCORD_WEBHOOK_URL, json={"embeds": [embed]}
+            )
+            response.raise_for_status()
+            logger.info("Discord %s sent", what)
+            return True
+    except Exception as exc:
+        logger.error("Failed to send Discord %s: %s", what, exc)
+        return False
+
+
+async def send_forecast_alert(
+    project_name: str,
+    overrun_date: str,
+    projected_eur: float,
+    low_eur: float,
+    high_eur: float,
+    budget_eur: float,
+) -> bool:
+    """The month-end forecast of a project crosses its budget."""
+    return await _post_finops_embed(
+        {
+            "title": "🟠 Dépassement de budget prévu",
+            "description": (
+                f"Le projet **{project_name}** devrait dépasser son budget "
+                f"mensuel : dépassement prévu le **{overrun_date}**."
+            ),
+            "color": 0xF97316,
+            "fields": [
+                {
+                    "name": "Prévision fin de mois",
+                    "value": (
+                        f"{projected_eur:.2f} € "
+                        f"({low_eur:.2f} – {high_eur:.2f} €)"
+                    ),
+                    "inline": True,
+                },
+                {
+                    "name": "Budget",
+                    "value": f"{budget_eur:.2f} €",
+                    "inline": True,
+                },
+            ],
+        },
+        f"forecast alert for {project_name}",
+    )
+
+
+async def send_cost_anomaly(
+    project_name: str,
+    app_name: str,
+    day: str,
+    cost_eur: float,
+    baseline_eur: float,
+    cause: str,
+) -> bool:
+    """An app cost far more on one day than over the previous two weeks."""
+    return await _post_finops_embed(
+        {
+            "title": "📈 Anomalie de coût FinOps",
+            "description": (
+                f"**{app_name}** ({project_name}) a coûté "
+                f"**{cost_eur:.2f} €** le {day}, contre "
+                f"{baseline_eur:.2f} € en médiane sur 14 jours."
+            ),
+            "color": 0xF59E0B,
+            "fields": [
+                {"name": "Cause probable", "value": cause[:1024]},
+            ],
+        },
+        f"cost anomaly for {app_name}",
+    )
+
+
 async def send_infra_alert(
     component_name: str,
     previous_state: str,

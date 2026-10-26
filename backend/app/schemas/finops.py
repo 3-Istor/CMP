@@ -142,6 +142,8 @@ class OverviewResponse(BaseModel):
         default_factory=lambda: {"onprem": 0.0, "aws": 0.0, "gcp": 0.0}
     )
     savings_ytd: SavingsYtd = Field(default_factory=SavingsYtd)
+    # Real costs only: the month-end forecast behind projected_month_eur.
+    forecast: "CostForecast | None" = None
 
 
 class SourceMeta(BaseModel):
@@ -210,6 +212,7 @@ class CostAlertRead(BaseModel):
     message: str
     value_pct: float | None = None
     triggered_at: datetime
+    subject_day: date | None = None
 
 
 class ActionResponse(BaseModel):
@@ -217,6 +220,49 @@ class ActionResponse(BaseModel):
     rec_id: str
     status: str
     commit_sha: str | None = None
+
+
+class ForecastDay(BaseModel):
+    date: str
+    eur: float
+    low_eur: float
+    high_eur: float
+
+
+class CostForecast(BaseModel):
+    projected_eur: float
+    low_eur: float
+    high_eur: float
+    actual_eur: float
+    method: str  # weekday_mean | mean | none
+    days_of_history: int
+    low_history: bool
+    confidence: float
+    budget_eur: float | None = None
+    overrun_date: date | None = None
+    daily: list[ForecastDay] = Field(default_factory=list)
+
+
+class AnomalyEvent(BaseModel):
+    kind: str  # argocd_sync | release | config_change
+    time: datetime
+    actor: str | None = None
+    revision: str | None = None
+    summary: str
+    changes: list[dict] = Field(default_factory=list)
+
+
+class CostAnomaly(BaseModel):
+    app_id: int
+    app_name: str
+    project_id: str | None = None
+    date: str
+    cost_eur: float
+    baseline_eur: float
+    delta_eur: float
+    delta_pct: float | None = None
+    cause: str
+    events: list[AnomalyEvent] = Field(default_factory=list)
 
 
 OverviewResponse.model_rebuild()

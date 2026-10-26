@@ -53,6 +53,9 @@ class CostAlert(Base):
     """History of budget / consumption alerts that were raised."""
 
     __tablename__ = "cost_alerts"
+    __table_args__ = (
+        Index("ix_cost_alerts_kind_app_day", "kind", "app_id", "subject_day"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     project_name: Mapped[str] = mapped_column(
@@ -64,9 +67,11 @@ class CostAlert(Base):
     )  # info|warning|critical
     kind: Mapped[str] = mapped_column(
         String(16), default="budget"
-    )  # budget|spike
+    )  # budget|spike|forecast
     message: Mapped[str] = mapped_column(String(500), default="")
     value_pct: Mapped[float | None] = mapped_column(Float)
+    # Cost day an anomaly was found on: one spike alert per app and day.
+    subject_day: Mapped[date | None] = mapped_column(Date)
     triggered_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()  # pylint: disable=not-callable
     )
@@ -113,6 +118,8 @@ class BudgetAlertState(Base):
     )
     # 0 = nominal, 1 = warning, 2 = critical (thresholds from ProjectBudget)
     last_level: Mapped[int] = mapped_column(Integer, default=0)
+    # Month (YYYY-MM) whose forecast overrun was already notified.
+    forecast_alerted_month: Mapped[str | None] = mapped_column(String(7))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),  # pylint: disable=not-callable
