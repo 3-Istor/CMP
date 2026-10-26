@@ -19,7 +19,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { downloadFinopsCsv } from "@/lib/api";
-import { useFinopsMeta, useFinopsOverview, useProjects } from "@/lib/hooks";
+import {
+  useFinopsAnomalies,
+  useFinopsMeta,
+  useFinopsOverview,
+  useProjects,
+} from "@/lib/hooks";
 import type { FinopsResource } from "@/types";
 import { AlertCircle, Download } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -48,6 +53,13 @@ function OverviewInner() {
     filters.cloud || undefined,
   );
   const meta = useFinopsMeta();
+  // Forecast and anomalies are daily figures: drawn on the daily view only.
+  const daily = filters.granularity === "daily";
+  const anomalies = useFinopsAnomalies(
+    filters.project || undefined,
+    filters.period,
+    daily,
+  );
 
   const exportCsv = async () => {
     setExporting(true);
@@ -123,6 +135,7 @@ function OverviewInner() {
             project={filters.project || undefined}
             meta={meta}
             savings={data.savings_ytd}
+            forecast={data.forecast ?? null}
           />
 
           <Card>
@@ -157,6 +170,8 @@ function OverviewInner() {
                 <CostTimeline
                   data={data.timeline}
                   focus={selectedResource}
+                  forecast={daily ? (data.forecast ?? null) : null}
+                  anomalies={anomalies}
                 />
               </CardContent>
             </Card>

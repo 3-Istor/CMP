@@ -3,11 +3,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
   Budget,
+  CostForecast,
   CostSummary,
   FinopsMeta,
   FinopsSavingsYtd,
 } from "@/types";
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Boxes,
@@ -20,10 +22,72 @@ import { BudgetGauge } from "./BudgetGauge";
 import { DataFreshness } from "./DataFreshness";
 import {
   RESOURCE_META,
+  STATUS_COLOR,
   formatEUR,
   formatPct,
   visibleResources,
 } from "./format";
+
+function formatDay(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+  });
+}
+
+function ForecastLine({
+  forecast,
+  currency,
+}: {
+  forecast: CostForecast;
+  currency: string;
+}) {
+  const spread = forecast.high_eur - forecast.projected_eur;
+  const overrun = forecast.overrun_date;
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <div className="space-y-1.5 text-xs text-muted-foreground">
+      <p>
+        Prévision fin de mois :{" "}
+        <span className="font-medium text-foreground tabular-nums">
+          {formatEUR(forecast.projected_eur, currency)}
+        </span>
+        {spread > 0 && (
+          <span className="tabular-nums">
+            {" "}
+            ± {formatEUR(spread, currency)}
+          </span>
+        )}
+      </p>
+      <p
+        className="tabular-nums"
+        title={`Intervalle à ${Math.round(forecast.confidence * 100)} %, ${forecast.days_of_history} jours d'historique`}
+      >
+        {formatEUR(forecast.low_eur, currency)} –{" "}
+        {formatEUR(forecast.high_eur, currency)} (
+        {Math.round(forecast.confidence * 100)} %)
+        {forecast.low_history && " · historique court"}
+      </p>
+      {overrun && (
+        <span
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium"
+          style={{
+            color: overrun < today ? STATUS_COLOR.critical : "#F97316",
+            backgroundColor:
+              overrun < today
+                ? "rgba(239, 68, 68, 0.12)"
+                : "rgba(249, 115, 22, 0.12)",
+          }}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          {overrun < today
+            ? `budget dépassé le ${formatDay(overrun)}`
+            : `dépassement prévu le ${formatDay(overrun)}`}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function KpiCards({
   summary,
@@ -31,12 +95,14 @@ export function KpiCards({
   project,
   meta = null,
   savings = null,
+  forecast = null,
 }: {
   summary: CostSummary;
   budget: Budget | null;
   project?: string;
   meta?: FinopsMeta | null;
   savings?: FinopsSavingsYtd | null;
+  forecast?: CostForecast | null;
 }) {
   const trend = summary.trend_pct;
   const trendUp = (trend ?? 0) >= 0;
@@ -69,10 +135,14 @@ export function KpiCards({
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Projection fin de mois :{" "}
-            {formatEUR(summary.projected_month_eur, summary.currency)}
-          </p>
+          {forecast ? (
+            <ForecastLine forecast={forecast} currency={summary.currency} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Projection fin de mois :{" "}
+              {formatEUR(summary.projected_month_eur, summary.currency)}
+            </p>
+          )}
           <DataFreshness meta={meta} />
           <div className="flex flex-wrap gap-1.5">
             {visibleResources((summary.breakdown.ai ?? 0) > 0).map((r) => (
