@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # FinOps — comma-separated Keycloak usernames granted the global
     # "Admin CNP" role (visibility over every project's costs).
     FINOPS_ADMIN_USERS: str = ""
+    # Usernames granted the finance role (read and export every project's
+    # costs) in addition to the ``cnp-finance`` Keycloak group.
+    FINOPS_FINANCE_USERS: str = ""
+    # Post last month's summary to the platform Discord on the 5th.
+    FINOPS_MONTHLY_REPORT_ENABLED: bool = False
 
     # Database
     DATABASE_URL: str = "sqlite:///./arcl.db"
