@@ -1035,8 +1035,6 @@ def deployment_gate(db, deployment):
 
 def register_argo_repository(job):
     """Argo renews its own read credentials using the existing App installation."""
-    from urllib.parse import quote
-
     headers = {"Authorization": f"Bearer {settings.IMPORT_ARGOCD_TOKEN}"}
     base = settings.IMPORT_ARGOCD_URL.rstrip("/") + "/api/v1/repositories"
     response = httpx.get(
@@ -1118,13 +1116,12 @@ def wait_for_argo(job, timeout=300):
                 matches.append(item)
         if matches:
             for item in matches:
-                if item.get("status", {}).get("health", {}).get("status") in {
-                    "Degraded",
-                    "Missing",
-                }:
-                    # Missing is normal during initial reconciliation; degraded is an immediate refusal.
-                    if item["status"]["health"]["status"] == "Degraded":
-                        stop("Argo CD signale une application dégradée", 502)
+                # Missing is normal during initial reconciliation; degraded is an immediate refusal.
+                if (
+                    item.get("status", {}).get("health", {}).get("status")
+                    == "Degraded"
+                ):
+                    stop("Argo CD signale une application dégradée", 502)
             if all(
                 item.get("status", {}).get("sync", {}).get("status")
                 == "Synced"

@@ -20,7 +20,6 @@ from app.core.database import Base
 from app.models.deployment import Deployment
 from app.models.project import Project
 from app.models.repository_import import RepositoryImport
-from app.models.user_github import UserGitHubInstallation
 from app.services import repository_imports as service
 from app.services.terraform_executor import TerraformExecutor, create_executor
 

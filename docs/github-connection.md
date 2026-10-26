@@ -9,16 +9,27 @@ et les restrictions GitHub peuvent réserver cette opération à un owner.
 
 Contrôle réel du 25 octobre 2026 : l’App CNP est déjà installée, active sur 3-Istor,
 avec accès à Session Manager. Le compte GitHub JoeBejjani est membre de 3-Istor.
-Le diagnostic a utilisé seulement members:read, sans modifier de rôle, de permission
-ni d’installation. À ce moment, son identité GitHub n’était pas liée dans Keycloak.
+Le diagnostic a utilisé seulement members:read, sans changer de rôle ni réinstaller
+l’App. À ce moment, son identité GitHub n’était pas liée dans Keycloak.
 
-## Prérequis réellement manquant
+## État au 26 octobre 2026
 
-La vérification d’administration a confirmé qu’il n’existe aucun Identity Provider
-dans le realm 3istor. Le menu Linked accounts est donc indisponible. Le lien direct
-renvoyait un HTTP 200 mais échouait dans la console authentifiée : sa réponse HTTP
-et sa présence dans le JavaScript ne prouvaient pas que la page était disponible.
-La configuration et le callback à préparer par l’administrateur sont décrits dans
+La vérification d’administration précédente avait confirmé l’absence de fournisseur
+GitHub dans le realm 3istor. Le menu Linked accounts était donc indisponible. Le
+lien direct renvoyait un HTTP 200 mais échouait dans la console authentifiée : sa
+réponse HTTP et sa présence dans le JavaScript ne prouvaient pas que la page était
+disponible.
+
+Le secret OAuth a déjà été fourni dans un fichier local hors Git, protégé par le
+mode 0600. Sa valeur ne doit être ni affichée ni ajoutée au dépôt. Joe a ajouté
+la permission utilisateur **Email addresses: Read**, dont la présence a été
+confirmée. Cette permission ne prouve pas que le parcours OAuth est configuré.
+
+Le champ de callback n’a pas été retrouvé ni confirmé dans **General** : l’interface
+GitHub affichée diffère de celle décrite dans la documentation. Le fournisseur
+GitHub n’a pas été activé dans Keycloak et aucune liaison GitHub réelle n’a été
+réalisée. La validation du callback reste nécessaire avant toute activation. La
+configuration et le callback attendus sont décrits dans
 K3s/k8s/config/keycloak/GITHUB_IDENTITY_PROVIDER.md, avec un exemple inactif.
 
 CMP ne propose plus le lien tant que GITHUB_ACCOUNT_LINK_URL est vide. Après
@@ -43,8 +54,8 @@ Dans CMP local, ouvrir **Compte → Connexion GitHub** :
 
 1. Cliquer **Lier mon compte GitHub dans CNP** si l’identité est absente.
 2. Le bouton ouvre directement **Comptes liés / Linked accounts** : cliquer sur **Lier / Link** pour GitHub.
-   Chemin vérifié sur le Keycloak déployé : `/realms/3istor/account/account-security/linked-accounts`.
-   Dans les menus anglais, cette page se trouve sous **Account security → Linked accounts**.
+   Chemin prévu, à valider après configuration du fournisseur : `/realms/3istor/account/account-security/linked-accounts`.
+   Dans les menus anglais, l’entrée attendue est **Account security → Linked accounts**.
 3. Revenir sur CMP et actualiser si nécessaire.
 4. Cliquer **Rattacher l’installation CNP existante**.
 
@@ -74,9 +85,11 @@ La connexion fonctionne indépendamment d’IMPORT_ENABLED et ne déclenche pas 
 
 ## Permissions de l’App à faire relire par son administrateur
 
-Cette correction ne modifie aucune permission globale de l’App et n’installe rien.
-Elle évite de demander une nouvelle approbation d’organisation pour un rattachement
-utilisateur à une installation qui a déjà été approuvée.
+Le code de rattachement réutilise l’installation existante. L’ajout de la permission
+utilisateur **Email addresses: Read** par Joe est distinct des permissions
+d’organisation et de dépôt recensées ci-dessous. Une approbation d’organisation
+n’est pas demandée par ce code pour le simple rattachement utilisateur à
+l’installation déjà approuvée.
 
 Les permissions utiles repérées pour **l’import central** sont :
 
@@ -100,15 +113,22 @@ de ses autres consommateurs ; il n’a pas été effectué ici.
 
 ## Validation
 
-Backend : 581 tests réussis, dont 25 tests de liaison GitHub. Lint/types
-et build frontend réussis. Six scénarios Chromium avec session/API simulées :
-provider non configuré, identité absente, rattachement existant, connecté, refus, callback non fiable.
-Le test réel en lecture a confirmé le compte et l’installation existante. La
-connexion OAuth et le clic de rattachement doivent être terminés par l’utilisateur.
+Le dernier passage complet du backend après intégration de main compte
+604 tests réussis. Le résultat de 581 tests, dont 25 tests de liaison GitHub,
+correspond à une validation antérieure. Les vérifications lint/types et build
+frontend ont réussi. Six scénarios Chromium ont utilisé une session et des API
+simulées : provider non configuré, identité absente, rattachement existant,
+connecté, refus, callback non fiable. Les tests du protocole utilisent aussi des
+services simulés ; ils ne valident pas une connexion OAuth réelle.
+
+Le contrôle réel antérieur en lecture a confirmé le compte et l’installation
+existante. Le callback reste non confirmé, le broker inactif et la liaison réelle
+non réalisée. Cette mise à jour documentaire ne lance aucun test, push, appel SSO
+ou accès cluster.
 
 L’import réel reste soumis aux autres prérequis de recette : CI et chart publiés,
 pins, callback HTTPS et Argo compatibles. Corriger la liaison GitHub ne les active
-pas implicitement. Aucun push ni changement de permissions GitHub effectué.
+pas implicitement. Leur validation reste obligatoire avant tout import connecté.
 
 Sources : [installation et autorisation d’une GitHub App](https://docs.github.com/en/apps/using-github-apps/installing-a-github-app-from-a-third-party),
 [restrictions d’installation](https://docs.github.com/en/organizations/managing-programmatic-access-to-your-organization/limiting-oauth-app-and-github-app-access-requests-and-installations),

@@ -3,7 +3,7 @@
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import jwt
 import pytest
