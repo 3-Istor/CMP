@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     # Versioned prices (K3s repo finops/), mounted from a ConfigMap.
     FINOPS_DATA_DIR: str = "/etc/cnp-finops"
     OPENCOST_URL: str = "http://opencost.opencost.svc.cluster.local:9003"
+    # Cloud clusters' OpenCost over the VPN, "aws=http://...,gcp=http://...".
+    # Empty until the cloud activation runbook is done.
+    FINOPS_OPENCOST_CLUSTERS: str = ""
     # Namespaces that predate CMP projects and carry no project label: each is
     # its own project. Any other unlabelled namespace is platform cost.
     FINOPS_LEGACY_NAMESPACES: str = (

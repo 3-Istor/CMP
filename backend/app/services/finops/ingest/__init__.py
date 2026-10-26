@@ -76,17 +76,23 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
         for day in days:
             final = is_final(day, today)
             g_per_kwh = carbon.intensity_for(db, day)
-            try:
-                allocations = opencost.fetch_day(day)
-                lines = opencost.to_lines(
-                    day, allocations, ns_projects, tco, final
-                )
-                carbon.apply_to_lines(lines, g_per_kwh)
-                written["opencost"] += upsert(db, lines)
-            except Exception as exc:  # pylint: disable=broad-exception-caught
-                logger.warning(
-                    "FinOps: OpenCost %s not ingested: %s", day, exc
-                )
+            for cloud, url in opencost.clusters().items():
+                try:
+                    allocations = opencost.fetch_day(day, url)
+                    lines = opencost.to_lines(
+                        day, allocations, ns_projects, tco, final, cloud
+                    )
+                    carbon.apply_to_lines(lines, g_per_kwh)
+                    written["opencost"] += upsert(db, lines)
+                except (
+                    Exception
+                ) as exc:  # pylint: disable=broad-exception-caught
+                    logger.warning(
+                        "FinOps: OpenCost %s %s not ingested: %s",
+                        cloud,
+                        day,
+                        exc,
+                    )
             try:
                 usage = ai_gateway.fetch_day(day)
                 lines = ai_gateway.to_lines(

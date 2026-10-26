@@ -28,11 +28,21 @@ COMPONENTS = (
 )
 
 
-def fetch_day(day: date) -> dict[str, dict]:
+def clusters() -> dict[str, str]:
+    """OpenCost API of each cluster: on-prem plus the clouds that are set."""
+    urls = {CLUSTER: settings.OPENCOST_URL}
+    for item in settings.FINOPS_OPENCOST_CLUSTERS.split(","):
+        cloud, _, url = item.partition("=")
+        if cloud.strip() and url.strip():
+            urls[cloud.strip()] = url.strip()
+    return urls
+
+
+def fetch_day(day: date, base_url: str | None = None) -> dict[str, dict]:
     start = datetime.combine(day, time.min)
     end = start + timedelta(days=1)
     response = httpx.get(
-        f"{settings.OPENCOST_URL}/allocation",
+        f"{base_url or settings.OPENCOST_URL}/allocation",
         params={
             "window": f"{start:%Y-%m-%dT%H:%M:%SZ},{end:%Y-%m-%dT%H:%M:%SZ}",
             "aggregate": "namespace",
@@ -55,7 +65,14 @@ def to_lines(
     ns_projects: dict[str, str],
     tco: OnPremTCO,
     is_final: bool,
+    cloud: str = CLUSTER,
 ) -> list[CostLine]:
+    """
+    On-prem lines are the cost itself (TCO prices). Cloud lines carry
+    OpenCost's list prices in USD and only serve as shares to split the
+    invoice (ingest/split.py); totals never count them.
+    """
+    onprem = cloud == CLUSTER
     start = datetime.combine(day, time.min)
     end = start + timedelta(days=1)
     lines: list[CostLine] = []
@@ -66,17 +83,17 @@ def to_lines(
             if cost <= 0:
                 continue
             energy_kwh = None
-            if tco.eur_per_kwh > 0:
+            if onprem and tco.eur_per_kwh > 0:
                 energy_kwh = cost * tco.energy_share / tco.eur_per_kwh
             lines.append(
                 CostLine(
                     x_source=SOURCE,
-                    provider_name=PROVIDER,
+                    provider_name=PROVIDER if onprem else f"OpenCost {cloud}",
                     service_name=service,
                     service_category=category,
                     charge_period_start=start,
                     charge_period_end=end,
-                    resource_id=f"{CLUSTER}/{namespace}/{suffix}",
+                    resource_id=f"{cloud}/{namespace}/{suffix}",
                     resource_name=namespace,
                     x_cost_eur=cost,
                     billed_cost=cost,
@@ -84,12 +101,13 @@ def to_lines(
                     effective_cost=cost,
                     project=owner.project,
                     app=owner.app,
-                    cloud=CLUSTER,
+                    billing_currency="EUR" if onprem else "USD",
+                    cloud=cloud,
                     x_allocation_method=owner.method,
-                    x_pricing_basis="tco",
+                    x_pricing_basis="tco" if onprem else "list_price",
                     x_energy_kwh=energy_kwh,
                     x_is_final=is_final,
-                    x_is_estimate=tco.has_mock,
+                    x_is_estimate=tco.has_mock if onprem else False,
                     extra_tags={"k8s_namespace": namespace},
                 )
             )

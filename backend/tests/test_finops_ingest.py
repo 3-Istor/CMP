@@ -272,7 +272,9 @@ def test_ingest_once_keeps_going_when_one_source_fails(
     monkeypatch.setattr(ingest.fx, "refresh", lambda db: None)
     monkeypatch.setattr(ingest.carbon, "refresh", lambda db, since: 0)
     monkeypatch.setattr(
-        ingest.opencost, "fetch_day", lambda day: {"qcm": {"cpuCost": 0.1}}
+        ingest.opencost,
+        "fetch_day",
+        lambda day, url=None: {"qcm": {"cpuCost": 0.1}},
     )
     boom = mock.Mock(side_effect=RuntimeError("vmselect down"))
     monkeypatch.setattr(ingest.ai_gateway, "fetch_day", boom)
@@ -337,3 +339,27 @@ def test_savings_store_updates_the_day_in_place(factory, tco):
         [entry] = db.scalars(select(SavingsEntry)).all()
 
     assert entry.avoided_eur == pytest.approx(0.12)
+
+
+def test_opencost_clusters_add_the_configured_clouds(monkeypatch):
+    monkeypatch.setattr(
+        settings, "FINOPS_OPENCOST_CLUSTERS", "aws=http://a:1, gcp=http://g:2,"
+    )
+
+    assert opencost.clusters() == {
+        "onprem": settings.OPENCOST_URL,
+        "aws": "http://a:1",
+        "gcp": "http://g:2",
+    }
+
+
+def test_opencost_cloud_lines_are_list_price_shares_without_energy(tco):
+    [line] = opencost.to_lines(
+        DAY, {"shop-api": {"cpuCost": 0.2}}, {}, tco, False, "aws"
+    )
+
+    assert line.cloud == "aws"
+    assert line.x_pricing_basis == "list_price"
+    assert line.billing_currency == "USD"
+    assert line.x_energy_kwh is None
+    assert line.resource_id == "aws/shop-api/cpu"
