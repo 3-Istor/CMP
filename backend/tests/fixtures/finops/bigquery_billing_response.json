@@ -1,0 +1,49 @@
+{
+  "kind": "bigquery#queryResponse",
+  "jobReference": {"projectId": "cnp-billing", "jobId": "job_1", "location": "EU"},
+  "schema": {
+    "fields": [
+      {"name": "Day", "type": "STRING"},
+      {"name": "ServiceName", "type": "STRING"},
+      {"name": "ServiceCategory", "type": "STRING"},
+      {"name": "ChargeCategory", "type": "STRING"},
+      {"name": "ResourceId", "type": "STRING"},
+      {"name": "ResourceName", "type": "STRING"},
+      {"name": "BilledCost", "type": "FLOAT"},
+      {"name": "EffectiveCost", "type": "FLOAT"},
+      {"name": "ListCost", "type": "FLOAT"},
+      {"name": "BillingCurrency", "type": "STRING"},
+      {"name": "ConsumedQuantity", "type": "FLOAT"},
+      {"name": "ConsumedUnit", "type": "STRING"},
+      {"name": "TagsJson", "type": "STRING"}
+    ]
+  },
+  "jobComplete": true,
+  "totalRows": "4",
+  "rows": [
+    {"f": [
+      {"v": "2026-10-27"}, {"v": "Compute Engine"}, {"v": "Compute"}, {"v": "Usage"},
+      {"v": "//compute/instances/gke-node-1"}, {"v": "gke-node-1"},
+      {"v": "4.0"}, {"v": "4.0"}, {"v": "4.0"}, {"v": "EUR"}, {"v": "24"}, {"v": "hour"},
+      {"v": "[{\"key\":\"goog-k8s-cluster-name\",\"value\":\"cnp-gke\"}]"}
+    ]},
+    {"f": [
+      {"v": "2026-10-27"}, {"v": "Cloud Storage"}, {"v": "Storage"}, {"v": "Usage"},
+      {"v": "//storage/buckets/qcm-data"}, {"v": "qcm-data"},
+      {"v": "2.0"}, {"v": "1.5"}, {"v": "2.0"}, {"v": "EUR"}, {"v": "10"}, {"v": "gibibyte month"},
+      {"v": "[{\"key\":\"cnp-project\",\"value\":\"qcm\"},{\"key\":\"cnp-app\",\"value\":\"api\"},{\"key\":\"cnp-env\",\"value\":\"dev\"}]"}
+    ]},
+    {"f": [
+      {"v": "2026-10-27"}, {"v": "Networking"}, {"v": "Other"}, {"v": "Usage"},
+      {"v": "//net/egress"}, {"v": "egress"},
+      {"v": "1.0"}, {"v": "1.0"}, {"v": "1.0"}, {"v": "EUR"}, {"v": null}, {"v": null},
+      {"v": "[]"}
+    ]},
+    {"f": [
+      {"v": "2026-10-27"}, {"v": "Cloud Logging"}, {"v": "Other"}, {"v": "Tax"},
+      {"v": ""}, {"v": ""},
+      {"v": "0.4"}, {"v": "0.4"}, {"v": "0.4"}, {"v": "EUR"}, {"v": null}, {"v": null},
+      {"v": "[]"}
+    ]}
+  ]
+}

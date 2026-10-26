@@ -119,6 +119,22 @@ class Settings(BaseSettings):
     )
     # Token metrics of the AI gateway (OpenTelemetry GenAI conventions).
     FINOPS_AI_TOKEN_METRIC: str = "gen_ai_client_token_usage_sum"
+    # AWS Data Exports "FOCUS 1.2 with AWS columns" (Parquet). Empty bucket
+    # disables the source. The prefix is the export root, i.e. the folder that
+    # holds metadata/ and data/ (<prefix>/<export-name>). Credentials come
+    # from the standard AWS_* environment variables.
+    FINOPS_AWS_EXPORT_BUCKET: str = ""
+    FINOPS_AWS_EXPORT_PREFIX: str = ""
+    FINOPS_AWS_REGION: str = "eu-west-3"
+    # BigQuery billing export. The FOCUS view wins over the detailed table
+    # when both are set; neither set disables the source. Tables are fully
+    # qualified: project.dataset.table.
+    FINOPS_GCP_FOCUS_VIEW: str = ""
+    FINOPS_GCP_BILLING_TABLE: str = ""
+    # Project the query jobs run (and are billed) in.
+    FINOPS_GCP_PROJECT: str = ""
+    # Service account key; falls back to GOOGLE_APPLICATION_CREDENTIALS.
+    FINOPS_GCP_CREDENTIALS_FILE: str = ""
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
