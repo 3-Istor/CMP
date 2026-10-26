@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Budget, CostSummary } from "@/types";
+import type { Budget, CostSummary, FinopsMeta } from "@/types";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -11,16 +11,24 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { BudgetGauge } from "./BudgetGauge";
-import { RESOURCE_META, RESOURCES, formatEUR, formatPct } from "./format";
+import { DataFreshness } from "./DataFreshness";
+import {
+  RESOURCE_META,
+  formatEUR,
+  formatPct,
+  visibleResources,
+} from "./format";
 
 export function KpiCards({
   summary,
   budget,
   project,
+  meta = null,
 }: {
   summary: CostSummary;
   budget: Budget | null;
   project?: string;
+  meta?: FinopsMeta | null;
 }) {
   const trend = summary.trend_pct;
   const trendUp = (trend ?? 0) >= 0;
@@ -57,8 +65,9 @@ export function KpiCards({
             Projection fin de mois :{" "}
             {formatEUR(summary.projected_month_eur, summary.currency)}
           </p>
+          <DataFreshness meta={meta} />
           <div className="flex flex-wrap gap-1.5">
-            {RESOURCES.map((r) => (
+            {visibleResources((summary.breakdown.ai ?? 0) > 0).map((r) => (
               <span
                 key={r}
                 className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px]"
@@ -68,7 +77,7 @@ export function KpiCards({
                   style={{ backgroundColor: RESOURCE_META[r].color }}
                 />
                 {RESOURCE_META[r].label}{" "}
-                {formatEUR(summary.breakdown[r], summary.currency)}
+                {formatEUR(summary.breakdown[r] ?? 0, summary.currency)}
               </span>
             ))}
           </div>

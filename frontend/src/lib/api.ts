@@ -449,10 +449,38 @@ export const getFinopsOverview = (opts: {
   project?: string;
   period?: string;
   granularity?: string;
+  cloud?: string;
 } = {}) =>
   request<import("@/types").FinopsOverview>(
     `/finops/overview${finopsQuery(opts)}`,
   );
+
+export const getFinopsMeta = () =>
+  request<import("@/types").FinopsMeta>("/finops/meta");
+
+/** The endpoint needs the bearer token, so a plain link cannot download it. */
+export async function downloadFinopsCsv(opts: {
+  project?: string;
+  period?: string;
+  cloud?: string;
+}): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/finops/export.csv${finopsQuery(opts)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.text());
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `finops-${opts.project || "tous"}-${opts.period ?? "30d"}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 export const getFinopsTimeline = (opts: {
   project?: string;

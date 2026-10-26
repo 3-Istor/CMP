@@ -39,6 +39,7 @@ export interface FinopsFilterState {
   project: string; // "" = tous
   period: string; // 7d | 30d | 90d
   granularity: string; // daily | weekly | monthly
+  cloud: string; // "" = tous | onprem | aws | gcp
 }
 
 export function FinopsFilters({
@@ -46,11 +47,13 @@ export function FinopsFilters({
   onChange,
   projects,
   showGranularity = true,
+  showCloud = false,
 }: {
   state: FinopsFilterState;
   onChange: (next: FinopsFilterState) => void;
   projects: Project[];
   showGranularity?: boolean;
+  showCloud?: boolean;
 }) {
   const set = (patch: Partial<FinopsFilterState>) =>
     onChange({ ...state, ...patch });
@@ -79,6 +82,19 @@ export function FinopsFilters({
         <option value="30d">30 jours</option>
         <option value="90d">90 jours</option>
       </NativeSelect>
+
+      {showCloud && (
+        <NativeSelect
+          aria-label="Cloud"
+          value={state.cloud}
+          onChange={(v) => set({ cloud: v })}
+        >
+          <option value="">Tous les clouds</option>
+          <option value="onprem">On-prem</option>
+          <option value="aws">AWS</option>
+          <option value="gcp">GCP</option>
+        </NativeSelect>
+      )}
 
       {showGranularity && (
         <NativeSelect

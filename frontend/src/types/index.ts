@@ -272,13 +272,16 @@ export interface KeycloakUserResult {
 
 // ── FinOps ────────────────────────────────────────────────────────────────────
 
-export type FinopsResource = "cpu" | "ram" | "storage" | "network";
+export type FinopsResource = "cpu" | "ram" | "storage" | "network" | "ai";
+
+export type FinopsCloud = "onprem" | "aws" | "gcp";
 
 export interface CostBreakdown {
   cpu: number;
   ram: number;
   storage: number;
   network: number;
+  ai?: number;
 }
 
 export interface CostSummary {
@@ -298,6 +301,7 @@ export interface CostSeriesPoint {
   ram: number;
   storage: number;
   network: number;
+  ai?: number;
   total: number;
 }
 
@@ -330,6 +334,20 @@ export interface FinopsOverview {
   budget: Budget | null;
   apps: AppCostRow[];
   timeline: CostSeriesPoint[];
+  by_cloud: Record<FinopsCloud, number>;
+}
+
+export interface FinopsSourceMeta {
+  source: string;
+  last_ingested_at: string | null;
+  latest_day: string | null;
+  final_through: string | null;
+  has_estimate: boolean;
+}
+
+export interface FinopsMeta {
+  provider: "simulated" | "real";
+  sources: FinopsSourceMeta[];
 }
 
 export type RecommendationType =
