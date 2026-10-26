@@ -31,8 +31,18 @@ def fresh_state(cloud: TargetCloud) -> str:
         return "unknown"
     if app is None:
         return "unknown"
-    health = (app.get("status") or {}).get("health") or {}
-    return _HEALTH.get(health.get("status"), "down")
+    status = app.get("status") or {}
+    result = _HEALTH.get((status.get("health") or {}).get("status"), "down")
+    # Argo CD keeps a stale Healthy when the cluster is unreachable.
+    errors = any(
+        str(c.get("type", "")).endswith("Error")
+        for c in status.get("conditions") or []
+    )
+    if result == "up" and (
+        (status.get("sync") or {}).get("status") == "Unknown" or errors
+    ):
+        return "down"
+    return result
 
 
 async def _refresh() -> None:
