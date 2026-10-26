@@ -465,6 +465,11 @@ export const getFinopsCarbon = (opts: { project?: string; period?: string } = {}
     `/finops/carbon${finopsQuery(opts)}`,
   );
 
+export const getFinopsPlatform = (period = "30d") =>
+  request<import("@/types").PlatformReport>(
+    `/finops/platform${finopsQuery({ period })}`,
+  );
+
 export const getFinopsMeta = () =>
   request<import("@/types").FinopsMeta>("/finops/meta");
 

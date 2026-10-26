@@ -145,9 +145,13 @@ export function KpiCards({
           )}
           <DataFreshness meta={meta} />
           <div className="flex flex-wrap gap-1.5">
-            {visibleResources((summary.breakdown.ai ?? 0) > 0).map((r) => (
+            {visibleResources(
+              (summary.breakdown.ai ?? 0) > 0,
+              (summary.breakdown.platform ?? 0) > 0,
+            ).map((r) => (
               <span
                 key={r}
+                title={RESOURCE_META[r].hint}
                 className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px]"
               >
                 <span

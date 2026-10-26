@@ -18,7 +18,10 @@ export function CostDonut({
   selected?: FinopsResource | null;
   onSelect?: (r: FinopsResource | null) => void;
 }) {
-  const data = visibleResources((breakdown.ai ?? 0) > 0).map((r) => ({
+  const data = visibleResources(
+    (breakdown.ai ?? 0) > 0,
+    (breakdown.platform ?? 0) > 0,
+  ).map((r) => ({
     resource: r,
     name: RESOURCE_META[r].label,
     value: breakdown[r] ?? 0,
@@ -82,6 +85,7 @@ export function CostDonut({
         {data.map((d) => (
           <button
             key={d.resource}
+            title={RESOURCE_META[d.resource].hint}
             onClick={() => onSelect?.(selected === d.resource ? null : d.resource)}
             className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-accent"
             style={{ opacity: selected && selected !== d.resource ? 0.4 : 1 }}

@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PlatformCost } from "@/components/finops/PlatformCost";
 import { Input } from "@/components/ui/input";
 import {
   closeFinopsMonth,
@@ -129,6 +130,8 @@ export default function FinopsFinancePage() {
           {error}
         </div>
       )}
+
+      <PlatformCost />
 
       <Card>
         <CardHeader>
