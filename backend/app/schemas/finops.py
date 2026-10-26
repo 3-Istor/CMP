@@ -47,6 +47,7 @@ class AppCostRow(BaseModel):
     cost_month_estimate_eur: float
     month_to_date_eur: float
     trend_pct: float | None = None
+    platform_eur: float = 0.0
 
 
 class SavingsTotals(BaseModel):

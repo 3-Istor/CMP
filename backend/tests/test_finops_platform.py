@@ -191,6 +191,12 @@ def test_specs_all_replaces_platform_and_idle_by_one_uncovered_row(seeded):
     ]
 
 
+def test_app_row_exposes_the_fee_it_includes(seeded):
+    [row] = RealCostProvider(seeded).app_rows([_spec()], REF)
+
+    assert (row["month_to_date_eur"], row["platform_eur"]) == (9.0, 6.0)
+
+
 def test_uncovered_row_is_the_pool_minus_the_fees_collected(seeded):
     provider = RealCostProvider(seeded)
     row = next(

@@ -445,6 +445,9 @@ class RealCostProvider(CostProvider):
                         2,
                     ),
                     "month_to_date_eur": round(mtd, 2),
+                    "platform_eur": round(
+                        sum(slot["platform"] for slot in days.values()), 2
+                    ),
                     "trend_pct": (
                         round((latest - before) / before * 100, 1)
                         if before > 0
