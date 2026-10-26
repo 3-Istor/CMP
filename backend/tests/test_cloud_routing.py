@@ -153,10 +153,11 @@ def test_collectors_skip_down_clouds(monkeypatch):
     )
     assert not any("shop" in url for url in urls)
     with factory() as db:
-        assert store.scan_state(db, "lab", None, Source.KYVERNO).status == "ok"
-        assert store.scan_state(db, "shop", None, Source.KYVERNO).status != (
-            "error"
-        )
+        lab = store.scan_state(db, "lab", None, Source.KYVERNO)
+        shop = store.scan_state(db, "shop", None, Source.KYVERNO)
+        # A fresh row is already "ok": collected_at proves the scan ran.
+        assert (lab.status, lab.collected_at is not None) == ("ok", True)
+        assert shop.collected_at is None
 
 
 def test_cloud_write_routed(monkeypatch, keycloak):  # noqa: F811

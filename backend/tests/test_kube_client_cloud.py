@@ -21,23 +21,27 @@ def _b64(raw: bytes | str) -> str:
     ).decode()
 
 
-SECRET = {
-    "data": {
-        "name": _b64("aws"),
-        "server": _b64("https://x"),
-        "config": _b64(
-            json.dumps(
-                {
-                    "bearerToken": "t",
-                    "tlsClientConfig": {
-                        "insecure": False,
-                        "caData": _b64(PEM),
-                    },
-                }
-            )
-        ),
+def _secret(token: str) -> dict:
+    return {
+        "data": {
+            "name": _b64("aws"),
+            "server": _b64("https://x"),
+            "config": _b64(
+                json.dumps(
+                    {
+                        "bearerToken": token,
+                        "tlsClientConfig": {
+                            "insecure": False,
+                            "caData": _b64(PEM),
+                        },
+                    }
+                )
+            ),
+        }
     }
-}
+
+
+SECRET = _secret("t")
 
 
 def _response(status, body=None):
@@ -81,11 +85,11 @@ def test_cloud_down_raises_without_request(monkeypatch):
     session.request.assert_not_called()
 
 
-def _routed(cloud_responses, secret_reads):
+def _routed(cloud_responses, secret_reads, secrets=None):
     def request(method, url, **kwargs):
         if url == SECRET_URL:
             secret_reads.append(kwargs["headers"]["Authorization"])
-            return _response(200, SECRET)
+            return _response(200, secrets.pop(0) if secrets else SECRET)
         cloud_responses[0]["seen"].append((url, kwargs))
         return cloud_responses.pop(0)["response"]
 
@@ -115,11 +119,17 @@ def test_cloud_target_rereads_secret_on_401():
         {"response": _response(200, {"kind": "NamespaceList"}), "seen": seen},
     ]
     with mock.patch.object(kc, "_session") as session:
-        session.request.side_effect = _routed(responses, reads)
+        session.request.side_effect = _routed(
+            responses, reads, [SECRET, _secret("rotated")]
+        )
         result = kc.kube_get("/api/v1/namespaces", cloud=TargetCloud.AWS)
 
     assert result == {"kind": "NamespaceList"}
     assert len(reads) == 2
+    assert [kwargs["headers"]["Authorization"] for _, kwargs in seen] == [
+        "Bearer t",
+        "Bearer rotated",
+    ]
 
 
 def test_outside_cluster_stays_kube_unavailable(monkeypatch):
