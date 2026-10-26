@@ -97,21 +97,21 @@ def to_lines(
 
     lines = []
     for u in usage:
-        common = dict(
-            x_source=SOURCE,
-            charge_period_start=start,
-            charge_period_end=end,
-            resource_id=f"{u.project}/{u.agent}/{u.model}/{u.backend}",
-            resource_name=u.model,
-            consumed_quantity=u.tokens,
-            consumed_unit="Tokens",
-            project=u.project,
-            app=u.agent,
-            service_category="AI and Machine Learning",
-            x_allocation_method="direct",
-            x_is_final=is_final,
-            extra_tags={"cnp_agent": u.agent, "model": u.model},
-        )
+        common = {
+            "x_source": SOURCE,
+            "charge_period_start": start,
+            "charge_period_end": end,
+            "resource_id": f"{u.project}/{u.agent}/{u.model}/{u.backend}",
+            "resource_name": u.model,
+            "consumed_quantity": u.tokens,
+            "consumed_unit": "Tokens",
+            "project": u.project,
+            "app": u.agent,
+            "service_category": "AI and Machine Learning",
+            "x_allocation_method": "direct",
+            "x_is_final": is_final,
+            "extra_tags": {"cnp_agent": u.agent, "model": u.model},
+        }
         if u.backend in local_backends:
             share = (
                 gpu_day_eur * u.tokens / local_tokens if local_tokens else 0
