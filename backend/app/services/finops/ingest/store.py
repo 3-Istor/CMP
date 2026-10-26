@@ -92,15 +92,10 @@ _COLUMNS = (
 def upsert(db: Session, lines: list[CostLine]) -> int:
     """Insert or update ``lines``; return how many rows were written."""
     closed = set(db.scalars(select(MonthClose.billing_period)))
-    written = 0
+    written = skipped = 0
     for line in lines:
         if line.billing_period in closed:
-            logger.info(
-                "FinOps: %s %s skipped, %s is closed",
-                line.x_source,
-                line.resource_id,
-                line.billing_period,
-            )
+            skipped += 1
             continue
         row = db.scalar(
             select(CostLineItem).where(
@@ -127,4 +122,8 @@ def upsert(db: Session, lines: list[CostLine]) -> int:
         row.x_ingested_at = datetime.now(timezone.utc).replace(tzinfo=None)
         written += 1
     db.commit()
+    if skipped:
+        logger.info(
+            "FinOps: %d lines of closed months left as they are", skipped
+        )
     return written
