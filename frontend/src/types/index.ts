@@ -341,6 +341,50 @@ export interface FinopsOverview {
   timeline: CostSeriesPoint[];
   by_cloud: Record<FinopsCloud, number>;
   savings_ytd: FinopsSavingsYtd;
+  /** Real costs only: the forecast behind summary.projected_month_eur. */
+  forecast?: CostForecast | null;
+}
+
+export interface ForecastDay {
+  date: string;
+  eur: number;
+  low_eur: number;
+  high_eur: number;
+}
+
+export interface CostForecast {
+  projected_eur: number;
+  low_eur: number;
+  high_eur: number;
+  actual_eur: number;
+  method: "weekday_mean" | "mean" | "none";
+  days_of_history: number;
+  low_history: boolean;
+  confidence: number;
+  budget_eur: number | null;
+  overrun_date: string | null;
+  daily: ForecastDay[];
+}
+
+export interface CostAnomalyEvent {
+  kind: "argocd_sync" | "release" | "config_change";
+  time: string;
+  actor: string | null;
+  revision: string | null;
+  summary: string;
+}
+
+export interface CostAnomaly {
+  app_id: number;
+  app_name: string;
+  project_id: string | null;
+  date: string;
+  cost_eur: number;
+  baseline_eur: number;
+  delta_eur: number;
+  delta_pct: number | null;
+  cause: string;
+  events: CostAnomalyEvent[];
 }
 
 export type FinopsSavingsCategory =

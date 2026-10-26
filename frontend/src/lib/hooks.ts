@@ -490,6 +490,33 @@ export function useFinopsFinance() {
   return { closes, centers, error, refresh };
 }
 
+/** Daily cost anomalies per app; skipped when disabled (non-daily view). */
+export function useFinopsAnomalies(
+  project?: string,
+  period = "30d",
+  enabled = true,
+) {
+  const [data, setData] = useState<import("@/types").CostAnomaly[]>([]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsAnomalies }) => getFinopsAnomalies({ project, period }))
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .catch(() => {
+        if (!cancelled) setData([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, period, enabled]);
+
+  return enabled ? data : [];
+}
+
 /** Fetch members of a specific project. */
 export function useProjectMembers(projectName: string | null) {
   const [members, setMembers] = useState<import("@/types").ProjectMember[]>([]);

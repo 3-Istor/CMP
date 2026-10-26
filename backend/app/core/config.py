@@ -143,6 +143,11 @@ class Settings(BaseSettings):
     FINOPS_GCP_PROJECT: str = ""
     # Service account key; falls back to GOOGLE_APPLICATION_CREDENTIALS.
     FINOPS_GCP_CREDENTIALS_FILE: str = ""
+    # A day is an anomaly when an app costs more than the median of its
+    # previous 14 days by this share AND by this many euros: on-prem apps
+    # cost cents a day, where a relative jump alone is noise.
+    FINOPS_ANOMALY_PCT: float = 0.5
+    FINOPS_ANOMALY_MIN_EUR: float = 0.05
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key

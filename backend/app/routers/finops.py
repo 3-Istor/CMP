@@ -57,6 +57,8 @@ from app.schemas.finops import (
     CarbonRow,
     CarbonTotals,
     CostAlertRead,
+    CostAnomaly,
+    CostForecast,
     CostSeriesPoint,
     CostSummary,
     MetaResponse,
@@ -75,7 +77,8 @@ from app.services.authz import (
     is_cnp_admin,
     is_cnp_finance,
 )
-from app.services.finops import reconciliation
+from app.services.finops import anomalies, reconciliation
+from app.services.finops.forecast import forecast_for_apps
 from app.services.finops.ingest import carbon
 from app.services.finops.provider import get_cost_provider, period_to_range
 from app.services.keycloak_service import (
@@ -236,6 +239,22 @@ def _savings_ytd(db: Session, token: dict, project: str | None) -> SavingsYtd:
     )
 
 
+def _project_budget(db: Session, project: str | None) -> ProjectBudget | None:
+    if not project:
+        return None
+    return (
+        db.query(ProjectBudget)
+        .filter(ProjectBudget.project_name == project)
+        .first()
+    )
+
+
+def _budget_amount(budget: ProjectBudget | None) -> float | None:
+    if budget is None or not budget.monthly_amount_eur:
+        return None
+    return budget.monthly_amount_eur
+
+
 def _rounded(model, *fields):
     for field in fields:
         setattr(model, field, round(getattr(model, field), 4))
@@ -274,14 +293,19 @@ def get_overview(
     ]
     app_rows = [AppCostRow(**r) for r in provider.app_rows(apps)]
 
-    budget_read = None
-    if project:
-        budget = (
-            db.query(ProjectBudget)
-            .filter(ProjectBudget.project_name == project)
-            .first()
+    budget = _project_budget(db, project)
+    budget_read = (
+        _budget_read(budget, summary.month_to_date_eur) if project else None
+    )
+
+    forecast = None
+    if settings.FINOPS_PROVIDER == "real":
+        forecast = CostForecast(
+            **forecast_for_apps(
+                provider, apps, budget_eur=_budget_amount(budget)
+            )
         )
-        budget_read = _budget_read(budget, summary.month_to_date_eur)
+        summary.projected_month_eur = forecast.projected_eur
 
     return OverviewResponse(
         summary=summary,
@@ -290,7 +314,47 @@ def get_overview(
         timeline=timeline,
         by_cloud=by_cloud,
         savings_ytd=_savings_ytd(db, token, project),
+        forecast=forecast,
     )
+
+
+@router.get("/forecast", response_model=CostForecast)
+def get_forecast(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+):
+    """Month-end forecast with an 80 % interval and the budget overrun day."""
+    deployments = _load_deployments(db, token, project)
+    provider = get_cost_provider()
+    return CostForecast(
+        **forecast_for_apps(
+            provider,
+            provider.specs(deployments),
+            budget_eur=_budget_amount(_project_budget(db, project)),
+        )
+    )
+
+
+@router.get("/anomalies", response_model=list[CostAnomaly])
+def get_anomalies(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "30d",
+):
+    """Daily cost anomalies per app, with the deployment that likely caused them."""
+    deployments = _load_deployments(db, token, project)
+    start, end = period_to_range(period)
+    rows = anomalies.find_anomalies(
+        db,
+        get_cost_provider(),
+        deployments,
+        start,
+        # Today is still being ingested.
+        end - timedelta(days=1),
+    )
+    return [CostAnomaly(**{**r, "date": r["date"].isoformat()}) for r in rows]
 
 
 @router.get("/savings", response_model=SavingsResponse)

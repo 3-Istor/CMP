@@ -468,6 +468,13 @@ export const getFinopsCarbon = (opts: { project?: string; period?: string } = {}
 export const getFinopsMeta = () =>
   request<import("@/types").FinopsMeta>("/finops/meta");
 
+export const getFinopsAnomalies = (
+  opts: { project?: string; period?: string } = {},
+) =>
+  request<import("@/types").CostAnomaly[]>(
+    `/finops/anomalies${finopsQuery(opts)}`,
+  );
+
 /** The endpoint needs the bearer token, so a plain link cannot download it. */
 export async function downloadFinopsCsv(opts: {
   project?: string;
