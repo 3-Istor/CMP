@@ -21,6 +21,7 @@ from app.models.finops import SavingsEntry
 from app.services.finops.ingest import carbon
 from app.services.finops.ingest.inputs import OnPremTCO
 from app.services.finops.ingest.projects import owner_of
+from app.services.finops.ingest.store import day_window
 from app.services.metrics_isolation import VMSELECT
 
 CATEGORY = "offhours"
@@ -70,7 +71,7 @@ def queries(tco: OnPremTCO) -> dict[str, str]:
 
 
 def fetch_day(day: date, tco: OnPremTCO) -> list[NamespaceDay]:
-    end = datetime.combine(day, time.min) + timedelta(days=1)
+    _, end = day_window(day)
     q = queries(tco)
     asleep = _query(q["asleep"], end)
     requested = _query(q["requested"], end)

@@ -13,7 +13,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.finops.ingest.inputs import ModelPrice, OnPremTCO, price_for
-from app.services.finops.ingest.store import CostLine
+from app.services.finops.ingest.store import CostLine, day_window
 from app.services.metrics_isolation import VMSELECT
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class Usage:
 
 
 def fetch_day(day: date) -> list[Usage]:
-    end = datetime.combine(day, time.min) + timedelta(days=1)
+    _, end = day_window(day)
     by = ",".join((PROJECT, AGENT, MODEL, BACKEND, TOKEN_TYPE))
     query = (
         f"sum by ({by}) " f"(increase({settings.FINOPS_AI_TOKEN_METRIC}[1d]))"

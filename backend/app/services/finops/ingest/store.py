@@ -7,7 +7,7 @@ of one of their lines becomes an adjustment line on the first open month.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,6 +15,14 @@ from sqlalchemy.orm import Session
 from app.models.finops import CostLineItem, MonthClose
 
 logger = logging.getLogger(__name__)
+
+
+def day_window(day) -> tuple[datetime, datetime]:
+    """UTC bounds of ``day``; today's window stops now (provisional data)."""
+    start = datetime.combine(day, datetime.min.time())
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return start, min(start + timedelta(days=1), now)
+
 
 ADJUSTMENT = "Adjustment"
 
