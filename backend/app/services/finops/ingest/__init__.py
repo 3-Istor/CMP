@@ -16,12 +16,15 @@ from app.core.database import SessionLocal
 from app.services.activity_sources import namespace_projects
 from app.services.finops.ingest import (
     ai_gateway,
+    aws_focus,
     carbon,
     fx,
+    gcp_focus,
     inputs,
     opencost,
     saas,
     savings,
+    split,
 )
 from app.services.finops.ingest.store import upsert
 from app.services.kube_client import KubeUnavailableError, in_cluster
@@ -43,7 +46,16 @@ def is_final(day: date, today: date) -> bool:
 def ingest_once(today: date | None = None) -> dict[str, int]:
     today = today or date.today()
     days = days_to_ingest(today)
-    written = {"opencost": 0, "ai_gateway": 0, "saas": 0, "savings": 0}
+    written = {
+        "opencost": 0,
+        "ai_gateway": 0,
+        "saas": 0,
+        "savings": 0,
+        "aws_focus": 0,
+        "gcp_focus": 0,
+        "aws_split": 0,
+        "gcp_split": 0,
+    }
     if not days:
         return written
 
@@ -64,17 +76,23 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
         for day in days:
             final = is_final(day, today)
             g_per_kwh = carbon.intensity_for(db, day)
-            try:
-                allocations = opencost.fetch_day(day)
-                lines = opencost.to_lines(
-                    day, allocations, ns_projects, tco, final
-                )
-                carbon.apply_to_lines(lines, g_per_kwh)
-                written["opencost"] += upsert(db, lines)
-            except Exception as exc:  # pylint: disable=broad-exception-caught
-                logger.warning(
-                    "FinOps: OpenCost %s not ingested: %s", day, exc
-                )
+            for cloud, url in opencost.clusters().items():
+                try:
+                    allocations = opencost.fetch_day(day, url)
+                    lines = opencost.to_lines(
+                        day, allocations, ns_projects, tco, final, cloud
+                    )
+                    carbon.apply_to_lines(lines, g_per_kwh)
+                    written["opencost"] += upsert(db, lines)
+                except (
+                    Exception
+                ) as exc:  # pylint: disable=broad-exception-caught
+                    logger.warning(
+                        "FinOps: OpenCost %s %s not ingested: %s",
+                        cloud,
+                        day,
+                        exc,
+                    )
             try:
                 usage = ai_gateway.fetch_day(day)
                 lines = ai_gateway.to_lines(
@@ -109,7 +127,36 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
         subscriptions = inputs.saas_subscriptions()
         for month in months:
             written["saas"] += upsert(db, saas.to_lines(month, subscriptions))
+        _ingest_cloud_billing(db, today, days, written)
     return written
+
+
+def _ingest_cloud_billing(
+    db, today: date, window: list[date], written: dict[str, int]
+) -> None:
+    """AWS and GCP invoices, then the split of their cluster nodes. A source
+    whose settings are empty is skipped silently."""
+    since = date.fromisoformat(settings.FINOPS_INGEST_SINCE)
+
+    def rate_for(currency: str, day: date) -> float | None:
+        return fx.rate_per_eur(db, currency, day)
+
+    sources = (
+        ("aws", aws_focus, aws_focus.enabled()),
+        ("gcp", gcp_focus, gcp_focus.enabled()),
+    )
+    for cloud, module, is_enabled in sources:
+        if not is_enabled:
+            continue
+        try:
+            lines = module.fetch_lines(today, window, since, rate_for)
+            written[f"{cloud}_focus"] += upsert(db, lines)
+            written[f"{cloud}_split"] += split.split_cloud(
+                db, cloud, {line.charge_period_start.date() for line in lines}
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            db.rollback()
+            logger.warning("FinOps: %s billing not ingested: %s", cloud, exc)
 
 
 async def finops_ingest_loop() -> None:

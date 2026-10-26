@@ -627,9 +627,13 @@ class TestEnvironmentsApi:
         )
         db.commit()
 
-        with mock.patch.object(router, "_holds", return_value=True), (
-            mock.patch.object(router, "_app", return_value=db.get(Deployment, 7))
-        ), mock.patch.object(state, "fresh_state", lambda cloud: "down"):
+        with mock.patch.object(
+            router, "_holds", return_value=True
+        ), mock.patch.object(
+            router, "_app", return_value=db.get(Deployment, 7)
+        ), mock.patch.object(
+            state, "fresh_state", lambda cloud: "down"
+        ):
             response = getattr(client("dev"), method)(path, json=body)
 
         assert response.status_code == 409

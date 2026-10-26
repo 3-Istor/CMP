@@ -185,7 +185,9 @@ def _ingest(monkeypatch, factory, tco_dir):
     monkeypatch.setattr(ingest, "in_cluster", lambda: False)
     monkeypatch.setattr(ingest.fx, "refresh", lambda db: None)
     monkeypatch.setattr(
-        ingest.opencost, "fetch_day", lambda day: {"qcm": {"cpuCost": 0.1}}
+        ingest.opencost,
+        "fetch_day",
+        lambda day, url=None: {"qcm": {"cpuCost": 0.1}},
     )
     monkeypatch.setattr(
         ingest.ai_gateway, "fetch_day", mock.Mock(return_value=[])

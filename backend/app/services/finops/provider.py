@@ -189,8 +189,13 @@ class RealCostProvider(CostProvider):
             < datetime.combine(end + timedelta(days=1), datetime.min.time()),
             or_(
                 (CostLineItem.x_source == "opencost")
+                & (CostLineItem.cloud == "onprem")
+                & CostLineItem.resource_name.in_(namespaces),
+                # Cloud apps: their share of the invoice, split by OpenCost.
+                CostLineItem.x_source.like("%\\_split", escape="\\")
                 & CostLineItem.resource_name.in_(namespaces),
                 (CostLineItem.x_source != "opencost")
+                & CostLineItem.x_source.not_like("%\\_split", escape="\\")
                 & CostLineItem.project.in_(projects),
             ),
         )

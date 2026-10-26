@@ -172,7 +172,7 @@ class CostLineItem(Base):
     cloud: Mapped[str] = mapped_column(String(16), default="onprem")
     x_cost_eur: Mapped[float] = mapped_column(Float, default=0.0)
     x_fx_rate: Mapped[float] = mapped_column(Float, default=1.0)
-    # direct | opencost | prorata | manual
+    # direct | opencost | prorata | manual | unallocated
     x_allocation_method: Mapped[str] = mapped_column(
         String(16), default="direct"
     )

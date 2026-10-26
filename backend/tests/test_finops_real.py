@@ -416,3 +416,28 @@ def test_export_denies_a_project_the_user_has_no_role_on(
         _export(db, {}, project="other")
 
     assert err.value.status_code == 403
+
+
+def test_cloud_apps_count_their_invoice_split_not_opencost_list_prices(
+    seeded,
+):
+    with seeded() as db:
+        _add(
+            db, 2, 50.0, cloud="aws", resource_name="shop-api", project="shop"
+        )
+        _add(
+            db,
+            2,
+            3.0,
+            cloud="aws",
+            x_source="aws_split",
+            resource_name="shop-api",
+            project="shop",
+        )
+        db.commit()
+
+    summary = RealCostProvider(seeded).summary(
+        [_app(2, "shop-api", "shop")], REF
+    )
+
+    assert summary["month_to_date_eur"] == 3.0

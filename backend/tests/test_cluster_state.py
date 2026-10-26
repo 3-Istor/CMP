@@ -77,7 +77,9 @@ def test_guard_waits_for_a_stable_state():
 
 def test_guard_gives_up_on_persistent_unknown():
     exc, sleeps = _guard(TargetCloud.GCP, *["unknown"] * 10)
-    assert exc.status_code == 503 and "GCP cluster state is unknown" in exc.detail
+    assert (
+        exc.status_code == 503 and "GCP cluster state is unknown" in exc.detail
+    )
     assert sleeps == state.GUARD_RETRIES
 
 

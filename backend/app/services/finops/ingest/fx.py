@@ -48,11 +48,17 @@ def refresh(db: Session) -> None:
     db.commit()
 
 
-def usd_per_eur(db: Session, day: date) -> float | None:
-    """The latest USD rate published on or before ``day``."""
+def rate_per_eur(db: Session, currency: str, day: date) -> float | None:
+    """Units of ``currency`` per EUR, latest published on or before ``day``."""
+    if currency == "EUR":
+        return 1.0
     return db.scalar(
         select(FxRate.rate)
-        .where(FxRate.currency == "USD", FxRate.day <= day)
+        .where(FxRate.currency == currency, FxRate.day <= day)
         .order_by(FxRate.day.desc())
         .limit(1)
     )
+
+
+def usd_per_eur(db: Session, day: date) -> float | None:
+    return rate_per_eur(db, "USD", day)
