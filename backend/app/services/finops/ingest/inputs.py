@@ -25,6 +25,7 @@ class OnPremTCO:
     gpu_has_mock: bool
     cpu_eur_per_core_hour: float = 0.0
     ram_eur_per_gib_hour: float = 0.0
+    watts_per_busy_core: float = 0.0
 
     @property
     def energy_share(self) -> float:
@@ -68,6 +69,7 @@ def onprem_tco() -> OnPremTCO:
             if ram_gib > 0
             else 0.0
         ),
+        watts_per_busy_core=float(power.get("watts_per_busy_core", 0)),
         eur_per_kwh=eur_per_kwh,
         cluster_watts=watts,
         cluster_eur_per_hour=hourly,

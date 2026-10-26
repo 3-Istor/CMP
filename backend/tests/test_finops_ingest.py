@@ -9,9 +9,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.core.database import Base
-from app.models.finops import CostLineItem, FxRate, MonthClose
+from app.models.finops import CostLineItem, FxRate, MonthClose, SavingsEntry
 from app.services.finops import ingest
-from app.services.finops.ingest import ai_gateway, fx, inputs, opencost, saas
+from app.services.finops.ingest import (
+    ai_gateway,
+    fx,
+    inputs,
+    opencost,
+    saas,
+    savings,
+)
 from app.services.finops.ingest.projects import IDLE, PLATFORM, owner_of
 from app.services.finops.ingest.store import CostLine, upsert
 
@@ -268,9 +275,64 @@ def test_ingest_once_keeps_going_when_one_source_fails(
     )
     boom = mock.Mock(side_effect=RuntimeError("vmselect down"))
     monkeypatch.setattr(ingest.ai_gateway, "fetch_day", boom)
+    monkeypatch.setattr(ingest.savings, "fetch_day", lambda day, tco: [])
 
     written = ingest.ingest_once(date(2026, 10, 29))
 
     assert written["opencost"] == 2
     assert written["ai_gateway"] == 0
     assert written["saas"] == 2
+
+
+def test_tco_derives_resource_prices_like_the_opencost_generator(tco):
+    assert tco.cpu_eur_per_core_hour == pytest.approx(0.0037877, abs=1e-6)
+    assert tco.ram_eur_per_gib_hour == pytest.approx(0.00051228, abs=1e-7)
+    assert tco.watts_per_busy_core == 15
+
+
+def test_savings_split_avoided_allocation_from_realized_energy(tco):
+    rows = [
+        savings.NamespaceDay(
+            namespace="shop-api",
+            asleep_fraction=0.25,
+            requested_eur_per_hour=0.01,
+            awake_busy_cores=0.4,
+        )
+    ]
+
+    [entry] = savings.to_entries(DAY, rows, {"shop-api": "shop"}, tco)
+
+    # 6 h asleep: 6 × 0.01 € avoided; 6 h × 0.4 core × 15 W = 36 Wh
+    assert (entry.project, entry.app) == ("shop", "api")
+    assert entry.avoided_eur == pytest.approx(0.06)
+    assert entry.energy_avoided_kwh == pytest.approx(0.036)
+    assert entry.realized_eur == pytest.approx(0.036 * tco.eur_per_kwh)
+
+
+def test_savings_fetch_day_scales_busy_cores_to_awake_time(tco, monkeypatch):
+    answers = {
+        "asleep": {"shop-api": 0.25, "idle-ns": 0.0},
+        "requested": {"shop-api": 0.01},
+        "busy": {"shop-api": 0.3},
+    }
+    exprs = {v: k for k, v in savings.queries(tco).items()}
+    monkeypatch.setattr(
+        savings, "_query", lambda expr, at: answers[exprs[expr]]
+    )
+
+    [row] = savings.fetch_day(DAY, tco)
+
+    assert row.namespace == "shop-api"
+    assert row.awake_busy_cores == pytest.approx(0.4)
+
+
+def test_savings_store_updates_the_day_in_place(factory, tco):
+    rows = [savings.NamespaceDay("qcm", 0.25, 0.01, 0.4)]
+    with factory() as db:
+        savings.store(db, savings.to_entries(DAY, rows, {}, tco))
+        rows = [savings.NamespaceDay("qcm", 0.5, 0.01, 0.4)]
+        savings.store(db, savings.to_entries(DAY, rows, {}, tco))
+
+        [entry] = db.scalars(select(SavingsEntry)).all()
+
+    assert entry.avoided_eur == pytest.approx(0.12)

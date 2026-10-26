@@ -25,6 +25,11 @@ power:
   measured_watts: 141.3
   source: "power_metrics.csv on pae-node-1..3, 2026-10-01 to 2026-10-26"
   electricity_eur_per_kwh_ttc: 0.1845
+  # Extra draw of one busy core (4 threads per node): slope of watts against
+  # CPU busy % over July to October, 0.55 / 0.52 / 0.76 W per point on the
+  # three nodes, × 25 points per core. Values the energy saved when
+  # offhours-guard puts a workload to sleep.
+  watts_per_busy_core: 15
 
 network:
   internet_eur_per_month: 30
