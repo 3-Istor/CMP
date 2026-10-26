@@ -303,6 +303,10 @@ def _csv_cell(value) -> str:
         return "true" if value else "false"
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        # Finance opens this in a spreadsheet: never let a cell run as a
+        # formula (model names come from gateway metric labels).
+        return "'" + value
     return str(value)
 
 
@@ -363,7 +367,8 @@ def export_csv(
         media_type="text/csv",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="finops-{project or "all"}-{period}.csv"'
+                f'attachment; filename="finops-{project or "all"}-'
+                f'{period if period in ("7d", "30d", "90d") else "30d"}.csv"'
             )
         },
     )
