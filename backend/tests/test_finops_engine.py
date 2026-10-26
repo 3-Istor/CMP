@@ -26,10 +26,15 @@ class _FakeDeployment:
 
 def _sample_apps():
     deps = [
-        _FakeDeployment(1, "api", {
-            "replica_count": 5,
-            "resources": {"limits": {"cpu": "4", "memory": "8Gi"}},
-        }, days_old=120),
+        _FakeDeployment(
+            1,
+            "api",
+            {
+                "replica_count": 5,
+                "resources": {"limits": {"cpu": "4", "memory": "8Gi"}},
+            },
+            days_old=120,
+        ),
         _FakeDeployment(2, "web", None, days_old=40),
         _FakeDeployment(3, "worker", {"replica_count": 3}, days_old=200),
     ]
@@ -38,10 +43,16 @@ def _sample_apps():
 
 class QuotaParsingTests(unittest.TestCase):
     def test_explicit_config_wins(self):
-        q = engine.quota_from_deployment(_FakeDeployment(1, "api", {
-            "replica_count": 5,
-            "resources": {"limits": {"cpu": "500m", "memory": "2Gi"}},
-        }))
+        q = engine.quota_from_deployment(
+            _FakeDeployment(
+                1,
+                "api",
+                {
+                    "replica_count": 5,
+                    "resources": {"limits": {"cpu": "500m", "memory": "2Gi"}},
+                },
+            )
+        )
         self.assertEqual(q.replicas, 5)
         self.assertAlmostEqual(q.cpu_cores, 0.5)
         self.assertAlmostEqual(q.ram_gb, 2.0)

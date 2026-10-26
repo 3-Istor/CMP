@@ -36,7 +36,9 @@ def _token(key=SIGNING_KEY, **overrides) -> str:
 
 
 def _unsigned(**claims) -> str:
-    enc = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=")
+    enc = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(
+        b"="
+    )
     return (
         enc({"alg": "none", "typ": "JWT"}) + b"." + enc(claims) + b"."
     ).decode()
@@ -62,10 +64,20 @@ class TestDecodePlatformToken:
     @pytest.mark.parametrize(
         "token",
         [
-            pytest.param(lambda: _token(key=OTHER_KEY), id="foreign-signature"),
-            pytest.param(lambda: _token(exp=int(time.time()) - 10), id="expired"),
-            pytest.param(lambda: _token(iss="https://evil.test/realms/3istor"), id="wrong-issuer"),
-            pytest.param(lambda: _unsigned(sub="u1", iss=ISSUER, exp=9999999999), id="alg-none"),
+            pytest.param(
+                lambda: _token(key=OTHER_KEY), id="foreign-signature"
+            ),
+            pytest.param(
+                lambda: _token(exp=int(time.time()) - 10), id="expired"
+            ),
+            pytest.param(
+                lambda: _token(iss="https://evil.test/realms/3istor"),
+                id="wrong-issuer",
+            ),
+            pytest.param(
+                lambda: _unsigned(sub="u1", iss=ISSUER, exp=9999999999),
+                id="alg-none",
+            ),
             pytest.param(lambda: "not-a-jwt", id="malformed"),
         ],
     )
@@ -124,7 +136,9 @@ def roles():
             deployments_router,
             "fetch_user_projects_from_keycloak",
             side_effect=lambda user: [
-                {"name": p, "role": r} for (u, p), r in ROLES.items() if u == user
+                {"name": p, "role": r}
+                for (u, p), r in ROLES.items()
+                if u == user
             ],
         ),
     ):
@@ -141,13 +155,17 @@ def _deployment_id(db, project: str) -> int:
 
 class TestDeploymentsAuthorization:
     def test_lists_only_the_users_projects(self, db, roles):
-        result = asyncio.run(deployments_router.list_deployments(_user("u2"), db))
+        result = asyncio.run(
+            deployments_router.list_deployments(_user("u2"), db)
+        )
 
         assert [d.project_id for d in result] == ["alpha"]
 
     def test_member_reads_a_deployment_of_their_project(self, db, roles):
         result = asyncio.run(
-            deployments_router.get_deployment(_deployment_id(db, "alpha"), _user("u2"), db)
+            deployments_router.get_deployment(
+                _deployment_id(db, "alpha"), _user("u2"), db
+            )
         )
 
         assert result.project_id == "alpha"
@@ -155,7 +173,9 @@ class TestDeploymentsAuthorization:
     def test_refuses_a_deployment_of_another_project(self, db, roles):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
-                deployments_router.get_deployment(_deployment_id(db, "beta"), _user("u1"), db)
+                deployments_router.get_deployment(
+                    _deployment_id(db, "beta"), _user("u1"), db
+                )
             )
 
         assert exc.value.status_code == 403
@@ -174,7 +194,10 @@ class TestDeploymentsAuthorization:
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
                 deployments_router.delete_deployment(
-                    _deployment_id(db, "alpha"), BackgroundTasks(), _user("u2"), db
+                    _deployment_id(db, "alpha"),
+                    BackgroundTasks(),
+                    _user("u2"),
+                    db,
                 )
             )
 
@@ -194,7 +217,9 @@ class TestDeploymentsAuthorization:
 
         assert exc.value.status_code == 403
 
-    def test_admin_cannot_target_another_project_through_app_config(self, db, roles):
+    def test_admin_cannot_target_another_project_through_app_config(
+        self, db, roles
+    ):
         payload = DeploymentCreate(
             name="api",
             template_id="k3s-gitops-app",
@@ -211,7 +236,9 @@ class TestDeploymentsAuthorization:
 
         assert exc.value.status_code == 400
 
-    def test_refuses_a_deployment_outside_any_project_to_non_platform_admins(self, db, roles):
+    def test_refuses_a_deployment_outside_any_project_to_non_platform_admins(
+        self, db, roles
+    ):
         payload = DeploymentCreate(name="vm", template_id="k3s-gitops-app")
 
         with pytest.raises(HTTPException) as exc:
