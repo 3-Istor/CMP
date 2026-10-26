@@ -21,7 +21,8 @@ from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.repository_import import RepositoryImport
 from app.models.security import SecurityException, SecurityScan
-from app.routers.finops import _user_project_names, is_cnp_admin
+from app.routers.finops import _user_project_names
+from app.services.authz import is_cnp_admin
 from app.services.github_service import (
     FileNotInRepoError,
     GitHubAppError,

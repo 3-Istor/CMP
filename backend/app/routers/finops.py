@@ -44,7 +44,7 @@ from app.schemas.finops import (
     OverviewResponse,
     Recommendation,
 )
-from app.services.authz import assert_project_role
+from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.finops.provider import get_cost_provider, period_to_range
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
@@ -64,19 +64,6 @@ _ACTIVE = [s for s in DeploymentStatus if s != DeploymentStatus.DELETED]
 
 def _username(token: dict) -> str:
     return token.get("preferred_username") or token.get("sub", "")
-
-
-def is_cnp_admin(token: dict) -> bool:
-    """Global FinOps admin: configured username or a ``cnp-admin`` realm role."""
-    admins = {
-        u.strip().lower()
-        for u in settings.FINOPS_ADMIN_USERS.split(",")
-        if u.strip()
-    }
-    if _username(token).lower() in admins:
-        return True
-    roles = (token.get("realm_access") or {}).get("roles", [])
-    return "cnp-admin" in roles
 
 
 def _user_project_names(token: dict) -> list[str]:

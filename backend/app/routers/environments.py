@@ -25,13 +25,15 @@ from app.models.environment import (
     PromotionPolicy,
     VerificationRun,
 )
+from app.models.project import TargetCloud
 from app.routers.deployments import (
     _authorize_app,
     _get_kubernetes_deployment_or_404,
 )
-from app.routers.finops import is_cnp_admin
 from app.schemas.release import _Camel
 from app.services import project_registry
+from app.services.authz import is_cnp_admin
+from app.services.clusters.state import ensure_cluster_up
 from app.services.environments import (
     activation,
     gitops,
@@ -317,6 +319,7 @@ async def enable_staging(
     deployment = await run_in_threadpool(
         _app, db, token, deployment_id, ProjectRole.ADMIN
     )
+    await ensure_cluster_up(TargetCloud(gitops.target_cloud(deployment)))
     try:
         row = activation.start_enable(
             db, deployment, payload.offhours.values()
@@ -628,6 +631,7 @@ async def start_promotion(
             status_code=409,
             detail="This app has no staging environment to promote from.",
         )
+    await ensure_cluster_up(TargetCloud(gitops.target_cloud(deployment)))
     try:
         item = await promotion.start(
             db,

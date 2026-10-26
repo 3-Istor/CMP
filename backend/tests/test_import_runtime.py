@@ -323,3 +323,57 @@ def test_head_encodes_the_selected_source_branch():
     assert (
         github.call_args.args[1] == "/repos/example/app/commits/recipe%2Fjoe"
     )
+
+
+@pytest.mark.parametrize("status", [409, 503])
+def test_stopped_or_unverifiable_cluster_stops_import_before_github_grants(
+    status,
+):
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.project import TargetCloud
+
+    db = Mock()
+    db.query.return_value.filter.return_value.one_or_none.return_value = (
+        SimpleNamespace(installation_id="11")
+    )
+    job = SimpleNamespace(
+        project_name="sandbox",
+        app_name="web",
+        user_sub="user",
+        username="joe",
+        installation_id="11",
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
+        + timedelta(hours=1),
+        configuration={"target_cloud": "aws", "chart_sha": "b" * 40},
+    )
+    with patch.object(service, "enabled"), patch.object(
+        settings, "IMPORT_CHART_SHA", "b" * 40
+    ), patch.object(
+        service,
+        "fresh_project",
+        return_value=SimpleNamespace(target_cloud=TargetCloud.AWS),
+    ), patch.object(
+        service.project_registry,
+        "read_record",
+        AsyncMock(
+            return_value=(
+                {"spec": {"status": "active", "targetCloud": "aws"}},
+                "test",
+            )
+        ),
+    ), patch.object(
+        service,
+        "ensure_cluster_up",
+        AsyncMock(side_effect=HTTPException(status, "cluster unavailable")),
+    ) as cluster, patch.object(
+        service, "require_gitops_consumer", AsyncMock()
+    ) as gitops, patch.object(
+        service, "scoped_token", AsyncMock()
+    ) as token:
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(service.authorize(db, job))
+    assert error.value.status_code == status
+    cluster.assert_awaited_once_with(TargetCloud.AWS)
+    gitops.assert_not_awaited()
+    token.assert_not_awaited()

@@ -30,12 +30,14 @@ from pydantic import Field
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.roles import ProjectRole
+from app.models.project import Project, TargetCloud
 from app.services import audit
 from app.services.agents import internal_api, policy, ratelimit
 from app.services.agents import repo as repo_ops
 from app.services.agents import skills, store
 from app.services.agents.provider import CmpAuthProvider
 from app.services.authz import assert_project_role
+from app.services.clusters.state import ensure_cluster_up
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
@@ -160,6 +162,21 @@ class Caller:
 
         try:
             await to_thread.run_sync(check)
+        except HTTPException as exc:
+            raise internal_api.ApiError(exc.status_code, exc.detail) from exc
+
+    async def require_cluster_up(self, project: str) -> None:
+        def cloud() -> TargetCloud:
+            with SessionLocal() as db:
+                row = (
+                    db.query(Project)
+                    .filter(Project.project_name == project)
+                    .first()
+                )
+                return row.target_cloud if row else TargetCloud.ONPREM
+
+        try:
+            await ensure_cluster_up(await to_thread.run_sync(cloud))
         except HTTPException as exc:
             raise internal_api.ApiError(exc.status_code, exc.detail) from exc
 
@@ -834,6 +851,7 @@ async def cut_release(
     project = app["project_id"]
     await caller.require_role(project, ProjectRole.MEMBER)
     await to_thread.run_sync(_require_mutable_import, app_id)
+    await caller.require_cluster_up(project)
     token, repo = await _repo_token(caller, app)
     current = await repo_ops.latest_version(token, repo)
     version = repo_ops.next_version(current, bump)

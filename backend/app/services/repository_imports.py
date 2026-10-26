@@ -24,6 +24,7 @@ from app.models.project import Project, ProjectStatus
 from app.models.repository_import import RepositoryImport
 from app.models.user_github import UserGitHubInstallation
 from app.services import keycloak_service, project_registry
+from app.services.clusters.state import ensure_cluster_up
 from app.services.github_account import linked_identity
 from app.services.github_service import generate_jwt, get_installation_token
 
@@ -444,6 +445,7 @@ async def authorize(db, job, write=False):
         stop("Le cloud cible a changé", 403)
     if job.configuration["chart_sha"] != settings.IMPORT_CHART_SHA:
         stop("La version approuvée du chart a changé", 403)
+    await ensure_cluster_up(project.target_cloud)
     await require_gitops_consumer()
     await require_runtime_secrets(job)
     await project_registry.ensure_app_names_free(

@@ -2,7 +2,7 @@
 Infrastructure Monitoring Router
 
 Provides real-time health monitoring endpoints for:
-- Global infrastructure (VPNs, hypervisors)
+- Global infrastructure (hypervisors, public clusters)
 - Application-specific resources (per deployment)
 """
 
@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.deployment import Deployment
 from app.services import monitoring_service
+from app.services.clusters.state import cluster_states
 from app.services.keycloak_service import get_current_user
 from app.services.monitoring_service import (
     AppHealthResponse,
+    ClusterStatus,
     GlobalHealthResponse,
 )
 
@@ -28,20 +30,21 @@ router = APIRouter(
 @router.get("/health", response_model=GlobalHealthResponse)
 async def get_global_infrastructure_health():
     """
-    Get health status of the global infrastructure:
-    - OpenStack VPN gateway
-    - AWS VPN instances
-    - OpenStack hypervisors (physical compute nodes)
-
-    This endpoint provides a dashboard view of the base infrastructure.
+    Get health status of the global infrastructure: OpenStack hypervisors
+    and the public clusters (EKS/GKE) state as seen by Argo CD.
     """
     try:
-        return await monitoring_service.get_global_health()
+        health = await monitoring_service.get_global_health()
     except Exception as exc:
         raise HTTPException(
             status_code=503,
             detail=f"Failed to retrieve infrastructure health: {str(exc)}",
         ) from exc
+    health.clusters = [
+        ClusterStatus(cloud=cloud.value, state=state)
+        for cloud, state in (await cluster_states()).items()
+    ]
+    return health
 
 
 @router.get(
