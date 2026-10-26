@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 
 from app.models.deployment import Deployment
 from app.models.project import TargetCloud
-from app.services.environments import gitops, layout, registry
-from app.services.kube_client import kube_get, kube_list, kube_merge_patch
+from app.services.environments import gitops, layout
+from app.services.kube_client import kube_list, kube_merge_patch
 
 CONTAINER = "cnp-generic-app"
 
@@ -129,11 +129,16 @@ def component_state(pods: list[dict]) -> ComponentState:
 
 
 def observe(
-    project: str, app: str, app_type: str, environment: str
+    project: str,
+    app: str,
+    app_type: str,
+    environment: str,
+    cloud: TargetCloud = TargetCloud.ONPREM,
 ) -> EnvironmentState:
     """
     Raises:
         KubeUnavailableError: The cluster cannot be read.
+        ClusterNotConnectedError: The project's public cloud is not up.
     """
     namespace = layout.namespace(project, app, environment)
     state = EnvironmentState(namespace=namespace)
@@ -142,6 +147,7 @@ def observe(
         pods = kube_list(
             f"/api/v1/namespaces/{namespace}/pods",
             {"labelSelector": f"app.kubernetes.io/instance={release}"},
+            cloud=cloud,
         )
         state.components[component] = component_state(pods)
     return state
@@ -169,74 +175,11 @@ def wake(namespace: str, cloud: TargetCloud = TargetCloud.ONPREM) -> int:
 
 
 def of(deployment: Deployment, environment: str) -> EnvironmentState:
-    """
-    What an app's environment runs, wherever it runs.
-
-    On-prem, from the pods. On a public cloud the CMP has no credentials
-    (D-02: only Argo CD holds them), so from the Applications' status, with
-    the tag resolved to a digest at GHCR.
-
-    Raises:
-        KubeUnavailableError: The cluster cannot be read.
-    """
-    kind = gitops.app_type(deployment)
-    if gitops.target_cloud(deployment) == "onprem":
-        return observe(
-            deployment.project_id, deployment.name, kind, environment
-        )
-    return observe_through_argocd(
-        deployment.project_id, deployment.name, kind, environment
+    """What an app's environment runs, read from its pods on its own cluster."""
+    return observe(
+        deployment.project_id,
+        deployment.name,
+        gitops.app_type(deployment),
+        environment,
+        TargetCloud(gitops.target_cloud(deployment)),
     )
-
-
-def _image_of_component(
-    images: list[str], app: str, component: str
-) -> str | None:
-    suffix = (
-        f"/{app.lower()}"
-        if component == "app"
-        else f"/{app.lower()}/{component}"
-    )
-    found = [image for image in images if _split(image)[0].endswith(suffix)]
-    return found[0] if len(found) == 1 else None
-
-
-def observe_through_argocd(
-    project: str, app: str, app_type: str, environment: str
-) -> EnvironmentState:
-    state = EnvironmentState(
-        namespace=layout.namespace(project, app, environment)
-    )
-    for component in layout.components(app_type):
-        name = layout.application(project, app, component, environment)
-        application = (
-            kube_get(
-                f"/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/{name}"
-            )
-            or {}
-        )
-        status = application.get("status") or {}
-        settled = (
-            (status.get("sync") or {}).get("status") == "Synced"
-            and (status.get("health") or {}).get("status") == "Healthy"
-            and (status.get("operationState") or {}).get("phase") != "Running"
-        )
-        image = _image_of_component(
-            (status.get("summary") or {}).get("images") or [], app, component
-        )
-        component_state = ComponentState(pods=1, ready=1 if settled else 0)
-        if image:
-            component_state.version = _tag(image)
-            if "@sha256:" in image:
-                component_state.digest = (
-                    f"{_split(image)[0]}@{image.rsplit('@', 1)[1]}"
-                )
-            elif component_state.version:
-                try:
-                    component_state.digest = registry.resolve(
-                        _split(image)[0], component_state.version
-                    )
-                except registry.RegistryLookupError:
-                    component_state.digest = None
-        state.components[component] = component_state
-    return state
