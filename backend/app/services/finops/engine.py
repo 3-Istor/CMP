@@ -102,6 +102,12 @@ def quota_from_deployment(deployment) -> Quota:
     )
 
 
+def _conventional_namespace(deployment) -> str | None:
+    """CMP apps live in ``<project>-<app>``; older rows never stored it."""
+    project = getattr(deployment, "project_id", None)
+    return f"{project}-{deployment.name}" if project else None
+
+
 def app_spec_from_deployment(deployment) -> AppSpec:
     created = getattr(deployment, "created_at", None) or datetime.utcnow()
     return AppSpec(
@@ -110,7 +116,8 @@ def app_spec_from_deployment(deployment) -> AppSpec:
         project_id=deployment.project_id,
         created_at=created,
         quota=quota_from_deployment(deployment),
-        namespace=getattr(deployment, "k8s_namespace", None),
+        namespace=getattr(deployment, "k8s_namespace", None)
+        or _conventional_namespace(deployment),
     )
 
 

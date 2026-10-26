@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.database import Base
 from app.models.finops import CostLineItem
 from app.routers import finops as router
+from app.services.finops import engine
 from app.services.finops import provider as provider_module
 from app.services.finops import recommendations_real as recs
 from app.services.finops.engine import AppSpec, Quota
@@ -441,3 +442,28 @@ def test_cloud_apps_count_their_invoice_split_not_opencost_list_prices(
     )
 
     assert summary["month_to_date_eur"] == 3.0
+
+
+def test_specs_all_adds_namespaces_that_are_not_cmp_apps(seeded):
+    provider = RealCostProvider(seeded)
+
+    specs = provider.specs_all([], REF)
+
+    by_ns = {s.namespace: s for s in specs}
+    assert set(by_ns) == {"qcm-api", "other-ns"}
+    assert by_ns["other-ns"].project_id == "other"
+    assert by_ns["other-ns"].id < 0
+
+
+def test_app_spec_falls_back_to_the_project_app_namespace():
+    class _Row:
+        id = 7
+        name = "api"
+        project_id = "shop"
+        k8s_namespace = None
+        app_config = None
+        created_at = datetime(2026, 1, 1)
+
+    spec = engine.app_spec_from_deployment(_Row())
+
+    assert spec.namespace == "shop-api"

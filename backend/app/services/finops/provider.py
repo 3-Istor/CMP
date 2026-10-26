@@ -10,6 +10,7 @@ the simulation internals. :class:`SimulatedCostProvider` is the default;
 from __future__ import annotations
 
 import calendar
+import zlib
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -165,6 +166,49 @@ class RealCostProvider(CostProvider):
 
     def specs(self, deployments):
         return [engine.app_spec_from_deployment(d) for d in deployments]
+
+    def specs_all(self, deployments, ref: date | None = None) -> list[AppSpec]:
+        """
+        Every on-prem namespace with costs in the last 90 days, for the
+        platform-wide view: CMP apps keep their id, apps that predate the CMP,
+        platform namespaces and idle capacity get a stable negative id.
+        """
+        ref = ref or date.today()
+        specs = self.specs(deployments)
+        known = {s.namespace for s in specs if s.namespace}
+        query = (
+            select(CostLineItem.resource_name, CostLineItem.project)
+            .where(
+                CostLineItem.x_source == "opencost",
+                CostLineItem.cloud == "onprem",
+                CostLineItem.charge_period_start
+                >= datetime.combine(
+                    ref - timedelta(days=90), datetime.min.time()
+                ),
+            )
+            .distinct()
+        )
+        with self._session_factory() as db:
+            rows = db.execute(query).all()
+        for namespace, project in sorted(rows):
+            if namespace in known:
+                continue
+            known.add(namespace)
+            specs.append(
+                AppSpec(
+                    id=-(zlib.crc32(namespace.encode()) or 1),
+                    name=(
+                        "Capacité inoccupée"
+                        if namespace == "__idle__"
+                        else namespace
+                    ),
+                    project_id=project,
+                    created_at=datetime.combine(ref, datetime.min.time()),
+                    quota=engine.Quota(0, 0.0, 0.0, 0.0, 0.0),
+                    namespace=namespace,
+                )
+            )
+        return specs
 
     def _lines(self, apps, start: date, end: date) -> list[tuple]:
         namespaces = {a.namespace for a in apps if a.namespace}

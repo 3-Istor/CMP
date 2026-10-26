@@ -264,6 +264,18 @@ def _rounded(model, *fields):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
+def _cost_specs(provider, deployments, token: dict, project, app=None):
+    """Admins and finance without a filter see every namespace that costs."""
+    if (
+        project is None
+        and app is None
+        and hasattr(provider, "specs_all")
+        and (is_cnp_admin(token) or is_cnp_finance(token))
+    ):
+        return provider.specs_all(deployments)
+    return provider.specs(deployments)
+
+
 @router.get("/overview", response_model=OverviewResponse)
 def get_overview(
     token: Annotated[dict, Depends(get_current_user)],
@@ -276,7 +288,7 @@ def get_overview(
     """Top KPIs + budget + app list + timeline for the Overview dashboard."""
     deployments = _load_deployments(db, token, project)
     provider = get_cost_provider()
-    all_apps = provider.specs(deployments)
+    all_apps = _cost_specs(provider, deployments, token, project)
     by_cloud = provider.by_cloud(all_apps)
     # Applications run on-prem; no application-scoped cost exists on a public
     # cloud yet, so filtering on one leaves nothing to list.
@@ -330,7 +342,7 @@ def get_forecast(
     return CostForecast(
         **forecast_for_apps(
             provider,
-            provider.specs(deployments),
+            _cost_specs(provider, deployments, token, project),
             budget_eur=_budget_amount(_project_budget(db, project)),
         )
     )
@@ -785,7 +797,7 @@ def get_timeline(
     """Stacked cost series with flexible granularity and filters."""
     deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    apps = _cost_specs(provider, deployments, token, project, app)
     start, end = period_to_range(period)
     points = provider.timeline(apps, start, end, granularity)
 
@@ -808,7 +820,7 @@ def get_breakdown(
 ):
     deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    apps = _cost_specs(provider, deployments, token, project, app)
     return Breakdown(**provider.breakdown(apps))
 
 
@@ -820,7 +832,7 @@ def get_apps(
 ):
     deployments = _load_deployments(db, token, project)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    apps = _cost_specs(provider, deployments, token, project)
     return [AppCostRow(**r) for r in provider.app_rows(apps)]
 
 
