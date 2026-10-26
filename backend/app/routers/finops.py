@@ -23,7 +23,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import Date, Integer, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -32,6 +32,7 @@ from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import (
     BudgetAlertState,
+    CarbonIntensity,
     CostAlert,
     CostLineItem,
     ProjectBudget,
@@ -45,6 +46,12 @@ from app.schemas.finops import (
     Breakdown,
     BudgetRead,
     BudgetWrite,
+    CarbonDay,
+    CarbonLatest,
+    CarbonMethod,
+    CarbonResponse,
+    CarbonRow,
+    CarbonTotals,
     CostAlertRead,
     CostSeriesPoint,
     CostSummary,
@@ -60,6 +67,7 @@ from app.schemas.finops import (
     SourceMeta,
 )
 from app.services.authz import assert_project_role, is_cnp_admin
+from app.services.finops.ingest import carbon
 from app.services.finops.provider import get_cost_provider, period_to_range
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
@@ -354,6 +362,149 @@ def get_savings(
             reverse=True,
         ),
         since=entries[0].day if entries else None,
+    )
+
+
+@router.get("/carbon", response_model=CarbonResponse)
+def get_carbon(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "30d",
+):
+    """Energy and carbon of on-prem workloads; the method is always named."""
+    since = _savings_since(period, date.today())
+    day = func.date(CostLineItem.charge_period_start, type_=Date)
+    query = (
+        select(
+            day.label("day"),
+            CostLineItem.project,
+            CostLineItem.app,
+            func.sum(CostLineItem.x_energy_kwh),
+            func.sum(CostLineItem.x_co2e_kg),
+            func.max(cast(CostLineItem.x_is_estimate, Integer)),
+        )
+        .where(day >= since, CostLineItem.x_energy_kwh.is_not(None))
+        .group_by(day, CostLineItem.project, CostLineItem.app)
+    )
+    if project:
+        _require_project_role(db, token, project)
+        query = query.where(CostLineItem.project == project)
+    elif not is_cnp_admin(token):
+        query = query.where(
+            CostLineItem.project.in_(_user_project_names(token))
+        )
+
+    intensities = {
+        row.day: row.g_per_kwh
+        for row in db.scalars(
+            select(CarbonIntensity).where(
+                CarbonIntensity.zone == carbon.ZONE,
+                CarbonIntensity.method == carbon.METHOD_DIRECT,
+                CarbonIntensity.day >= since,
+            )
+        )
+    }
+    lca_per_kwh = carbon.LCA_G_PER_KWH / 1000
+
+    totals = CarbonTotals()
+    days: dict[date, CarbonDay] = {}
+    rows: dict[tuple[str, str], CarbonRow] = {}
+    has_estimate = False
+    for line_day, line_project, line_app, kwh, co2e, estimate in db.execute(
+        query
+    ):
+        kwh = kwh or 0.0
+        co2e = co2e or 0.0
+        has_estimate = has_estimate or bool(estimate)
+        totals.energy_kwh += kwh
+        totals.co2e_direct_kg += co2e
+        point = days.setdefault(
+            line_day,
+            CarbonDay(
+                date=line_day.isoformat(),
+                energy_kwh=0,
+                co2e_kg=0,
+                g_per_kwh=intensities.get(line_day),
+            ),
+        )
+        point.energy_kwh += kwh
+        point.co2e_kg += co2e
+        row = rows.setdefault(
+            (line_project or "", line_app or ""),
+            CarbonRow(
+                project=line_project or "",
+                app=line_app or "",
+                energy_kwh=0,
+                co2e_direct_kg=0,
+                co2e_lca_kg=0,
+            ),
+        )
+        row.energy_kwh += kwh
+        row.co2e_direct_kg += co2e
+    totals.co2e_lca_kg = totals.energy_kwh * lca_per_kwh
+    for row in rows.values():
+        row.co2e_lca_kg = row.energy_kwh * lca_per_kwh
+
+    avoided = db.scalars(
+        _savings_query(db, token, project, since).where(
+            SavingsEntry.category == "offhours"
+        )
+    ).all()
+    totals.co2e_avoided_kg = sum(e.co2e_avoided_kg or 0.0 for e in avoided)
+
+    newest = db.scalar(
+        select(CarbonIntensity)
+        .where(
+            CarbonIntensity.zone == carbon.ZONE,
+            CarbonIntensity.method == carbon.METHOD_DIRECT,
+        )
+        .order_by(CarbonIntensity.day.desc())
+        .limit(1)
+    )
+    return CarbonResponse(
+        totals=_rounded(
+            totals,
+            "energy_kwh",
+            "co2e_direct_kg",
+            "co2e_lca_kg",
+            "co2e_avoided_kg",
+        ),
+        methods=[
+            CarbonMethod(
+                id=carbon.METHOD_DIRECT,
+                label="Intensité mesurée du réseau (RTE éCO2mix)",
+                source="RTE éCO2mix, moyenne journalière du taux de CO2",
+            ),
+            CarbonMethod(
+                id=carbon.METHOD_LCA,
+                label="Analyse de cycle de vie (ADEME)",
+                source=carbon.LCA_SOURCE,
+                g_per_kwh=carbon.LCA_G_PER_KWH,
+            ),
+        ],
+        timeline=[
+            _rounded(d, "energy_kwh", "co2e_kg")
+            for _, d in sorted(days.items())
+        ],
+        rows=sorted(
+            (
+                _rounded(r, "energy_kwh", "co2e_direct_kg", "co2e_lca_kg")
+                for r in rows.values()
+            ),
+            key=lambda r: r.energy_kwh,
+            reverse=True,
+        ),
+        latest=(
+            CarbonLatest(
+                g_per_kwh=round(newest.g_per_kwh, 1),
+                day=newest.day,
+                source=newest.source,
+            )
+            if newest
+            else None
+        ),
+        has_estimate=has_estimate,
     )
 
 

@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.finops import SavingsEntry
+from app.services.finops.ingest import carbon
 from app.services.finops.ingest.inputs import OnPremTCO
 from app.services.finops.ingest.projects import owner_of
 from app.services.metrics_isolation import VMSELECT
@@ -97,6 +98,7 @@ def to_entries(
     rows: list[NamespaceDay],
     ns_projects: dict[str, str],
     tco: OnPremTCO,
+    g_per_kwh: float | None = None,
 ) -> list[SavingsEntry]:
     entries = []
     for row in rows:
@@ -117,7 +119,11 @@ def to_entries(
                 avoided_eur=asleep_hours * row.requested_eur_per_hour,
                 realized_eur=energy_kwh * tco.eur_per_kwh,
                 energy_avoided_kwh=energy_kwh,
-                co2e_avoided_kg=0.0,
+                co2e_avoided_kg=(
+                    carbon.co2e_kg(energy_kwh, g_per_kwh)
+                    if g_per_kwh is not None
+                    else 0.0
+                ),
                 cloud="onprem",
             )
         )
