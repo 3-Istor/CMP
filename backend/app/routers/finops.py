@@ -67,6 +67,7 @@ from app.schemas.finops import (
     SourceMeta,
 )
 from app.services.authz import assert_project_role, is_cnp_admin
+from app.services.finops import reconciliation
 from app.services.finops.ingest import carbon
 from app.services.finops.provider import get_cost_provider, period_to_range
 from app.services.keycloak_service import (
@@ -658,6 +659,23 @@ def export_csv(
             )
         },
     )
+
+
+@router.get("/reconciliation")
+def get_reconciliation(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    provider: Annotated[str, Query(pattern="^(aws|gcp)$")] = "aws",
+    period: Annotated[str, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = "",
+):
+    """Invoice vs allocated cost of a cloud month, with the untagged top."""
+    if not is_cnp_admin(token):
+        raise HTTPException(status_code=403, detail="CNP admin only")
+    period = period or date.today().strftime("%Y-%m")
+    return {
+        **reconciliation.reconcile(db, provider, period),
+        "untagged_top": reconciliation.tag_compliance(db, provider, period),
+    }
 
 
 @router.get("/timeline", response_model=list[CostSeriesPoint])
