@@ -393,3 +393,15 @@ def test_finance_cluster_days_ignore_cloud_lines():
         x_cost_eur = 5.0
 
     assert finance.cluster_days([Line()]) == {}
+
+
+def test_project_system_namespace_counts_in_price_but_pays_no_fee():
+    days = platform.cluster_days(
+        [
+            (date(2026, 11, 1), "monitoring", "platform", 10.0),
+            (date(2026, 11, 1), "shop-api", "shop", 1.0),
+            (date(2026, 11, 1), "shop-system", "shop", 0.5),
+        ]
+    )
+
+    assert list(days[date(2026, 11, 1)].active) == ["shop-api"]

@@ -310,6 +310,7 @@ class RealCostProvider(CostProvider):
         }
         if not namespaces and not projects:
             return []
+        namespaces |= {f"{p}-system" for p in projects}
         query = select(
             CostLineItem.charge_period_start,
             CostLineItem.resource_name,

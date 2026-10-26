@@ -44,10 +44,13 @@ class ClusterDay:
 
     @property
     def active(self) -> dict[str, str | None]:
+        # A project's <project>-system namespace (status page, tunnel,
+        # offhours-guard) is its own infrastructure, not an app: it counts in
+        # the project's price but takes no slot and pays no fee.
         return {
             ns: project
             for ns, (project, cost) in self.apps.items()
-            if cost > 0
+            if cost > 0 and not ns.endswith("-system")
         }
 
     @property
