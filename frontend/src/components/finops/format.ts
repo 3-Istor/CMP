@@ -3,13 +3,18 @@ import type { FinopsCloud, FinopsResource } from "@/types";
 /** Charte couleur des ressources (alignée sur le backend pricing.py). */
 export const RESOURCE_META: Record<
   FinopsResource,
-  { label: string; color: string }
+  { label: string; color: string; hint?: string }
 > = {
   cpu: { label: "CPU", color: "#3B82F6" },
   ram: { label: "RAM", color: "#10B981" },
   storage: { label: "Stockage", color: "#F59E0B" },
   network: { label: "Réseau", color: "#8B5CF6" },
   ai: { label: "IA", color: "#EC4899" },
+  platform: {
+    label: "Forfait plateforme",
+    color: "#94A3B8",
+    hint: "Part fixe des services communs de la plateforme (1/25 du coût de la plateforme par app)",
+  },
 };
 
 export const RESOURCES: FinopsResource[] = [
@@ -18,6 +23,7 @@ export const RESOURCES: FinopsResource[] = [
   "storage",
   "network",
   "ai",
+  "platform",
 ];
 
 /** Couleurs par cloud, définies dans globals.css. */
@@ -30,9 +36,14 @@ export const CLOUD_META: Record<FinopsCloud, { label: string; color: string }> =
 
 export const CLOUDS: FinopsCloud[] = ["onprem", "aws", "gcp"];
 
-/** Ressources à afficher : "ai" n'apparaît que lorsqu'il y a du coût IA. */
-export function visibleResources(hasAi: boolean): FinopsResource[] {
-  return RESOURCES.filter((r) => r !== "ai" || hasAi);
+/** "ai" et "platform" n'apparaissent que lorsqu'ils ont un coût. */
+export function visibleResources(
+  hasAi: boolean,
+  hasPlatform: boolean,
+): FinopsResource[] {
+  return RESOURCES.filter(
+    (r) => (r !== "ai" || hasAi) && (r !== "platform" || hasPlatform),
+  );
 }
 
 export function formatAge(iso: string | null, now = Date.now()): string {

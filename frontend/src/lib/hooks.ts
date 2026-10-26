@@ -490,6 +490,35 @@ export function useFinopsFinance() {
   return { closes, centers, error, refresh };
 }
 
+/** Platform cost report; the endpoint refuses non admin/finance callers. */
+export function useFinopsPlatform(period: string, enabled: boolean) {
+  const [data, setData] = useState<import("@/types").PlatformReport | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsPlatform }) => getFinopsPlatform(period))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "Chargement impossible");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, enabled]);
+
+  return { data: enabled ? data : null, error };
+}
+
 /** Daily cost anomalies per app; skipped when disabled (non-daily view). */
 export function useFinopsAnomalies(
   project?: string,

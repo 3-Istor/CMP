@@ -300,6 +300,7 @@ def test_xlsx_has_the_expected_sheets(api, seeded):
     assert book.sheetnames == [
         "Synthèse",
         "Projets",
+        "Plateforme",
         "Fournisseurs",
         "Économies",
         "Lignes",

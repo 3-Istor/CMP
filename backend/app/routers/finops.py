@@ -63,6 +63,7 @@ from app.schemas.finops import (
     CostSummary,
     MetaResponse,
     OverviewResponse,
+    PlatformReport,
     Recommendation,
     SavingsCategory,
     SavingsDay,
@@ -77,10 +78,14 @@ from app.services.authz import (
     is_cnp_admin,
     is_cnp_finance,
 )
-from app.services.finops import anomalies, reconciliation
+from app.services.finops import anomalies, platform, reconciliation
 from app.services.finops.forecast import forecast_for_apps
 from app.services.finops.ingest import carbon
-from app.services.finops.provider import get_cost_provider, period_to_range
+from app.services.finops.provider import (
+    REAL_RESOURCES,
+    get_cost_provider,
+    period_to_range,
+)
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
@@ -789,7 +794,7 @@ def get_timeline(
     project: str | None = None,
     app: int | None = None,
     resource: str | None = Query(
-        default=None, description="cpu|ram|storage|network|ai"
+        default=None, description="cpu|ram|storage|network|ai|platform"
     ),
     granularity: str = "daily",
     period: str = "30d",
@@ -801,14 +806,46 @@ def get_timeline(
     start, end = period_to_range(period)
     points = provider.timeline(apps, start, end, granularity)
 
-    if resource and resource in ("cpu", "ram", "storage", "network", "ai"):
+    if resource and resource in REAL_RESOURCES:
         # Zero out non-selected resources so the client can still stack.
         for p in points:
-            for r in ("cpu", "ram", "storage", "network", "ai"):
+            for r in REAL_RESOURCES:
                 if r != resource:
                     p[r] = 0.0
             p["total"] = p.get(resource, 0.0)
     return [CostSeriesPoint(**p) for p in points]
+
+
+_PLATFORM_PERIOD = r"^(30d|90d|ytd|\d{4}-(0[1-9]|1[0-2]))$"
+
+
+def _platform_range(period: str, today: date) -> tuple[date, date]:
+    if period == "ytd":
+        return today.replace(month=1, day=1), today
+    if period in ("30d", "90d"):
+        return today - timedelta(days=int(period[:-1]) - 1), today
+    first = date(int(period[:4]), int(period[5:]), 1)
+    return first, (first.replace(day=28) + timedelta(days=4)).replace(
+        day=1
+    ) - timedelta(days=1)
+
+
+@router.get("/platform", response_model=PlatformReport)
+def get_platform(
+    token: Annotated[dict, Depends(get_current_user)],
+    period: Annotated[str, Query(pattern=_PLATFORM_PERIOD)] = "30d",
+):
+    """Platform cost, fees recovered and uncovered remainder. Admin/finance."""
+    if not _sees_all(token):
+        raise HTTPException(
+            status_code=403,
+            detail="Réservé à la finance et aux admins CNP.",
+        )
+    provider = get_cost_provider()
+    if not hasattr(provider, "platform_report"):
+        return PlatformReport(app_slots=platform.app_slots())
+    start, end = _platform_range(period, date.today())
+    return PlatformReport(**provider.platform_report(start, end))
 
 
 @router.get("/breakdown", response_model=Breakdown)

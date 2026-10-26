@@ -159,7 +159,10 @@ export function CostTimeline({
     });
   };
 
-  const RESOURCES = visibleResources(data.some((p) => (p.ai ?? 0) > 0));
+  const RESOURCES = visibleResources(
+    data.some((p) => (p.ai ?? 0) > 0),
+    data.some((p) => (p.platform ?? 0) > 0),
+  );
 
   const isHidden = (r: FinopsResource) =>
     focus ? r !== focus : hidden.has(r);
@@ -286,6 +289,7 @@ export function CostTimeline({
           return (
             <button
               key={r}
+              title={RESOURCE_META[r].hint}
               onClick={() => toggle(r)}
               className="flex items-center gap-1.5 text-xs transition-opacity"
               style={{ opacity: off ? 0.4 : 1 }}

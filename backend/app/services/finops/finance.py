@@ -29,6 +29,7 @@ from app.models.finops import (
     MonthClose,
     SavingsEntry,
 )
+from app.services.finops import platform
 from app.services.finops.provider import resource_of
 
 PERIOD_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
@@ -220,6 +221,19 @@ def _widths(sheet, widths: tuple[int, ...]) -> None:
         sheet.column_dimensions[chr(ord("A") + index)].width = width
 
 
+def cluster_days(lines: list[CostLineItem]) -> dict[date, platform.ClusterDay]:
+    return platform.cluster_days(
+        (
+            line.charge_period_start.date(),
+            line.resource_name,
+            line.project,
+            line.x_cost_eur or 0.0,
+        )
+        for line in lines
+        if line.x_source == "opencost" and line.cloud == "onprem"
+    )
+
+
 def build_xlsx(
     period: str,
     lines: list[CostLineItem],
@@ -227,6 +241,8 @@ def build_xlsx(
     centers: dict[str, CostCenter],
 ) -> bytes:
     book = Workbook()
+    cluster = cluster_days(lines)
+    fees = platform.fees_by_project(cluster)
 
     summary = book.active
     summary.title = "Synthèse"
@@ -270,6 +286,7 @@ def build_xlsx(
             "Fournisseur",
             "Base",
             "Coût (EUR)",
+            "Dont forfait plateforme (EUR)",
         ],
         bold=True,
     )
@@ -281,8 +298,11 @@ def build_xlsx(
             line.x_pricing_basis,
         )
         grid[key] += line.x_cost_eur or 0.0
+    fee_shown: set[str] = set()
     for (project, provider, basis), cost in sorted(grid.items()):
         center = centers.get(project)
+        fee = 0.0 if project in fee_shown else fees.get(project, 0.0)
+        fee_shown.add(project)
         _append(
             projects,
             [
@@ -292,9 +312,73 @@ def build_xlsx(
                 provider,
                 basis,
                 round(cost, 2),
+                fee,
             ],
         )
-    _widths(projects, (28, 18, 24, 28, 16, 14))
+    _widths(projects, (28, 18, 24, 28, 16, 14, 18))
+
+    shared = book.create_sheet("Plateforme")
+    first_day = min(cluster, default=date.today())
+    last_day = max(cluster, default=first_day)
+    summary_report = platform.report(cluster, first_day, last_day)
+    _append(shared, ["Coût de la plateforme"], bold=True)
+    _append(
+        shared,
+        [
+            "Total plateforme et capacité inoccupée (EUR)",
+            summary_report["total_eur"],
+        ],
+    )
+    _append(
+        shared, ["Dont capacité inoccupée (EUR)", summary_report["idle_eur"]]
+    )
+    _append(
+        shared,
+        ["Recouvert par les forfaits (EUR)", summary_report["recovered_eur"]],
+    )
+    _append(shared, ["Non couvert (EUR)", summary_report["uncovered_eur"]])
+    _append(
+        shared, ["Emplacements d'applications", summary_report["app_slots"]]
+    )
+    _append(
+        shared,
+        ["Applications actives (moyenne)", summary_report["active_apps_avg"]],
+    )
+    _append(
+        shared,
+        [
+            "Forfait par application et par mois (EUR)",
+            summary_report["fee_per_app_month_eur"],
+        ],
+    )
+    _append(shared, [])
+    _append(shared, ["Namespace", "Coût (EUR)"], bold=True)
+    for entry in summary_report["by_namespace"]:
+        _append(shared, [entry["namespace"], entry["eur"]])
+    _append(shared, [])
+    _append(
+        shared,
+        [
+            "Jour",
+            "Plateforme (EUR)",
+            "Inoccupé (EUR)",
+            "Recouvert (EUR)",
+            "Non couvert (EUR)",
+        ],
+        bold=True,
+    )
+    for day in summary_report["daily"]:
+        _append(
+            shared,
+            [
+                day["date"],
+                day["platform_eur"],
+                day["idle_eur"],
+                day["recovered_eur"],
+                day["uncovered_eur"],
+            ],
+        )
+    _widths(shared, (44, 18, 16, 16, 18))
 
     providers = book.create_sheet("Fournisseurs")
     _append(

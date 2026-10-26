@@ -272,7 +272,7 @@ export interface KeycloakUserResult {
 
 // ── FinOps ────────────────────────────────────────────────────────────────────
 
-export type FinopsResource = "cpu" | "ram" | "storage" | "network" | "ai";
+export type FinopsResource = "cpu" | "ram" | "storage" | "network" | "ai" | "platform";
 
 export type FinopsCloud = "onprem" | "aws" | "gcp";
 
@@ -282,6 +282,7 @@ export interface CostBreakdown {
   storage: number;
   network: number;
   ai?: number;
+  platform?: number;
 }
 
 export interface CostSummary {
@@ -302,6 +303,7 @@ export interface CostSeriesPoint {
   storage: number;
   network: number;
   ai?: number;
+  platform?: number;
   total: number;
 }
 
@@ -313,6 +315,25 @@ export interface AppCostRow {
   cost_month_estimate_eur: number;
   month_to_date_eur: number;
   trend_pct: number | null;
+  platform_eur?: number;
+}
+
+export interface PlatformReport {
+  total_eur: number;
+  by_namespace: { namespace: string; eur: number }[];
+  idle_eur: number;
+  recovered_eur: number;
+  uncovered_eur: number;
+  app_slots: number;
+  active_apps_avg: number;
+  fee_per_app_month_eur: number;
+  daily: {
+    date: string;
+    platform_eur: number;
+    idle_eur: number;
+    recovered_eur: number;
+    uncovered_eur: number;
+  }[];
 }
 
 export interface Budget {

@@ -69,10 +69,11 @@ def app_daily(provider, app, start: date, end: date) -> dict[date, float]:
     """
     Daily cost of the app's own namespace. Project-level lines (AI gateway,
     cloud invoices) are shared by every app of the project, so a jump there
-    says nothing about this app.
+    says nothing about this app. The platform fee is left out too: it moves
+    with the cost of the platform, not with anything the app did.
     """
     own = replace(app, project_id=None)
-    return daily_totals(provider.timeline([own], start, end, "daily"))
+    return daily_totals(provider.direct_timeline([own], start, end))
 
 
 def _short(revision: str) -> str:
