@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -154,6 +155,7 @@ class SourceMeta(BaseModel):
 class MetaResponse(BaseModel):
     provider: str
     sources: list[SourceMeta]
+    role: Literal["admin", "finance", "member"] = "member"
 
 
 class Recommendation(BaseModel):
@@ -218,3 +220,19 @@ class ActionResponse(BaseModel):
 
 
 OverviewResponse.model_rebuild()
+
+
+class CostCenterRow(BaseModel):
+    project_name: str
+    cost_center: str | None = None
+    budget_owner: str | None = None
+
+
+class CostCentersWrite(BaseModel):
+    centers: list[CostCenterRow]
+
+
+class MonthCloseRead(BaseModel):
+    billing_period: str
+    closed_by: str
+    closed_at: datetime | None = None

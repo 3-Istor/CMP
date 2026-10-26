@@ -384,6 +384,19 @@ export interface FinopsSourceMeta {
 export interface FinopsMeta {
   provider: "simulated" | "real";
   sources: FinopsSourceMeta[];
+  role?: "admin" | "finance" | "member";
+}
+
+export interface FinopsCostCenter {
+  project_name: string;
+  cost_center: string | null;
+  budget_owner: string | null;
+}
+
+export interface FinopsMonthClose {
+  billing_period: string;
+  closed_by: string;
+  closed_at: string | null;
 }
 
 export type RecommendationType =

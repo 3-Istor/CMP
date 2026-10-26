@@ -63,6 +63,8 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/security/backups"): "database.backup",
     ("POST", "/api/security/restores"): "database.restore",
     ("PUT", "/api/finops/budgets/{project_name}"): "finops.budget.update",
+    ("POST", "/api/finops/close/{period}"): "finops.month.close",
+    ("PUT", "/api/finops/cost-centers"): "finops.cost_centers.update",
     (
         "POST",
         "/api/finops/recommendations/{rec_id}/apply",

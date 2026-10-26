@@ -264,3 +264,12 @@ class CarbonIntensity(Base):
     g_per_kwh: Mapped[float] = mapped_column(Float, nullable=False)
     method: Mapped[str] = mapped_column(String(16), nullable=False)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class FinopsState(Base):
+    """Small key/value store for FinOps loops (e.g. last monthly report)."""
+
+    __tablename__ = "finops_state"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(255), nullable=False)

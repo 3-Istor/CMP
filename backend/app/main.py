@@ -22,6 +22,7 @@ from app.routers import (
     deployments,
     environments,
     finops,
+    finops_finance,
     infra,
     projects,
     releases,
@@ -34,7 +35,7 @@ from app.services.activity_collector import activity_collector_loop
 from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
 from app.services.environments.loop import environment_loop
-from app.services.finops import alert_poller
+from app.services.finops import alert_poller, monthly_report
 from app.services.finops.ingest import finops_ingest_loop
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
@@ -244,6 +245,12 @@ async def lifespan(app: FastAPI):
         else None
     )
 
+    finops_report_task = (
+        asyncio.create_task(monthly_report.finops_monthly_report_loop())
+        if settings.FINOPS_MONTHLY_REPORT_ENABLED
+        else None
+    )
+
     logger.info("Starting security collector...")
     security_collector_task = asyncio.create_task(security_collector_loop())
     audit_retention_task = asyncio.create_task(audit_retention_loop())
@@ -267,6 +274,8 @@ async def lifespan(app: FastAPI):
     finops_poller_task.cancel()
     if finops_ingest_task:
         finops_ingest_task.cancel()
+    if finops_report_task:
+        finops_report_task.cancel()
     security_collector_task.cancel()
     audit_retention_task.cancel()
     activity_collector_task.cancel()
@@ -337,6 +346,7 @@ app.include_router(environments.router, prefix="/api")
 app.include_router(environments.callbacks, prefix="/api")
 app.include_router(environments.projects, prefix="/api")
 app.include_router(finops.router, prefix="/api")
+app.include_router(finops_finance.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")

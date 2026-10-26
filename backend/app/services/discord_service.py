@@ -262,3 +262,29 @@ async def send_infra_alert(
     except Exception as exc:
         logger.error("Failed to send Discord infra alert: %s", exc)
         return False
+
+
+async def send_finops_monthly_report(message: str) -> bool:
+    if not settings.DISCORD_WEBHOOK_URL:
+        logger.debug("Discord webhook not configured, skipping FinOps report")
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                settings.DISCORD_WEBHOOK_URL,
+                json={
+                    "embeds": [
+                        {
+                            "title": "Rapport mensuel FinOps",
+                            "description": message,
+                            "color": 0x3B82F6,
+                            "footer": {"text": "CMP FinOps"},
+                        }
+                    ]
+                },
+            )
+            response.raise_for_status()
+            return True
+    except Exception as exc:
+        logger.error("Failed to send Discord FinOps report: %s", exc)
+        return False

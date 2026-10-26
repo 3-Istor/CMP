@@ -202,3 +202,22 @@ def is_cnp_admin(token: dict) -> bool:
         return True
     roles = (token.get("realm_access") or {}).get("roles", [])
     return "cnp-admin" in roles
+
+
+def is_cnp_finance(token: dict) -> bool:
+    """
+    Finance role: ``cnp-finance`` in the token's groups (with or without the
+    leading slash Keycloak adds to group paths) or realm roles, or a username
+    listed in FINOPS_FINANCE_USERS. It widens FinOps reads, nothing else.
+    """
+    finance = {
+        u.strip().lower()
+        for u in settings.FINOPS_FINANCE_USERS.split(",")
+        if u.strip()
+    }
+    username = token.get("preferred_username") or token.get("sub", "")
+    if username.lower() in finance:
+        return True
+    groups = {str(g).lstrip("/") for g in token.get("groups") or []}
+    roles = (token.get("realm_access") or {}).get("roles", [])
+    return "cnp-finance" in groups or "cnp-finance" in roles

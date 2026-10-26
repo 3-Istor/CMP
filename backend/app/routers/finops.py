@@ -8,6 +8,9 @@ are persisted here.
 
 Access control (spec matrix):
   * **Admin CNP** (``FINOPS_ADMIN_USERS``) — sees every project's costs.
+  * **Finance** (``cnp-finance`` group, ``FINOPS_FINANCE_USERS``) — reads and
+    exports every project's costs, savings and budgets, and nothing else:
+    no recommendation, no budget edit, nothing outside ``/api/finops``.
   * **Any role on a project, guests included** — sees that project's costs.
   * **Project admins/owner** — the only roles allowed to act on a
     recommendation (applying one commits to GitOps and changes running
@@ -18,6 +21,7 @@ Access control (spec matrix):
 import csv
 import io
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Annotated
 
@@ -66,7 +70,11 @@ from app.schemas.finops import (
     SavingsYtd,
     SourceMeta,
 )
-from app.services.authz import assert_project_role, is_cnp_admin
+from app.services.authz import (
+    assert_project_role,
+    is_cnp_admin,
+    is_cnp_finance,
+)
 from app.services.finops import reconciliation
 from app.services.finops.ingest import carbon
 from app.services.finops.provider import get_cost_provider, period_to_range
@@ -108,6 +116,11 @@ def _user_project_names(token: dict) -> list[str]:
     return [p["name"] for p in fetch_user_projects_from_keycloak(user_id)]
 
 
+def _sees_all(token: dict) -> bool:
+    """Admin CNP or finance: allowed to read every project's figures."""
+    return is_cnp_admin(token) or is_cnp_finance(token)
+
+
 def _require_project_role(
     db: Session,
     token: dict,
@@ -115,14 +128,18 @@ def _require_project_role(
     minimum: ProjectRole = ProjectRole.GUEST,
 ) -> None:
     """
-    CNP admins pass; anyone else needs *minimum* on the project.
+    CNP admins pass; finance passes for reads only; anyone else needs
+    *minimum* on the project.
 
     The default (any role, guests included) is enough to read costs. The
     mutating endpoints pass ADMIN: applying a recommendation commits to the
     app's GitOps repository and ArgoCD then changes what is running.
     """
-    if not is_cnp_admin(token):
-        assert_project_role(db, token, project, minimum)
+    if is_cnp_admin(token):
+        return
+    if minimum == ProjectRole.GUEST and is_cnp_finance(token):
+        return
+    assert_project_role(db, token, project, minimum)
 
 
 def _is_owner(db: Session, project: str, username: str) -> bool:
@@ -145,7 +162,7 @@ def _load_deployments(
     if project:
         _require_project_role(db, token, project)
         q = q.filter(Deployment.project_id == project)
-    elif not is_cnp_admin(token):
+    elif not _sees_all(token):
         projects = _user_project_names(token)
         if not projects:
             return []
@@ -203,7 +220,7 @@ def _savings_query(db: Session, token: dict, project: str | None, since: date):
     if project:
         _require_project_role(db, token, project)
         query = query.where(SavingsEntry.project == project)
-    elif not is_cnp_admin(token):
+    elif not _sees_all(token):
         query = query.where(
             SavingsEntry.project.in_(_user_project_names(token))
         )
@@ -391,7 +408,7 @@ def get_carbon(
     if project:
         _require_project_role(db, token, project)
         query = query.where(CostLineItem.project == project)
-    elif not is_cnp_admin(token):
+    elif not _sees_all(token):
         query = query.where(
             CostLineItem.project.in_(_user_project_names(token))
         )
@@ -515,7 +532,11 @@ def get_meta(
     db: Session = Depends(get_db),
 ):
     """Nature (simulated / real) and freshness of the cost data."""
-    del token
+    role = (
+        "admin"
+        if is_cnp_admin(token)
+        else "finance" if is_cnp_finance(token) else "member"
+    )
     sources: list[SourceMeta] = []
     for source in db.scalars(select(CostLineItem.x_source).distinct()).all():
         scoped = CostLineItem.x_source == source
@@ -549,6 +570,7 @@ def get_meta(
     return MetaResponse(
         provider="real" if settings.FINOPS_PROVIDER == "real" else "simulated",
         sources=sources,
+        role=role,
     )
 
 
@@ -628,17 +650,23 @@ def export_csv(
                 "(FINOPS_PROVIDER=real)."
             ),
         )
-    start, end = period_to_range(period)
-    query = select(CostLineItem).where(
-        CostLineItem.charge_period_start
-        >= datetime.combine(start, datetime.min.time()),
-        CostLineItem.charge_period_start
-        < datetime.combine(end + timedelta(days=1), datetime.min.time()),
-    )
+    if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period):
+        # A billing month, as picked in the Finance tab.
+        query = select(CostLineItem).where(
+            CostLineItem.billing_period == period
+        )
+    else:
+        start, end = period_to_range(period)
+        query = select(CostLineItem).where(
+            CostLineItem.charge_period_start
+            >= datetime.combine(start, datetime.min.time()),
+            CostLineItem.charge_period_start
+            < datetime.combine(end + timedelta(days=1), datetime.min.time()),
+        )
     if project:
         _require_project_role(db, token, project)
         query = query.where(CostLineItem.project == project)
-    elif not is_cnp_admin(token):
+    elif not _sees_all(token):
         query = query.where(
             CostLineItem.project.in_(_user_project_names(token))
         )
@@ -655,7 +683,7 @@ def export_csv(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="finops-{project or "all"}-'
-                f'{period if period in ("7d", "30d", "90d") else "30d"}.csv"'
+                f'{period if period in ("7d", "30d", "90d") or re.fullmatch(r"\d{4}-\d{2}", period) else "30d"}.csv"'
             )
         },
     )
@@ -984,7 +1012,7 @@ def get_alerts(
     if project:
         _require_project_role(db, token, project)
         q = q.filter(CostAlert.project_name == project)
-    elif not is_cnp_admin(token):
+    elif not _sees_all(token):
         projects = _user_project_names(token)
         if not projects:
             return []
