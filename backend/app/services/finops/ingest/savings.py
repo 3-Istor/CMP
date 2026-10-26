@@ -7,11 +7,13 @@ electricity its busy cores would have drawn meanwhile. In the cloud nothing is
 realized until a node autoscaler removes nodes, so the ledger says 0.
 
 A namespace's schedule usually covers all of its workloads, so the asleep
-fraction is the mean over its targets.
+fraction is the mean over its targets. It is read from kube-state-metrics
+(a target at 0 replicas sleeps) rather than from offhours_target_asleep, so
+nights before the guard exposed metrics are counted too.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import httpx
 from sqlalchemy import select
@@ -51,7 +53,56 @@ def _query(expr: str, at: datetime) -> dict[str, float]:
     return out
 
 
-def queries(tco: OnPremTCO) -> dict[str, str]:
+# kube-state-metrics series and workload label per kind a schedule can target.
+REPLICAS = {
+    "Deployment": ("kube_deployment_spec_replicas", "deployment"),
+    "StatefulSet": ("kube_statefulset_replicas", "statefulset"),
+}
+
+
+def targets() -> dict[str, list[tuple[str, str]]]:
+    """Every workload a schedule targeted in the last 30 days, by namespace."""
+    response = httpx.get(
+        f"{VMSELECT}/api/v1/query",
+        params={
+            "query": "group by (exported_namespace, target) "
+            "(last_over_time(offhours_target_asleep[30d]))",
+            "time": int(datetime.now(timezone.utc).timestamp()),
+        },
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    out: dict[str, list[tuple[str, str]]] = {}
+    for sample in response.json()["data"]["result"]:
+        labels = sample["metric"]
+        kind, _, name = labels.get("target", "").partition("/")
+        # Alloy's pod scrape moves the controller's label to exported_namespace.
+        namespace = labels.get("exported_namespace")
+        if namespace and name and kind in REPLICAS:
+            out.setdefault(namespace, []).append((kind, name))
+    return out
+
+
+def asleep_query(by_namespace: dict[str, list[tuple[str, str]]]) -> str:
+    selectors = []
+    for namespace, workloads in sorted(by_namespace.items()):
+        for kind, name in sorted(workloads):
+            metric, label = REPLICAS[kind]
+            selectors.append(
+                f'label_replace({metric}{{namespace="{namespace}",'
+                f'{label}="{name}"}}, "workload", "$1", "{label}", "(.+)")'
+            )
+    replicas = " or ".join(selectors)
+    return (
+        "avg by (namespace) (avg_over_time(("
+        f"sum by (namespace, workload) ({replicas}) == bool 0"
+        ")[1d:5m]))"
+    )
+
+
+def queries(
+    tco: OnPremTCO, by_namespace: dict[str, list[tuple[str, str]]]
+) -> dict[str, str]:
     requested = (
         'sum by (namespace) (kube_pod_container_resource_requests{resource="cpu"})'
         f" * {tco.cpu_eur_per_core_hour:.10f}"
@@ -60,9 +111,7 @@ def queries(tco: OnPremTCO) -> dict[str, str]:
         f" * {tco.ram_eur_per_gib_hour:.10f}"
     )
     return {
-        # Alloy's pod scrape moves the controller's label to exported_namespace.
-        "asleep": "avg by (exported_namespace) "
-        "(avg_over_time(offhours_target_asleep[1d]))",
+        "asleep": asleep_query(by_namespace),
         # Asleep pods request nothing, so the day's peak is the awake size.
         "requested": f"max_over_time(({requested})[1d:15m])",
         "busy": "avg_over_time((sum by (namespace) "
@@ -71,8 +120,11 @@ def queries(tco: OnPremTCO) -> dict[str, str]:
 
 
 def fetch_day(day: date, tco: OnPremTCO) -> list[NamespaceDay]:
+    by_namespace = targets()
+    if not by_namespace:
+        return []
     _, end = day_window(day)
-    q = queries(tco)
+    q = queries(tco, by_namespace)
     asleep = _query(q["asleep"], end)
     requested = _query(q["requested"], end)
     busy = _query(q["busy"], end)

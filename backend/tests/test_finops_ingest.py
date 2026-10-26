@@ -329,7 +329,9 @@ def test_savings_fetch_day_scales_busy_cores_to_awake_time(tco, monkeypatch):
         "requested": {"shop-api": 0.01},
         "busy": {"shop-api": 0.3},
     }
-    exprs = {v: k for k, v in savings.queries(tco).items()}
+    by_namespace = {"shop-api": [("Deployment", "api")]}
+    monkeypatch.setattr(savings, "targets", lambda: by_namespace)
+    exprs = {v: k for k, v in savings.queries(tco, by_namespace).items()}
     monkeypatch.setattr(
         savings, "_query", lambda expr, at: answers[exprs[expr]]
     )
@@ -338,6 +340,50 @@ def test_savings_fetch_day_scales_busy_cores_to_awake_time(tco, monkeypatch):
 
     assert row.namespace == "shop-api"
     assert row.awake_busy_cores == pytest.approx(0.4)
+
+
+def test_savings_fetch_day_is_empty_when_no_schedule_has_targets(
+    tco, monkeypatch
+):
+    monkeypatch.setattr(savings, "targets", lambda: {})
+
+    assert savings.fetch_day(DAY, tco) == []
+
+
+def test_savings_asleep_query_reads_each_target_replicas_by_its_kind():
+    by_namespace = {
+        "qcm": [("Deployment", "qcm"), ("StatefulSet", "qcm-db")],
+    }
+
+    expr = savings.asleep_query(by_namespace)
+
+    assert (
+        'kube_deployment_spec_replicas{namespace="qcm",deployment="qcm"}'
+        in expr
+    )
+    assert (
+        'kube_statefulset_replicas{namespace="qcm",statefulset="qcm-db"}'
+        in expr
+    )
+    assert "== bool 0" in expr
+
+
+def test_savings_targets_keep_only_workload_kinds_with_replicas(monkeypatch):
+    result = [
+        {"metric": {"exported_namespace": "qcm", "target": "Deployment/qcm"}},
+        {"metric": {"exported_namespace": "qcm", "target": "CronJob/purge"}},
+    ]
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": {"result": result}}
+
+    monkeypatch.setattr(savings.httpx, "get", lambda *a, **k: Response())
+
+    assert savings.targets() == {"qcm": [("Deployment", "qcm")]}
 
 
 def test_savings_store_updates_the_day_in_place(factory, tco):
