@@ -45,6 +45,11 @@ def fresh_state(cloud: TargetCloud) -> str:
     return result
 
 
+def cached_state(cloud: TargetCloud) -> str:
+    """Last state read by the background refresh; unknown before the first one."""
+    return _cache.get(cloud, "unknown")
+
+
 async def _refresh() -> None:
     global _cache, _cached_at
     _cache = {

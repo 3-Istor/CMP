@@ -18,6 +18,9 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.database import SessionLocal
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.project import Project, ProjectStatus, TargetCloud
 from app.services.kube_client import kube_list
 
 PROJECT_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -130,12 +133,34 @@ def namespace_projects() -> dict[str, str]:
     items = kube_list(
         "/api/v1/namespaces", {"labelSelector": "cnp.3istor.com/project"}
     )
-    return {
+    result = {
         item["metadata"]["name"]: item["metadata"]["labels"][
             "cnp.3istor.com/project"
         ]
         for item in items
     }
+    # Cloud namespaces live in EKS/GKE, so they are derived from the DB
+    # (cnp-project-base: <project>-system plus <project>-<app>).
+    with SessionLocal() as db:
+        rows = (
+            db.query(Project.project_name, Deployment.name)
+            .outerjoin(
+                Deployment,
+                (Deployment.project_id == Project.project_name)
+                & (Deployment.provider_type == ProviderType.KUBERNETES)
+                & (Deployment.status != DeploymentStatus.DELETED),
+            )
+            .filter(
+                Project.target_cloud != TargetCloud.ONPREM,
+                Project.status != ProjectStatus.DECOMMISSIONING,
+            )
+            .all()
+        )
+    for project, app in rows:
+        result[f"{project}-system"] = project
+        if app:
+            result[f"{project}-{app}"] = project
+    return result
 
 
 def _event_id(source: str, when: datetime, line: str) -> str:
