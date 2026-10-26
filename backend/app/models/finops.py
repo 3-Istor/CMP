@@ -250,3 +250,17 @@ class SavingsEntry(Base):
     energy_avoided_kwh: Mapped[float] = mapped_column(Float, default=0.0)
     co2e_avoided_kg: Mapped[float] = mapped_column(Float, default=0.0)
     cloud: Mapped[str] = mapped_column(String(16), default="onprem")
+
+
+class CarbonIntensity(Base):
+    """Daily mean carbon intensity of a grid zone, gCO2e per kWh."""
+
+    __tablename__ = "carbon_intensity"
+    __table_args__ = (UniqueConstraint("day", "zone", "method"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    zone: Mapped[str] = mapped_column(String(8), nullable=False)
+    g_per_kwh: Mapped[float] = mapped_column(Float, nullable=False)
+    method: Mapped[str] = mapped_column(String(16), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)

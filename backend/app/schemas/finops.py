@@ -88,6 +88,50 @@ class SavingsResponse(BaseModel):
     since: date | None = None
 
 
+class CarbonTotals(BaseModel):
+    energy_kwh: float = 0.0
+    co2e_direct_kg: float = 0.0
+    co2e_lca_kg: float = 0.0
+    co2e_avoided_kg: float = 0.0
+
+
+class CarbonMethod(BaseModel):
+    id: str
+    label: str
+    source: str
+    g_per_kwh: float | None = None
+
+
+class CarbonDay(BaseModel):
+    date: str
+    energy_kwh: float
+    co2e_kg: float
+    g_per_kwh: float | None = None
+
+
+class CarbonRow(BaseModel):
+    project: str
+    app: str
+    energy_kwh: float
+    co2e_direct_kg: float
+    co2e_lca_kg: float
+
+
+class CarbonLatest(BaseModel):
+    g_per_kwh: float
+    day: date
+    source: str
+
+
+class CarbonResponse(BaseModel):
+    totals: CarbonTotals
+    methods: list[CarbonMethod]
+    timeline: list[CarbonDay]
+    rows: list[CarbonRow]
+    latest: CarbonLatest | None = None
+    has_estimate: bool = False
+
+
 class OverviewResponse(BaseModel):
     summary: CostSummary
     budget: "BudgetRead | None" = None

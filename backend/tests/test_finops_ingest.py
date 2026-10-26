@@ -270,6 +270,7 @@ def test_ingest_once_keeps_going_when_one_source_fails(
     monkeypatch.setattr(ingest, "SessionLocal", factory)
     monkeypatch.setattr(ingest, "in_cluster", lambda: False)
     monkeypatch.setattr(ingest.fx, "refresh", lambda db: None)
+    monkeypatch.setattr(ingest.carbon, "refresh", lambda db, since: 0)
     monkeypatch.setattr(
         ingest.opencost, "fetch_day", lambda day: {"qcm": {"cpuCost": 0.1}}
     )

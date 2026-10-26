@@ -460,6 +460,11 @@ export const getFinopsSavings = (opts: { project?: string; period?: string } = {
     `/finops/savings${finopsQuery(opts)}`,
   );
 
+export const getFinopsCarbon = (opts: { project?: string; period?: string } = {}) =>
+  request<import("@/types").FinopsCarbon>(
+    `/finops/carbon${finopsQuery(opts)}`,
+  );
+
 export const getFinopsMeta = () =>
   request<import("@/types").FinopsMeta>("/finops/meta");
 

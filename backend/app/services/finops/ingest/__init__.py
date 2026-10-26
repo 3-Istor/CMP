@@ -16,6 +16,7 @@ from app.core.database import SessionLocal
 from app.services.activity_sources import namespace_projects
 from app.services.finops.ingest import (
     ai_gateway,
+    carbon,
     fx,
     inputs,
     opencost,
@@ -56,34 +57,37 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
 
     with SessionLocal() as db:
         fx.refresh(db)
+        try:
+            carbon.refresh(db, days[0])
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("FinOps: carbon intensity not refreshed: %s", exc)
         for day in days:
             final = is_final(day, today)
+            g_per_kwh = carbon.intensity_for(db, day)
             try:
                 allocations = opencost.fetch_day(day)
-                written["opencost"] += upsert(
-                    db,
-                    opencost.to_lines(
-                        day, allocations, ns_projects, tco, final
-                    ),
+                lines = opencost.to_lines(
+                    day, allocations, ns_projects, tco, final
                 )
+                carbon.apply_to_lines(lines, g_per_kwh)
+                written["opencost"] += upsert(db, lines)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.warning(
                     "FinOps: OpenCost %s not ingested: %s", day, exc
                 )
             try:
                 usage = ai_gateway.fetch_day(day)
-                written["ai_gateway"] += upsert(
-                    db,
-                    ai_gateway.to_lines(
-                        day,
-                        usage,
-                        prices,
-                        local_backends,
-                        tco,
-                        fx.usd_per_eur(db, day),
-                        final,
-                    ),
+                lines = ai_gateway.to_lines(
+                    day,
+                    usage,
+                    prices,
+                    local_backends,
+                    tco,
+                    fx.usd_per_eur(db, day),
+                    final,
                 )
+                carbon.apply_to_lines(lines, g_per_kwh)
+                written["ai_gateway"] += upsert(db, lines)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.warning(
                     "FinOps: AI usage %s not ingested: %s", day, exc
@@ -92,7 +96,11 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
                 written["savings"] += savings.store(
                     db,
                     savings.to_entries(
-                        day, savings.fetch_day(day, tco), ns_projects, tco
+                        day,
+                        savings.fetch_day(day, tco),
+                        ns_projects,
+                        tco,
+                        g_per_kwh,
                     ),
                 )
             except Exception as exc:  # pylint: disable=broad-exception-caught

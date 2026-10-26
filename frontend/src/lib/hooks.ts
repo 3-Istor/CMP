@@ -406,6 +406,40 @@ export function useFinopsSavings(project?: string, period = "ytd") {
   return { data, loading, error };
 }
 
+/** Energy and carbon of on-prem workloads, re-fetched when the filters change. */
+export function useFinopsCarbon(project?: string, period = "30d") {
+  const [data, setData] = useState<import("@/types").FinopsCarbon | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsCarbon }) => getFinopsCarbon({ project, period }))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch carbon",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, period]);
+
+  return { data, loading, error };
+}
+
 /** Nature (simulé / réel) and freshness of the FinOps data. */
 export function useFinopsMeta() {
   const [meta, setMeta] = useState<import("@/types").FinopsMeta | null>(null);

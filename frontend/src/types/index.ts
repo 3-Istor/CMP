@@ -1012,3 +1012,33 @@ export interface StagingOffhours {
   wakeAt: string;
   timezone: string;
 }
+
+export interface FinopsCarbon {
+  totals: {
+    energy_kwh: number;
+    co2e_direct_kg: number;
+    co2e_lca_kg: number;
+    co2e_avoided_kg: number;
+  };
+  methods: {
+    id: "direct" | "lca";
+    label: string;
+    source: string;
+    g_per_kwh: number | null;
+  }[];
+  timeline: {
+    date: string;
+    energy_kwh: number;
+    co2e_kg: number;
+    g_per_kwh: number | null;
+  }[];
+  rows: {
+    project: string;
+    app: string;
+    energy_kwh: number;
+    co2e_direct_kg: number;
+    co2e_lca_kg: number;
+  }[];
+  latest: { g_per_kwh: number; day: string; source: string } | null;
+  has_estimate: boolean;
+}
