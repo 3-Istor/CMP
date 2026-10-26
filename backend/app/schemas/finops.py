@@ -14,6 +14,7 @@ class Breakdown(BaseModel):
     storage: float = 0.0
     network: float = 0.0
     ai: float = 0.0
+    platform: float = 0.0
 
 
 class CostSummary(BaseModel):
@@ -35,6 +36,7 @@ class CostSeriesPoint(BaseModel):
     network: float
     total: float
     ai: float = 0.0
+    platform: float = 0.0
 
 
 class AppCostRow(BaseModel):
@@ -282,3 +284,30 @@ class MonthCloseRead(BaseModel):
     billing_period: str
     closed_by: str
     closed_at: datetime | None = None
+
+
+class PlatformNamespace(BaseModel):
+    namespace: str
+    eur: float
+
+
+class PlatformDay(BaseModel):
+    date: str
+    platform_eur: float
+    idle_eur: float
+    recovered_eur: float
+    uncovered_eur: float
+
+
+class PlatformReport(BaseModel):
+    """total_eur = Σ by_namespace + idle_eur; uncovered = total - recovered."""
+
+    total_eur: float = 0.0
+    by_namespace: list[PlatformNamespace] = Field(default_factory=list)
+    idle_eur: float = 0.0
+    recovered_eur: float = 0.0
+    uncovered_eur: float = 0.0
+    app_slots: int
+    active_apps_avg: float = 0.0
+    fee_per_app_month_eur: float = 0.0
+    daily: list[PlatformDay] = Field(default_factory=list)

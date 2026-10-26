@@ -129,6 +129,7 @@ def test_breakdown_maps_services_to_resource_keys(seeded):
         "storage": 1.0,
         "network": 0.0,
         "ai": 0.25,
+        "platform": 0.0,
     }
 
 
@@ -450,7 +451,7 @@ def test_specs_all_adds_namespaces_that_are_not_cmp_apps(seeded):
     specs = provider.specs_all([], REF)
 
     by_ns = {s.namespace: s for s in specs}
-    assert set(by_ns) == {"qcm-api", "other-ns"}
+    assert set(by_ns) == {"qcm-api", "other-ns", "__uncovered__"}
     assert by_ns["other-ns"].project_id == "other"
     assert by_ns["other-ns"].id < 0
 

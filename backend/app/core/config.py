@@ -125,6 +125,9 @@ class Settings(BaseSettings):
     FINOPS_LEGACY_NAMESPACES: str = (
         "qcm,mepa-app,roadmap,linmap-bot,3istor-sessions,dev-sandbox,demo-app"
     )
+    # Target capacity (10 projects x 2-3 apps): the cost of the platform
+    # namespaces and idle capacity is divided by it into a fixed fee per app.
+    FINOPS_PLATFORM_APP_SLOTS: int = 25
     # Token metrics of the AI gateway (OpenTelemetry GenAI conventions).
     FINOPS_AI_TOKEN_METRIC: str = "gen_ai_client_token_usage_sum"
     # AWS Data Exports "FOCUS 1.2 with AWS columns" (Parquet). Empty bucket
