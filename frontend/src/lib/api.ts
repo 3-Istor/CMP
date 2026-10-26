@@ -455,6 +455,11 @@ export const getFinopsOverview = (opts: {
     `/finops/overview${finopsQuery(opts)}`,
   );
 
+export const getFinopsSavings = (opts: { project?: string; period?: string } = {}) =>
+  request<import("@/types").FinopsSavings>(
+    `/finops/savings${finopsQuery(opts)}`,
+  );
+
 export const getFinopsMeta = () =>
   request<import("@/types").FinopsMeta>("/finops/meta");
 

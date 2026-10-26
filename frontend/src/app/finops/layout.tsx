@@ -2,7 +2,7 @@
 
 import { UserNav } from "@/components/layout/UserNav";
 import { cn } from "@/lib/utils";
-import { Lightbulb, TrendingUp, Wallet } from "lucide-react";
+import { Leaf, Lightbulb, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,6 +14,7 @@ const TABS = [
     icon: Lightbulb,
     exact: false,
   },
+  { href: "/finops/savings", label: "Économies", icon: Leaf, exact: false },
   {
     href: "/finops/budgets",
     label: "Budgets & Alertes",

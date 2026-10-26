@@ -108,8 +108,8 @@ function OverviewInner() {
 
       {loading && !data ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} className="h-40 rounded-xl" />
             ))}
           </div>
@@ -122,6 +122,7 @@ function OverviewInner() {
             budget={data.budget}
             project={filters.project || undefined}
             meta={meta}
+            savings={data.savings_ytd}
           />
 
           <Card>

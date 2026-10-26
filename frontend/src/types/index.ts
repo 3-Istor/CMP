@@ -329,12 +329,48 @@ export interface Budget {
   updated_at: string | null;
 }
 
+export interface FinopsSavingsYtd {
+  avoided_eur: number;
+  realized_eur: number;
+}
+
 export interface FinopsOverview {
   summary: CostSummary;
   budget: Budget | null;
   apps: AppCostRow[];
   timeline: CostSeriesPoint[];
   by_cloud: Record<FinopsCloud, number>;
+  savings_ytd: FinopsSavingsYtd;
+}
+
+export type FinopsSavingsCategory =
+  | "offhours"
+  | "rightsizing_applied"
+  | "idle_cleanup";
+
+export interface FinopsSavings {
+  totals: {
+    avoided_eur: number;
+    realized_eur: number;
+    energy_avoided_kwh: number;
+    co2e_avoided_kg: number;
+  };
+  by_category: {
+    category: FinopsSavingsCategory;
+    avoided_eur: number;
+    realized_eur: number;
+  }[];
+  timeline: { date: string; avoided_eur: number; realized_eur: number }[];
+  rows: {
+    project: string;
+    app: string;
+    category: FinopsSavingsCategory;
+    avoided_eur: number;
+    realized_eur: number;
+    energy_avoided_kwh: number;
+    days: number;
+  }[];
+  since: string | null;
 }
 
 export interface FinopsSourceMeta {
