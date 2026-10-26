@@ -1,12 +1,18 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Budget, CostSummary, FinopsMeta } from "@/types";
+import type {
+  Budget,
+  CostSummary,
+  FinopsMeta,
+  FinopsSavingsYtd,
+} from "@/types";
 import {
   ArrowDownRight,
   ArrowUpRight,
   Boxes,
   PiggyBank,
+  Leaf,
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
@@ -24,17 +30,19 @@ export function KpiCards({
   budget,
   project,
   meta = null,
+  savings = null,
 }: {
   summary: CostSummary;
   budget: Budget | null;
   project?: string;
   meta?: FinopsMeta | null;
+  savings?: FinopsSavingsYtd | null;
 }) {
   const trend = summary.trend_pct;
   const trendUp = (trend ?? 0) >= 0;
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
       {/* 1 · Coût total du mois */}
       <Card>
         <CardHeader>
@@ -158,6 +166,38 @@ export function KpiCards({
           </Link>
         </CardContent>
       </Card>
+      {/* 5 · Économies encaissées (YTD), évité en ligne secondaire */}
+      {savings && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-muted-foreground">
+              <Leaf className="h-4 w-4" /> Économies encaissées (YTD)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <span
+              className="text-2xl font-semibold tabular-nums"
+              style={{ color: "#10B981" }}
+            >
+              {formatEUR(savings.realized_eur, summary.currency)}
+            </span>
+            <p className="text-xs text-muted-foreground">
+              + {formatEUR(savings.avoided_eur, summary.currency)} alloués
+              évités
+            </p>
+            <Link
+              href={
+                project
+                  ? `/finops/savings?project=${encodeURIComponent(project)}`
+                  : "/finops/savings"
+              }
+              className="block text-xs text-primary hover:underline"
+            >
+              Voir le détail →
+            </Link>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

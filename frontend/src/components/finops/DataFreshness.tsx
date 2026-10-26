@@ -15,9 +15,17 @@ function pick(
     : null;
 }
 
-export function DataFreshness({ meta }: { meta: FinopsMeta | null }) {
+export function DataFreshness({
+  meta,
+  compact = false,
+}: {
+  meta: FinopsMeta | null;
+  /** Nature badge only, for data that has no cost-line freshness. */
+  compact?: boolean;
+}) {
   if (!meta) return null;
-  const real = meta.provider === "real";
+  const real = compact || meta.provider === "real";
+  const detailed = real && !compact;
   const ingested = pick(
     meta.sources.map((s) => s.last_ingested_at),
     (a, b) => a > b,
@@ -38,7 +46,7 @@ export function DataFreshness({ meta }: { meta: FinopsMeta | null }) {
       >
         {real ? "réel" : "simulé"}
       </span>
-      {real && meta.sources.some((s) => s.has_estimate) && (
+      {detailed && meta.sources.some((s) => s.has_estimate) && (
         <span
           className={`${PILL} bg-amber-500/15 text-amber-600 dark:text-amber-400`}
           title="Une partie des coûts repose sur un prix provisoire."
@@ -46,12 +54,12 @@ export function DataFreshness({ meta }: { meta: FinopsMeta | null }) {
           estimé
         </span>
       )}
-      {real && (
+      {detailed && (
         <span className={`${PILL} bg-muted text-muted-foreground`}>
           màj {formatAge(ingested)}
         </span>
       )}
-      {real && finalThrough && (
+      {detailed && finalThrough && (
         <span className={`${PILL} bg-muted text-muted-foreground`}>
           définitif jusqu&apos;au{" "}
           {new Date(finalThrough).toLocaleDateString("fr-FR")}

@@ -14,7 +14,14 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services.activity_sources import namespace_projects
-from app.services.finops.ingest import ai_gateway, fx, inputs, opencost, saas
+from app.services.finops.ingest import (
+    ai_gateway,
+    fx,
+    inputs,
+    opencost,
+    saas,
+    savings,
+)
 from app.services.finops.ingest.store import upsert
 from app.services.kube_client import KubeUnavailableError, in_cluster
 
@@ -35,7 +42,7 @@ def is_final(day: date, today: date) -> bool:
 def ingest_once(today: date | None = None) -> dict[str, int]:
     today = today or date.today()
     days = days_to_ingest(today)
-    written = {"opencost": 0, "ai_gateway": 0, "saas": 0}
+    written = {"opencost": 0, "ai_gateway": 0, "saas": 0, "savings": 0}
     if not days:
         return written
 
@@ -81,6 +88,15 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
                 logger.warning(
                     "FinOps: AI usage %s not ingested: %s", day, exc
                 )
+            try:
+                written["savings"] += savings.store(
+                    db,
+                    savings.to_entries(
+                        day, savings.fetch_day(day, tco), ns_projects, tco
+                    ),
+                )
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logger.warning("FinOps: savings %s not computed: %s", day, exc)
         months = sorted({d.replace(day=1) for d in days})
         subscriptions = inputs.saas_subscriptions()
         for month in months:

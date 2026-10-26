@@ -372,6 +372,40 @@ export function useFinopsOverview(
   return { data, loading, error, refresh };
 }
 
+/** Savings ledger (évité / encaissé), re-fetched when the filters change. */
+export function useFinopsSavings(project?: string, period = "ytd") {
+  const [data, setData] = useState<import("@/types").FinopsSavings | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsSavings }) => getFinopsSavings({ project, period }))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch savings",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, period]);
+
+  return { data, loading, error };
+}
+
 /** Nature (simulé / réel) and freshness of the FinOps data. */
 export function useFinopsMeta() {
   const [meta, setMeta] = useState<import("@/types").FinopsMeta | null>(null);
