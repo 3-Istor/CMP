@@ -21,6 +21,7 @@ Access control (spec matrix):
 import csv
 import io
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Annotated
 
@@ -649,13 +650,19 @@ def export_csv(
                 "(FINOPS_PROVIDER=real)."
             ),
         )
-    start, end = period_to_range(period)
-    query = select(CostLineItem).where(
-        CostLineItem.charge_period_start
-        >= datetime.combine(start, datetime.min.time()),
-        CostLineItem.charge_period_start
-        < datetime.combine(end + timedelta(days=1), datetime.min.time()),
-    )
+    if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period):
+        # A billing month, as picked in the Finance tab.
+        query = select(CostLineItem).where(
+            CostLineItem.billing_period == period
+        )
+    else:
+        start, end = period_to_range(period)
+        query = select(CostLineItem).where(
+            CostLineItem.charge_period_start
+            >= datetime.combine(start, datetime.min.time()),
+            CostLineItem.charge_period_start
+            < datetime.combine(end + timedelta(days=1), datetime.min.time()),
+        )
     if project:
         _require_project_role(db, token, project)
         query = query.where(CostLineItem.project == project)
@@ -676,7 +683,7 @@ def export_csv(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="finops-{project or "all"}-'
-                f'{period if period in ("7d", "30d", "90d") else "30d"}.csv"'
+                f'{period if period in ("7d", "30d", "90d") or re.fullmatch(r"\d{4}-\d{2}", period) else "30d"}.csv"'
             )
         },
     )

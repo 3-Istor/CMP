@@ -708,3 +708,12 @@ def test_report_follows_the_paris_date_not_utc(report_db):
         late_utc = datetime(2026, 10, 4, 23, 30, tzinfo=ZoneInfo("UTC"))
 
         assert monthly_report.is_due(db, late_utc) == "2026-09"
+
+
+def test_csv_export_accepts_a_billing_month(api, seeded, monkeypatch):
+    monkeypatch.setattr(settings, "FINOPS_PROVIDER", "real")
+
+    response = api(FINANCE).get("/api/finops/export.csv?period=2026-09")
+
+    assert response.text.count("\n") == 4
+    assert "finops-all-2026-09.csv" in response.headers["content-disposition"]
