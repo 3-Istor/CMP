@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, ProjectStatus, TargetCloud
+from app.services.environments import layout
 from app.services.kube_client import kube_list
 
 PROJECT_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -140,7 +141,7 @@ def namespace_projects() -> dict[str, str]:
         for item in items
     }
     # Cloud namespaces live in EKS/GKE, so they are derived from the DB
-    # (cnp-project-base: <project>-system plus <project>-<app>).
+    # (cnp-project-base: <project>-system plus each app's environments).
     with SessionLocal() as db:
         rows = (
             db.query(Project.project_name, Deployment.name)
@@ -157,7 +158,11 @@ def namespace_projects() -> dict[str, str]:
             .all()
         )
     for project, app in rows:
-        names = [f"{project}-system"] + ([f"{project}-{app}"] if app else [])
+        names = [f"{project}-system"] + (
+            [layout.namespace(project, app, e) for e in layout.ENVIRONMENTS]
+            if app
+            else []
+        )
         # namespace_matcher refuses the whole list over one bad name.
         result.update({n: project for n in names if PROJECT_NAME.match(n)})
     return result

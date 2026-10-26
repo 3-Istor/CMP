@@ -536,4 +536,8 @@ def test_namespace_projects_adds_cloud_projects_from_db(session_factory):
     ):
         mapping = src.namespace_projects()
 
-    assert mapping == {"shop-system": "shop", "shop-api": "shop"}
+    assert mapping == {
+        "shop-system": "shop",
+        "shop-api": "shop",
+        "shop-api-stg": "shop",
+    }
