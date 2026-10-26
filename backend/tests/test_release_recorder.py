@@ -1,5 +1,6 @@
 from unittest import mock
 
+from app.models.project import TargetCloud
 from app.models.release import ReleaseEvent
 from app.services.kube_client import KubeUnavailableError
 from app.services.release import recorder
@@ -25,7 +26,9 @@ def test_record_all_records_a_release_nobody_is_watching(session_factory):
     with session_factory() as db:
         assert recorded == 1
         assert db.query(ReleaseEvent).filter_by(deployment_id=7).count() == 1
-    reconcile.assert_called_once_with("shop", "web", canary_moving=True)
+    reconcile.assert_called_once_with(
+        "shop", "web", canary_moving=True, cloud=TargetCloud.ONPREM
+    )
 
 
 def test_record_all_stops_quietly_when_the_cluster_is_unreachable(

@@ -8,6 +8,7 @@ again, a running pod's imageID cannot change.
 from dataclasses import dataclass, field
 
 from app.models.deployment import Deployment
+from app.models.project import TargetCloud
 from app.services.environments import gitops, layout, registry
 from app.services.kube_client import kube_get, kube_list, kube_merge_patch
 
@@ -146,7 +147,7 @@ def observe(
     return state
 
 
-def wake(namespace: str) -> int:
+def wake(namespace: str, cloud: TargetCloud = TargetCloud.ONPREM) -> int:
     """
     Ask offhours-guard to wake every schedule of a namespace until its next
     planned sleep, the same thing its own Wake button does.
@@ -154,13 +155,15 @@ def wake(namespace: str) -> int:
     Returns how many schedules were woken.
     """
     schedules = kube_list(
-        f"/apis/guard.3istor.com/v1alpha1/namespaces/{namespace}/offhoursschedules"
+        f"/apis/guard.3istor.com/v1alpha1/namespaces/{namespace}/offhoursschedules",
+        cloud=cloud,
     )
     for schedule in schedules:
         name = schedule["metadata"]["name"]
         kube_merge_patch(
             f"/apis/guard.3istor.com/v1alpha1/namespaces/{namespace}/offhoursschedules/{name}/status",
             {"status": {"currentState": "MANUAL_WAKE"}},
+            cloud=cloud,
         )
     return len(schedules)
 

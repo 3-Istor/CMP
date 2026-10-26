@@ -517,6 +517,7 @@ def test_namespace_projects_adds_cloud_projects_from_db(session_factory):
         for name, status in (
             ("api", DeploymentStatus.RUNNING),
             ("old", DeploymentStatus.DELETED),
+            ("Not_A_Namespace", DeploymentStatus.RUNNING),
         ):
             db.add(
                 Deployment(

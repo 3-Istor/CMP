@@ -157,9 +157,9 @@ def namespace_projects() -> dict[str, str]:
             .all()
         )
     for project, app in rows:
-        result[f"{project}-system"] = project
-        if app:
-            result[f"{project}-{app}"] = project
+        names = [f"{project}-system"] + ([f"{project}-{app}"] if app else [])
+        # namespace_matcher refuses the whole list over one bad name.
+        result.update({n: project for n in names if PROJECT_NAME.match(n)})
     return result
 
 

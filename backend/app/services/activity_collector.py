@@ -16,6 +16,7 @@ from app.core.database import SessionLocal
 from app.models.audit import ActivityCursor, ActivityRecord
 from app.services import activity_sources as src
 from app.services import metrics_isolation
+from app.services.clusters.state import cluster_states
 from app.services.kube_client import (
     OUTSIDE_CLUSTER_NOTICE,
     KubeUnavailableError,
@@ -171,6 +172,7 @@ async def activity_collector_loop() -> None:
         logger.warning("Activity collector: %s", OUTSIDE_CLUSTER_NOTICE)
     while True:
         try:
+            await cluster_states()
             await collect_once()
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("Activity collector error: %s", exc, exc_info=True)

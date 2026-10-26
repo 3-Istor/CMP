@@ -3,11 +3,17 @@
 import asyncio
 import time
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.models.project import TargetCloud
-from app.services.kube_client import KubeUnavailableError, kube_get
+from app.models.project import Project, TargetCloud
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    KubeUnavailableError,
+    kube_get,
+)
 
 PUBLIC_CLOUDS = (TargetCloud.AWS, TargetCloud.GCP)
 APP_PATH = (
@@ -48,6 +54,25 @@ def fresh_state(cloud: TargetCloud) -> str:
 def cached_state(cloud: TargetCloud) -> str:
     """Last state read by the background refresh; unknown before the first one."""
     return _cache.get(cloud, "unknown")
+
+
+def project_cloud(db: Session, project_name: str | None) -> TargetCloud:
+    """The cluster a project runs on; on-prem when the project is unknown."""
+    cloud = (
+        db.query(Project.target_cloud)
+        .filter(Project.project_name == project_name)
+        .scalar()
+    )
+    return cloud or TargetCloud.ONPREM
+
+
+async def not_connected_response(
+    _request: Request, exc: ClusterNotConnectedError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "cluster_not_connected", "cloud": exc.cloud},
+    )
 
 
 async def _refresh() -> None:

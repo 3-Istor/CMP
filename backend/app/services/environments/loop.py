@@ -6,8 +6,12 @@ import logging
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, Promotion, PromotionPolicy
+from app.services.clusters.state import cluster_states
 from app.services.environments import gitops, observe, promotion, runs
-from app.services.kube_client import KubeUnavailableError
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    KubeUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +19,7 @@ TICK_SECONDS = 15.0
 
 
 async def tick(tick_seconds: float = TICK_SECONDS) -> None:
+    await cluster_states()
     with SessionLocal() as db:
         runs.expire(db)
         for item in (
@@ -24,6 +29,8 @@ async def tick(tick_seconds: float = TICK_SECONDS) -> None:
         ):
             try:
                 await promotion.advance(db, item, tick_seconds)
+            except ClusterNotConnectedError as exc:
+                logger.debug("promotion %s waits: %s", item.id, exc)
             except (KubeUnavailableError, gitops.GitOpsError) as exc:
                 logger.warning("promotion %s waits: %s", item.id, exc)
         await _auto_promote(db)
@@ -42,7 +49,7 @@ async def _auto_promote(db) -> None:
             staging = await asyncio.to_thread(
                 observe.of, deployment, "staging"
             )
-        except KubeUnavailableError:
+        except (KubeUnavailableError, ClusterNotConnectedError):
             continue
         if not staging.converged:
             continue

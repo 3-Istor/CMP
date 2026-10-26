@@ -10,7 +10,12 @@ import logging
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
-from app.services.kube_client import KubeUnavailableError
+from app.models.project import TargetCloud
+from app.services.clusters.state import cluster_states, project_cloud
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    KubeUnavailableError,
+)
 from app.services.release import sync
 from app.services.release.route_reconciler import reconcile_route
 from app.services.release.source import KubeReleaseSource, ReleaseSource
@@ -35,13 +40,21 @@ def record_all(source: ReleaseSource) -> int:
             .all()
         )
         for deployment in deployments:
+            cloud = project_cloud(db, deployment.project_id)
             try:
                 view, snapshot, _ = sync.compute(db, deployment, source)
+            except ClusterNotConnectedError as exc:
+                logger.debug("Release recorder: skipped, %s", exc)
+                continue
             except KubeUnavailableError as exc:
                 logger.warning(
-                    "Release recorder: cluster unreachable: %s", exc
+                    "Release recorder: %s cluster unreachable: %s",
+                    cloud.value,
+                    exc,
                 )
-                return recorded
+                if cloud == TargetCloud.ONPREM:
+                    return recorded
+                continue
             except Exception:  # pylint: disable=broad-exception-caught
                 # One malformed Rollout must not stop the others being recorded.
                 logger.exception(
@@ -55,8 +68,9 @@ def record_all(source: ReleaseSource) -> int:
                         deployment.project_id,
                         deployment.name,
                         canary_moving=view.phase in MOVING_PHASES,
+                        cloud=cloud,
                     )
-                except KubeUnavailableError as exc:
+                except (KubeUnavailableError, ClusterNotConnectedError) as exc:
                     logger.warning(
                         "Route reconcile skipped for %s: %s",
                         deployment.id,
@@ -71,6 +85,7 @@ async def release_recorder_loop() -> None:
     source = KubeReleaseSource()
     while True:
         try:
+            await cluster_states()
             await asyncio.to_thread(record_all, source)
         except Exception:  # pylint: disable=broad-exception-caught
             logger.exception("Release recorder pass failed")

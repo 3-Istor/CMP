@@ -126,3 +126,11 @@ def test_outside_cluster_stays_kube_unavailable(monkeypatch):
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST")
     with pytest.raises(kc.KubeUnavailableError):
         kc.kube_get("/api/v1/namespaces")
+
+
+def test_malformed_cloud_secret_is_kube_unavailable():
+    secret = {"data": {**SECRET["data"], "config": _b64("[]")}}
+    with mock.patch.object(kc, "_session") as session:
+        session.request.return_value = _response(200, secret)
+        with pytest.raises(kc.KubeUnavailableError):
+            kc.kube_get("/api/v1/namespaces", cloud=TargetCloud.AWS)

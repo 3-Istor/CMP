@@ -19,9 +19,11 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus
+from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
 from app.services.authz import is_cnp_admin
+from app.services.clusters.state import project_cloud
 from app.services.github_service import (
     FileNotInRepoError,
     GitHubAppError,
@@ -177,7 +179,8 @@ class AppSummary(BaseModel):
 
 class Guarantee(BaseModel):
     label: str
-    ok: bool
+    # None: not applicable to the project's cluster.
+    ok: bool | None
 
 
 class Summary(BaseModel):
@@ -278,12 +281,19 @@ def _scan_read(s: SecurityScan) -> ScanRead:
 # ── Reads ────────────────────────────────────────────────────────────────────
 
 
-def _guarantees(items: list[store.Merged]) -> list[Guarantee]:
+def _guarantees(
+    items: list[store.Merged], cloud: TargetCloud
+) -> list[Guarantee]:
     platform_open = {m.rule for m in items if m.audience.value == "platform"}
     return [
         Guarantee(
             label="Isolé des autres projets",
-            ok="network-isolation" not in platform_open,
+            # Checked through Cilium, which only runs on-prem.
+            ok=(
+                "network-isolation" not in platform_open
+                if cloud == TargetCloud.ONPREM
+                else None
+            ),
         ),
         Guarantee(label="Pods privilégiés refusés", ok=True),
     ]
@@ -349,7 +359,7 @@ def _summary(
         segments=[SegmentRead(**vars(s)) for s in scoring.segments(scored)],
         apps=apps if app is None else [a for a in apps if a.app == app],
         scans=[_scan_read(s) for s in store.scans(db, project, app)],
-        guarantees=_guarantees(everything),
+        guarantees=_guarantees(everything, project_cloud(db, project)),
     )
 
 
@@ -508,11 +518,13 @@ async def request_scan(
             raise HTTPException(status_code=502, detail=str(exc)) from exc
     else:
         namespace = f"{payload.project}-{payload.app}"
+        cloud = project_cloud(db, payload.project)
         try:
             for kind in ("vulnerabilityreports", "exposedsecretreports"):
                 await run_in_threadpool(
                     kube_delete_collection,
                     f"/apis/aquasecurity.github.io/v1alpha1/namespaces/{namespace}/{kind}",
+                    cloud=cloud,
                 )
         except KubeUnavailableError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc

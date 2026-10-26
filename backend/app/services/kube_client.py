@@ -81,7 +81,7 @@ def _cloud_credentials(cloud: TargetCloud) -> tuple[str, str, str]:
         server = base64.b64decode(data["server"]).decode()
         ca = base64.b64decode(config["tlsClientConfig"]["caData"])
         token = config["bearerToken"]
-    except (KeyError, ValueError) as exc:
+    except (KeyError, ValueError, TypeError) as exc:
         raise KubeUnavailableError(
             f"malformed Argo CD cluster secret for {cloud.value}"
         ) from exc

@@ -24,7 +24,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
+from app.models.project import TargetCloud
 from app.services import app_security_data as security_data
+from app.services.clusters.state import cluster_states, project_cloud
 from app.services.github_service import (
     FileNotInRepoError,
     GitHubAppError,
@@ -35,6 +37,7 @@ from app.services.github_service import (
 )
 from app.services.kube_client import (
     OUTSIDE_CLUSTER_NOTICE,
+    ClusterNotConnectedError,
     KubeUnavailableError,
     in_cluster,
     kube_get,
@@ -147,12 +150,13 @@ class ClusterData:
     isolation_policy: dict | None
 
 
-def _fetch_cluster(project: str) -> ClusterData:
+def _fetch_cluster(project: str, cloud: TargetCloud) -> ClusterData:
     namespaces = [
         ns["metadata"]["name"]
         for ns in kube_list(
             "/api/v1/namespaces",
             {"labelSelector": f"{PROJECT_LABEL}={project}"},
+            cloud=cloud,
         )
     ]
     data = ClusterData(
@@ -160,31 +164,43 @@ def _fetch_cluster(project: str) -> ClusterData:
         policy_reports=[],
         vulnerability_reports=[],
         secret_reports=[],
-        trivy_installed=kube_get("/apis/aquasecurity.github.io/v1alpha1")
+        trivy_installed=kube_get(
+            "/apis/aquasecurity.github.io/v1alpha1", cloud=cloud
+        )
         is not None,
         clusters=[],
         backups=[],
-        isolation_policy=kube_get(
-            "/apis/cilium.io/v2/ciliumclusterwidenetworkpolicies/"
-            f"cnp-project-{project}-ingress"
+        # Cilium only runs on-prem.
+        isolation_policy=(
+            kube_get(
+                "/apis/cilium.io/v2/ciliumclusterwidenetworkpolicies/"
+                f"cnp-project-{project}-ingress"
+            )
+            if cloud == TargetCloud.ONPREM
+            else None
         ),
     )
     for ns in namespaces:
         data.policy_reports += kube_list(
-            f"/apis/wgpolicyk8s.io/v1alpha2/namespaces/{ns}/policyreports"
+            f"/apis/wgpolicyk8s.io/v1alpha2/namespaces/{ns}/policyreports",
+            cloud=cloud,
         )
         if data.trivy_installed:
             data.vulnerability_reports += kube_list(
-                f"/apis/aquasecurity.github.io/v1alpha1/namespaces/{ns}/vulnerabilityreports"
+                f"/apis/aquasecurity.github.io/v1alpha1/namespaces/{ns}/vulnerabilityreports",
+                cloud=cloud,
             )
             data.secret_reports += kube_list(
-                f"/apis/aquasecurity.github.io/v1alpha1/namespaces/{ns}/exposedsecretreports"
+                f"/apis/aquasecurity.github.io/v1alpha1/namespaces/{ns}/exposedsecretreports",
+                cloud=cloud,
             )
         data.clusters += kube_list(
-            f"/apis/postgresql.cnpg.io/v1/namespaces/{ns}/clusters"
+            f"/apis/postgresql.cnpg.io/v1/namespaces/{ns}/clusters",
+            cloud=cloud,
         )
         data.backups += kube_list(
-            f"/apis/postgresql.cnpg.io/v1/namespaces/{ns}/backups"
+            f"/apis/postgresql.cnpg.io/v1/namespaces/{ns}/backups",
+            cloud=cloud,
         )
     return data
 
@@ -249,8 +265,12 @@ def _record_cluster_scans(
 
 async def collect_cluster(db: Session, entry: ProjectApps) -> list:
     now = utcnow()
+    cloud = project_cloud(db, entry.project)
     try:
-        data = await asyncio.to_thread(_fetch_cluster, entry.project)
+        data = await asyncio.to_thread(_fetch_cluster, entry.project, cloud)
+    except ClusterNotConnectedError as exc:
+        logger.debug("Security: '%s' skipped: %s", entry.project, exc)
+        return []
     except KubeUnavailableError as exc:
         logger.warning(
             "Security: cluster data of '%s' unavailable: %s",
@@ -277,8 +297,11 @@ async def collect_cluster(db: Session, entry: ProjectApps) -> list:
             data.backups,
             datetime.now(timezone.utc),
         )
-        + sources.isolation_drafts(entry.project, data.isolation_policy)
     )
+    if cloud == TargetCloud.ONPREM:
+        drafts += sources.isolation_drafts(
+            entry.project, data.isolation_policy
+        )
     owned = tuple(
         s
         for s in CLUSTER_SOURCES
@@ -497,6 +520,7 @@ async def security_collector_loop() -> None:
         cluster = has_cluster and started - last_cluster >= CLUSTER_INTERVAL
         github = started - last_github >= GITHUB_INTERVAL
         try:
+            await cluster_states()
             await collect_once(cluster, github)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("Security collector error: %s", exc, exc_info=True)
