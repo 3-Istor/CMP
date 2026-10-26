@@ -1,9 +1,10 @@
 """
 FinOps Router — costs, budgets, recommendations and alerts.
 
-All cost figures come from the deterministic simulation behind
-:func:`app.services.finops.provider.get_cost_provider`; only budgets, alert
-history and recommendation decisions are persisted.
+Cost figures come from the provider behind
+:func:`app.services.finops.provider.get_cost_provider` (simulated or read from
+the ingested cost store); budgets, alert history and recommendation decisions
+are persisted here.
 
 Access control (spec matrix):
   * **Admin CNP** (``FINOPS_ADMIN_USERS``) — sees every project's costs.
@@ -14,11 +15,15 @@ Access control (spec matrix):
   * **Project Owner** — the ONLY role allowed to set a project budget.
 """
 
+import csv
+import io
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -28,6 +33,7 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import (
     BudgetAlertState,
     CostAlert,
+    CostLineItem,
     ProjectBudget,
     RecommendationState,
 )
@@ -41,8 +47,10 @@ from app.schemas.finops import (
     CostAlertRead,
     CostSeriesPoint,
     CostSummary,
+    MetaResponse,
     OverviewResponse,
     Recommendation,
+    SourceMeta,
 )
 from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.finops.provider import get_cost_provider, period_to_range
@@ -174,11 +182,16 @@ def get_overview(
     project: str | None = None,
     period: str = "30d",
     granularity: str = "daily",
+    cloud: str | None = Query(default=None, description="onprem|aws|gcp"),
 ):
     """Top KPIs + budget + app list + timeline for the Overview dashboard."""
     deployments = _load_deployments(db, token, project)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    all_apps = provider.specs(deployments)
+    by_cloud = provider.by_cloud(all_apps)
+    # Applications run on-prem; no application-scoped cost exists on a public
+    # cloud yet, so filtering on one leaves nothing to list.
+    apps = all_apps if cloud in (None, "", "all", "onprem") else []
 
     summary_dict = provider.summary(apps)
     summary_dict["breakdown"] = Breakdown(**summary_dict["breakdown"])
@@ -205,6 +218,154 @@ def get_overview(
         budget=budget_read,
         apps=app_rows,
         timeline=timeline,
+        by_cloud=by_cloud,
+    )
+
+
+@router.get("/meta", response_model=MetaResponse)
+def get_meta(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """Nature (simulated / real) and freshness of the cost data."""
+    del token
+    sources: list[SourceMeta] = []
+    for source in db.scalars(select(CostLineItem.x_source).distinct()).all():
+        scoped = CostLineItem.x_source == source
+        latest = db.scalar(
+            select(func.max(CostLineItem.charge_period_start)).where(scoped)
+        )
+        final = db.scalar(
+            select(func.max(CostLineItem.charge_period_start)).where(
+                scoped, CostLineItem.x_is_final.is_(True)
+            )
+        )
+        estimated = db.scalar(
+            select(func.count(CostLineItem.id)).where(
+                scoped,
+                CostLineItem.x_is_estimate.is_(True),
+                CostLineItem.charge_period_start == latest,
+            )
+        )
+        sources.append(
+            SourceMeta(
+                source=source,
+                last_ingested_at=db.scalar(
+                    select(func.max(CostLineItem.x_ingested_at)).where(scoped)
+                ),
+                latest_day=latest.date() if latest else None,
+                final_through=final.date() if final else None,
+                has_estimate=bool(estimated),
+            )
+        )
+    sources.sort(key=lambda s: s.source)
+    return MetaResponse(
+        provider="real" if settings.FINOPS_PROVIDER == "real" else "simulated",
+        sources=sources,
+    )
+
+
+_EXPORT_COLUMNS = (
+    ("ChargePeriodStart", "charge_period_start"),
+    ("ChargePeriodEnd", "charge_period_end"),
+    ("BillingPeriod", "billing_period"),
+    ("ProviderName", "provider_name"),
+    ("ServiceName", "service_name"),
+    ("ServiceCategory", "service_category"),
+    ("ChargeCategory", "charge_category"),
+    ("ResourceId", "resource_id"),
+    ("ResourceName", "resource_name"),
+    ("BilledCost", "billed_cost"),
+    ("EffectiveCost", "effective_cost"),
+    ("ListCost", "list_cost"),
+    ("BillingCurrency", "billing_currency"),
+    ("ConsumedQuantity", "consumed_quantity"),
+    ("ConsumedUnit", "consumed_unit"),
+    ("x_CostEur", "x_cost_eur"),
+    ("x_FxRate", "x_fx_rate"),
+    ("x_Project", "project"),
+    ("x_App", "app"),
+    ("x_Env", "env"),
+    ("x_Cloud", "cloud"),
+    ("x_AllocationMethod", "x_allocation_method"),
+    ("x_PricingBasis", "x_pricing_basis"),
+    ("x_EnergyKWh", "x_energy_kwh"),
+    ("x_CO2eKg", "x_co2e_kg"),
+    ("x_IsFinal", "x_is_final"),
+    ("x_IsEstimate", "x_is_estimate"),
+)
+
+
+def _csv_cell(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _csv_rows(rows):
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([name for name, _attr in _EXPORT_COLUMNS])
+    yield buffer.getvalue()
+    for row in rows:
+        buffer.seek(0)
+        buffer.truncate()
+        writer.writerow(
+            [_csv_cell(getattr(row, attr)) for _name, attr in _EXPORT_COLUMNS]
+        )
+        yield buffer.getvalue()
+
+
+@router.get("/export.csv")
+def export_csv(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "30d",
+    cloud: str | None = Query(default=None, description="onprem|aws|gcp"),
+):
+    """The cost lines behind the overview, with FOCUS column names."""
+    if settings.FINOPS_PROVIDER != "real":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "L'export CSV n'est disponible qu'avec des coûts réels "
+                "(FINOPS_PROVIDER=real)."
+            ),
+        )
+    start, end = period_to_range(period)
+    query = select(CostLineItem).where(
+        CostLineItem.charge_period_start
+        >= datetime.combine(start, datetime.min.time()),
+        CostLineItem.charge_period_start
+        < datetime.combine(end + timedelta(days=1), datetime.min.time()),
+    )
+    if project:
+        _require_project_role(db, token, project)
+        query = query.where(CostLineItem.project == project)
+    elif not is_cnp_admin(token):
+        query = query.where(
+            CostLineItem.project.in_(_user_project_names(token))
+        )
+    if cloud in ("onprem", "aws", "gcp"):
+        query = query.where(CostLineItem.cloud == cloud)
+    # Loaded before streaming: the request's session may close once the
+    # endpoint returns.
+    rows = db.scalars(
+        query.order_by(CostLineItem.charge_period_start, CostLineItem.id)
+    ).all()
+    return StreamingResponse(
+        _csv_rows(rows),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="finops-{project or "all"}-{period}.csv"'
+            )
+        },
     )
 
 
@@ -215,7 +376,7 @@ def get_timeline(
     project: str | None = None,
     app: int | None = None,
     resource: str | None = Query(
-        default=None, description="cpu|ram|storage|network"
+        default=None, description="cpu|ram|storage|network|ai"
     ),
     granularity: str = "daily",
     period: str = "30d",
@@ -227,13 +388,13 @@ def get_timeline(
     start, end = period_to_range(period)
     points = provider.timeline(apps, start, end, granularity)
 
-    if resource and resource in ("cpu", "ram", "storage", "network"):
+    if resource and resource in ("cpu", "ram", "storage", "network", "ai"):
         # Zero out non-selected resources so the client can still stack.
         for p in points:
-            for r in ("cpu", "ram", "storage", "network"):
+            for r in ("cpu", "ram", "storage", "network", "ai"):
                 if r != resource:
                     p[r] = 0.0
-            p["total"] = p[resource]
+            p["total"] = p.get(resource, 0.0)
     return [CostSeriesPoint(**p) for p in points]
 
 

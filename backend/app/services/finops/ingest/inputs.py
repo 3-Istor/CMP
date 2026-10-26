@@ -23,6 +23,8 @@ class OnPremTCO:
     gpu_server_watts: float
     has_mock: bool
     gpu_has_mock: bool
+    cpu_eur_per_core_hour: float = 0.0
+    ram_eur_per_gib_hour: float = 0.0
 
     @property
     def energy_share(self) -> float:
@@ -53,7 +55,19 @@ def onprem_tco() -> OnPremTCO:
         * float(network.get("platform_share", 0))
         / 730
     )
+    cluster = raw.get("cluster", {})
+    split = cluster.get("split", {})
+    vcpu = float(cluster.get("vcpu", 0))
+    ram_gib = float(cluster.get("ram_gib", 0))
     return OnPremTCO(
+        cpu_eur_per_core_hour=(
+            hourly * float(split.get("cpu", 0)) / vcpu if vcpu > 0 else 0.0
+        ),
+        ram_eur_per_gib_hour=(
+            hourly * float(split.get("ram", 0)) / ram_gib
+            if ram_gib > 0
+            else 0.0
+        ),
         eur_per_kwh=eur_per_kwh,
         cluster_watts=watts,
         cluster_eur_per_hour=hourly,
