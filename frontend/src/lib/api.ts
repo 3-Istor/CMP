@@ -492,6 +492,63 @@ export async function downloadFinopsCsv(opts: {
   URL.revokeObjectURL(url);
 }
 
+export type FinopsFileKind = "xlsx" | "parquet" | "statement";
+
+/** Same bearer-token download as the CSV, for the finance pack files. */
+export async function downloadFinopsFile(
+  kind: FinopsFileKind,
+  period: string,
+  project?: string,
+): Promise<void> {
+  const token = await getAccessToken();
+  const path = {
+    xlsx: "export.xlsx",
+    parquet: "export.parquet",
+    statement: "statement.pdf",
+  }[kind];
+  const res = await fetch(
+    `${BASE}/finops/${path}${finopsQuery({ period, project })}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.text());
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download =
+    kind === "statement"
+      ? `releve-${project}-${period}.pdf`
+      : `finops-${period}.${kind}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const getFinopsCloses = () =>
+  request<import("@/types").FinopsMonthClose[]>("/finops/closes");
+
+export const closeFinopsMonth = (period: string, force = false) =>
+  request<import("@/types").FinopsMonthClose>(
+    `/finops/close/${encodeURIComponent(period)}${finopsQuery({ force: force ? "true" : undefined })}`,
+    { method: "POST" },
+  );
+
+export const getFinopsCostCenters = () =>
+  request<import("@/types").FinopsCostCenter[]>("/finops/cost-centers");
+
+export const putFinopsCostCenters = (
+  centers: import("@/types").FinopsCostCenter[],
+) =>
+  request<import("@/types").FinopsCostCenter[]>("/finops/cost-centers", {
+    method: "PUT",
+    body: JSON.stringify({ centers }),
+  });
+
 export const getFinopsTimeline = (opts: {
   project?: string;
   app?: number;

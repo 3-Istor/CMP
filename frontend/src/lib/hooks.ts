@@ -460,6 +460,36 @@ export function useFinopsMeta() {
   return meta;
 }
 
+/** Closed months and cost centers of the Finance tab, with their refresh. */
+export function useFinopsFinance() {
+  const [closes, setCloses] = useState<import("@/types").FinopsMonthClose[]>([]);
+  const [centers, setCenters] = useState<import("@/types").FinopsCostCenter[]>(
+    [],
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const { getFinopsCloses, getFinopsCostCenters } = await import("./api");
+      const [c, cc] = await Promise.all([
+        getFinopsCloses(),
+        getFinopsCostCenters(),
+      ]);
+      setCloses(c);
+      setCenters(cc);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Chargement impossible");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { closes, centers, error, refresh };
+}
+
 /** Fetch members of a specific project. */
 export function useProjectMembers(projectName: string | null) {
   const [members, setMembers] = useState<import("@/types").ProjectMember[]>([]);
