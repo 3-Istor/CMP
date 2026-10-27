@@ -3,10 +3,6 @@ Finance pack: monthly aggregates, XLSX / Parquet / PDF exports and month close.
 
 Everything works on the FOCUS lines of one billing month (``billing_period``),
 so an adjustment booked on a later month shows up in that later month.
-
-The XLSX has no "Écarts" sheet yet: it is added together with the
-reconciliation module (``app.services.finops.reconciliation``), which is not
-on this branch.
 """
 
 import io
@@ -239,7 +235,9 @@ def build_xlsx(
     lines: list[CostLineItem],
     savings: list[SavingsEntry],
     centers: dict[str, CostCenter],
+    gaps: dict[str, dict],
 ) -> bytes:
+    """``gaps`` is ``reconciliation.reconcile`` per cloud provider."""
     book = Workbook()
     cluster = cluster_days(lines)
     fees = platform.fees_by_project(cluster)
@@ -401,6 +399,41 @@ def build_xlsx(
     for key, (count, cost) in sorted(by_service.items()):
         _append(providers, [*key, count, round(cost, 2)])
     _widths(providers, (28, 24, 16, 10, 10, 14))
+
+    reconciled = book.create_sheet("Écarts")
+    _append(
+        reconciled,
+        ["Facture du cloud comparée à sa répartition (EUR)."],
+    )
+    _append(
+        reconciled,
+        [
+            "Fournisseur",
+            "Facture",
+            "Alloué aux projets",
+            "Inactif",
+            "Plateforme",
+            "Non alloué",
+            "Non alloué (%)",
+            "Écart inexpliqué",
+        ],
+        bold=True,
+    )
+    for provider, gap in sorted(gaps.items()):
+        _append(
+            reconciled,
+            [
+                provider,
+                round(gap["invoice_total_eur"], 2),
+                round(gap["allocated_eur"], 2),
+                round(gap["idle_eur"], 2),
+                round(gap["platform_eur"], 2),
+                round(gap["unallocated_eur"], 2),
+                gap["unallocated_pct"],
+                round(gap["gap_eur"], 2),
+            ],
+        )
+    _widths(reconciled, (12, 12, 18, 10, 12, 12, 14, 16))
 
     ledger = book.create_sheet("Économies")
     _append(
