@@ -7,6 +7,7 @@ import {
   FinopsFilters,
   type FinopsFilterState,
 } from "@/components/finops/FinopsFilters";
+import { CloudEstimateTable } from "@/components/finops/CloudEstimateTable";
 import { CloudSplit } from "@/components/finops/CloudSplit";
 import { DataFreshness } from "@/components/finops/DataFreshness";
 import { KpiCards } from "@/components/finops/KpiCards";
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { downloadFinopsCsv } from "@/lib/api";
 import {
   useFinopsAnomalies,
+  useFinopsEstimates,
   useFinopsMeta,
   useFinopsOverview,
   useProjects,
@@ -53,6 +55,7 @@ function OverviewInner() {
     filters.cloud || undefined,
   );
   const meta = useFinopsMeta();
+  const estimates = useFinopsEstimates(filters.project || undefined);
   // Forecast and anomalies are daily figures: drawn on the daily view only.
   const daily = filters.granularity === "daily";
   const anomalies = useFinopsAnomalies(
@@ -199,6 +202,17 @@ function OverviewInner() {
               <AppCostTable apps={data.apps} />
             </CardContent>
           </Card>
+
+          {estimates.data && estimates.data.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Où faire tourner chaque application</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CloudEstimateTable rows={estimates.data} />
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       ) : null}
     </div>

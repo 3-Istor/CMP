@@ -288,7 +288,7 @@ def test_ingest_once_keeps_going_when_one_source_fails(
     )
     boom = mock.Mock(side_effect=RuntimeError("vmselect down"))
     monkeypatch.setattr(ingest.ai_gateway, "fetch_day", boom)
-    monkeypatch.setattr(ingest.savings, "fetch_day", lambda day, tco: [])
+    monkeypatch.setattr(ingest.savings, "targets", lambda: {})
 
     written = ingest.ingest_once(date(2026, 10, 29))
 
@@ -304,53 +304,68 @@ def test_tco_derives_resource_prices_like_the_opencost_generator(tco):
     assert tco.watts_per_busy_core == 15
 
 
+def _rates(cpu=0.004, ram=0.0005):
+    return inputs.NodeRates(cpu, ram)
+
+
 def test_savings_split_avoided_allocation_from_realized_energy(tco):
     rows = [
         savings.NamespaceDay(
             namespace="shop-api",
-            asleep_fraction=0.25,
-            requested_eur_per_hour=0.01,
+            asleep_hours=6,
+            cpu_cores=1,
+            ram_gib=2,
             awake_busy_cores=0.4,
         )
     ]
 
-    [entry] = savings.to_entries(DAY, rows, {"shop-api": "shop"}, tco)
+    [entry] = savings.to_entries(
+        DAY, rows, {"shop-api": "shop"}, _rates(), tco
+    )
 
-    # 6 h asleep: 6 × 0.01 € avoided; 6 h × 0.4 core × 15 W = 36 Wh
+    # 6 h asleep: 6 × (1 × 0.004 + 2 × 0.0005) avoided; 6 h × 0.4 core × 15 W
     assert (entry.project, entry.app) == ("shop", "api")
-    assert entry.avoided_eur == pytest.approx(0.06)
+    assert entry.avoided_eur == pytest.approx(0.03)
     assert entry.energy_avoided_kwh == pytest.approx(0.036)
     assert entry.realized_eur == pytest.approx(0.036 * tco.eur_per_kwh)
 
 
-def test_savings_fetch_day_scales_busy_cores_to_awake_time(tco, monkeypatch):
+def test_savings_in_the_cloud_realize_nothing_and_use_the_cloud_rates(tco):
+    rows = [savings.NamespaceDay("shop-api", 2, 1, 0, 0.4)]
+
+    [entry] = savings.to_entries(
+        DAY, rows, {}, _rates(cpu=0.03), tco, cloud="aws"
+    )
+
+    assert entry.cloud == "aws"
+    assert entry.avoided_eur == pytest.approx(0.06)
+    assert entry.realized_eur == 0
+
+
+def test_savings_fetch_day_scales_busy_cores_to_awake_time(monkeypatch):
     answers = {
-        "asleep": {"shop-api": 0.25, "idle-ns": 0.0},
-        "requested": {"shop-api": 0.01},
+        "asleep_hours": {"shop-api": 6, "idle-ns": 0.0},
+        "cpu_cores": {"shop-api": 1},
+        "ram_gib": {"shop-api": 2},
         "busy": {"shop-api": 0.3},
     }
     by_namespace = {"shop-api": [("Deployment", "api")]}
-    monkeypatch.setattr(savings, "targets", lambda: by_namespace)
-    exprs = {v: k for k, v in savings.queries(tco, by_namespace).items()}
+    exprs = {v: k for k, v in savings.queries(by_namespace).items()}
     monkeypatch.setattr(
-        savings, "_query", lambda expr, at: answers[exprs[expr]]
+        savings, "_query", lambda expr, at, cluster: answers[exprs[expr]]
     )
 
-    [row] = savings.fetch_day(DAY, tco)
+    [row] = savings.fetch_day(DAY, "onprem", by_namespace)
 
     assert row.namespace == "shop-api"
     assert row.awake_busy_cores == pytest.approx(0.4)
 
 
-def test_savings_fetch_day_is_empty_when_no_schedule_has_targets(
-    tco, monkeypatch
-):
-    monkeypatch.setattr(savings, "targets", lambda: {})
-
-    assert savings.fetch_day(DAY, tco) == []
+def test_savings_fetch_day_is_empty_when_no_schedule_has_targets():
+    assert savings.fetch_day(DAY, "aws", {}) == []
 
 
-def test_savings_asleep_query_reads_each_target_replicas_by_its_kind():
+def test_savings_asleep_query_counts_hours_not_a_share_of_the_day():
     by_namespace = {
         "qcm": [("Deployment", "qcm"), ("StatefulSet", "qcm-db")],
     }
@@ -365,15 +380,10 @@ def test_savings_asleep_query_reads_each_target_replicas_by_its_kind():
         'kube_statefulset_replicas{namespace="qcm",statefulset="qcm-db"}'
         in expr
     )
-    assert "== bool 0" in expr
+    assert "sum_over_time" in expr and "* 5 / 60" in expr
 
 
-def test_savings_targets_keep_only_workload_kinds_with_replicas(monkeypatch):
-    result = [
-        {"metric": {"exported_namespace": "qcm", "target": "Deployment/qcm"}},
-        {"metric": {"exported_namespace": "qcm", "target": "CronJob/purge"}},
-    ]
-
+def _targets_response(monkeypatch, result, sent=None):
     class Response:
         def raise_for_status(self):
             pass
@@ -381,42 +391,100 @@ def test_savings_targets_keep_only_workload_kinds_with_replicas(monkeypatch):
         def json(self):
             return {"data": {"result": result}}
 
-    monkeypatch.setattr(savings.httpx, "get", lambda *a, **k: Response())
-
-    assert savings.targets() == {"qcm": [("Deployment", "qcm")]}
-
-
-def test_savings_queries_read_only_on_prem_series(monkeypatch):
-    sent = []
-
-    class Response:
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"data": {"result": []}}
-
     def get(url, params, timeout):
-        sent.append(params)
+        if sent is not None:
+            sent.append(params)
         return Response()
 
     monkeypatch.setattr(savings.httpx, "get", get)
 
-    savings.targets()
 
-    assert sent[0]["extra_filters[]"] == '{cluster=~"onprem|"}'
+def test_savings_targets_group_workloads_by_cluster(monkeypatch):
+    _targets_response(
+        monkeypatch,
+        [
+            {
+                "metric": {
+                    "exported_namespace": "qcm",
+                    "target": "Deployment/qcm",
+                }
+            },
+            {
+                "metric": {
+                    "cluster": "aws",
+                    "exported_namespace": "shop",
+                    "target": "Deployment/api",
+                }
+            },
+            {
+                "metric": {
+                    "exported_namespace": "qcm",
+                    "target": "CronJob/purge",
+                }
+            },
+        ],
+    )
+
+    assert savings.targets() == {
+        "onprem": {"qcm": [("Deployment", "qcm")]},
+        "aws": {"shop": [("Deployment", "api")]},
+    }
 
 
-def test_savings_store_updates_the_day_in_place(factory, tco):
-    rows = [savings.NamespaceDay("qcm", 0.25, 0.01, 0.4)]
+def test_savings_queries_filter_on_their_cluster(monkeypatch):
+    sent = []
+    _targets_response(monkeypatch, [], sent)
+
+    savings.fetch_day(DAY, "gcp", {"shop": [("Deployment", "api")]})
+
+    assert {p["extra_filters[]"] for p in sent} == {'{cluster="gcp"}'}
+
+
+def test_savings_store_keeps_one_row_per_cloud_and_updates_in_place(
+    factory, tco
+):
+    row = savings.NamespaceDay("qcm", 6, 1, 0, 0)
     with factory() as db:
-        savings.store(db, savings.to_entries(DAY, rows, {}, tco))
-        rows = [savings.NamespaceDay("qcm", 0.5, 0.01, 0.4)]
-        savings.store(db, savings.to_entries(DAY, rows, {}, tco))
+        savings.store(db, savings.to_entries(DAY, [row], {}, _rates(), tco))
+        savings.store(
+            db, savings.to_entries(DAY, [row], {}, _rates(), tco, cloud="aws")
+        )
+        twice = savings.NamespaceDay("qcm", 12, 1, 0, 0)
+        savings.store(db, savings.to_entries(DAY, [twice], {}, _rates(), tco))
 
-        [entry] = db.scalars(select(SavingsEntry)).all()
+        entries = db.scalars(select(SavingsEntry)).all()
 
-    assert entry.avoided_eur == pytest.approx(0.12)
+    by_cloud = {e.cloud: e.avoided_eur for e in entries}
+    assert by_cloud == {
+        "onprem": pytest.approx(0.048),
+        "aws": pytest.approx(0.024),
+    }
+
+
+def test_opencost_lines_record_core_hours_and_gib_hours(tco):
+    lines = opencost.to_lines(
+        DAY,
+        {
+            "shop-api": {
+                "cpuCost": 0.1,
+                "cpuCoreHours": 12,
+                "ramCost": 0.05,
+                "ramByteHours": 48 * 2**30,
+            }
+        },
+        {},
+        tco,
+        False,
+    )
+
+    quantities = {
+        line.resource_id: (line.consumed_quantity, line.consumed_unit)
+        for line in lines
+    }
+    assert quantities == {
+        "onprem/shop-api/cpu": (12, "CoreHour"),
+        "onprem/shop-api/ram": (48, "GiBHour"),
+    }
 
 
 def test_opencost_clusters_add_the_configured_clouds(monkeypatch):

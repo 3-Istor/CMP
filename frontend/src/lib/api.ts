@@ -479,6 +479,11 @@ export const getFinopsCarbon = (opts: { project?: string; period?: string } = {}
     `/finops/carbon${finopsQuery(opts)}`,
   );
 
+export const getFinopsEstimates = (opts: { project?: string } = {}) =>
+  request<import("@/types").FinopsCloudEstimate[]>(
+    `/finops/estimates${finopsQuery(opts)}`,
+  );
+
 export const getFinopsPlatform = (period = "30d") =>
   request<import("@/types").PlatformReport>(
     `/finops/platform${finopsQuery({ period })}`,

@@ -46,6 +46,7 @@ from app.models.finops import (
 from app.models.project import Project
 from app.schemas.finops import (
     ActionResponse,
+    AppCloudEstimate,
     AppCostRow,
     Breakdown,
     BudgetRead,
@@ -78,9 +79,9 @@ from app.services.authz import (
     is_cnp_admin,
     is_cnp_finance,
 )
-from app.services.finops import anomalies, platform, reconciliation
+from app.services.finops import anomalies, estimate, platform, reconciliation
 from app.services.finops.forecast import forecast_for_apps
-from app.services.finops.ingest import carbon
+from app.services.finops.ingest import carbon, fx
 from app.services.finops.provider import (
     REAL_RESOURCES,
     get_cost_provider,
@@ -871,6 +872,27 @@ def get_apps(
     provider = get_cost_provider()
     apps = _cost_specs(provider, deployments, token, project)
     return [AppCostRow(**r) for r in provider.app_rows(apps)]
+
+
+@router.get("/estimates", response_model=list[AppCloudEstimate])
+def get_estimates(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+):
+    """Monthly compute cost of each app on on-prem, AWS and GCP, from its usage."""
+    if settings.FINOPS_PROVIDER != "real":
+        return []
+    deployments = _load_deployments(db, token, project)
+    provider = get_cost_provider()
+    apps = _cost_specs(provider, deployments, token, project)
+    today = date.today()
+    return [
+        AppCloudEstimate(**row)
+        for row in estimate.for_apps(
+            db, apps, today, fx.usd_per_eur(db, today)
+        )
+    ]
 
 
 @router.get("/recommendations", response_model=list[Recommendation])

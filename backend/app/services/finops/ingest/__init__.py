@@ -91,6 +91,11 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
         ns_projects = {}
     tco = inputs.onprem_tco()
     prices, local_backends = inputs.ai_prices()
+    try:
+        offhours_targets = savings.targets()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning("FinOps: offhours targets unknown: %s", exc)
+        offhours_targets = {}
 
     with SessionLocal() as db:
         fx.refresh(db)
@@ -135,19 +140,32 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
                 logger.warning(
                     "FinOps: AI usage %s not ingested: %s", day, exc
                 )
-            try:
-                written["savings"] += savings.store(
-                    db,
-                    savings.to_entries(
+            rates = inputs.cluster_rates(fx.usd_per_eur(db, day))
+            for cluster, by_namespace in offhours_targets.items():
+                if cluster not in rates:
+                    continue
+                try:
+                    written["savings"] += savings.store(
+                        db,
+                        savings.to_entries(
+                            day,
+                            savings.fetch_day(day, cluster, by_namespace),
+                            ns_projects,
+                            rates[cluster],
+                            tco,
+                            g_per_kwh,
+                            cluster,
+                        ),
+                    )
+                except (
+                    Exception
+                ) as exc:  # pylint: disable=broad-exception-caught
+                    logger.warning(
+                        "FinOps: savings %s %s not computed: %s",
+                        cluster,
                         day,
-                        savings.fetch_day(day, tco),
-                        ns_projects,
-                        tco,
-                        g_per_kwh,
-                    ),
-                )
-            except Exception as exc:  # pylint: disable=broad-exception-caught
-                logger.warning("FinOps: savings %s not computed: %s", day, exc)
+                        exc,
+                    )
         months = sorted({d.replace(day=1) for d in days})
         subscriptions = inputs.saas_subscriptions()
         for month in months:
