@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, VerificationRun
+from app.models.project import TargetCloud
 from app.services.environments import gitops, layout, observe, suites
 from app.services.github_service import GitHubAppError, dispatch_workflow
 
@@ -115,8 +116,12 @@ async def start(
             verified by this suite, or running other digests than expected.
     """
     state = await asyncio.to_thread(observe.of, deployment, environment)
-    if state.asleep and gitops.target_cloud(deployment) == "onprem":
-        await asyncio.to_thread(observe.wake, state.namespace)
+    if state.asleep:
+        await asyncio.to_thread(
+            observe.wake,
+            state.namespace,
+            TargetCloud(gitops.target_cloud(deployment)),
+        )
         raise RunRefused(
             f"{environment} was asleep (offhours): it is waking up, the run starts once it is up."
         )
@@ -196,12 +201,6 @@ async def _execute(
                 "error", f"{run.environment} has no public hostname to test."
             )
         return await suites.run_public_smoke(target, project)
-    if spec["kind"] == "metrics" and cloud != "onprem":
-        return suites.Outcome(
-            "error",
-            f"The Envoy metrics of {cloud} are not collected by the platform yet: "
-            "use an external suite there.",
-        )
     if spec["kind"] == "smoke":
         gh = await gitops.token_for(deployment)
         base = await gitops.read_base(gh, gitops.repo_of(deployment), kind)

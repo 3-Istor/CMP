@@ -10,6 +10,7 @@ the weights, so it changes nothing else.
 
 import logging
 
+from app.models.project import TargetCloud
 from app.services.kube_client import kube_get, kube_list, kube_merge_patch
 
 logger = logging.getLogger(__name__)
@@ -47,12 +48,13 @@ def _route_out_of_sync(application: dict) -> bool:
     )
 
 
-def _route_lacks_canary(application: dict) -> bool:
+def _route_lacks_canary(application: dict, cloud: TargetCloud) -> bool:
     """A route still in its rolling shape: the Rollout cannot set weights."""
     for resource in _routes(application):
         route = kube_get(
             f"{HTTPROUTES_API}/namespaces/{resource.get('namespace')}"
-            f"/httproutes/{resource.get('name')}"
+            f"/httproutes/{resource.get('name')}",
+            cloud=cloud,
         )
         if route is None:
             continue
@@ -66,21 +68,30 @@ def _route_lacks_canary(application: dict) -> bool:
     return False
 
 
-def _needs_resync(application: dict, canary_moving: bool) -> bool:
+def _needs_resync(
+    application: dict, canary_moving: bool, cloud: TargetCloud
+) -> bool:
     if _sync_in_flight(application):
         return False
     # Under a moving canary a resync would reset the weights it set, unless
     # the route never got its canary backend: then there are none to keep and
     # the Rollout is stuck at its first step until the route is reshaped.
     if canary_moving:
-        return _route_lacks_canary(application)
+        return _route_lacks_canary(application, cloud)
     return _route_out_of_sync(application)
 
 
 def reconcile_route(
-    project: str, app_name: str, canary_moving: bool
+    project: str,
+    app_name: str,
+    canary_moving: bool,
+    cloud: TargetCloud = TargetCloud.ONPREM,
 ) -> list[str]:
-    """Sync the app's Applications whose route stayed out of sync, return their names."""
+    """
+    Sync the app's Applications whose route stayed out of sync, return their names.
+
+    The Applications are in the on-prem Argo CD, the routes in the app's cluster.
+    """
     selector = (
         f"cnp.3istor.com/project={project},cnp.3istor.com/app={app_name}"
     )
@@ -89,7 +100,7 @@ def reconcile_route(
         APPLICATIONS_PATH, {"labelSelector": selector}
     ):
         name = application["metadata"]["name"]
-        if not _needs_resync(application, canary_moving):
+        if not _needs_resync(application, canary_moving, cloud):
             _stuck_once.discard(name)
             _resynced.discard(name)
             continue

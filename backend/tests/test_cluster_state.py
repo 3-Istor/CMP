@@ -35,6 +35,30 @@ def test_fresh_state_maps_argocd_health(app, expected):
     )
 
 
+def _stale(sync="Synced", conditions=()):
+    return {
+        "status": {
+            "health": {"status": "Healthy"},
+            "sync": {"status": sync},
+            "conditions": [{"type": t} for t in conditions],
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "app,expected",
+    [
+        (_stale(sync="Unknown"), "down"),
+        (_stale(conditions=["ComparisonError"]), "down"),
+        (_stale(conditions=["UnknownError"]), "down"),
+        (_stale(sync="OutOfSync"), "up"),  # drift is not an outage
+    ],
+)
+def test_healthy_is_up_only_if_argocd_can_reach_the_cluster(app, expected):
+    with mock.patch.object(state, "kube_get", return_value=app):
+        assert state.fresh_state(AWS) == expected
+
+
 def test_fresh_state_read_error_is_unknown():
     with mock.patch.object(
         state, "kube_get", side_effect=KubeUnavailableError("boom")

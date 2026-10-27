@@ -40,6 +40,20 @@ export class ApiError extends Error {
   }
 }
 
+/** The cloud whose cluster is down, from a 503 `cluster_not_connected` body; accepts an error or its raw message. */
+export function isNotConnected(err: unknown): { cloud: string } | null {
+  const text = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  try {
+    const body = JSON.parse(text);
+    if (body?.detail === "cluster_not_connected" && typeof body.cloud === "string") {
+      return { cloud: body.cloud };
+    }
+  } catch {
+    // not JSON: an ordinary error
+  }
+  return null;
+}
+
 // ── Access-token cache ────────────────────────────────────────────────────────
 // `getSession()` performs a network round-trip to `/api/auth/session` on every
 // call. With polling hooks (deployments refresh every 3s, plus the sidebar),

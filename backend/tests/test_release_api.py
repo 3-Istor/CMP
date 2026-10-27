@@ -48,11 +48,11 @@ class FakeSource:
         self.snapshot = snapshot
         self.patches = []
 
-    def fetch(self, namespace, app_name):
+    def fetch(self, namespace, app_name, cloud):
         assert (namespace, app_name) == ("shop-web", "web")
         return self.snapshot
 
-    def patch_status(self, namespace, rollout_name, body):
+    def patch_status(self, namespace, rollout_name, body, cloud):
         self.patches.append((namespace, rollout_name, body))
 
 

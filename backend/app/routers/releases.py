@@ -41,9 +41,13 @@ from app.schemas.release import (
 )
 from app.services import app_security_data as security_data
 from app.services import audit
+from app.services.clusters.state import cluster_states, project_cloud
 from app.services.github_service import GitHubAppError, put_file_content
 from app.services.keycloak_service import get_current_user
-from app.services.kube_client import KubeUnavailableError
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    KubeUnavailableError,
+)
 from app.services.release import history
 from app.services.release import settings as release_settings
 from app.services.release import sync, traffic
@@ -124,6 +128,8 @@ def _poll_frame(deployment_id: int, source: ReleaseSource) -> str | None:
         except HTTPException as exc:
             # A comment: the client parses every data line as a view.
             return f": {exc.detail}\n\n"
+        except ClusterNotConnectedError as exc:
+            return f": {exc}\n\n"
     return f"data: {view.model_dump_json(by_alias=True)}\n\n"
 
 
@@ -147,6 +153,7 @@ async def _poll_watch(
 ) -> None:
     try:
         while watch.listeners:
+            await cluster_states()
             frame = await run_in_threadpool(_poll_frame, deployment_id, source)
             watch.gone = frame is None
             if watch.gone or frame != watch.frame:
@@ -248,7 +255,12 @@ def _act(
     patch, action, forced = decide(view, snapshot.rollout)
     rollout = snapshot.rollout["metadata"]
     try:
-        source.patch_status(rollout["namespace"], rollout["name"], patch)
+        source.patch_status(
+            rollout["namespace"],
+            rollout["name"],
+            patch,
+            project_cloud(db, deployment.project_id),
+        )
     except KubeUnavailableError as exc:
         raise HTTPException(
             status_code=502, detail=f"Rollout not updated: {exc}"

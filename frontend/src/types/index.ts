@@ -594,7 +594,7 @@ export interface SecuritySummary {
   segments: SecuritySegment[];
   apps: SecurityAppSummary[];
   scans: SecurityScan[];
-  guarantees: { label: string; ok: boolean }[];
+  guarantees: { label: string; ok: boolean | null }[];
 }
 
 export interface SecurityTrendPoint {

@@ -33,7 +33,7 @@ from app.routers.deployments import (
 from app.schemas.release import _Camel
 from app.services import project_registry
 from app.services.authz import is_cnp_admin
-from app.services.clusters.state import ensure_cluster_up
+from app.services.clusters.state import ensure_cluster_up, project_cloud
 from app.services.environments import (
     activation,
     gitops,
@@ -391,7 +391,9 @@ async def wake_staging(
         deployment.project_id, deployment.name, "staging"
     )
     try:
-        woken = await asyncio.to_thread(observe.wake, namespace)
+        woken = await asyncio.to_thread(
+            observe.wake, namespace, project_cloud(db, deployment.project_id)
+        )
     except KubeUnavailableError as exc:
         raise HTTPException(
             status_code=503, detail=f"Cluster unreachable: {exc}"

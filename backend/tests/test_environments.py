@@ -18,6 +18,7 @@ from app.models.environment import (
     PromotionPolicy,
     VerificationRun,
 )
+from app.models.project import TargetCloud
 from app.routers import environments as router
 from app.services.clusters import state
 from app.services.environments import (
@@ -115,7 +116,7 @@ def _observed(staging, prod=None):
         "prod": prod or _state(PROD, "1.3.2", "shop-web"),
     }
     return mock.patch.object(
-        observe, "observe", side_effect=lambda p, a, k, env: states[env]
+        observe, "observe", side_effect=lambda p, a, k, env, cloud: states[env]
     )
 
 
@@ -656,99 +657,64 @@ class TestEnvironmentsApi:
 
 
 class TestCloudObservation:
-    def _application(self, images, sync="Synced", health="Healthy"):
-        return {
-            "status": {
-                "sync": {"status": sync},
-                "health": {"status": health},
-                "operationState": {"phase": "Succeeded"},
-                "summary": {"images": images},
-            }
-        }
-
-    def test_reads_a_cloud_environment_from_argo_cd_and_resolves_the_tag_at_ghcr(
-        self,
-    ):
-        apps = {
-            "shop-web-frontend-stg": self._application(
-                ["ghcr.io/3-istor/web/frontend:1.4.0-rc.2"]
-            ),
-            "shop-web-backend-stg": self._application(
-                [
-                    "ghcr.io/3-istor/web/backend:1.4.0-rc.2",
-                    "cloudflare/cloudflared:2026.10.0",
-                ]
-            ),
-        }
-
-        with mock.patch.object(
-            observe,
-            "kube_get",
-            side_effect=lambda path: apps[path.rsplit("/", 1)[1]],
-        ), mock.patch.object(
-            observe.registry,
-            "resolve",
-            side_effect=lambda repo, tag: f"{repo}@sha256:{tag}",
-        ):
-            state = observe.observe_through_argocd(
-                "shop", "web", "fullstack", "staging"
-            )
-
-        assert (state.converged, state.version, state.digests["backend"]) == (
-            True,
-            "1.4.0-rc.2",
-            "ghcr.io/3-istor/web/backend@sha256:1.4.0-rc.2",
-        )
-
-    def test_a_pinned_prod_image_needs_no_registry_lookup(self):
-        pinned = "ghcr.io/3-istor/web:1.4.0-rc.2@sha256:" + "9" * 64
-
-        with mock.patch.object(
-            observe, "kube_get", return_value=self._application([pinned])
-        ), mock.patch.object(
-            observe.registry,
-            "resolve",
-            side_effect=AssertionError("no lookup"),
-        ):
-            state = observe.observe_through_argocd(
-                "shop", "web", "static", "prod"
-            )
-
-        assert state.digests == {
-            "app": "ghcr.io/3-istor/web@sha256:" + "9" * 64
-        }
-
-    def test_a_cloud_environment_still_syncing_has_not_converged(self):
-        with mock.patch.object(
-            observe,
-            "kube_get",
-            return_value=self._application(
-                ["ghcr.io/3-istor/web:1.0.0@sha256:" + "1" * 64],
-                sync="OutOfSync",
-            ),
-        ):
-            state = observe.observe_through_argocd(
-                "shop", "web", "static", "prod"
-            )
-
-        assert not state.converged
-
-    def test_cloud_apps_are_observed_through_argo_cd(self, db):
+    def _cloud_app(self, db):
         deployment = db.get(Deployment, 7)
         deployment.app_config = json.dumps(
             {"github_installation_id": "42", "target_cloud": "aws"}
         )
+        return deployment
 
+    def test_cloud_pods_are_read_on_the_project_cluster(self, db):
+        image = "ghcr.io/3-istor/web:1.4.0-rc.2"
         with mock.patch.object(
-            observe, "observe_through_argocd", return_value="argo"
-        ) as through, mock.patch.object(
             observe,
-            "observe",
-            side_effect=AssertionError("no pod reads on a cloud"),
-        ):
-            assert observe.of(deployment, "staging") == "argo"
+            "kube_list",
+            return_value=[_pod(image, f"{image}@sha256:" + "2" * 64)],
+        ) as listed:
+            state_ = observe.of(self._cloud_app(db), "staging")
 
-        through.assert_called_once_with("shop", "web", "static", "staging")
+        assert listed.call_args.kwargs["cloud"] == TargetCloud.AWS
+        assert (state_.converged, state_.digests) == (True, RC2)
+
+    def test_an_asleep_cloud_staging_is_woken_on_its_cluster_before_a_run(
+        self, db
+    ):
+        with _observed(_state(RC2, "1.4.0-rc.2", pods=0)), mock.patch.object(
+            observe, "wake"
+        ) as woken, pytest.raises(runs.RunRefused):
+            asyncio.run(
+                runs.start(
+                    db,
+                    self._cloud_app(db),
+                    "staging",
+                    suites.SMOKE_SPEC,
+                    "dev",
+                )
+            )
+
+        woken.assert_called_once_with("shop-web-stg", TargetCloud.AWS)
+
+    def test_a_metrics_suite_runs_on_a_cloud(self, db):
+        run = mock.Mock(environment="staging")
+        with mock.patch.object(
+            suites,
+            "run_metrics",
+            return_value=suites.Outcome("passed", "ok"),
+        ) as measured:
+            outcome = asyncio.run(
+                runs._execute(
+                    db,
+                    self._cloud_app(db),
+                    run,
+                    {"name": "errors", "kind": "metrics"},
+                    None,
+                )
+            )
+
+        assert (measured.call_args.args[0], outcome.status) == (
+            "shop-web-stg",
+            "passed",
+        )
 
 
 class TestTurningStagingOff:

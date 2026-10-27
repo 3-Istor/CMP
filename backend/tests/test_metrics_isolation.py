@@ -71,3 +71,8 @@ def test_a_new_namespace_rewrites_the_config():
         patch.call_args.args[1]["data"]["auth.yml"]
     ).decode()
     assert "project-shop" in written
+
+
+def test_render_refuses_empty_namespaces():
+    with pytest.raises(ValueError):
+        mi.render({"": "shop"})

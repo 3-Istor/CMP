@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { abortRelease, promoteRelease, skipReleaseStep } from "@/lib/api";
+import { NotConnected } from "@/components/clusters/NotConnected";
+import { abortRelease, isNotConnected, promoteRelease, skipReleaseStep } from "@/lib/api";
 import { useCan, useRelease, useReleaseHistory } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import type { ReleaseEvent, ReleaseRevision, ReleaseView } from "@/types";
@@ -338,6 +339,8 @@ export function ReleaseTab({
   };
 
   if (!view) {
+    const nc = isNotConnected(error);
+    if (nc) return <NotConnected cloud={nc.cloud} />;
     if (error) {
       return (
         <Card>
