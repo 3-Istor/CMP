@@ -13,7 +13,7 @@ export const RESOURCE_META: Record<
   platform: {
     label: "Forfait plateforme",
     color: "#94A3B8",
-    hint: "Part fixe des services communs de la plateforme (1/25 du coût de la plateforme par app)",
+    hint: "Part fixe par app des services communs de la plateforme",
   },
 };
 

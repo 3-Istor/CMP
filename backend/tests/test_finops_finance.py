@@ -302,8 +302,21 @@ def test_xlsx_has_the_expected_sheets(api, seeded):
         "Projets",
         "Plateforme",
         "Fournisseurs",
+        "Écarts",
         "Économies",
         "Lignes",
+    ]
+
+
+def test_xlsx_gaps_sheet_has_one_row_per_cloud(api, seeded):
+    response = api(FINANCE).get("/api/finops/export.xlsx?period=2026-09")
+
+    sheet = load_workbook(io.BytesIO(response.content))["Écarts"]
+    assert [
+        row[0] for row in sheet.iter_rows(min_row=3, values_only=True)
+    ] == [
+        "aws",
+        "gcp",
     ]
 
 

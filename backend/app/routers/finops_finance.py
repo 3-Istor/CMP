@@ -23,7 +23,7 @@ from app.routers.finops import (
     _username,
 )
 from app.schemas.finops import CostCenterRow, CostCentersWrite, MonthCloseRead
-from app.services.finops import finance
+from app.services.finops import finance, reconciliation
 from app.services.keycloak_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -56,13 +56,17 @@ def _download(content: bytes, media_type: str, filename: str) -> Response:
 def export_xlsx(
     token: Token, period: PeriodQuery, db: Session = Depends(get_db)
 ):
-    """Month workbook for finance: summary, projects, providers, savings, lines."""
+    """Month workbook for finance: summary, projects, providers, gaps, savings, lines."""
     _require_finance(token)
     content = finance.build_xlsx(
         period,
         finance.month_lines(db, period),
         finance.month_savings(db, period),
         finance.cost_centers(db),
+        {
+            provider: reconciliation.reconcile(db, provider, period)
+            for provider in reconciliation.PROVIDERS
+        },
     )
     return _download(content, XLSX_TYPE, f"finops-{period}.xlsx")
 
