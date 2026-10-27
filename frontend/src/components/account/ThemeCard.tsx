@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,26 +28,38 @@ declare global {
   }
 }
 
-export function ThemeCard() {
-  const [theme, setTheme] = useState<Theme>("system");
+const listeners = new Set<() => void>();
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "light" || stored === "dark") setTheme(stored);
-    } catch {
-      // Storage blocked: the browser's theme applies.
-    }
-  }, []);
+function readTheme(): Theme {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === "light" || stored === "dark" ? stored : "system";
+  } catch {
+    // Storage blocked: the browser's theme applies.
+    return "system";
+  }
+}
+
+function subscribe(onChange: () => void) {
+  listeners.add(onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+export function ThemeCard() {
+  const theme = useSyncExternalStore(subscribe, readTheme, () => "system");
 
   const choose = (value: Theme) => {
-    setTheme(value);
     try {
       if (value === "system") localStorage.removeItem(STORAGE_KEY);
       else localStorage.setItem(STORAGE_KEY, value);
     } catch {
       // Storage blocked: the choice is not kept.
     }
+    listeners.forEach((onChange) => onChange());
     window.__applyTheme?.();
   };
 
