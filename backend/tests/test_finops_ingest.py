@@ -386,6 +386,27 @@ def test_savings_targets_keep_only_workload_kinds_with_replicas(monkeypatch):
     assert savings.targets() == {"qcm": [("Deployment", "qcm")]}
 
 
+def test_savings_queries_read_only_on_prem_series(monkeypatch):
+    sent = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": {"result": []}}
+
+    def get(url, params, timeout):
+        sent.append(params)
+        return Response()
+
+    monkeypatch.setattr(savings.httpx, "get", get)
+
+    savings.targets()
+
+    assert sent[0]["extra_filters[]"] == '{cluster=~"onprem|"}'
+
+
 def test_savings_store_updates_the_day_in_place(factory, tco):
     rows = [savings.NamespaceDay("qcm", 0.25, 0.01, 0.4)]
     with factory() as db:

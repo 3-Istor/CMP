@@ -26,6 +26,9 @@ VMSELECT = (
     "http://vm-victoria-metrics-cluster-vmselect.observability.svc.cluster.local"
     ":8481/select/0/prometheus"
 )
+# The clouds write to the same VictoriaMetrics since CNP-110. Series written
+# before 2026-10-27 carry no cluster label, hence the empty alternative.
+ONPREM_FILTER = '{cluster=~"onprem|"}'
 
 
 def username(project: str) -> str:

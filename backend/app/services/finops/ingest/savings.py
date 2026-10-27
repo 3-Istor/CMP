@@ -24,7 +24,7 @@ from app.services.finops.ingest import carbon
 from app.services.finops.ingest.inputs import OnPremTCO
 from app.services.finops.ingest.projects import owner_of
 from app.services.finops.ingest.store import day_window
-from app.services.metrics_isolation import VMSELECT
+from app.services.metrics_isolation import ONPREM_FILTER, VMSELECT
 
 CATEGORY = "offhours"
 
@@ -40,7 +40,11 @@ class NamespaceDay:
 def _query(expr: str, at: datetime) -> dict[str, float]:
     response = httpx.get(
         f"{VMSELECT}/api/v1/query",
-        params={"query": expr, "time": int(at.timestamp())},
+        params={
+            "query": expr,
+            "time": int(at.timestamp()),
+            "extra_filters[]": ONPREM_FILTER,
+        },
         timeout=30.0,
     )
     response.raise_for_status()
@@ -68,6 +72,7 @@ def targets() -> dict[str, list[tuple[str, str]]]:
             "query": "group by (exported_namespace, target) "
             "(last_over_time(offhours_target_asleep[30d]))",
             "time": int(datetime.now(timezone.utc).timestamp()),
+            "extra_filters[]": ONPREM_FILTER,
         },
         timeout=30.0,
     )

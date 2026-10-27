@@ -45,7 +45,10 @@ _cache: dict[tuple[str, ...], tuple[float, dict]] = {}
 def _instant(query: str) -> dict[str, float]:
     response = httpx.get(
         f"{metrics_isolation.VMSELECT}/api/v1/query",
-        params={"query": query},
+        params={
+            "query": query,
+            "extra_filters[]": metrics_isolation.ONPREM_FILTER,
+        },
         timeout=30.0,
     )
     response.raise_for_status()
