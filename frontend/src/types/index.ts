@@ -1091,6 +1091,19 @@ export interface StagingOffhours {
   timezone: string;
 }
 
+/** Monthly compute cost of an app on each cluster, from its measured usage. */
+export interface FinopsCloudEstimate {
+  app_id: number;
+  app_name: string;
+  project_id: string | null;
+  measured_on: FinopsCloud[];
+  avg_cores: number;
+  avg_ram_gib: number;
+  hours_measured: number;
+  monthly_eur: Partial<Record<FinopsCloud, number>>;
+  estimated: Partial<Record<FinopsCloud, boolean>>;
+}
+
 export interface FinopsCarbon {
   totals: {
     energy_kwh: number;

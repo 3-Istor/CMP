@@ -27,6 +27,12 @@ COMPONENTS = (
     ("loadBalancerCost", "lb", "Load balancers", "Networking"),
 )
 
+# What a resource line consumed: (OpenCost field, divisor, FOCUS ConsumedUnit).
+QUANTITIES = {
+    "cpu": ("cpuCoreHours", 1, "CoreHour"),
+    "ram": ("ramByteHours", 2**30, "GiBHour"),
+}
+
 
 def clusters() -> dict[str, str]:
     """OpenCost API of each cluster: on-prem plus the clouds that are set."""
@@ -84,6 +90,10 @@ def to_lines(
             energy_kwh = None
             if onprem and tco.eur_per_kwh > 0:
                 energy_kwh = cost * tco.energy_share / tco.eur_per_kwh
+            quantity = unit = None
+            if suffix in QUANTITIES:
+                field_name, divisor, unit = QUANTITIES[suffix]
+                quantity = float(alloc.get(field_name) or 0.0) / divisor
             lines.append(
                 CostLine(
                     x_source=SOURCE,
@@ -105,6 +115,8 @@ def to_lines(
                     x_allocation_method=owner.method,
                     x_pricing_basis="tco" if onprem else "list_price",
                     x_energy_kwh=energy_kwh,
+                    consumed_quantity=quantity,
+                    consumed_unit=unit,
                     x_is_final=is_final,
                     x_is_estimate=tco.has_mock if onprem else False,
                     extra_tags={"k8s_namespace": namespace},

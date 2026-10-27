@@ -440,6 +440,36 @@ export function useFinopsCarbon(project?: string, period = "30d") {
   return { data, loading, error };
 }
 
+/** What each app would cost per month on-prem, on AWS and on GCP. */
+export function useFinopsEstimates(project?: string) {
+  const [data, setData] = useState<
+    import("@/types").FinopsCloudEstimate[] | null
+  >(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsEstimates }) => getFinopsEstimates({ project }))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch estimates",
+          );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project]);
+
+  return { data, error };
+}
+
 /** Nature (simulé / réel) and freshness of the FinOps data. */
 export function useFinopsMeta() {
   const [meta, setMeta] = useState<import("@/types").FinopsMeta | null>(null);

@@ -244,7 +244,16 @@ class SavingsEntry(Base):
     """
 
     __tablename__ = "savings_ledger"
-    __table_args__ = (UniqueConstraint("day", "project", "app", "category"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "day",
+            "project",
+            "app",
+            "category",
+            "cloud",
+            name="uq_savings_ledger_day_cloud",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     day: Mapped[date] = mapped_column(Date, nullable=False, index=True)

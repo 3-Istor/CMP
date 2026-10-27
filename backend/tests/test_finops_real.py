@@ -199,10 +199,19 @@ def test_get_cost_provider_follows_setting(monkeypatch):
 # ── recommendations ──────────────────────────────────────────────────────────
 
 
-def _vm(monkeypatch, series):
+def _vm(monkeypatch, series, cluster="onprem", usd_per_eur=None):
+    monkeypatch.setattr(recs, "_usd_per_eur", lambda: usd_per_eur)
+    wanted = recs.metrics_isolation.cluster_filter(cluster)
+
     def fake_get(url, params, timeout):
         assert url.endswith("/api/v1/query")
         query = params["query"]
+        if params["extra_filters[]"] != wanted:
+            return httpx.Response(
+                200,
+                json={"data": {"result": []}},
+                request=httpx.Request("GET", url),
+            )
         for needle, values in series:
             if needle in query:
                 result = [
@@ -292,6 +301,47 @@ def test_saving_is_priced_with_tco_unit_costs(monkeypatch):
     expected = (4.0 - 0.52) * tco.cpu_eur_per_core_hour * 730
 
     assert rec.monthly_saving_eur == pytest.approx(expected, abs=0.01)
+
+
+def test_cloud_advice_uses_the_cloud_price_and_its_own_id(monkeypatch):
+    _vm(
+        monkeypatch,
+        _usage(cpu_p95=0.4, replicas=1),
+        cluster="aws",
+        usd_per_eur=1.08,
+    )
+
+    [rec] = recs.recommendations_for_apps([_app()], REF)
+    aws = recs.inputs.cluster_rates(1.08)["aws"]
+
+    assert rec.id == "1:rightsizing:aws"
+    assert rec.title.endswith("(AWS)")
+    assert rec.monthly_saving_eur == pytest.approx(
+        (4.0 - 0.52) * aws.cpu_eur_per_core_hour * 730, abs=0.01
+    )
+
+
+def test_cloud_saving_counts_only_the_share_of_time_it_ran(monkeypatch):
+    _vm(
+        monkeypatch,
+        _usage(cpu_p95=0.4, replicas=1, history=3.5),
+        cluster="aws",
+        usd_per_eur=1.08,
+    )
+
+    [rec] = recs.recommendations_for_apps([_app()], REF)
+    aws = recs.inputs.cluster_rates(1.08)["aws"]
+
+    # 3.5 days of data over the 14-day window: a quarter of a month
+    assert rec.monthly_saving_eur == pytest.approx(
+        (4.0 - 0.52) * aws.cpu_eur_per_core_hour * 730 / 4, abs=0.01
+    )
+
+
+def test_clouds_get_no_advice_while_the_usd_rate_is_unknown(monkeypatch):
+    _vm(monkeypatch, _usage(cpu_p95=0.4, replicas=1), cluster="aws")
+
+    assert recs.recommendations_for_apps([_app()], REF) == []
 
 
 def test_returns_nothing_when_victoriametrics_is_unreachable(monkeypatch):

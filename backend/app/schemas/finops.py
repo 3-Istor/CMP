@@ -39,6 +39,20 @@ class CostSeriesPoint(BaseModel):
     platform: float = 0.0
 
 
+class AppCloudEstimate(BaseModel):
+    """What an app's measured compute would cost per month on each cluster."""
+
+    app_id: int
+    app_name: str
+    project_id: str | None = None
+    measured_on: list[str]
+    avg_cores: float
+    avg_ram_gib: float
+    hours_measured: float
+    monthly_eur: dict[str, float]
+    estimated: dict[str, bool]
+
+
 class AppCostRow(BaseModel):
     app_id: int
     name: str

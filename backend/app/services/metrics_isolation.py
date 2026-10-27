@@ -31,6 +31,11 @@ VMSELECT = (
 ONPREM_FILTER = '{cluster=~"onprem|"}'
 
 
+def cluster_filter(cluster: str) -> str:
+    """vmselect ``extra_filters[]`` value for one of ``inputs.CLUSTERS``."""
+    return ONPREM_FILTER if cluster == "onprem" else f'{{cluster="{cluster}"}}'
+
+
 def username(project: str) -> str:
     return f"project-{project}"
 

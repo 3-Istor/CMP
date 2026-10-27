@@ -121,3 +121,51 @@ def price_for(
 
 def saas_subscriptions() -> list[dict]:
     return list(_load("saas.yaml").get("subscriptions", []))
+
+
+CLUSTERS = ("onprem", "aws", "gcp")
+
+
+@dataclass(frozen=True)
+class NodeRates:
+    """What one requested core and one requested GiB cost per hour, in EUR."""
+
+    cpu_eur_per_core_hour: float
+    ram_eur_per_gib_hour: float
+    estimated: bool = False
+
+    def hourly_eur(self, cpu_cores: float, ram_gib: float) -> float:
+        return (
+            cpu_cores * self.cpu_eur_per_core_hour
+            + ram_gib * self.ram_eur_per_gib_hour
+        )
+
+
+def cluster_rates(usd_per_eur: float | None) -> dict[str, NodeRates]:
+    """
+    On-prem from the TCO; each cloud from its node's list price, split between
+    vCPUs and memory by ``cpu_to_gib_price_ratio``. A cloud is left out while
+    the USD rate or its price is unknown.
+    """
+    tco = onprem_tco()
+    rates = {
+        "onprem": NodeRates(
+            tco.cpu_eur_per_core_hour, tco.ram_eur_per_gib_hour, tco.has_mock
+        )
+    }
+    if not usd_per_eur:
+        return rates
+    try:
+        raw = _load("cloud-prices.yaml")
+    except FileNotFoundError:
+        return rates
+    ratio = float(raw.get("cpu_to_gib_price_ratio", 0))
+    for cloud, node in (raw.get("clouds") or {}).items():
+        weight = ratio * float(node["vcpu"]) + float(node["ram_gib"])
+        if ratio <= 0 or weight <= 0:
+            continue
+        per_gib = float(node["usd_per_hour"]) / weight / usd_per_eur
+        rates[cloud] = NodeRates(
+            per_gib * ratio, per_gib, bool(node.get("mock"))
+        )
+    return rates

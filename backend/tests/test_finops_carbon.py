@@ -165,14 +165,20 @@ def test_savings_entries_carry_the_co2e_avoided_by_sleeping(tco):
     rows = [
         savings.NamespaceDay(
             namespace="shop-api",
-            asleep_fraction=0.25,
-            requested_eur_per_hour=0.01,
+            asleep_hours=6,
+            cpu_cores=1,
+            ram_gib=0,
             awake_busy_cores=0.4,
         )
     ]
 
     [entry] = savings.to_entries(
-        date(2026, 10, 27), rows, {"shop-api": "shop"}, tco, 50.0
+        date(2026, 10, 27),
+        rows,
+        {"shop-api": "shop"},
+        inputs.NodeRates(0.004, 0.0005),
+        tco,
+        50.0,
     )
 
     assert entry.co2e_avoided_kg == pytest.approx(0.036 * 50 / 1000)
@@ -192,7 +198,7 @@ def _ingest(monkeypatch, factory, tco_dir):
     monkeypatch.setattr(
         ingest.ai_gateway, "fetch_day", mock.Mock(return_value=[])
     )
-    monkeypatch.setattr(ingest.savings, "fetch_day", lambda day, tco: [])
+    monkeypatch.setattr(ingest.savings, "targets", lambda: {})
 
 
 def test_ingest_once_sets_co2e_on_onprem_lines_from_the_day_intensity(

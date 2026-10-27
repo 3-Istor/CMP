@@ -1,19 +1,22 @@
 """
-Daily savings of offhours-guard, per namespace (D-F5).
+Daily savings of offhours-guard, per namespace and cluster (D-F5).
 
-Avoided: the requested CPU and memory of the namespace, priced like OpenCost
-prices them, for the time its workloads slept. Realized on-prem: the
-electricity its busy cores would have drawn meanwhile. In the cloud nothing is
-realized until a node autoscaler removes nodes, so the ledger says 0.
+Avoided: the requested CPU and memory of the namespace, priced at its
+cluster's rates (on-prem TCO, cloud node list price), for the hours its
+workloads slept. Realized on-prem: the electricity its busy cores would have
+drawn meanwhile. In the cloud nothing is realized until a node autoscaler
+removes nodes, so the ledger says 0.
 
 A namespace's schedule usually covers all of its workloads, so the asleep
-fraction is the mean over its targets. It is read from kube-state-metrics
-(a target at 0 replicas sleeps) rather than from offhours_target_asleep, so
-nights before the guard exposed metrics are counted too.
+time is the mean over its targets. It is read from kube-state-metrics (a
+target at 0 replicas sleeps) rather than from offhours_target_asleep, so
+nights before the guard exposed metrics are counted too. It is counted in
+hours with samples, not as a share of the day: a cloud cluster only runs
+for demos, and the hours it was off are neither asleep nor awake.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timezone
 
 import httpx
 from sqlalchemy import select
@@ -21,29 +24,31 @@ from sqlalchemy.orm import Session
 
 from app.models.finops import SavingsEntry
 from app.services.finops.ingest import carbon
-from app.services.finops.ingest.inputs import OnPremTCO
+from app.services.finops.ingest.inputs import NodeRates, OnPremTCO
 from app.services.finops.ingest.projects import owner_of
 from app.services.finops.ingest.store import day_window
-from app.services.metrics_isolation import ONPREM_FILTER, VMSELECT
+from app.services.metrics_isolation import VMSELECT, cluster_filter
 
 CATEGORY = "offhours"
+STEP_MINUTES = 5
 
 
 @dataclass(frozen=True)
 class NamespaceDay:
     namespace: str
-    asleep_fraction: float
-    requested_eur_per_hour: float
+    asleep_hours: float
+    cpu_cores: float
+    ram_gib: float
     awake_busy_cores: float
 
 
-def _query(expr: str, at: datetime) -> dict[str, float]:
+def _query(expr: str, at: datetime, cluster: str) -> dict[str, float]:
     response = httpx.get(
         f"{VMSELECT}/api/v1/query",
         params={
             "query": expr,
             "time": int(at.timestamp()),
-            "extra_filters[]": ONPREM_FILTER,
+            "extra_filters[]": cluster_filter(cluster),
         },
         timeout=30.0,
     )
@@ -64,27 +69,32 @@ REPLICAS = {
 }
 
 
-def targets() -> dict[str, list[tuple[str, str]]]:
-    """Every workload a schedule targeted in the last 30 days, by namespace."""
+def targets() -> dict[str, dict[str, list[tuple[str, str]]]]:
+    """
+    Every workload a schedule targeted in the last 30 days, by cluster then
+    namespace. Series from before the cluster label existed are on-prem.
+    """
     response = httpx.get(
         f"{VMSELECT}/api/v1/query",
         params={
-            "query": "group by (exported_namespace, target) "
+            "query": "group by (cluster, exported_namespace, target) "
             "(last_over_time(offhours_target_asleep[30d]))",
             "time": int(datetime.now(timezone.utc).timestamp()),
-            "extra_filters[]": ONPREM_FILTER,
         },
         timeout=30.0,
     )
     response.raise_for_status()
-    out: dict[str, list[tuple[str, str]]] = {}
+    out: dict[str, dict[str, list[tuple[str, str]]]] = {}
     for sample in response.json()["data"]["result"]:
         labels = sample["metric"]
         kind, _, name = labels.get("target", "").partition("/")
         # Alloy's pod scrape moves the controller's label to exported_namespace.
         namespace = labels.get("exported_namespace")
+        cluster = labels.get("cluster") or "onprem"
         if namespace and name and kind in REPLICAS:
-            out.setdefault(namespace, []).append((kind, name))
+            workloads = out.setdefault(cluster, {}).setdefault(namespace, [])
+            if (kind, name) not in workloads:
+                workloads.append((kind, name))
     return out
 
 
@@ -99,52 +109,53 @@ def asleep_query(by_namespace: dict[str, list[tuple[str, str]]]) -> str:
             )
     replicas = " or ".join(selectors)
     return (
-        "avg by (namespace) (avg_over_time(("
+        "avg by (namespace) (sum_over_time(("
         f"sum by (namespace, workload) ({replicas}) == bool 0"
-        ")[1d:5m]))"
+        f")[1d:{STEP_MINUTES}m])) * {STEP_MINUTES} / 60"
     )
 
 
-def queries(
-    tco: OnPremTCO, by_namespace: dict[str, list[tuple[str, str]]]
-) -> dict[str, str]:
-    requested = (
-        'sum by (namespace) (kube_pod_container_resource_requests{resource="cpu"})'
-        f" * {tco.cpu_eur_per_core_hour:.10f}"
-        " + sum by (namespace) "
-        '(kube_pod_container_resource_requests{resource="memory"}) / 2^30'
-        f" * {tco.ram_eur_per_gib_hour:.10f}"
-    )
+def queries(by_namespace: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
+    requests = "kube_pod_container_resource_requests"
     return {
-        "asleep": asleep_query(by_namespace),
+        "asleep_hours": asleep_query(by_namespace),
         # Asleep pods request nothing, so the day's peak is the awake size.
-        "requested": f"max_over_time(({requested})[1d:15m])",
+        "cpu_cores": "max_over_time((sum by (namespace) "
+        f'({requests}{{resource="cpu"}}))[1d:15m])',
+        "ram_gib": "max_over_time((sum by (namespace) "
+        f'({requests}{{resource="memory"}}) / 2^30)[1d:15m])',
         "busy": "avg_over_time((sum by (namespace) "
         '(rate(container_cpu_usage_seconds_total{container!=""}[5m])))[1d:15m])',
     }
 
 
-def fetch_day(day: date, tco: OnPremTCO) -> list[NamespaceDay]:
-    by_namespace = targets()
+def fetch_day(
+    day: date,
+    cluster: str,
+    by_namespace: dict[str, list[tuple[str, str]]],
+) -> list[NamespaceDay]:
     if not by_namespace:
         return []
     _, end = day_window(day)
-    q = queries(tco, by_namespace)
-    asleep = _query(q["asleep"], end)
-    requested = _query(q["requested"], end)
-    busy = _query(q["busy"], end)
+    results = {
+        name: _query(expr, end, cluster)
+        for name, expr in queries(by_namespace).items()
+    }
     rows = []
-    for namespace, fraction in asleep.items():
-        if fraction <= 0:
+    for namespace, hours in results["asleep_hours"].items():
+        if hours <= 0:
             continue
-        awake = 1 - fraction
+        awake = 1 - min(hours, 24) / 24
         rows.append(
             NamespaceDay(
                 namespace=namespace,
-                asleep_fraction=fraction,
-                requested_eur_per_hour=requested.get(namespace, 0.0),
+                asleep_hours=hours,
+                cpu_cores=results["cpu_cores"].get(namespace, 0.0),
+                ram_gib=results["ram_gib"].get(namespace, 0.0),
                 awake_busy_cores=(
-                    busy.get(namespace, 0.0) / awake if awake > 0 else 0.0
+                    results["busy"].get(namespace, 0.0) / awake
+                    if awake > 0
+                    else 0.0
                 ),
             )
         )
@@ -155,17 +166,20 @@ def to_entries(
     day: date,
     rows: list[NamespaceDay],
     ns_projects: dict[str, str],
+    rates: NodeRates,
     tco: OnPremTCO,
     g_per_kwh: float | None = None,
+    cloud: str = "onprem",
 ) -> list[SavingsEntry]:
     entries = []
     for row in rows:
-        asleep_hours = row.asleep_fraction * 24
         energy_kwh = (
-            asleep_hours
+            row.asleep_hours
             * row.awake_busy_cores
             * tco.watts_per_busy_core
             / 1000
+            if cloud == "onprem"
+            else 0.0
         )
         owner = owner_of(row.namespace, ns_projects)
         entries.append(
@@ -174,7 +188,8 @@ def to_entries(
                 project=owner.project,
                 app=owner.app or "",
                 category=CATEGORY,
-                avoided_eur=asleep_hours * row.requested_eur_per_hour,
+                avoided_eur=row.asleep_hours
+                * rates.hourly_eur(row.cpu_cores, row.ram_gib),
                 realized_eur=energy_kwh * tco.eur_per_kwh,
                 energy_avoided_kwh=energy_kwh,
                 co2e_avoided_kg=(
@@ -182,7 +197,7 @@ def to_entries(
                     if g_per_kwh is not None
                     else 0.0
                 ),
-                cloud="onprem",
+                cloud=cloud,
             )
         )
     return entries
@@ -196,6 +211,7 @@ def store(db: Session, entries: list[SavingsEntry]) -> int:
                 SavingsEntry.project == entry.project,
                 SavingsEntry.app == entry.app,
                 SavingsEntry.category == entry.category,
+                SavingsEntry.cloud == entry.cloud,
             )
         )
         if row is None:
@@ -206,7 +222,6 @@ def store(db: Session, entries: list[SavingsEntry]) -> int:
             "realized_eur",
             "energy_avoided_kwh",
             "co2e_avoided_kg",
-            "cloud",
         ):
             setattr(row, column, getattr(entry, column))
     db.commit()
