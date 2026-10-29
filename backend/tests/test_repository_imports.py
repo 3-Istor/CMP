@@ -51,6 +51,7 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
                 "target_cloud": "onprem",
                 "image": "ghcr.io/example/imports/web:import-123",
                 "chart_sha": "b" * 40,
+                "domain": settings.IMPORT_DOMAIN,
             },
         )
         self.db.add(self.job)
@@ -223,7 +224,10 @@ class ImportProtocolTests(unittest.IsolatedAsyncioTestCase):
                     self.job,
                     self.claims,
                     action,
-                    payload or {},
+                    {
+                        "attempt_id": self.job.configuration.get("attempt_id"),
+                        **(payload or {}),
+                    },
                     self.tasks,
                 )
 

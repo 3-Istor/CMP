@@ -1,3 +1,5 @@
+> Résultats et limites de la reprise : [statut du 29 octobre](../../extern-project-analyzer/docs/import-oct29-status.md).
+
 # Connexion GitHub depuis CMP
 
 ## Cause du refus « organization owner »
@@ -12,7 +14,7 @@ avec accès à Session Manager. Le compte GitHub JoeBejjani est membre de 3-Isto
 Le diagnostic a utilisé seulement members:read, sans changer de rôle ni réinstaller
 l’App. À ce moment, son identité GitHub n’était pas liée dans Keycloak.
 
-## État au 26 octobre 2026
+## État vérifié au 29 octobre 2026
 
 La vérification d’administration précédente avait confirmé l’absence de fournisseur
 GitHub dans le realm 3istor. Le menu Linked accounts était donc indisponible. Le
@@ -30,7 +32,8 @@ GitHub affichée diffère de celle décrite dans la documentation. Le fournisseu
 GitHub n’a pas été activé dans Keycloak et aucune liaison GitHub réelle n’a été
 réalisée. La validation du callback reste nécessaire avant toute activation. La
 configuration et le callback attendus sont décrits dans
-K3s/k8s/config/keycloak/GITHUB_IDENTITY_PROVIDER.md, avec un exemple inactif.
+[K3s/k8s/config/keycloak/GITHUB_IDENTITY_PROVIDER.md](../../K3s/k8s/config/keycloak/GITHUB_IDENTITY_PROVIDER.md),
+avec le module Terraform natif désactivé par défaut et le contrôle de plan associé.
 
 CMP ne propose plus le lien tant que GITHUB_ACCOUNT_LINK_URL est vide. Après
 configuration et test OAuth du provider, cette variable peut recevoir l’URL des

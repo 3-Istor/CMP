@@ -8,14 +8,14 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import jwt
 import requests
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import or_, update
+from sqlalchemy import inspect, or_, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
@@ -39,9 +39,23 @@ def stop(message, code=409):
     raise HTTPException(code, message)
 
 
+def import_state_configuration():
+    """Imports must keep a recoverable shared state; catalog behavior is unchanged."""
+    return {
+        "TF_BACKEND_S3_ENABLED": bool(settings.TF_BACKEND_S3_ENABLED),
+        "TF_BACKEND_S3_BUCKET": bool(settings.TF_BACKEND_S3_BUCKET.strip()),
+        "TF_BACKEND_AWS_REGION": bool(settings.TF_BACKEND_AWS_REGION.strip()),
+    }
+
+
 def enabled():
     if not settings.IMPORT_ENABLED:
         stop("L’import de repos n’est pas activé", 503)
+    if not all(import_state_configuration().values()):
+        stop(
+            "Un backend S3 explicite est requis pour l’état Terraform de l’import",
+            503,
+        )
     if not (
         settings.IMPORT_DISPATCH_WORKFLOW
         in {"docker-image.yml", "import-project.yml"}
@@ -414,10 +428,36 @@ async def require_runtime_secrets(job):
         )
 
 
+def import_context():
+    return {
+        "registry_repo": settings.CNP_REGISTRY_REPO,
+        "registry_branch": settings.CNP_REGISTRY_BRANCH,
+        "domain": settings.IMPORT_DOMAIN,
+    }
+
+
+def current_attempt(job):
+    value = job.configuration.get("attempt_id")
+    try:
+        if str(UUID(value)) == value:
+            return value
+    except (ValueError, TypeError, AttributeError):
+        pass
+    stop("Ce parcours exige une nouvelle tentative explicite", 403)
+
+
 async def authorize(db, job, write=False):
     enabled()
     if job.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
         stop("L’autorisation de ce parcours a expiré", 403)
+    if any(
+        job.configuration.get(key) != value
+        for key, value in import_context().items()
+    ):
+        stop(
+            "Le registre ou le domaine autorisé a changé ou n’est pas identifié",
+            403,
+        )
     project = await run_in_threadpool(
         fresh_project, db, job.project_name, job.user_sub, job.username
     )
@@ -494,21 +534,63 @@ async def head(job, token):
     return data["sha"]
 
 
-def transition(db, job, expected, status, **changes):
-    result = db.execute(
-        update(RepositoryImport)
-        .where(
-            RepositoryImport.id == job.id,
-            RepositoryImport.status == expected,
-            RepositoryImport.run_id == job.run_id,
+def job_owner(job):
+    return job.configuration.get("attempt_id"), job.run_id
+
+
+def changed_values(job):
+    """Include pending grant updates in the guarded SQL write, never a later flush."""
+    return {
+        attr.key: attr.value
+        for attr in inspect(job).attrs
+        if attr.history.has_changes()
+    }
+
+
+def transition(db, job, expected, status, *, expected_owner=None, **changes):
+    with db.no_autoflush:
+        attempt_id, run_id = (
+            job_owner(job) if expected_owner is None else expected_owner
         )
-        .values(status=status, **changes)
-    )
-    if result.rowcount != 1:
+        result = db.execute(
+            update(RepositoryImport)
+            .where(
+                RepositoryImport.id == job.id,
+                RepositoryImport.status == expected,
+                RepositoryImport.run_id == run_id,
+                RepositoryImport.configuration["attempt_id"].as_string()
+                == attempt_id,
+            )
+            .values(**{**changed_values(job), **changes, "status": status})
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            db.rollback()
+            stop("Le parcours a changé ou a déjà été exécuté")
+        # The guarded UPDATE already wrote the pending values. Discard their ORM
+        # histories before commit so an autoflush cannot overwrite a newer grant.
+        db.expire(job)
+        db.commit()
+        db.refresh(job)
+
+
+def fail_owned(db, job, expected, owner, message):
+    try:
+        transition(
+            db, job, expected, "failed", expected_owner=owner, message=message
+        )
+    except HTTPException as error:
+        if error.status_code != 409:
+            raise
+
+
+async def dispatch_or_stop(db, job, owner, message):
+    try:
+        await dispatch(job, attempt_id=owner[0])
+    except Exception:
         db.rollback()
-        stop("Le parcours a changé ou a déjà été exécuté")
-    db.commit()
-    db.refresh(job)
+        fail_owned(db, job, "queued", owner, message)
+        raise
 
 
 async def require_workflow_configuration():
@@ -537,7 +619,9 @@ async def require_workflow_configuration():
     return token
 
 
-async def dispatch(job):
+async def dispatch(job, *, attempt_id=None):
+    if attempt_id is None:
+        attempt_id = current_attempt(job)
     token = await require_workflow_configuration()
     await github(
         "POST",
@@ -545,7 +629,7 @@ async def dispatch(job):
         token,
         json={
             "ref": settings.IMPORT_WORKFLOW_REF,
-            "inputs": {"import_id": job.id},
+            "inputs": {"import_id": job.id, "attempt_id": attempt_id},
         },
     )
 
@@ -624,6 +708,8 @@ async def create(db, claims, payload):
         expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(hours=1),
         configuration={
+            **import_context(),
+            "attempt_id": str(uuid4()),
             "source_branch": getattr(payload, "source_branch", "main"),
             "project_path": payload.project_path,
             "port": payload.port,
@@ -642,6 +728,7 @@ async def create(db, claims, payload):
         db, job
     )  # No clone, commit or dispatch before permission checks.
     await head(job, token)  # Refuse missing branches before dispatch.
+    owner = job_owner(job)
     db.add(job)
     try:
         db.commit()
@@ -650,12 +737,7 @@ async def create(db, claims, payload):
         stop(
             "Ce repo ou ce nom d’application possède déjà un parcours d’import"
         )
-    try:
-        await dispatch(job)
-    except Exception:
-        job.status, job.message = "failed", "La CI n’a pas pu être démarrée"
-        db.commit()
-        raise
+    await dispatch_or_stop(db, job, owner, "La CI n’a pas pu être démarrée")
     return public(job)
 
 
@@ -704,6 +786,11 @@ async def approved_pr(job, token):
 
 
 async def resume(db, job):
+    with db.no_autoflush:
+        return await _resume(db, job, job_owner(job))
+
+
+async def _resume(db, job, owner):
     if job.status != "waiting_pr" or not job.pull_request:
         stop("Le parcours n’attend pas de PR")
     job.expires_at = datetime.now(timezone.utc).replace(
@@ -711,25 +798,30 @@ async def resume(db, job):
     ) + timedelta(hours=1)
     token = await authorize(db, job)
     await approved_pr(job, token)
+    new_attempt_id = str(uuid4())
+    job.configuration = {**job.configuration, "attempt_id": new_attempt_id}
     transition(
         db,
         job,
         "waiting_pr",
         "queued",
+        expected_owner=owner,
         run_id=None,
         message="PR fusionnée : nouvelle validation complète",
     )
-    try:
-        await dispatch(job)
-    except Exception:
-        job.status, job.message = "failed", "La reprise de la CI a échoué"
-        db.commit()
-        raise
+    await dispatch_or_stop(
+        db, job, (new_attempt_id, None), "La reprise de la CI a échoué"
+    )
     return public(job)
 
 
 async def retry(db, job):
     """Only an explicit portal action can restart a failed pre-deployment run."""
+    with db.no_autoflush:
+        return await _retry(db, job, job.status, job_owner(job))
+
+
+async def _retry(db, job, original_status, owner):
     if job.status not in {"failed", "cancelled"} or job.deployment_id:
         stop(
             "Seuls les parcours arrêtés avant déploiement peuvent être relancés"
@@ -739,14 +831,14 @@ async def retry(db, job):
     ) + timedelta(hours=1)
     token = await authorize(db, job)
     path = "/repos/" + job.repository_url.removeprefix("https://github.com/")
-    owner = REPOSITORY.fullmatch(job.repository_url).group(1)
+    repository_owner = REPOSITORY.fullmatch(job.repository_url).group(1)
     prs = await github(
         "GET",
         path + "/pulls",
         token,
         params={
             "state": "all",
-            "head": f"{owner}:cnp-import/{job.id}",
+            "head": f"{repository_owner}:cnp-import/{job.id}",
             "base": job.configuration.get("source_branch", "main"),
         },
     )
@@ -757,11 +849,14 @@ async def retry(db, job):
             stop(
                 "La PR précédente a été refusée ; corrigez ce parcours avant de le relancer"
             )
+        new_attempt_id = str(uuid4())
+        job.configuration = {**job.configuration, "attempt_id": new_attempt_id}
         transition(
             db,
             job,
-            job.status,
+            original_status,
             "waiting_pr",
+            expected_owner=owner,
             run_id=None,
             pull_request=prs[0]["number"],
             message="PR existante retrouvée : validez sa dernière révision et reprenez ici",
@@ -774,35 +869,108 @@ async def retry(db, job):
         stop(
             "Une branche de préparation existe sans PR ; ouvrez sa PR avant de relancer"
         )
+    new_attempt_id = str(uuid4())
+    job.configuration = {**job.configuration, "attempt_id": new_attempt_id}
     transition(
         db,
         job,
-        job.status,
+        original_status,
         "queued",
+        expected_owner=owner,
         run_id=None,
         source_sha=None,
         pull_request=None,
         message="Nouvelle autorisation : reprise complète des contrôles",
     )
-    try:
-        await dispatch(job)
-    except Exception:
-        job.status, job.message = "failed", "La relance de la CI a échoué"
-        db.commit()
-        raise
+    await dispatch_or_stop(
+        db, job, (new_attempt_id, None), "La relance de la CI a échoué"
+    )
     return public(job)
 
 
+async def verify_unclaimed_failure(job, claims):
+    """Only the exact dispatched attempt can report setup failure before claim."""
+    attempt_id = current_attempt(job)
+    token = await get_installation_token(
+        settings.GITHUB_INSTALLATION_ID, permissions={"actions": "read"}
+    )
+    base = f"/repos/{settings.IMPORT_WORKFLOW_REPO}/actions"
+    workflow = await github(
+        "GET", base + "/workflows/" + settings.IMPORT_DISPATCH_WORKFLOW, token
+    )
+    run = await github("GET", base + "/runs/" + str(claims["run_id"]), token)
+    if (
+        not isinstance(workflow.get("id"), int)
+        or workflow["id"] <= 0
+        or workflow.get("path")
+        != ".github/workflows/" + settings.IMPORT_DISPATCH_WORKFLOW
+        or run.get("workflow_id") != workflow["id"]
+        or str(run.get("id")) != str(claims["run_id"])
+        or run.get("repository", {}).get("full_name")
+        != settings.IMPORT_WORKFLOW_REPO
+        or run.get("head_repository", {}).get("full_name")
+        != settings.IMPORT_WORKFLOW_REPO
+        or run.get("head_sha") != settings.IMPORT_WORKFLOW_SHA
+        or run.get("head_sha") != claims.get("sha")
+        or run.get("head_branch") != settings.IMPORT_WORKFLOW_REF
+        or claims.get("ref") != "refs/heads/" + settings.IMPORT_WORKFLOW_REF
+        or run.get("event") != "workflow_dispatch"
+        or run.get("event") != claims.get("event_name")
+        or str(run.get("run_attempt")) != "1"
+        or str(run.get("run_attempt")) != str(claims.get("run_attempt"))
+        or run.get("display_title")
+        != f"CNP import {job.id} attempt {attempt_id}"
+    ):
+        stop("Cette exécution ne correspond pas à la tentative autorisée", 403)
+
+
 async def worker(db, job, claims, action, payload, tasks):
+    with db.no_autoflush:
+        return await _worker(
+            db,
+            job,
+            claims,
+            action,
+            payload,
+            tasks,
+            (job.status, job_owner(job)),
+        )
+
+
+async def _worker(db, job, claims, action, payload, tasks, original_state):
+    failure_status, owner = original_state
+    failure_owner = owner
     run_id = str(claims["run_id"])
+    if job.configuration.get("attempt_id") is not None:
+        if payload.get("attempt_id") != current_attempt(job):
+            stop("Cette tentative n’est plus autorisée", 403)
+    if action == "fail" and job.status == "queued" and job.run_id is None:
+        await verify_unclaimed_failure(job, claims)
+        transition(
+            db,
+            job,
+            "queued",
+            "failed",
+            run_id=run_id,
+            report=payload.get("report", {}),
+            message="La CI a échoué avant l’analyse ; aucune suite autorisée",
+            expected_owner=owner,
+        )
+        return {"status": "failed"}
     if (
         action == "fail"
         and job.run_id == run_id
         and job.status in {"failed", "cancelled", "waiting_pr"}
     ):
         if job.status == "failed" and payload.get("report"):
-            job.report = {**job.report, **payload["report"]}
-            db.commit()
+            transition(
+                db,
+                job,
+                "failed",
+                "failed",
+                expected_owner=owner,
+                report={**job.report, **payload["report"]},
+            )
         return {"status": job.status}
     if job.status in TERMINAL or job.status in {"waiting_pr", "deploying"}:
         stop("Le parcours est arrêté")
@@ -819,6 +987,7 @@ async def worker(db, job, claims, action, payload, tasks):
             "failed",
             report=payload.get("report", {}),
             message="La CI a échoué ou a été annulée ; aucune suite autorisée",
+            expected_owner=owner,
         )
         return {"status": "failed"}
     try:
@@ -835,7 +1004,9 @@ async def worker(db, job, claims, action, payload, tasks):
                 run_id=run_id,
                 source_sha=sha,
                 message="Analyse et préparation",
+                expected_owner=owner,
             )
+            failure_status, failure_owner = "preparing", (owner[0], run_id)
             return {
                 "repository_url": job.repository_url,
                 "source_sha": sha,
@@ -880,6 +1051,7 @@ async def worker(db, job, claims, action, payload, tasks):
                 expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
                 + timedelta(days=7),
                 message="Arrêt : validez et fusionnez la PR puis reprenez ici",
+                expected_owner=owner,
             )
             return {"status": "waiting_pr"}
         if action == "validated" and job.status == "preparing":
@@ -903,6 +1075,7 @@ async def worker(db, job, claims, action, payload, tasks):
                 "building",
                 report=report,
                 message="Scans validés : construction de l’image",
+                expected_owner=owner,
             )
             return {"image": job.configuration["image"]}
         if action == "publish" and job.status == "building":
@@ -931,6 +1104,7 @@ async def worker(db, job, claims, action, payload, tasks):
                 "building",
                 "publishing",
                 message="Publication de l’image validée",
+                expected_owner=owner,
             )
             return {"image": job.configuration["image"]}
         if action == "complete" and job.status == "publishing":
@@ -964,7 +1138,7 @@ async def worker(db, job, claims, action, payload, tasks):
                         "target_cloud": job.configuration["target_cloud"],
                         "github_installation_id": job.installation_id,
                         "project_name": job.project_name,
-                        "domain": settings.IMPORT_DOMAIN,
+                        "domain": job.configuration["domain"],
                         "runtime_secret_keys": job.configuration.get(
                             "runtime_secret_keys", []
                         ),
@@ -977,16 +1151,21 @@ async def worker(db, job, claims, action, payload, tasks):
                 .where(
                     RepositoryImport.id == job.id,
                     RepositoryImport.status == "publishing",
-                    RepositoryImport.run_id == run_id,
+                    RepositoryImport.run_id == owner[1],
+                    RepositoryImport.configuration["attempt_id"].as_string()
+                    == owner[0],
                 )
+                .values(**changed_values(job))
                 .values(
                     status="deploying",
                     message="Déploiement dans le projet existant",
                 )
+                .execution_options(synchronize_session=False)
             )
             if result.rowcount != 1:
                 db.rollback()
                 stop("Déploiement déjà déclenché")
+            db.expire(job)
             db.add(deployment)
             db.flush()
             db.refresh(job)
@@ -1004,13 +1183,13 @@ async def worker(db, job, claims, action, payload, tasks):
         stop("Étape invalide ou validation précédente manquante")
     except Exception:
         db.rollback()
-        db.refresh(job)
-        if job.status not in TERMINAL | {"waiting_pr", "deploying"}:
-            job.status, job.message = (
-                "failed",
-                "Un contrôle a échoué ; parcours arrêté",
-            )
-            db.commit()
+        fail_owned(
+            db,
+            job,
+            failure_status,
+            failure_owner,
+            "Un contrôle a échoué ; parcours arrêté",
+        )
         raise
 
 

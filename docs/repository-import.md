@@ -119,3 +119,32 @@ Le diagnostic Keycloak a confirmé l’absence de fournisseur GitHub. La liaison
 utilisateur est bloquée jusqu’à sa configuration par l’administrateur. Le bouton
 CMP explique désormais ce prérequis ; GITHUB_ACCOUNT_LINK_URL reste vide jusqu’à
 la validation du provider et du parcours OAuth réellement connecté.
+
+## Préflight et protocole de la reprise du 29 octobre
+
+```sh
+make import-readiness
+make import-readiness ARGS=--live
+# Diagnostic administratif optionnel du broker, indépendant de la CI :
+make import-readiness ARGS=--github
+```
+
+Le contrôle local affiche seulement les noms de réglages et des booléens. Le mode
+live vérifie workflow/chart/Argo/Vault en lecture, sans clone ni dispatch. Le mode
+github peut être refusé au compte de service sans droits de lecture de configuration
+IdP : ne pas élargir ses rôles uniquement pour ce diagnostic. La liaison réelle de
+l’utilisateur et ses droits sont vérifiés dans le portail avant chaque accès source.
+
+Les imports exigent désormais un backend S3 explicitement activé avec bucket et
+région ; ils ne retombent pas sur un state local. L’init/plan vérifie l’accès réel.
+Un préflight technique réussi ne prouve ni OAuth ni un déploiement connecté.
+
+Chaque dispatch transmet `import_id` et `attempt_id`. Le caller, le workflow
+réutilisable, le worker et CMP doivent provenir de versions compatibles publiées
+et approuvées. Une ancienne tentative ne peut pas consommer la nouvelle. Le dépôt
+et la branche du registre ainsi que le domaine sont figés dans le job ; une ancienne
+demande sans contexte identifié est refusée et demande une recréation explicite.
+Aucun job n’est migré silencieusement vers main.
+
+La consigne reste sans push et sans activation. Voir
+[la passation actuelle](../../extern-project-analyzer/docs/import-oct29-status.md).

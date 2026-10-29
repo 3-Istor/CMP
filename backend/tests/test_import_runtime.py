@@ -189,7 +189,16 @@ def test_wrong_callback_prevents_dispatch():
         service, "github", github
     ):
         with pytest.raises(HTTPException):
-            asyncio.run(service.dispatch(SimpleNamespace(id="test-import")))
+            asyncio.run(
+                service.dispatch(
+                    SimpleNamespace(
+                        id="test-import",
+                        configuration={
+                            "attempt_id": "12345678-1234-4234-8234-123456789012"
+                        },
+                    )
+                )
+            )
     assert all(call.args[0] != "POST" for call in github.call_args_list)
 
 
@@ -209,12 +218,22 @@ def test_dispatch_uses_the_existing_driver_with_import_id():
     ), patch.object(
         service, "github", github
     ):
-        asyncio.run(service.dispatch(SimpleNamespace(id="test-import")))
+        asyncio.run(
+            service.dispatch(
+                SimpleNamespace(
+                    id="test-import",
+                    configuration={
+                        "attempt_id": "12345678-1234-4234-8234-123456789012"
+                    },
+                )
+            )
+        )
     assert github.call_args.args[1].endswith(
         "/actions/workflows/docker-image.yml/dispatches"
     )
     assert github.call_args.kwargs["json"]["inputs"] == {
-        "import_id": "test-import"
+        "import_id": "test-import",
+        "attempt_id": "12345678-1234-4234-8234-123456789012",
     }
 
 
@@ -345,7 +364,11 @@ def test_stopped_or_unverifiable_cluster_stops_import_before_github_grants(
         installation_id="11",
         expires_at=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(hours=1),
-        configuration={"target_cloud": "aws", "chart_sha": "b" * 40},
+        configuration={
+            **service.import_context(),
+            "target_cloud": "aws",
+            "chart_sha": "b" * 40,
+        },
     )
     with patch.object(service, "enabled"), patch.object(
         settings, "IMPORT_CHART_SHA", "b" * 40

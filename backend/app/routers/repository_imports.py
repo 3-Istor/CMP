@@ -173,42 +173,56 @@ async def create(
 def list_imports(
     project_name: str, db: Session = Depends(get_db), claims=Depends(user)
 ):
-    service.fresh_project(
-        db, project_name, claims["sub"], claims["preferred_username"]
-    )
-    jobs = (
-        db.query(RepositoryImport)
-        .filter_by(project_name=project_name, user_sub=claims["sub"])
-        .all()
-    )
-    from datetime import datetime, timezone
+    with db.no_autoflush:
+        service.fresh_project(
+            db, project_name, claims["sub"], claims["preferred_username"]
+        )
+        jobs = (
+            db.query(RepositoryImport)
+            .filter_by(project_name=project_name, user_sub=claims["sub"])
+            .all()
+        )
+        from datetime import datetime, timezone
 
-    from app.models.deployment import Deployment, DeploymentStatus
+        from app.models.deployment import Deployment, DeploymentStatus
 
-    for job in jobs:
-        if job.status == "deploying" and job.deployment_id:
-            deployment = db.get(Deployment, job.deployment_id)
-            if deployment and deployment.status in {
-                DeploymentStatus.RUNNING,
-                DeploymentStatus.FAILED,
-            }:
-                job.status = (
-                    "completed"
-                    if deployment.status == DeploymentStatus.RUNNING
-                    else "failed"
-                )
-                job.message = deployment.step_message
-        elif (
-            job.status not in service.TERMINAL
-            and job.expires_at
-            < datetime.now(timezone.utc).replace(tzinfo=None)
-        ):
-            job.status, job.message = (
-                "failed",
-                "Délai dépassé ; parcours arrêté",
-            )
-    db.commit()
-    return [service.public(job) for job in jobs]
+        for job in jobs:
+            original_status, owner = job.status, service.job_owner(job)
+            status, message = original_status, job.message
+            if job.status == "deploying" and job.deployment_id:
+                deployment = db.get(Deployment, job.deployment_id)
+                if deployment and deployment.status in {
+                    DeploymentStatus.RUNNING,
+                    DeploymentStatus.FAILED,
+                }:
+                    status = (
+                        "completed"
+                        if deployment.status == DeploymentStatus.RUNNING
+                        else "failed"
+                    )
+                    message = deployment.step_message
+            elif (
+                job.status not in service.TERMINAL
+                and job.expires_at
+                < datetime.now(timezone.utc).replace(tzinfo=None)
+            ):
+                status, message = "failed", "Délai dépassé ; parcours arrêté"
+            if status != original_status:
+                try:
+                    service.transition(
+                        db,
+                        job,
+                        original_status,
+                        status,
+                        expected_owner=owner,
+                        message=message,
+                    )
+                except HTTPException as error:
+                    if error.status_code != 409:
+                        raise
+                    with db.no_autoflush:
+                        db.refresh(job)
+        return [service.public(job) for job in jobs]
 
 
 @router.post("/{import_id}/resume")
@@ -222,27 +236,45 @@ async def resume(
 async def cancel(
     import_id: str, db: Session = Depends(get_db), claims=Depends(user)
 ):
-    job = owned(db, import_id, claims)
-    if job.status in service.TERMINAL or job.status == "deploying":
-        service.stop("Ce parcours ne peut plus être annulé")
-    run_id = job.run_id
-    service.transition(
-        db, job, job.status, "cancelled", message="Parcours annulé"
-    )
-    if run_id:
-        try:
-            token = await service.get_installation_token(
-                service.settings.GITHUB_INSTALLATION_ID
-            )
-            await service.github(
-                "POST",
-                f"/repos/{service.settings.IMPORT_WORKFLOW_REPO}/actions/runs/{run_id}/cancel",
-                token,
-            )
-        except Exception:
-            job.message = "Parcours bloqué dans CMP ; l’arrêt de la CI distante n’a pas pu être confirmé"
-            db.commit()
-    return service.public(job)
+    with db.no_autoflush:
+        job = owned(db, import_id, claims)
+        if job.status in service.TERMINAL or job.status == "deploying":
+            service.stop("Ce parcours ne peut plus être annulé")
+        run_id, owner = job.run_id, service.job_owner(job)
+        service.transition(
+            db,
+            job,
+            job.status,
+            "cancelled",
+            expected_owner=owner,
+            message="Parcours annulé",
+        )
+        if run_id:
+            try:
+                token = await service.get_installation_token(
+                    service.settings.GITHUB_INSTALLATION_ID
+                )
+                await service.github(
+                    "POST",
+                    f"/repos/{service.settings.IMPORT_WORKFLOW_REPO}/actions/runs/{run_id}/cancel",
+                    token,
+                )
+            except Exception:
+                try:
+                    service.transition(
+                        db,
+                        job,
+                        "cancelled",
+                        "cancelled",
+                        expected_owner=owner,
+                        message="Parcours bloqué dans CMP ; l’arrêt de la CI distante n’a pas pu être confirmé",
+                    )
+                except HTTPException as error:
+                    if error.status_code != 409:
+                        raise
+        with db.no_autoflush:
+            db.refresh(job)
+        return service.public(job)
 
 
 @router.post("/{import_id}/retry")

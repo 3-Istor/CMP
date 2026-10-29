@@ -472,8 +472,12 @@ provider "openstack" {{
                 for word in ("password", "token", "secret", "private_key")
             )
         }
+        # Terraform parses collection inputs as HCL/JSON, not Python repr.
         self._import_sensitive = {
-            f"TF_VAR_{key}": str(value) for key, value in sensitive.items()
+            f"TF_VAR_{key}": (
+                value if isinstance(value, str) else json.dumps(value)
+            )
+            for key, value in sensitive.items()
         }
         path = self.working_dir / "import.auto.tfvars.json"
         path.write_text(
