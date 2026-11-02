@@ -370,7 +370,22 @@ async def remove_user_from_project_org(
         )
         return False
 
-    # Step 2: Get user ID
+    # Step 2: Get user ID. Grafana's login for OIDC users is their email.
+    from app.services.keycloak_service import (
+        _find_user_by_username,
+        _get_admin_token,
+    )
+
+    try:
+        keycloak_user = _find_user_by_username(username, _get_admin_token())
+    except Exception as exc:
+        logger.warning(f"⚠️  Failed to fetch user '{username}': {exc}")
+        return False
+    user_email = (keycloak_user or {}).get("email")
+    if not user_email:
+        logger.warning(f"⚠️  User '{username}' has no email — removal skipped")
+        return False
+
     user_id = await _get_user_id_by_username(user_email)
     if user_id is None:
         logger.warning(

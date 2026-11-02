@@ -1,6 +1,7 @@
 import asyncio
 from unittest import mock
 
+import httpx
 import pytest
 from fastapi import BackgroundTasks
 
@@ -116,3 +117,38 @@ def test_startup_sync_logs_and_moves_on_when_keycloak_is_down(
         asyncio.run(grafana_service.sync_all_project_orgs())
 
     grafana_add.assert_awaited_once_with("second", "ben", "owner")
+
+
+def test_removing_a_member_deletes_their_grafana_org_membership():
+    calls = []
+
+    def grafana(request):
+        calls.append((request.method, request.url.path, request.url.query))
+        if request.url.path.startswith("/api/orgs/name/"):
+            return httpx.Response(200, json={"id": 27})
+        if request.url.path == "/api/users/lookup":
+            return httpx.Response(200, json={"id": 42})
+        return httpx.Response(200, json={})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(grafana))
+    with (
+        mock.patch.object(grafana_service, "_http_client", client),
+        mock.patch.object(keycloak_service, "_get_admin_token"),
+        mock.patch.object(
+            keycloak_service,
+            "_find_user_by_username",
+            return_value={"email": "bob@3istor.com"},
+        ),
+    ):
+        removed = asyncio.run(
+            grafana_service.remove_user_from_project_org("test-hugo", "bob")
+        )
+
+    assert removed is True
+    # Grafana's login for these OIDC users is their email, not the username.
+    assert (
+        "GET",
+        "/api/users/lookup",
+        b"loginOrEmail=bob%403istor.com",
+    ) in calls
+    assert ("DELETE", "/api/orgs/27/users/42", b"") in calls
