@@ -242,7 +242,7 @@ def test_dispatch_uses_the_existing_driver_with_import_id():
     [
         ("joetest", "import-fichier-joe-raph", True),
         ("", "main", False),
-        ("joetest", "main", False),
+        ("joetest", "main", True),
     ],
 )
 def test_recipe_mode_blocks_unrelated_catalog_and_project_mutations(
@@ -261,40 +261,33 @@ def test_recipe_mode_blocks_unrelated_catalog_and_project_mutations(
             require_standard_platform_mode()
 
 
-@pytest.mark.parametrize(
-    "protected,approved_revision", [(True, True), (False, True), (True, False)]
-)
-def test_recipe_refuses_unprotected_or_unreviewed_image_updater(
-    protected, approved_revision
+@pytest.mark.parametrize("protected", [False, True])
+def test_image_updater_must_follow_main_and_preserve_imported_images(
+    protected,
 ):
     import base64
 
-    revision = "b" * 40
-    expression = (
-        '{{ if eq .metadata.name "joetest" }}'
-        + revision
-        + "{{ else }}HEAD{{ end }}"
-    )
     response = Mock()
     response.json.return_value = {
-        "metadata": {
-            "annotations": {
-                "cnp.3istor.com/import-test-k3s-revision": revision
-            }
-        },
         "spec": {
+            "generators": [
+                {
+                    "git": {
+                        "repoURL": "https://github.com/3-Istor/cnp-projects.git",
+                        "revision": "main",
+                    }
+                }
+            ],
             "template": {
                 "spec": {
                     "source": {
-                        "repoURL": "https://github.com/3-Istor/K3s",
+                        "repoURL": "https://github.com/3-Istor/K3s.git",
                         "path": "k8s/helm/cnp-image-updaters",
-                        "targetRevision": (
-                            expression if approved_revision else "HEAD"
-                        ),
+                        "targetRevision": "HEAD",
                     }
                 }
-            }
-        },
+            },
+        }
     }
     client = AsyncMock()
     client.get.return_value = response
@@ -303,11 +296,7 @@ def test_recipe_refuses_unprotected_or_unreviewed_image_updater(
         if protected
         else "{{ range .Values.apps }}"
     )
-    with patch.object(
-        settings, "IMPORT_ALLOWED_PROJECT", "joetest"
-    ), patch.object(
-        settings, "CNP_REGISTRY_BRANCH", "import-fichier-joe-raph"
-    ), patch.object(
+    with patch.object(settings, "CNP_REGISTRY_BRANCH", "main"), patch.object(
         service.httpx, "AsyncClient"
     ) as factory, patch.object(
         service, "get_installation_token", AsyncMock(return_value="test")
@@ -321,13 +310,38 @@ def test_recipe_refuses_unprotected_or_unreviewed_image_updater(
         ),
     ) as github:
         factory.return_value.__aenter__.return_value = client
-        if protected and approved_revision:
+        if protected:
             asyncio.run(service.require_image_updater_consumer())
-            assert github.call_args.kwargs["params"] == {"ref": revision}
+            assert github.call_args.kwargs["params"] == {"ref": "HEAD"}
         else:
             with pytest.raises(HTTPException) as error:
                 asyncio.run(service.require_image_updater_consumer())
             assert error.value.status_code == 503
+
+
+@pytest.mark.parametrize(
+    "registry_branch,generator_branch",
+    [("feature", "main"), ("main", "feature"), ("main", "HEAD")],
+)
+def test_registry_branch_overlay_is_refused_even_for_joetest(
+    registry_branch, generator_branch
+):
+    with patch.object(
+        settings, "CNP_REGISTRY_BRANCH", registry_branch
+    ), patch.object(settings, "IMPORT_ALLOWED_PROJECT", "joetest"):
+        with pytest.raises(HTTPException):
+            service.require_main_registry(
+                {
+                    "generators": [
+                        {
+                            "git": {
+                                "repoURL": "https://github.com/3-Istor/cnp-projects.git",
+                                "revision": generator_branch,
+                            }
+                        }
+                    ]
+                }
+            )
 
 
 def test_head_encodes_the_selected_source_branch():

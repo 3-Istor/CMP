@@ -10,10 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import httpx
 from fastapi import HTTPException
-from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import settings
-from app.services import keycloak_service
+from app.services.github_account import check_oauth_configuration
 from app.services.github_service import generate_jwt
 from app.services.repository_imports import (
     github,
@@ -43,17 +42,14 @@ def configuration_checks():
         "IMPORT_OIDC_AUDIENCE": bool(settings.IMPORT_OIDC_AUDIENCE),
         "IMPORT_ARGOCD_URL": settings.IMPORT_ARGOCD_URL.startswith("https://"),
         "IMPORT_ARGOCD_TOKEN": bool(settings.IMPORT_ARGOCD_TOKEN),
-        "GITHUB_ACCOUNT_LINK_URL": settings.GITHUB_ACCOUNT_LINK_URL.startswith(
-            "https://"
-        ),
+        **check_oauth_configuration(),
         "GITHUB_APP_PRIVATE_KEY": bool(settings.GITHUB_APP_PRIVATE_KEY),
         "GITHUB_INSTALLATION_ID": bool(settings.GITHUB_INSTALLATION_ID),
         "GITHUB_REGISTRY_TOKEN": bool(settings.GITHUB_REGISTRY_TOKEN),
         "VAULT_URL": bool(settings.VAULT_URL),
         "VAULT_TOKEN": bool(settings.VAULT_TOKEN),
         **import_state_configuration(),
-        "IMPORT_ALLOWED_PROJECT": settings.CNP_REGISTRY_BRANCH == "main"
-        or bool(settings.IMPORT_ALLOWED_PROJECT),
+        "CNP_REGISTRY_BRANCH_MAIN": settings.CNP_REGISTRY_BRANCH == "main",
     }
 
 
@@ -64,54 +60,22 @@ def report(checks):
 
 
 async def github_linking_checks():
-    """Read provider/App configuration; never create a federation or user token."""
-    token = await run_in_threadpool(keycloak_service._get_admin_token)
-    async with httpx.AsyncClient(
-        timeout=15, headers={"User-Agent": "cnp-backend"}
-    ) as client:
-        response = await client.get(
-            settings.KEYCLOAK_URL.rstrip("/")
-            + "/admin/realms/"
-            + settings.KEYCLOAK_REALM
-            + "/identity-provider/instances",
-            headers={"Authorization": "Bearer " + token},
-        )
-        response.raise_for_status()
-        providers = response.json()
-    provider = next((p for p in providers if p.get("alias") == "github"), None)
+    """Check this App's OAuth configuration without any Keycloak federation."""
+    checks = check_oauth_configuration()
+    if not all(checks.values()):
+        return checks
     app = await github("GET", "/app", generate_jwt())
-    config = provider.get("config", {}) if provider else {}
     return {
-        "GITHUB_ACCOUNT_LINK_URL": settings.GITHUB_ACCOUNT_LINK_URL.startswith(
-            "https://"
-        ),
-        "KEYCLOAK_GITHUB_PROVIDER": bool(
-            provider and provider.get("providerId") == "github"
-        ),
-        "KEYCLOAK_GITHUB_ENABLED": bool(provider and provider.get("enabled")),
-        "KEYCLOAK_GITHUB_LINK_ONLY": bool(
-            provider and provider.get("linkOnly")
-        ),
-        "KEYCLOAK_GITHUB_EMAIL_NOT_TRUSTED": bool(
-            provider and not provider.get("trustEmail")
-        ),
-        "KEYCLOAK_GITHUB_TOKENS_NOT_STORED": bool(
-            provider and not provider.get("storeToken")
-        ),
-        "KEYCLOAK_GITHUB_OAUTH_CREDENTIALS": bool(
-            config.get("clientId") and config.get("clientSecret")
-        ),
+        **checks,
         "CNP_PORTAL_APP": app.get("slug") == "cnp-portal"
-        and app.get("owner", {}).get("login") == "3-Istor",
-        "GITHUB_EMAIL_ADDRESSES_READ": app.get("permissions", {}).get("emails")
-        in {"read", "write"},
+        and app.get("owner", {}).get("login", "").lower() == "3-istor"
+        and app.get("client_id") == settings.GITHUB_OAUTH_CLIENT_ID,
     }
 
 
 async def live_checks():
-    # IdP admin configuration is an optional operator diagnostic (--github).
-    # Normal imports verify the user's federation in authorize instead of
-    # requiring additional IdP-administration rights for the CNP service account.
+    # Browser OAuth and current user/repository access are checked by the portal.
+    # No GitHub provider or federation is required in Keycloak.
     token = await require_workflow_configuration()
     print("OK      workflow branch, exact SHA, callback and audience")
     chart = await github(

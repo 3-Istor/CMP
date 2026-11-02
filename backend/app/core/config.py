@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/cnp-imports"
     IMPORT_MAX_IMAGE_BYTES: int = 1024 * 1024 * 1024
     IMPORT_DOMAIN: str = "3istor.com"
-    # Optional restriction for a branch recipe.
+    # Optional local-CMP project restriction (for example joetest); registry stays main.
     IMPORT_ALLOWED_PROJECT: str = ""
     IMPORT_CALLBACK_URL: str = ""
     IMPORT_ARGOCD_URL: str = ""
@@ -176,8 +176,11 @@ class Settings(BaseSettings):
     FINOPS_ANOMALY_MIN_EUR: float = 0.05
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
-    # Enable the account-link action only after the broker is configured and tested.
-    GITHUB_ACCOUNT_LINK_URL: str = ""
+    # Direct GitHub App OAuth; CNP authentication remains unchanged.
+    GITHUB_OAUTH_CLIENT_ID: str = ""
+    GITHUB_OAUTH_CLIENT_SECRET: str = ""
+    GITHUB_OAUTH_REDIRECT_URI: str = ""
+    GITHUB_OAUTH_TOKEN_KEY: str = ""  # Stable Fernet key, stored outside Git.
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
     # Installation ID of the GitHub App on the 3-Istor org — used to mint
     # installation tokens for org-level Terraform operations (e.g. project bootstrap)

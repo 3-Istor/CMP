@@ -4,7 +4,14 @@ from typing import Annotated
 import boto3
 import requests
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+)
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -14,6 +21,8 @@ from app.schemas.account import (
     GitHubConnectionStatus,
     GitHubInstallationRequest,
     GitHubInstallationResponse,
+    GitHubOAuthCallbackRequest,
+    GitHubOAuthStartRequest,
     PictureUploadResponse,
     UserProfile,
 )
@@ -293,18 +302,23 @@ async def upload_profile_picture(
 
 @router.get("/github", response_model=GitHubConnectionStatus)
 async def github_connection_status(
+    response: Response,
     token_payload: dict = Depends(github_account.portal_user),
     db: Session = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "no-store"
     return await github_account.connection_status(db, token_payload)
 
 
 @router.post("/github-connect", response_model=GitHubInstallationResponse)
 async def connect_github(
+    request_data: GitHubInstallationRequest,
     token_payload: dict = Depends(github_account.portal_user),
     db: Session = Depends(get_db),
 ):
-    return await github_account.connect(db, token_payload)
+    return await github_account.connect(
+        db, token_payload, request_data.installation_id
+    )
 
 
 @router.post("/github-installation", response_model=GitHubInstallationResponse)
@@ -313,7 +327,37 @@ async def save_github_installation(
     token_payload: dict = Depends(github_account.portal_user),
     db: Session = Depends(get_db),
 ):
-    """Legacy entrypoint: an installation ID alone never establishes ownership."""
+    """Legacy entrypoint uses the same OAuth proof; an ID alone grants nothing."""
     return await github_account.connect(
         db, token_payload, request_data.installation_id
+    )
+
+
+@router.post("/github/oauth/start")
+async def start_github_oauth(
+    request_data: GitHubOAuthStartRequest,
+    response: Response,
+    token_payload: dict = Depends(github_account.portal_user),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await github_account.begin(
+        db, token_payload, request_data.binding, request_data.mode
+    )
+
+
+@router.post("/github/oauth/callback")
+async def complete_github_oauth(
+    request_data: GitHubOAuthCallbackRequest,
+    response: Response,
+    token_payload: dict = Depends(github_account.portal_user),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await github_account.callback(
+        db,
+        token_payload,
+        request_data.state,
+        request_data.code,
+        request_data.binding,
     )

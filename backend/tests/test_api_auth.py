@@ -155,9 +155,7 @@ def _deployment_id(db, project: str) -> int:
 
 class TestDeploymentsAuthorization:
     def test_lists_only_the_users_projects(self, db, roles):
-        result = asyncio.run(
-            deployments_router.list_deployments(_user("u2"), db)
-        )
+        result = deployments_router.list_deployments(_user("u2"), db)
 
         assert [d.project_id for d in result] == ["alpha"]
 

@@ -249,7 +249,9 @@ async def lifespan(app: FastAPI):
             tasks.append(asyncio.create_task(finops_ingest_loop()))
         if settings.FINOPS_MONTHLY_REPORT_ENABLED:
             tasks.append(
-                asyncio.create_task(monthly_report.finops_monthly_report_loop())
+                asyncio.create_task(
+                    monthly_report.finops_monthly_report_loop()
+                )
             )
 
     # Last, so it only gets the paths no router claimed: /mcp, the OAuth

@@ -25,8 +25,12 @@ from app.models.repository_import import RepositoryImport
 from app.models.user_github import UserGitHubInstallation
 from app.services import keycloak_service, project_registry
 from app.services.clusters.state import ensure_cluster_up
-from app.services.github_account import linked_identity
-from app.services.github_service import generate_jwt, get_installation_token
+from app.services.github_account import repository_access
+from app.services.github_service import (
+    GITHUB_APP_ID,
+    generate_jwt,
+    get_installation_token,
+)
 
 TERMINAL = {"completed", "failed", "cancelled"}
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -61,10 +65,7 @@ def enabled():
         in {"docker-image.yml", "import-project.yml"}
         and SHA.fullmatch(settings.IMPORT_WORKFLOW_SHA)
         and SHA.fullmatch(settings.IMPORT_CHART_SHA)
-        and (
-            settings.CNP_REGISTRY_BRANCH == "main"
-            or settings.IMPORT_ALLOWED_PROJECT
-        )
+        and settings.CNP_REGISTRY_BRANCH == "main"
         and settings.IMPORT_OIDC_AUDIENCE
         and settings.IMPORT_IMAGE_PREFIX.startswith("ghcr.io/")
         and settings.IMPORT_CALLBACK_URL.startswith("https://")
@@ -229,26 +230,41 @@ async def require_gitops_consumer():
         or "imageDigest" not in sources[0].get("helm", {}).get("values", "")
     ):
         stop(
-            "Déployez la branche K3s qui fige les révisions avant d’activer l’import",
+            "Les changements K3s approuvés doivent être fusionnés et synchronisés avant l’import",
             503,
         )
 
-    if settings.CNP_REGISTRY_BRANCH != "main":
-        annotations = (
-            response.json().get("metadata", {}).get("annotations", {})
-        )
-        if (
-            annotations.get("cnp.3istor.com/import-test-project")
-            != settings.IMPORT_ALLOWED_PROJECT
-            or annotations.get("cnp.3istor.com/import-test-registry")
-            != settings.CNP_REGISTRY_BRANCH
-        ):
-            stop(
-                "L’ApplicationSet n’est pas configuré pour ce projet et ce registre de recette",
-                503,
-            )
+    require_main_registry(spec)
     await require_registry_contract()
     await require_image_updater_consumer()
+
+
+def require_main_registry(spec):
+    """A local recipe uses real main records without repointing Argo's source."""
+    generators = []
+
+    def collect(value):
+        if isinstance(value, dict):
+            if "git" in value:
+                generators.append(value["git"])
+            for child in value.values():
+                collect(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect(child)
+
+    collect(spec.get("generators", []))
+    if (
+        settings.CNP_REGISTRY_BRANCH != "main"
+        or not generators
+        or any(
+            git.get("repoURL", "").removesuffix(".git").lower()
+            != ("https://github.com/" + settings.CNP_REGISTRY_REPO).lower()
+            or git.get("revision") != "main"
+            for git in generators
+        )
+    ):
+        stop("Les imports exigent le registre GitOps approuvé sur main", 503)
 
 
 async def require_registry_contract():
@@ -295,26 +311,12 @@ async def require_image_updater_consumer():
         .get("source", {})
     )
     revision = source.get("targetRevision", "HEAD")
-    if settings.CNP_REGISTRY_BRANCH != "main":
-        annotations = data.get("metadata", {}).get("annotations", {})
-        revision = annotations.get(
-            "cnp.3istor.com/import-test-k3s-revision", ""
+    require_main_registry(data.get("spec", {}))
+    if revision not in {"HEAD", "main"}:
+        stop(
+            "ImageUpdater doit suivre la configuration K3s validée sur main",
+            503,
         )
-        expected = (
-            '{{ if eq .metadata.name "'
-            + settings.IMPORT_ALLOWED_PROJECT
-            + '" }}'
-            + revision
-            + "{{ else }}HEAD{{ end }}"
-        )
-        if (
-            not SHA.fullmatch(revision)
-            or source.get("targetRevision") != expected
-        ):
-            stop(
-                "Le contrôleur d’images de recette n’utilise pas la révision K3s approuvée",
-                503,
-            )
     if (
         source.get("repoURL", "").removesuffix(".git")
         != "https://github.com/3-Istor/K3s"
@@ -373,31 +375,36 @@ def fresh_project(db, project_name, sub, username):
     return project
 
 
-async def repository_user_permission(job, token, write=False):
-    """An installation ID is not proof that the portal user owns its repositories."""
-    identity = await run_in_threadpool(linked_identity, job.user_sub)
-    if identity is None:
-        stop(
-            "Liez votre identité GitHub à votre compte CNP dans les comptes liés Keycloak",
-            403,
-        )
-    login = identity["login"]
-    user = await github("GET", f"/users/{login}", token)
-    if str(user.get("id")) != identity["id"]:
-        stop("L’identité GitHub liée a changé", 403)
-    permission = await github(
-        "GET",
-        "/repos/"
-        + job.repository_url.removeprefix("https://github.com/")
-        + f"/collaborators/{login}/permission",
-        token,
+async def repository_user_permission(db, job, write=False):
+    """Check the OAuth user's current access, independently of App credentials."""
+    identity = await repository_access(
+        db,
+        job.user_sub,
+        job.installation_id,
+        job.repository_url.removeprefix("https://github.com/"),
+        write=write,
     )
-    allowed = {"admin", "write"} if write else {"admin", "write", "read"}
-    if permission.get("permission") not in allowed:
+    if job.configuration.get("github_user_id", str(identity["id"])) != str(
+        identity["id"]
+    ):
+        stop("Le compte GitHub autorisé pour cet import a changé", 403)
+    repo = identity["repository"]
+    permissions = repo.get("permissions", {})
+    if (
+        repo.get("html_url", "").removesuffix("/").lower()
+        != job.repository_url.lower()
+        or repo.get("archived")
+        or repo.get("disabled")
+        or permissions.get("push" if write else "pull") is not True
+    ):
         stop(
             "Vos droits GitHub sur ce repo sont insuffisants pour cette étape",
             403,
         )
+    job.configuration = {
+        **job.configuration,
+        "github_user_id": str(identity["id"]),
+    }
 
 
 async def require_runtime_secrets(job):
@@ -491,8 +498,8 @@ async def authorize(db, job, write=False):
     await project_registry.ensure_app_names_free(
         job.project_name, job.app_name, "static", job.configuration["hostname"]
     )
+    await repository_user_permission(db, job, write=write)
     token = await scoped_token(job)
-    await repository_user_permission(job, token, write=write)
     repo = await github(
         "GET",
         "/repos/" + job.repository_url.removeprefix("https://github.com/"),
@@ -1212,34 +1219,83 @@ def deployment_gate(db, deployment):
     return job
 
 
-def register_argo_repository(job):
-    """Argo renews its own read credentials using the existing App installation."""
+def register_argo_repository(db, deployment):
+    """Authorize first; external repos receive project-scoped App credentials."""
+    job = deployment_gate(db, deployment)
+    match = REPOSITORY.fullmatch(job.repository_url)
+    if not match:
+        stop("URL GitHub invalide pour Argo CD", 422)
+    # 3-Istor already uses the existing cnp-portal-github-creds owner template.
+    if match.group(1).lower() == "3-istor":
+        return job
     headers = {"Authorization": f"Bearer {settings.IMPORT_ARGOCD_TOKEN}"}
     base = settings.IMPORT_ARGOCD_URL.rstrip("/") + "/api/v1/repositories"
-    response = httpx.get(
-        base + "/" + quote(job.repository_url, safe=""),
-        headers=headers,
-        timeout=20,
-    )
-    if response.status_code == 404:
-        response = httpx.post(
-            base,
+    try:
+        # Argo's individual GET can return 403 for an absent repo. Its list is
+        # RBAC-filtered and lets us distinguish absence without treating denial
+        # as permission to create. Do not adopt another project's credentials.
+        response = httpx.get(base, headers=headers, timeout=20)
+        response.raise_for_status()
+        repositories = response.json().get("items", []) or []
+        if not isinstance(repositories, list):
+            stop("La liste des connexions Argo CD est invalide", 502)
+        matches = [
+            item
+            for item in repositories
+            if (
+                item.get("repo", "").removesuffix(".git").lower()
+                == job.repository_url.lower()
+                and item.get("project") == job.project_name
+            )
+        ]
+        if len(matches) > 1:
+            stop("La connexion Argo CD du repo est ambiguë", 502)
+        if not matches:
+            # Recheck live user/project/repo access immediately before the write.
+            deployment_gate(db, deployment)
+            response = httpx.post(
+                base,
+                headers=headers,
+                timeout=20,
+                json={
+                    "repo": job.repository_url,
+                    "project": job.project_name,
+                    "type": "git",
+                    "githubAppID": int(GITHUB_APP_ID),
+                    "githubAppInstallationID": int(job.installation_id),
+                    "githubAppPrivateKey": settings.GITHUB_APP_PRIVATE_KEY,
+                },
+            )
+            response.raise_for_status()
+        # Create returns only repo/type/name and does not test a scoped
+        # connection. Recheck both new and existing credentials without cache.
+        response = httpx.get(
+            base + "/" + quote(job.repository_url, safe=""),
+            params={"appProject": job.project_name, "forceRefresh": "true"},
             headers=headers,
             timeout=20,
-            json={
-                "repo": job.repository_url,
-                "type": "git",
-                "githubAppID": 3836905,
-                "githubAppInstallationID": int(job.installation_id),
-                "githubAppPrivateKey": settings.GITHUB_APP_PRIVATE_KEY,
-            },
         )
-    response.raise_for_status()
+        response.raise_for_status()
+        repository = response.json()
+    except (httpx.HTTPError, ValueError):
+        # Never log upstream requests: the create body contains the App private key.
+        raise HTTPException(
+            502, "Argo CD n’a pas pu enregistrer l’accès au repo importé"
+        ) from None
     if (
-        response.json().get("connectionState", {}).get("status")
-        != "Successful"
+        repository.get("repo", "").removesuffix(".git").lower()
+        != job.repository_url.lower()
+        or repository.get("project") != job.project_name
+        or str(repository.get("githubAppID")) != str(GITHUB_APP_ID)
+        or str(repository.get("githubAppInstallationID"))
+        != job.installation_id
+        or repository.get("connectionState", {}).get("status") != "Successful"
     ):
-        stop("Argo CD ne peut pas lire le repo importé", 502)
+        stop(
+            "L’accès Argo CD ne correspond pas au repo et à l’installation autorisés",
+            502,
+        )
+    return job
 
 
 def wait_for_argo(job, timeout=300):

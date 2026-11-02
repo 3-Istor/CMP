@@ -29,9 +29,19 @@ case "$action" in
     python3 - <<'PY'
 from pathlib import Path
 import secrets
+import base64
+import sqlite3
 backend = Path("backend/.env")
 if not backend.exists():
-    backend.write_text(Path("backend/.env.import-local.example").read_text())
+    database = Path("backend/data/import-local.db")
+    if database.exists():
+        with sqlite3.connect("file:" + str(database.resolve()) + "?mode=ro", uri=True) as connection:
+            table = connection.execute("SELECT 1 FROM sqlite_master WHERE name='github_oauth_credentials'").fetchone()
+            if table and connection.execute("SELECT COUNT(*) FROM github_oauth_credentials").fetchone()[0]:
+                raise SystemExit("Existing GitHub OAuth credentials require the original encryption key; restore the local env backup.")
+    example = Path("backend/.env.import-local.example").read_text()
+    key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+    backend.write_text(example.replace("GITHUB_OAUTH_TOKEN_KEY=\n", "GITHUB_OAUTH_TOKEN_KEY=" + key + "\n"))
     backend.chmod(0o600)
 frontend = Path("frontend/.env.local")
 if not frontend.exists():

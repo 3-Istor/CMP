@@ -71,8 +71,7 @@ def run_deployment(deployment_id: int) -> None:
                     wait_for_argo,
                 )
 
-                import_job = deployment_gate(db, deployment)
-                register_argo_repository(import_job)
+                import_job = register_argo_repository(db, deployment)
 
             # CRITICAL: Inject app_name from deployment name
             # This ensures Terraform resources are named correctly

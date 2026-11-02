@@ -723,54 +723,65 @@ class SignedIdentityTests(unittest.TestCase):
 
 
 class RepositoryPermissionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_installation_id_alone_never_grants_repository_access(self):
-        job = SimpleNamespace(
+    def job(self):
+        return SimpleNamespace(
             user_sub="user-id",
+            installation_id="11",
             repository_url="https://github.com/example/private",
+            configuration={},
         )
-        response = Mock()
-        response.json.return_value = []
+
+    async def test_installation_id_alone_never_grants_repository_access(self):
         with patch.object(
-            service.keycloak_service, "_get_admin_token", return_value="admin"
-        ), patch.object(
-            service.requests, "get", return_value=response
-        ), patch.object(
-            service, "github", AsyncMock()
-        ) as github:
+            service,
+            "repository_access",
+            AsyncMock(side_effect=HTTPException(403, "OAuth required")),
+        ), patch.object(service, "github", AsyncMock()) as github:
             with self.assertRaises(HTTPException):
-                await service.repository_user_permission(job, "read")
+                await service.repository_user_permission(Mock(), self.job())
         github.assert_not_called()
 
     async def test_user_permission_is_checked_again_before_writes(self):
-        job = SimpleNamespace(
-            user_sub="user-id",
-            repository_url="https://github.com/example/private",
-        )
-        response = Mock()
-        response.json.return_value = [
-            {"identityProvider": "github", "userName": "joe", "userId": "42"}
-        ]
+        job = self.job()
+        repo = {
+            "html_url": job.repository_url,
+            "permissions": {"pull": True, "push": False},
+        }
         with patch.object(
-            service.keycloak_service, "_get_admin_token", return_value="admin"
-        ), patch.object(
-            service.requests, "get", return_value=response
-        ), patch.object(
             service,
-            "github",
+            "repository_access",
             AsyncMock(
-                side_effect=[
-                    {"id": 42},
-                    {"permission": "read"},
-                    {"id": 42},
-                    {"permission": "read"},
-                ]
+                return_value={
+                    "id": "42",
+                    "login": "joe",
+                    "token": "user-token",
+                    "repository": repo,
+                }
             ),
-        ):
-            await service.repository_user_permission(job, "read")
+        ), patch.object(
+            service, "github", AsyncMock(return_value=repo)
+        ) as github:
+            await service.repository_user_permission(Mock(), job)
             with self.assertRaises(HTTPException):
                 await service.repository_user_permission(
-                    job, "read", write=True
+                    Mock(), job, write=True
                 )
+        self.assertEqual(job.configuration["github_user_id"], "42")
+        github.assert_not_called()
+
+    async def test_switching_github_identity_cannot_take_over_existing_import(
+        self,
+    ):
+        job = self.job()
+        job.configuration = {"github_user_id": "41"}
+        with patch.object(
+            service,
+            "repository_access",
+            AsyncMock(return_value={"id": "42", "token": "new-user-token"}),
+        ), patch.object(service, "github", AsyncMock()) as github:
+            with self.assertRaises(HTTPException):
+                await service.repository_user_permission(Mock(), job)
+        github.assert_not_called()
 
 
 if __name__ == "__main__":

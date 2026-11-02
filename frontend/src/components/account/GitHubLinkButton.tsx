@@ -3,10 +3,9 @@
 import { CheckCircle2, GitBranch, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { connectGitHubAccount, getGitHubConnectionStatus } from "@/lib/api";
+import { connectGitHubAccount, getGitHubConnectionStatus, startGitHubLink } from "@/lib/api";
 import type { GitHubConnectionStatus } from "@/types";
 
 export function GitHubLinkButton() {
@@ -14,70 +13,88 @@ export function GitHubLinkButton() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [callbackError, setCallbackError] = useState("");
+  const [installation, setInstallation] = useState("");
 
   const reload = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      setStatus(await getGitHubConnectionStatus());
+      const result = await getGitHubConnectionStatus();
+      setStatus(result);
+      setInstallation(result.github_installation_id || "");
     } catch (error) {
       setStatus(null);
       setError(error instanceof Error ? error.message : "Vérification GitHub indisponible");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => { void reload(); }, 0);
+    const timer = setTimeout(() => {
+      const url = new URL(window.location.href);
+      const outcome = url.searchParams.get("github");
+      if (outcome === "linked") toast.success("Compte GitHub connecté ; choisissez votre installation");
+      if (outcome === "failed") setCallbackError("Connexion GitHub refusée ou session expirée. Recommencez depuis ce bouton.");
+      if (outcome) {
+        url.searchParams.delete("github");
+        window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+      }
+      void reload();
+    }, 0);
     const refresh = () => { void reload(); };
     window.addEventListener("focus", refresh);
     return () => { clearTimeout(timer); window.removeEventListener("focus", refresh); };
   }, [reload]);
 
-  async function connect() {
-    setSaving(true);
-    setError("");
+  async function authorize(mode: "authorize" | "install" = "authorize") {
+    setSaving(true); setError(""); setCallbackError("");
     try {
-      const result = await connectGitHubAccount();
-      toast.success(`Compte @${result.github_login} relié à l’installation CNP existante`);
-      await reload();
+      const result = await startGitHubLink(mode);
+      window.location.assign(result.authorization_url);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Liaison GitHub refusée");
-    } finally {
+      setError(error instanceof Error ? error.message : "Connexion GitHub indisponible");
       setSaving(false);
     }
   }
 
-  const linked = status?.identity_linked && !!status.github_installation_id;
+  async function connect() {
+    setSaving(true); setError("");
+    try {
+      const result = await connectGitHubAccount(installation);
+      toast.success(`Installation de ${result.account} sélectionnée pour @${result.github_login}`);
+      await reload();
+    } catch (error) { setError(error instanceof Error ? error.message : "Installation GitHub refusée"); }
+    finally { setSaving(false); }
+  }
+
   return <Card aria-label="Connexion GitHub">
     <CardHeader>
       <CardTitle className="flex items-center gap-2"><GitBranch className="h-5 w-5" />Connexion GitHub</CardTitle>
-      <CardDescription>Reliez votre identité GitHub et l’installation CNP déjà approuvée pour utiliser vos repos.</CardDescription>
+      <CardDescription>Connectez votre compte GitHub, puis choisissez l’installation CNP-Portal de votre compte ou organisation.</CardDescription>
     </CardHeader>
     <CardContent className="space-y-4">
-      {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Vérification de la connexion…</p>}
+      {loading && <p role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />Vérification…</p>}
       {status && <>
-        <p className="flex items-center gap-2 text-sm">
-          {status.identity_linked && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-          {status.identity_linked ? `Identité GitHub liée : @${status.github_login}` : "Votre identité GitHub doit d’abord être liée à votre compte CNP."}
-        </p>
-        {!status.identity_linked && <>
-          {status.account_url ? <>
-            <Button variant="outline" disabled={saving || loading} onClick={() => { if (status.account_url) window.open(status.account_url, "_blank", "noopener,noreferrer"); }}>Lier mon compte GitHub dans CNP</Button>
-            <p className="text-sm text-muted-foreground">La page CNP ouvre « Comptes liés / Linked accounts ». Cliquez sur « Lier / Link » à côté de GitHub, puis revenez ici et actualisez.</p>
-          </> : <p role="status" className="rounded border p-3 text-sm">La liaison GitHub n’est pas configurée sur le SSO CNP. Un administrateur doit configurer le fournisseur GitHub dans Keycloak avant de poursuivre.</p>}
-        </>}
-        {linked ? <p className="flex items-center gap-2 font-medium text-green-600"><CheckCircle2 className="h-5 w-5" />Installation CNP rattachée à votre compte</p> : <>
-          <Button onClick={() => void connect()} disabled={!status.identity_linked || saving || loading}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Rattacher l’installation CNP existante
-          </Button>
-          <p className="text-sm text-muted-foreground">CNP vérifie votre compte GitHub et votre appartenance à l’organisation avant d’enregistrer la liaison.</p>
+        {!status.oauth_configured && <p role="status" className="rounded border p-3 text-sm">OAuth GitHub doit être configuré dans CMP avant de poursuivre.</p>}
+        {status.identity_linked && <p className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 text-green-600" />Compte GitHub connecté : @{status.github_login}</p>}
+        <Button variant="outline" disabled={!status.oauth_configured || saving || loading} onClick={() => void authorize()}>
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{status.identity_linked ? "Reconnecter mon compte GitHub" : "Connecter mon compte GitHub"}
+        </Button>
+        {status.installation_url && <Button variant="outline" disabled={saving || loading} onClick={() => void authorize("install")}>Installer CNP-Portal sur mon compte ou mon organisation</Button>}
+        {status.identity_linked && <>
+          <label className="block space-y-1 text-sm"><span>Installation GitHub à utiliser</span>
+            <select aria-label="Installation GitHub" className="w-full rounded border bg-background p-2" value={installation} onChange={(event) => setInstallation(event.target.value)} disabled={saving || loading}>
+              <option value="">Choisir une installation</option>
+              {status.installations.map((item) => <option key={item.id} value={item.id}>{item.account} ({item.account_type})</option>)}
+            </select>
+          </label>
+          {!status.installations.length && <p role="status" className="text-sm">Aucune installation accessible. Installez CNP-Portal sur les dépôts voulus, puis actualisez.</p>}
+          <Button onClick={() => void connect()} disabled={!installation || saving || loading}>Utiliser cette installation</Button>
+          {status.github_installation_id && <p className="text-sm text-green-600">Installation sélectionnée et vérifiée</p>}
         </>}
       </>}
-      {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
+      {(error || callbackError) && <p role="alert" className="text-sm text-destructive">{error || callbackError}</p>}
       <Button variant="ghost" size="sm" disabled={loading || saving} onClick={() => void reload()}><RefreshCw className="mr-2 h-4 w-4" />Actualiser la connexion GitHub</Button>
-      <p className="text-xs text-muted-foreground">L’App est installée une seule fois par l’organisation. Si un repo ne lui est pas accessible ou si ses permissions doivent changer, un administrateur GitHub doit intervenir. Les droits sur chaque repo seront revérifiés avant l’import.</p>
+      <p className="text-xs text-muted-foreground">Vos droits et l’accès de l’App aux dépôts sont revérifiés avant l’import. Les secrets OAuth restent côté serveur.</p>
     </CardContent>
   </Card>;
 }

@@ -72,14 +72,15 @@ class DeploymentGatesTests(unittest.TestCase):
 
     def run_pipeline(self, gate=None, registry_error=None, ready=True):
         registry = AsyncMock(side_effect=registry_error)
+        gate = gate or Mock(return_value=self.job)
         with patch.object(
             orchestrator, "SessionLocal", return_value=self.db
         ), patch.object(orchestrator, "get_repository") as repo, patch.object(
             orchestrator, "create_executor", return_value=self.executor
         ), patch.object(
-            service, "deployment_gate", gate or Mock(return_value=self.job)
+            service, "deployment_gate", gate
         ), patch.object(
-            service, "register_argo_repository"
+            service, "register_argo_repository", side_effect=gate
         ), patch.object(
             service, "wait_for_argo"
         ) as argo, patch.object(

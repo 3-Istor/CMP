@@ -342,8 +342,16 @@ export const getGitHubStatus = async (): Promise<
 export const getGitHubConnectionStatus = () =>
   request<import("@/types").GitHubConnectionStatus>("/account/github");
 
-export const connectGitHubAccount = () =>
-  request<import("@/types").GitHubInstallationResponse>("/account/github-connect", {method: "POST"});
+export const connectGitHubAccount = (installation_id: string) =>
+  request<import("@/types").GitHubInstallationResponse>("/account/github-connect", {
+    method: "POST", body: JSON.stringify({ installation_id }),
+  });
+
+export async function startGitHubLink(mode: "authorize" | "install" = "authorize"): Promise<{ authorization_url: string }> {
+  const response = await fetch("/api/auth/github/link", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) });
+  if (!response.ok) throw new Error("La connexion OAuth GitHub est indisponible ou non configurée");
+  return response.json();
+}
 
 // Projects (Phase 4)
 export const getProjects = () =>

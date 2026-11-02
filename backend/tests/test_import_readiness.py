@@ -72,11 +72,11 @@ def test_github_check_does_not_require_published_ci(monkeypatch, capsys):
     monkeypatch.setattr(
         preflight,
         "github_linking_checks",
-        AsyncMock(return_value={"KEYCLOAK_GITHUB_PROVIDER": False}),
+        AsyncMock(return_value={"CNP_PORTAL_APP": False}),
     )
     monkeypatch.setattr(settings, "IMPORT_ENABLED", False)
     assert preflight.main(["--github"]) == 1
-    assert "MISSING KEYCLOAK_GITHUB_PROVIDER" in capsys.readouterr().out
+    assert "MISSING CNP_PORTAL_APP" in capsys.readouterr().out
     assert settings.IMPORT_ENABLED is False
     static.assert_not_called()
 
@@ -94,63 +94,57 @@ def test_remote_error_body_cannot_leak_to_console(monkeypatch, capsys):
     assert "STOP" in output
 
 
-@pytest.mark.parametrize(
-    "provider_change",
-    [
-        None,
-        {"enabled": False},
-        {"linkOnly": False},
-        {"trustEmail": True},
-        {"storeToken": True},
-        {},
-    ],
-)
-def test_provider_configuration_must_match_linking_contract(
-    monkeypatch, provider_change
-):
-    provider = {
-        "alias": "github",
-        "providerId": "github",
-        "enabled": True,
-        "linkOnly": True,
-        "trustEmail": False,
-        "storeToken": False,
-        "config": {"clientId": "public-client-id", "clientSecret": "masked"},
-    }
-    providers = (
-        [] if provider_change is None else [{**provider, **provider_change}]
-    )
-    response = Mock()
-    response.json.return_value = providers
-    client = AsyncMock()
-    client.get.return_value = response
-    factory = Mock()
-    factory.return_value.__aenter__ = AsyncMock(return_value=client)
-    factory.return_value.__aexit__ = AsyncMock(return_value=None)
-    monkeypatch.setattr(preflight.httpx, "AsyncClient", factory)
+def test_oauth_preflight_checks_app_without_keycloak_admin(monkeypatch):
+    from cryptography.fernet import Fernet
+
     monkeypatch.setattr(
-        preflight.keycloak_service, "_get_admin_token", lambda: "test-only"
+        settings, "GITHUB_OAUTH_CLIENT_ID", "Iv-public-test-id"
     )
-    monkeypatch.setattr(preflight, "generate_jwt", lambda: "test-only-app-jwt")
+    monkeypatch.setattr(settings, "GITHUB_OAUTH_CLIENT_SECRET", "test-secret")
+    monkeypatch.setattr(
+        settings,
+        "GITHUB_OAUTH_REDIRECT_URI",
+        "http://localhost:3000/api/auth/github/callback",
+    )
+    monkeypatch.setattr(
+        settings, "GITHUB_OAUTH_TOKEN_KEY", Fernet.generate_key().decode()
+    )
+    monkeypatch.setattr(preflight, "generate_jwt", lambda: "test-app-jwt")
     github = AsyncMock(
         return_value={
             "slug": "cnp-portal",
             "owner": {"login": "3-Istor"},
-            "permissions": {"emails": "read"},
+            "client_id": "Iv-public-test-id",
         }
     )
     monkeypatch.setattr(preflight, "github", github)
+    assert all(asyncio.run(preflight.github_linking_checks()).values())
+    github.assert_awaited_once_with("GET", "/app", "test-app-jwt")
+
+
+def test_invalid_token_key_or_external_http_callback_blocks_oauth_check(
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "GITHUB_OAUTH_TOKEN_KEY", "invalid")
     monkeypatch.setattr(
         settings,
-        "GITHUB_ACCOUNT_LINK_URL",
-        "https://sso.example.org/realms/test/account/",
+        "GITHUB_OAUTH_REDIRECT_URI",
+        "http://example.org/api/auth/github/callback",
     )
+    remote = AsyncMock()
+    monkeypatch.setattr(preflight, "github", remote)
     checks = asyncio.run(preflight.github_linking_checks())
-    assert all(checks.values()) is (provider_change == {})
-    github.assert_awaited_once_with("GET", "/app", "test-only-app-jwt")
-    assert client.get.call_args.args[0].endswith(
-        "/identity-provider/instances"
-    )
+    assert not checks["GITHUB_OAUTH_TOKEN_KEY"]
+    assert not checks["GITHUB_OAUTH_REDIRECT_URI"]
+    remote.assert_not_called()
+
+
+def test_local_project_restriction_never_allows_registry_branch_override(
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "IMPORT_ALLOWED_PROJECT", "joetest")
+    monkeypatch.setattr(settings, "CNP_REGISTRY_BRANCH", "feature")
+    assert not preflight.configuration_checks()["CNP_REGISTRY_BRANCH_MAIN"]
 
 
 def test_unavailable_chart_prevents_argo_and_vault_checks(monkeypatch):

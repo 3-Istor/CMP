@@ -24,10 +24,7 @@ def require_mutable_source(db, deployment):
 
 
 def require_standard_platform_mode():
-    if (
-        settings.IMPORT_ALLOWED_PROJECT
-        and settings.CNP_REGISTRY_BRANCH != "main"
-    ):
+    if settings.IMPORT_ALLOWED_PROJECT:
         raise HTTPException(
             409,
             "Cette instance de recette est réservée à l’import dans le projet existant ; "

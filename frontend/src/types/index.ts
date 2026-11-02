@@ -256,7 +256,9 @@ export interface GitHubStatus {
 export interface GitHubConnectionStatus extends GitHubStatus {
   identity_linked: boolean;
   github_login: string | null;
-  account_url: string | null;
+  oauth_configured: boolean;
+  installations: { id: string; account: string; account_type: string }[];
+  installation_url: string | null;
 }
 
 export interface GitHubInstallationResponse {

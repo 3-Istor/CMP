@@ -1,150 +1,86 @@
-# Tester l’import de repo depuis CMP local
+# Importer un repo depuis CMP
 
-La branche de travail est `import-fichier-joe-raph`, dans le worktree
-`CMP-import-fichier-joe-raph`. Le parcours utilise un projet CMP **déjà actif**.
-Le schéma, les fichiers par repo, les prérequis de recette et l’exemple démo sont
-dans [le guide joetest](../../extern-project-analyzer/docs/import-recipe-joetest.md).
+Modèle validé par le PO, 2 novembre 2026. Travail sur `import-fichier-joe-raph`.
 
-## Démarrage local
+## Lancement local
 
 ```sh
-cd /home/joebuntu/Desktop/SIGL/CNP/CMP-import-fichier-joe-raph
 make import-setup
 make import-doctor
-make import-local BACKEND_PORT=8001
+IMPORT_ENABLED=false make import-local BACKEND_PORT=8001
 ```
 
-L’interface est sur http://localhost:3000 ; l’API écoute sur 127.0.0.1:8001.
-Le lanceur utilise une base SQLite dédiée et l’app-templates voisin. Les collecteurs
-sont désactivés. Il respecte les paramètres S3 et IMPORT_ENABLED du `.env`
-backend ; **l’import reste désactivé par défaut**, sans activation implicite.
-Après une modification de `.env`, arrêter puis relancer le backend.
+Interface : `http://localhost:3000`, backend : `http://127.0.0.1:8001`.
+Le lanceur utilise une base SQLite dédiée, le template voisin et désactive les
+collecteurs. Il respecte les choix du `.env`, sans activer implicitement l’import.
+Les secrets des services CNP viennent du mécanisme habituel `make env`, avec l’accès
+Kubernetes autorisé. Après modification du `.env`, redémarrer le backend.
 
-Le compte SSO et le secret du client Keycloak `3-istor-openid` sont nécessaires
-à l’authentification locale. Si l’accès cluster est disponible :
+Le SSO CNP est conservé. La liaison GitHub est distincte et passe directement par
+OAuth CMP, sans fournisseur GitHub dans Keycloak. Voir [la connexion](github-connection.md).
 
-```sh
-make import-tunnel
-# Dans un autre terminal :
-make import-auth KUBE_CONTEXT=3istor
-```
+## Parcours utilisateur
 
-`import-auth` copie uniquement le secret client dans les fichiers locaux ignorés,
-sans l’afficher. Le tunnel SSH utilise 127.0.0.1:6443 vers l’API K3s et conserve
-le port 3000 libre. Le contexte Kubernetes est `3istor`, avec le plugin OIDC.
-Le VPN concerne l’accès réseau au cluster ; le site public et le SSO peuvent
-fonctionner sans ce VPN.
+Compte → connecter GitHub / installer CNP-Portal sur son compte ou organisation,
+choisir les repos et sélectionner l’installation cible vérifiée. Puis ouvrir un
+projet CMP déjà actif dont on est propriétaire ou administrateur → Applications
+→ Importer un repo.
 
-La commande standard `make env` de CMP synchronise aussi les credentials des
-services CNP dans le `.env`. Elle a été exécutée manuellement par l’utilisateur.
-Si Vault public est inaccessible, laisser dans un terminal dédié :
+Le formulaire transmet repo, branche, dossier, nom d’app, port, chemin de santé,
+configuration publique, noms de secrets Vault et consentement. Il reste consultable
+si l’import est désactivé ; aucune identité Session Manager n’est codée dans ce flux.
 
-```sh
-make import-vault-tunnel KUBE_CONTEXT=3istor
-```
+Avant clone, CMP relit les droits projet, le compte CNP actif, l’identité OAuth
+GitHub et les repos accessibles dans l’installation choisie. Il vérifie cluster,
+versions approuvées, registre main et secrets requis. Les droits utilisateur et
+ceux de l’App sont indépendants ; un installation_id seul n’autorise rien.
 
-Configurer alors `VAULT_URL=http://127.0.0.1:18200` dans le `.env` backend ignoré.
-Le port-forward expose Vault uniquement sur loopback. Ces accès utilisent les
-services réels de CNP ; le fonctionnement local concerne le frontend/backend.
+La CI centrale fige source/chart, scanne et prépare les fichiers manquants. S’il
+faut une PR, le run s’arrête : approbation indépendante du dernier commit, fusion
+vers la branche source, puis Reprendre dans CMP. Le nouveau run rescanne la version
+finale avant build, contrôle HTTP, Trivy et publication.
 
-## Formulaire et vrai import
+Le déploiement reprend le module Terraform en mode existing : aucun second repo
+ou projet créé. Il garde un état S3 explicite, des tfvars publics isolés et les
+secrets hors fichiers versionnés. Une seule fiche Deployment peut être créée.
 
-Ouvrir joetest → Applications → **Importer un repo**, avec le compte propriétaire
-ou admin du projet. Le bouton n’est pas affiché aux invités/membres.
-Le formulaire permet de choisir le repo, sa branche, le dossier, le port HTTP,
-le chemin de santé et la configuration de l’application.
+Pour Argo, les repos 3-Istor réutilisent les credentials par owner existants sans
+déclaration. Les repos externes sont déclarés par repo et projet, avec la clé App
+et l’installation du job ; le backend relit les droits avant l’appel et avant
+l’écriture. Une entrée incompatible n’est jamais écrasée. Les connexions nouvelles
+et existantes sont vérifiées sans cache avant Terraform.
 
-Pour Session Manager : branche `import-fichier-joe-raph`, dossier `.`, port `8000`,
-santé `/api/health`, mode démo selon le guide joetest. Les variables publiques sont
-proposées dans la PR ; les secrets éventuels restent dans Vault.
+Le record réel du projet reste sur `cnp-projects/main`, avec SHA source/chart et
+digest. Aucun overlay de recette ni repointage de l’Application argocd. Le succès
+exige les bonnes révisions et destination Argo, Healthy + Synced et l’URL disponible.
 
-Un formulaire consultable ne signifie pas que l’import réel est activé. Celui-ci
-exige aussi les deux liaisons GitHub, l’App installée sur les repos, le workflow
-et le chart publiés à leurs SHA approuvés, le callback HTTPS, le registre et le
-profil Argo compatibles, ainsi que les accès Terraform/GHCR/Vault.
-
-Le 25 octobre, les contrôles en lecture ont confirmé le projet actif joetest et
-les droits de son propriétaire. Le parcours de connexion GitHub a été corrigé
-pour réutiliser l’installation existante ; la liaison d’identité et le rattachement
-restent à terminer par l’utilisateur dans Compte. Aucun import connecté de Session
-Manager n’a été lancé et aucun contrôle d’identité n’a été contourné. L’import
-reste désactivé dans le `.env` local.
-
-Après publication et configuration autorisées, vérifier sans muter les services :
+## Contrôles et recette
 
 ```sh
 make import-readiness
-make import-readiness ARGS=--live
-```
-
-Le second contrôle lit GitHub et Argo : commit du dispatcher, callback, audience,
-provenance du registre, pins source/chart/digest et protection ImageUpdater.
-Il n’active pas l’import et ne clone, ne dispatch ni ne déploie rien.
-
-Une fois les prérequis validés, l’utilisateur lance l’import et donne son
-consentement dans le portail. Si des fichiers manquent, la CI propose une PR et
-s’arrête. Il faut une approbation indépendante du dernier commit, la fusion sur
-la branche source choisie puis **Reprendre** dans CMP. Le nouveau run rescanne
-la version finale avant build et déploiement.
-
-## Isolation et vérification
-
-En recette avec `IMPORT_ALLOWED_PROJECT=joetest` et
-`CNP_REGISTRY_BRANCH=import-fichier-joe-raph`, les imports des autres projets sont
-refusés. La création/suppression de projet et les déploiements catalogue sont
-aussi refusés sur cette instance, pour éviter d’écrire leur état dans le registre
-de test. Le profil K3s ne change la branche de registre que pour joetest.
-
-Le premier refus, timeout, scan bloquant ou contrôle manquant arrête le parcours.
-Une PR en attente ne permet aucun build ni déploiement. Seuls le rapport, le statut
-et le nettoyage temporaire peuvent continuer. Le déploiement réutilise le projet
-et le repo existants ; les tfvars se trouvent dans un workdir propre à l’app,
-jamais dans le template partagé. Les modifications directes du repo importé par
-les écrans configuration/sécurité/FinOps/release/MCP sont bloquées.
-
-Les tests backend utilisent des JWT signés de test et une base SQL temporaire,
-avec les services externes simulés. Le frontend a passé lint, TypeScript et build.
-Le script inter-repos `extern-project-analyzer/scripts/check-import-local.sh`
-regroupe les tests analyzer, CMP, registre, K3s, chart et Terraform simulé.
-Ces résultats ne remplacent pas la recette connectée avec SSO/GitHub/Argo réels.
-
-## Correction de la connexion GitHub
-
-Le bouton Compte réutilise maintenant l’installation CNP existante après vérification
-de l’identité GitHub liée dans Keycloak et de l’appartenance à l’organisation.
-La page d’installation réservée aux administrateurs ne fait plus partie de la
-connexion courante. Voir [le parcours et les permissions](github-connection.md).
-
-Le diagnostic Keycloak a confirmé l’absence de fournisseur GitHub. La liaison
-utilisateur est bloquée jusqu’à sa configuration par l’administrateur. Le bouton
-CMP explique désormais ce prérequis ; GITHUB_ACCOUNT_LINK_URL reste vide jusqu’à
-la validation du provider et du parcours OAuth réellement connecté.
-
-## Préflight et protocole de la reprise du 29 octobre
-
-```sh
-make import-readiness
-make import-readiness ARGS=--live
-# Diagnostic administratif optionnel du broker, indépendant de la CI :
 make import-readiness ARGS=--github
+make import-readiness ARGS=--live
 ```
 
-Le contrôle local affiche seulement les noms de réglages et des booléens. Le mode
-live vérifie workflow/chart/Argo/Vault en lecture, sans clone ni dispatch. Le mode
-github peut être refusé au compte de service sans droits de lecture de configuration
-IdP : ne pas élargir ses rôles uniquement pour ce diagnostic. La liaison réelle de
-l’utilisateur et ses droits sont vérifiés dans le portail avant chaque accès source.
+Le contrôle GitHub vérifie la configuration OAuth/App, pas une fédération Keycloak.
+Le live lit CI/chart/Argo/Vault, sans clone ni dispatch. S3 est réellement vérifié
+à init/plan. Une réussite de préflight ne remplace pas OAuth dans le navigateur et
+la recette connectée.
 
-Les imports exigent désormais un backend S3 explicitement activé avec bucket et
-région ; ils ne retombent pas sur un state local. L’init/plan vérifie l’accès réel.
-Un préflight technique réussi ne prouve ni OAuth ni un déploiement connecté.
+`IMPORT_ALLOWED_PROJECT=joetest` limite cette instance locale aux imports dans le
+projet existant et bloque les mutations catalogue/projets depuis cette instance.
+`CNP_REGISTRY_BRANCH` reste obligatoirement `main` pour l’import. Laisser la
+restriction projet vide sur une instance destinée à tous les projets autorisés.
 
-Chaque dispatch transmet `import_id` et `attempt_id`. Le caller, le workflow
-réutilisable, le worker et CMP doivent provenir de versions compatibles publiées
-et approuvées. Une ancienne tentative ne peut pas consommer la nouvelle. Le dépôt
-et la branche du registre ainsi que le domaine sont figés dans le job ; une ancienne
-demande sans contexte identifié est refusée et demande une recréation explicite.
-Aucun job n’est migré silencieusement vers main.
+Chaque dispatch a un `attempt_id` neuf ; les anciens callbacks ne peuvent pas
+faire avancer une nouvelle tentative. Le registre et le domaine sont figés dans
+le job ; un changement de contexte exige une nouvelle demande explicite.
 
-La consigne reste sans push et sans activation. Voir
-[la passation actuelle](../../extern-project-analyzer/docs/import-oct29-status.md).
+Tout refus, erreur, timeout ou contrôle obligatoire manquant bloque la suite.
+Les modifications du source importé via configuration/sécurité/FinOps/release/MCP
+doivent repasser par les scans. Les écritures déjà effectuées restent tracées ;
+aucun nettoyage ne supprime automatiquement le repo source.
+
+[Schéma et fichiers](../../extern-project-analyzer/docs/import-changes-overview.md) ·
+[Recette joetest et fermeture du tunnel](../../extern-project-analyzer/docs/import-recipe-joetest.md) ·
+[Accès Argo et RBAC](../../K3s/k8s/config/argocd/REPOSITORY_IMPORTS.md)

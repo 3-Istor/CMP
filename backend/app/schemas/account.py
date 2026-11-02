@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -36,8 +38,28 @@ class GitHubInstallationResponse(BaseModel):
     account: str
 
 
+class GitHubInstallationOption(BaseModel):
+    id: str
+    account: str
+    account_type: str
+
+
 class GitHubConnectionStatus(BaseModel):
     github_installation_id: str | None
     identity_linked: bool
     github_login: str | None
-    account_url: str | None
+    oauth_configured: bool
+    installations: list[GitHubInstallationOption]
+    installation_url: str | None
+
+
+class GitHubOAuthStartRequest(BaseModel):
+    mode: Literal["authorize", "install"] = "authorize"
+    binding: str = Field(min_length=32, max_length=256, repr=False)
+
+
+class GitHubOAuthCallbackRequest(GitHubOAuthStartRequest):
+    state: str = Field(min_length=1, max_length=128, repr=False)
+    code: str | None = Field(
+        default=None, min_length=1, max_length=512, repr=False
+    )
