@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { downloadActivity, getActivity, getActivitySummary } from "@/lib/api";
+import { downloadActivity, getActivity, getActivitySummary, isNotConnected } from "@/lib/api";
+import { NotConnected } from "@/components/clusters/NotConnected";
 import { cn } from "@/lib/utils";
 import type {
   ActivityEvent,
@@ -278,7 +279,7 @@ export function AuditView({
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
   const [unavailable, setUnavailable] = useState<ActivitySource[]>([]);
   const [selected, setSelected] = useState<ActivityEvent | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [more, setMore] = useState(true);
 
@@ -298,7 +299,7 @@ export function AuditView({
       setMore(feed.events.length >= 100);
       setError(null);
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e);
     } finally {
       setLoading(false);
     }
@@ -318,7 +319,7 @@ export function AuditView({
       setEvents([...events, ...feed.events.filter((e) => !seen.has(e.id))]);
       setMore(feed.events.length >= 100);
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e);
     } finally {
       setLoading(false);
     }
@@ -339,10 +340,12 @@ export function AuditView({
     [events],
   );
 
-  if (error && !events) {
+  if (error != null && !events) {
+    const nc = isNotConnected(error);
+    if (nc) return <NotConnected cloud={nc.cloud} />;
     return (
       <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-        <AlertTriangle className="h-4 w-4" /> {error}
+        <AlertTriangle className="h-4 w-4" /> {errorMessage(error)}
       </div>
     );
   }
@@ -520,7 +523,7 @@ export function AuditView({
                   size="sm"
                   onClick={() =>
                     downloadActivity(project, filters, "csv").catch((e) =>
-                      setError(errorMessage(e)),
+                      setError(e),
                     )
                   }
                 >
@@ -531,7 +534,7 @@ export function AuditView({
                   size="sm"
                   onClick={() =>
                     downloadActivity(project, filters, "json").catch((e) =>
-                      setError(errorMessage(e)),
+                      setError(e),
                     )
                   }
                 >

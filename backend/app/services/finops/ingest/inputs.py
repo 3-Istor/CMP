@@ -1,0 +1,171 @@
+"""The versioned FinOps inputs of the K3s repo (finops/*.yaml)."""
+
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+
+from ruamel.yaml import YAML
+
+from app.core.config import settings
+
+
+def _load(name: str) -> dict:
+    path = Path(settings.FINOPS_DATA_DIR) / name
+    with path.open(encoding="utf-8") as handle:
+        return YAML(typ="safe").load(handle) or {}
+
+
+@dataclass(frozen=True)
+class OnPremTCO:
+    eur_per_kwh: float
+    cluster_watts: float
+    cluster_eur_per_hour: float
+    gpu_server_watts: float
+    has_mock: bool
+    gpu_has_mock: bool
+    cpu_eur_per_core_hour: float = 0.0
+    ram_eur_per_gib_hour: float = 0.0
+    watts_per_busy_core: float = 0.0
+
+    @property
+    def energy_share(self) -> float:
+        """Part of the cluster's hourly cost that is electricity."""
+        energy = self.cluster_watts / 1000 * self.eur_per_kwh
+        if self.cluster_eur_per_hour <= 0:
+            return 0.0
+        return energy / self.cluster_eur_per_hour
+
+
+def onprem_tco() -> OnPremTCO:
+    raw = _load("onprem-tco.yaml")
+    power = raw.get("power", {})
+    network = raw.get("network", {})
+    gpu = raw.get("gpu_server", {})
+    eur_per_kwh = float(power.get("electricity_eur_per_kwh_ttc", 0))
+    watts = float(power.get("measured_watts", 0))
+    amortization = sum(
+        float(h.get("purchase_eur", 0))
+        / (float(h["amortization_months"]) * 730)
+        for h in raw.get("hypervisors", [])
+        if float(h.get("purchase_eur", 0)) > 0
+    )
+    hourly = (
+        watts / 1000 * eur_per_kwh
+        + amortization
+        + float(network.get("internet_eur_per_month", 0))
+        * float(network.get("platform_share", 0))
+        / 730
+    )
+    cluster = raw.get("cluster", {})
+    split = cluster.get("split", {})
+    vcpu = float(cluster.get("vcpu", 0))
+    ram_gib = float(cluster.get("ram_gib", 0))
+    return OnPremTCO(
+        cpu_eur_per_core_hour=(
+            hourly * float(split.get("cpu", 0)) / vcpu if vcpu > 0 else 0.0
+        ),
+        ram_eur_per_gib_hour=(
+            hourly * float(split.get("ram", 0)) / ram_gib
+            if ram_gib > 0
+            else 0.0
+        ),
+        watts_per_busy_core=float(power.get("watts_per_busy_core", 0)),
+        eur_per_kwh=eur_per_kwh,
+        cluster_watts=watts,
+        cluster_eur_per_hour=hourly,
+        gpu_server_watts=float(gpu.get("mean_watts", 0)),
+        has_mock=any(
+            bool(section.get("mock"))
+            for section in (power, network)
+            if isinstance(section, dict)
+        ),
+        gpu_has_mock=bool(gpu.get("mock")),
+    )
+
+
+@dataclass(frozen=True)
+class ModelPrice:
+    provider: str
+    service: str
+    model: str
+    input_usd_per_mtok: float
+    output_usd_per_mtok: float
+    effective_from: date
+
+
+def ai_prices() -> tuple[list[ModelPrice], set[str]]:
+    raw = _load("ai-prices.yaml")
+    prices = [
+        ModelPrice(
+            provider=m["provider"],
+            service=m["service"],
+            model=m["model"],
+            input_usd_per_mtok=float(m["input_usd_per_mtok"]),
+            output_usd_per_mtok=float(m["output_usd_per_mtok"]),
+            effective_from=date.fromisoformat(str(m["effective_from"])),
+        )
+        for m in raw.get("models", [])
+    ]
+    return prices, set(raw.get("local_backends", []))
+
+
+def price_for(
+    prices: list[ModelPrice], model: str, day: date
+) -> ModelPrice | None:
+    """The price of ``model`` in force on ``day``."""
+    candidates = [
+        p for p in prices if p.model == model and p.effective_from <= day
+    ]
+    return max(candidates, key=lambda p: p.effective_from, default=None)
+
+
+def saas_subscriptions() -> list[dict]:
+    return list(_load("saas.yaml").get("subscriptions", []))
+
+
+CLUSTERS = ("onprem", "aws", "gcp")
+
+
+@dataclass(frozen=True)
+class NodeRates:
+    """What one requested core and one requested GiB cost per hour, in EUR."""
+
+    cpu_eur_per_core_hour: float
+    ram_eur_per_gib_hour: float
+    estimated: bool = False
+
+    def hourly_eur(self, cpu_cores: float, ram_gib: float) -> float:
+        return (
+            cpu_cores * self.cpu_eur_per_core_hour
+            + ram_gib * self.ram_eur_per_gib_hour
+        )
+
+
+def cluster_rates(usd_per_eur: float | None) -> dict[str, NodeRates]:
+    """
+    On-prem from the TCO; each cloud from its node's list price, split between
+    vCPUs and memory by ``cpu_to_gib_price_ratio``. A cloud is left out while
+    the USD rate or its price is unknown.
+    """
+    tco = onprem_tco()
+    rates = {
+        "onprem": NodeRates(
+            tco.cpu_eur_per_core_hour, tco.ram_eur_per_gib_hour, tco.has_mock
+        )
+    }
+    if not usd_per_eur:
+        return rates
+    try:
+        raw = _load("cloud-prices.yaml")
+    except FileNotFoundError:
+        return rates
+    ratio = float(raw.get("cpu_to_gib_price_ratio", 0))
+    for cloud, node in (raw.get("clouds") or {}).items():
+        weight = ratio * float(node["vcpu"]) + float(node["ram_gib"])
+        if ratio <= 0 or weight <= 0:
+            continue
+        per_gib = float(node["usd_per_hour"]) / weight / usd_per_eur
+        rates[cloud] = NodeRates(
+            per_gib * ratio, per_gib, bool(node.get("mock"))
+        )
+    return rates

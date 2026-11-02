@@ -12,12 +12,14 @@ import {
   cancelPromotion,
   cancelRun,
   getEnvironments,
+  isNotConnected,
   listPromotions,
   listRuns,
   startPromotion,
   startRun,
   wakeStaging,
 } from "@/lib/api";
+import { NotConnected } from "@/components/clusters/NotConnected";
 import { cn } from "@/lib/utils";
 import type {
   EnvironmentState,
@@ -364,7 +366,7 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
   const [view, setView] = useState<EnvironmentsView | null>(null);
   const [runs, setRuns] = useState<VerificationRun[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [emergency, setEmergency] = useState(false);
   const [reason, setReason] = useState("");
   const [starting, setStarting] = useState(false);
@@ -383,7 +385,7 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
         setPromotions(nextPromotions);
       }
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e);
     }
   }, [deploymentId]);
 
@@ -393,8 +395,12 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  if (error && !view) {
-    return <p className={cn("rounded-md border px-3 py-2 text-sm", TONE.bad)}>{error}</p>;
+  if (error != null && !view) {
+    const nc = isNotConnected(error);
+    if (nc) return <NotConnected cloud={nc.cloud} />;
+    return (
+      <p className={cn("rounded-md border px-3 py-2 text-sm", TONE.bad)}>{errorMessage(error)}</p>
+    );
   }
   if (!view) return <Skeleton className="h-48 w-full" />;
 

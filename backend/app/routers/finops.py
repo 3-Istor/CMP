@@ -1,12 +1,16 @@
 """
 FinOps Router — costs, budgets, recommendations and alerts.
 
-All cost figures come from the deterministic simulation behind
-:func:`app.services.finops.provider.get_cost_provider`; only budgets, alert
-history and recommendation decisions are persisted.
+Cost figures come from the provider behind
+:func:`app.services.finops.provider.get_cost_provider` (simulated or read from
+the ingested cost store); budgets, alert history and recommendation decisions
+are persisted here.
 
 Access control (spec matrix):
   * **Admin CNP** (``FINOPS_ADMIN_USERS``) — sees every project's costs.
+  * **Finance** (``cnp-finance`` group, ``FINOPS_FINANCE_USERS``) — reads and
+    exports every project's costs, savings and budgets, and nothing else:
+    no recommendation, no budget edit, nothing outside ``/api/finops``.
   * **Any role on a project, guests included** — sees that project's costs.
   * **Project admins/owner** — the only roles allowed to act on a
     recommendation (applying one commits to GitOps and changes running
@@ -14,11 +18,16 @@ Access control (spec matrix):
   * **Project Owner** — the ONLY role allowed to set a project budget.
 """
 
+import csv
+import io
 import logging
-from datetime import date
+import re
+from datetime import date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from sqlalchemy import Date, Integer, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -27,25 +36,57 @@ from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import (
     BudgetAlertState,
+    CarbonIntensity,
     CostAlert,
+    CostLineItem,
     ProjectBudget,
     RecommendationState,
+    SavingsEntry,
 )
 from app.models.project import Project
 from app.schemas.finops import (
     ActionResponse,
+    AppCloudEstimate,
     AppCostRow,
     Breakdown,
     BudgetRead,
     BudgetWrite,
+    CarbonDay,
+    CarbonLatest,
+    CarbonMethod,
+    CarbonResponse,
+    CarbonRow,
+    CarbonTotals,
     CostAlertRead,
+    CostAnomaly,
+    CostForecast,
     CostSeriesPoint,
     CostSummary,
+    MetaResponse,
     OverviewResponse,
+    PlatformReport,
     Recommendation,
+    SavingsCategory,
+    SavingsDay,
+    SavingsResponse,
+    SavingsRow,
+    SavingsTotals,
+    SavingsYtd,
+    SourceMeta,
 )
-from app.services.authz import assert_project_role, is_cnp_admin
-from app.services.finops.provider import get_cost_provider, period_to_range
+from app.services.authz import (
+    assert_project_role,
+    is_cnp_admin,
+    is_cnp_finance,
+)
+from app.services.finops import anomalies, estimate, platform, reconciliation
+from app.services.finops.forecast import forecast_for_apps
+from app.services.finops.ingest import carbon, fx
+from app.services.finops.provider import (
+    REAL_RESOURCES,
+    get_cost_provider,
+    period_to_range,
+)
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
@@ -84,6 +125,11 @@ def _user_project_names(token: dict) -> list[str]:
     return [p["name"] for p in fetch_user_projects_from_keycloak(user_id)]
 
 
+def _sees_all(token: dict) -> bool:
+    """Admin CNP or finance: allowed to read every project's figures."""
+    return is_cnp_admin(token) or is_cnp_finance(token)
+
+
 def _require_project_role(
     db: Session,
     token: dict,
@@ -91,14 +137,18 @@ def _require_project_role(
     minimum: ProjectRole = ProjectRole.GUEST,
 ) -> None:
     """
-    CNP admins pass; anyone else needs *minimum* on the project.
+    CNP admins pass; finance passes for reads only; anyone else needs
+    *minimum* on the project.
 
     The default (any role, guests included) is enough to read costs. The
     mutating endpoints pass ADMIN: applying a recommendation commits to the
     app's GitOps repository and ArgoCD then changes what is running.
     """
-    if not is_cnp_admin(token):
-        assert_project_role(db, token, project, minimum)
+    if is_cnp_admin(token):
+        return
+    if minimum == ProjectRole.GUEST and is_cnp_finance(token):
+        return
+    assert_project_role(db, token, project, minimum)
 
 
 def _is_owner(db: Session, project: str, username: str) -> bool:
@@ -121,7 +171,7 @@ def _load_deployments(
     if project:
         _require_project_role(db, token, project)
         q = q.filter(Deployment.project_id == project)
-    elif not is_cnp_admin(token):
+    elif not _sees_all(token):
         projects = _user_project_names(token)
         if not projects:
             return []
@@ -164,7 +214,72 @@ def _budget_read(
     )
 
 
+# ── Savings helpers ───────────────────────────────────────────────────────────
+
+
+def _savings_since(period: str, today: date) -> date:
+    days = {"30d": 30, "90d": 90}.get(period)
+    if days is None:
+        return date(today.year, 1, 1)
+    return today - timedelta(days=days - 1)
+
+
+def _savings_query(db: Session, token: dict, project: str | None, since: date):
+    query = select(SavingsEntry).where(SavingsEntry.day >= since)
+    if project:
+        _require_project_role(db, token, project)
+        query = query.where(SavingsEntry.project == project)
+    elif not _sees_all(token):
+        query = query.where(
+            SavingsEntry.project.in_(_user_project_names(token))
+        )
+    return query
+
+
+def _savings_ytd(db: Session, token: dict, project: str | None) -> SavingsYtd:
+    since = _savings_since("ytd", date.today())
+    entries = db.scalars(_savings_query(db, token, project, since)).all()
+    return SavingsYtd(
+        avoided_eur=round(sum(e.avoided_eur or 0.0 for e in entries), 2),
+        realized_eur=round(sum(e.realized_eur or 0.0 for e in entries), 2),
+    )
+
+
+def _project_budget(db: Session, project: str | None) -> ProjectBudget | None:
+    if not project:
+        return None
+    return (
+        db.query(ProjectBudget)
+        .filter(ProjectBudget.project_name == project)
+        .first()
+    )
+
+
+def _budget_amount(budget: ProjectBudget | None) -> float | None:
+    if budget is None or not budget.monthly_amount_eur:
+        return None
+    return budget.monthly_amount_eur
+
+
+def _rounded(model, *fields):
+    for field in fields:
+        setattr(model, field, round(getattr(model, field), 4))
+    return model
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+
+def _cost_specs(provider, deployments, token: dict, project, app=None):
+    """Admins and finance without a filter see every namespace that costs."""
+    if (
+        project is None
+        and app is None
+        and hasattr(provider, "specs_all")
+        and (is_cnp_admin(token) or is_cnp_finance(token))
+    ):
+        return provider.specs_all(deployments)
+    return provider.specs(deployments)
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -174,11 +289,16 @@ def get_overview(
     project: str | None = None,
     period: str = "30d",
     granularity: str = "daily",
+    cloud: str | None = Query(default=None, description="onprem|aws|gcp"),
 ):
     """Top KPIs + budget + app list + timeline for the Overview dashboard."""
     deployments = _load_deployments(db, token, project)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    all_apps = _cost_specs(provider, deployments, token, project)
+    by_cloud = provider.by_cloud(all_apps)
+    # Applications run on-prem; no application-scoped cost exists on a public
+    # cloud yet, so filtering on one leaves nothing to list.
+    apps = all_apps if cloud in (None, "", "all", "onprem") else []
 
     summary_dict = provider.summary(apps)
     summary_dict["breakdown"] = Breakdown(**summary_dict["breakdown"])
@@ -191,21 +311,481 @@ def get_overview(
     ]
     app_rows = [AppCostRow(**r) for r in provider.app_rows(apps)]
 
-    budget_read = None
-    if project:
-        budget = (
-            db.query(ProjectBudget)
-            .filter(ProjectBudget.project_name == project)
-            .first()
+    budget = _project_budget(db, project)
+    budget_read = (
+        _budget_read(budget, summary.month_to_date_eur) if project else None
+    )
+
+    forecast = None
+    if settings.FINOPS_PROVIDER == "real":
+        forecast = CostForecast(
+            **forecast_for_apps(
+                provider, apps, budget_eur=_budget_amount(budget)
+            )
         )
-        budget_read = _budget_read(budget, summary.month_to_date_eur)
+        summary.projected_month_eur = forecast.projected_eur
 
     return OverviewResponse(
         summary=summary,
         budget=budget_read,
         apps=app_rows,
         timeline=timeline,
+        by_cloud=by_cloud,
+        savings_ytd=_savings_ytd(db, token, project),
+        forecast=forecast,
     )
+
+
+@router.get("/forecast", response_model=CostForecast)
+def get_forecast(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+):
+    """Month-end forecast with an 80 % interval and the budget overrun day."""
+    deployments = _load_deployments(db, token, project)
+    provider = get_cost_provider()
+    return CostForecast(
+        **forecast_for_apps(
+            provider,
+            _cost_specs(provider, deployments, token, project),
+            budget_eur=_budget_amount(_project_budget(db, project)),
+        )
+    )
+
+
+@router.get("/anomalies", response_model=list[CostAnomaly])
+def get_anomalies(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "30d",
+):
+    """Daily cost anomalies per app, with the deployment that likely caused them."""
+    deployments = _load_deployments(db, token, project)
+    start, end = period_to_range(period)
+    rows = anomalies.find_anomalies(
+        db,
+        get_cost_provider(),
+        deployments,
+        start,
+        # Today is still being ingested.
+        end - timedelta(days=1),
+    )
+    return [CostAnomaly(**{**r, "date": r["date"].isoformat()}) for r in rows]
+
+
+@router.get("/savings", response_model=SavingsResponse)
+def get_savings(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "ytd",
+):
+    """Savings ledger. Avoided and realized are never summed together."""
+    since = _savings_since(period, date.today())
+    entries = db.scalars(
+        _savings_query(db, token, project, since).order_by(SavingsEntry.day)
+    ).all()
+
+    totals = SavingsTotals()
+    categories: dict[str, SavingsCategory] = {}
+    days: dict[date, SavingsDay] = {}
+    rows: dict[tuple[str, str, str], SavingsRow] = {}
+    for e in entries:
+        avoided = e.avoided_eur or 0.0
+        realized = e.realized_eur or 0.0
+        kwh = e.energy_avoided_kwh or 0.0
+        totals.avoided_eur += avoided
+        totals.realized_eur += realized
+        totals.energy_avoided_kwh += kwh
+        totals.co2e_avoided_kg += e.co2e_avoided_kg or 0.0
+
+        cat = categories.setdefault(
+            e.category,
+            SavingsCategory(
+                category=e.category, avoided_eur=0, realized_eur=0
+            ),
+        )
+        cat.avoided_eur += avoided
+        cat.realized_eur += realized
+
+        day = days.setdefault(
+            e.day,
+            SavingsDay(date=e.day.isoformat(), avoided_eur=0, realized_eur=0),
+        )
+        day.avoided_eur += avoided
+        day.realized_eur += realized
+
+        row = rows.setdefault(
+            (e.project, e.app or "", e.category),
+            SavingsRow(
+                project=e.project,
+                app=e.app or "",
+                category=e.category,
+                avoided_eur=0,
+                realized_eur=0,
+                energy_avoided_kwh=0,
+                days=0,
+            ),
+        )
+        row.avoided_eur += avoided
+        row.realized_eur += realized
+        row.energy_avoided_kwh += kwh
+        row.days += 1
+
+    _rounded(
+        totals,
+        "avoided_eur",
+        "realized_eur",
+        "energy_avoided_kwh",
+        "co2e_avoided_kg",
+    )
+    return SavingsResponse(
+        totals=totals,
+        by_category=[
+            _rounded(c, "avoided_eur", "realized_eur")
+            for c in sorted(categories.values(), key=lambda c: c.category)
+        ],
+        timeline=[
+            _rounded(d, "avoided_eur", "realized_eur")
+            for _, d in sorted(days.items())
+        ],
+        rows=sorted(
+            (
+                _rounded(
+                    r, "avoided_eur", "realized_eur", "energy_avoided_kwh"
+                )
+                for r in rows.values()
+            ),
+            key=lambda r: r.avoided_eur,
+            reverse=True,
+        ),
+        since=entries[0].day if entries else None,
+    )
+
+
+@router.get("/carbon", response_model=CarbonResponse)
+def get_carbon(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "30d",
+):
+    """Energy and carbon of on-prem workloads; the method is always named."""
+    since = _savings_since(period, date.today())
+    day = func.date(CostLineItem.charge_period_start, type_=Date)
+    query = (
+        select(
+            day.label("day"),
+            CostLineItem.project,
+            CostLineItem.app,
+            func.sum(CostLineItem.x_energy_kwh),
+            func.sum(CostLineItem.x_co2e_kg),
+            func.max(cast(CostLineItem.x_is_estimate, Integer)),
+        )
+        .where(day >= since, CostLineItem.x_energy_kwh.is_not(None))
+        .group_by(day, CostLineItem.project, CostLineItem.app)
+    )
+    if project:
+        _require_project_role(db, token, project)
+        query = query.where(CostLineItem.project == project)
+    elif not _sees_all(token):
+        query = query.where(
+            CostLineItem.project.in_(_user_project_names(token))
+        )
+
+    intensities = {
+        row.day: row.g_per_kwh
+        for row in db.scalars(
+            select(CarbonIntensity).where(
+                CarbonIntensity.zone == carbon.ZONE,
+                CarbonIntensity.method == carbon.METHOD_DIRECT,
+                CarbonIntensity.day >= since,
+            )
+        )
+    }
+    lca_per_kwh = carbon.LCA_G_PER_KWH / 1000
+
+    totals = CarbonTotals()
+    days: dict[date, CarbonDay] = {}
+    rows: dict[tuple[str, str], CarbonRow] = {}
+    has_estimate = False
+    for line_day, line_project, line_app, kwh, co2e, estimate in db.execute(
+        query
+    ):
+        kwh = kwh or 0.0
+        co2e = co2e or 0.0
+        has_estimate = has_estimate or bool(estimate)
+        totals.energy_kwh += kwh
+        totals.co2e_direct_kg += co2e
+        point = days.setdefault(
+            line_day,
+            CarbonDay(
+                date=line_day.isoformat(),
+                energy_kwh=0,
+                co2e_kg=0,
+                g_per_kwh=intensities.get(line_day),
+            ),
+        )
+        point.energy_kwh += kwh
+        point.co2e_kg += co2e
+        row = rows.setdefault(
+            (line_project or "", line_app or ""),
+            CarbonRow(
+                project=line_project or "",
+                app=line_app or "",
+                energy_kwh=0,
+                co2e_direct_kg=0,
+                co2e_lca_kg=0,
+            ),
+        )
+        row.energy_kwh += kwh
+        row.co2e_direct_kg += co2e
+    totals.co2e_lca_kg = totals.energy_kwh * lca_per_kwh
+    for row in rows.values():
+        row.co2e_lca_kg = row.energy_kwh * lca_per_kwh
+
+    avoided = db.scalars(
+        _savings_query(db, token, project, since).where(
+            SavingsEntry.category == "offhours"
+        )
+    ).all()
+    totals.co2e_avoided_kg = sum(e.co2e_avoided_kg or 0.0 for e in avoided)
+
+    newest = db.scalar(
+        select(CarbonIntensity)
+        .where(
+            CarbonIntensity.zone == carbon.ZONE,
+            CarbonIntensity.method == carbon.METHOD_DIRECT,
+        )
+        .order_by(CarbonIntensity.day.desc())
+        .limit(1)
+    )
+    return CarbonResponse(
+        totals=_rounded(
+            totals,
+            "energy_kwh",
+            "co2e_direct_kg",
+            "co2e_lca_kg",
+            "co2e_avoided_kg",
+        ),
+        methods=[
+            CarbonMethod(
+                id=carbon.METHOD_DIRECT,
+                label="Intensité mesurée du réseau (RTE éCO2mix)",
+                source="RTE éCO2mix, moyenne journalière du taux de CO2",
+            ),
+            CarbonMethod(
+                id=carbon.METHOD_LCA,
+                label="Analyse de cycle de vie (ADEME)",
+                source=carbon.LCA_SOURCE,
+                g_per_kwh=carbon.LCA_G_PER_KWH,
+            ),
+        ],
+        timeline=[
+            _rounded(d, "energy_kwh", "co2e_kg")
+            for _, d in sorted(days.items())
+        ],
+        rows=sorted(
+            (
+                _rounded(r, "energy_kwh", "co2e_direct_kg", "co2e_lca_kg")
+                for r in rows.values()
+            ),
+            key=lambda r: r.energy_kwh,
+            reverse=True,
+        ),
+        latest=(
+            CarbonLatest(
+                g_per_kwh=round(newest.g_per_kwh, 1),
+                day=newest.day,
+                source=newest.source,
+            )
+            if newest
+            else None
+        ),
+        has_estimate=has_estimate,
+    )
+
+
+@router.get("/meta", response_model=MetaResponse)
+def get_meta(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """Nature (simulated / real) and freshness of the cost data."""
+    role = (
+        "admin"
+        if is_cnp_admin(token)
+        else "finance" if is_cnp_finance(token) else "member"
+    )
+    sources: list[SourceMeta] = []
+    for source in db.scalars(select(CostLineItem.x_source).distinct()).all():
+        scoped = CostLineItem.x_source == source
+        latest = db.scalar(
+            select(func.max(CostLineItem.charge_period_start)).where(scoped)
+        )
+        final = db.scalar(
+            select(func.max(CostLineItem.charge_period_start)).where(
+                scoped, CostLineItem.x_is_final.is_(True)
+            )
+        )
+        estimated = db.scalar(
+            select(func.count(CostLineItem.id)).where(
+                scoped,
+                CostLineItem.x_is_estimate.is_(True),
+                CostLineItem.charge_period_start == latest,
+            )
+        )
+        sources.append(
+            SourceMeta(
+                source=source,
+                last_ingested_at=db.scalar(
+                    select(func.max(CostLineItem.x_ingested_at)).where(scoped)
+                ),
+                latest_day=latest.date() if latest else None,
+                final_through=final.date() if final else None,
+                has_estimate=bool(estimated),
+            )
+        )
+    sources.sort(key=lambda s: s.source)
+    return MetaResponse(
+        provider="real" if settings.FINOPS_PROVIDER == "real" else "simulated",
+        sources=sources,
+        role=role,
+    )
+
+
+_EXPORT_COLUMNS = (
+    ("ChargePeriodStart", "charge_period_start"),
+    ("ChargePeriodEnd", "charge_period_end"),
+    ("BillingPeriod", "billing_period"),
+    ("ProviderName", "provider_name"),
+    ("ServiceName", "service_name"),
+    ("ServiceCategory", "service_category"),
+    ("ChargeCategory", "charge_category"),
+    ("ResourceId", "resource_id"),
+    ("ResourceName", "resource_name"),
+    ("BilledCost", "billed_cost"),
+    ("EffectiveCost", "effective_cost"),
+    ("ListCost", "list_cost"),
+    ("BillingCurrency", "billing_currency"),
+    ("ConsumedQuantity", "consumed_quantity"),
+    ("ConsumedUnit", "consumed_unit"),
+    ("x_CostEur", "x_cost_eur"),
+    ("x_FxRate", "x_fx_rate"),
+    ("x_Project", "project"),
+    ("x_App", "app"),
+    ("x_Env", "env"),
+    ("x_Cloud", "cloud"),
+    ("x_AllocationMethod", "x_allocation_method"),
+    ("x_PricingBasis", "x_pricing_basis"),
+    ("x_EnergyKWh", "x_energy_kwh"),
+    ("x_CO2eKg", "x_co2e_kg"),
+    ("x_IsFinal", "x_is_final"),
+    ("x_IsEstimate", "x_is_estimate"),
+)
+
+
+def _csv_cell(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        # Finance opens this in a spreadsheet: never let a cell run as a
+        # formula (model names come from gateway metric labels).
+        return "'" + value
+    return str(value)
+
+
+def _csv_rows(rows):
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([name for name, _attr in _EXPORT_COLUMNS])
+    yield buffer.getvalue()
+    for row in rows:
+        buffer.seek(0)
+        buffer.truncate()
+        writer.writerow(
+            [_csv_cell(getattr(row, attr)) for _name, attr in _EXPORT_COLUMNS]
+        )
+        yield buffer.getvalue()
+
+
+@router.get("/export.csv")
+def export_csv(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+    period: str = "30d",
+    cloud: str | None = Query(default=None, description="onprem|aws|gcp"),
+):
+    """The cost lines behind the overview, with FOCUS column names."""
+    if settings.FINOPS_PROVIDER != "real":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "L'export CSV n'est disponible qu'avec des coûts réels "
+                "(FINOPS_PROVIDER=real)."
+            ),
+        )
+    if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period):
+        # A billing month, as picked in the Finance tab.
+        query = select(CostLineItem).where(
+            CostLineItem.billing_period == period
+        )
+    else:
+        start, end = period_to_range(period)
+        query = select(CostLineItem).where(
+            CostLineItem.charge_period_start
+            >= datetime.combine(start, datetime.min.time()),
+            CostLineItem.charge_period_start
+            < datetime.combine(end + timedelta(days=1), datetime.min.time()),
+        )
+    if project:
+        _require_project_role(db, token, project)
+        query = query.where(CostLineItem.project == project)
+    elif not _sees_all(token):
+        query = query.where(
+            CostLineItem.project.in_(_user_project_names(token))
+        )
+    if cloud in ("onprem", "aws", "gcp"):
+        query = query.where(CostLineItem.cloud == cloud)
+    # Loaded before streaming: the request's session may close once the
+    # endpoint returns.
+    rows = db.scalars(
+        query.order_by(CostLineItem.charge_period_start, CostLineItem.id)
+    ).all()
+    return StreamingResponse(
+        _csv_rows(rows),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="finops-{project or "all"}-'
+                f'{period if period in ("7d", "30d", "90d") or re.fullmatch(r"\d{4}-\d{2}", period) else "30d"}.csv"'
+            )
+        },
+    )
+
+
+@router.get("/reconciliation")
+def get_reconciliation(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    provider: Annotated[str, Query(pattern="^(aws|gcp)$")] = "aws",
+    period: Annotated[str, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = "",
+):
+    """Invoice vs allocated cost of a cloud month, with the untagged top."""
+    if not is_cnp_admin(token):
+        raise HTTPException(status_code=403, detail="CNP admin only")
+    period = period or date.today().strftime("%Y-%m")
+    return {
+        **reconciliation.reconcile(db, provider, period),
+        "untagged_top": reconciliation.tag_compliance(db, provider, period),
+    }
 
 
 @router.get("/timeline", response_model=list[CostSeriesPoint])
@@ -215,7 +795,7 @@ def get_timeline(
     project: str | None = None,
     app: int | None = None,
     resource: str | None = Query(
-        default=None, description="cpu|ram|storage|network"
+        default=None, description="cpu|ram|storage|network|ai|platform"
     ),
     granularity: str = "daily",
     period: str = "30d",
@@ -223,18 +803,50 @@ def get_timeline(
     """Stacked cost series with flexible granularity and filters."""
     deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    apps = _cost_specs(provider, deployments, token, project, app)
     start, end = period_to_range(period)
     points = provider.timeline(apps, start, end, granularity)
 
-    if resource and resource in ("cpu", "ram", "storage", "network"):
+    if resource and resource in REAL_RESOURCES:
         # Zero out non-selected resources so the client can still stack.
         for p in points:
-            for r in ("cpu", "ram", "storage", "network"):
+            for r in REAL_RESOURCES:
                 if r != resource:
                     p[r] = 0.0
-            p["total"] = p[resource]
+            p["total"] = p.get(resource, 0.0)
     return [CostSeriesPoint(**p) for p in points]
+
+
+_PLATFORM_PERIOD = r"^(30d|90d|ytd|\d{4}-(0[1-9]|1[0-2]))$"
+
+
+def _platform_range(period: str, today: date) -> tuple[date, date]:
+    if period == "ytd":
+        return today.replace(month=1, day=1), today
+    if period in ("30d", "90d"):
+        return today - timedelta(days=int(period[:-1]) - 1), today
+    first = date(int(period[:4]), int(period[5:]), 1)
+    return first, (first.replace(day=28) + timedelta(days=4)).replace(
+        day=1
+    ) - timedelta(days=1)
+
+
+@router.get("/platform", response_model=PlatformReport)
+def get_platform(
+    token: Annotated[dict, Depends(get_current_user)],
+    period: Annotated[str, Query(pattern=_PLATFORM_PERIOD)] = "30d",
+):
+    """Platform cost, fees recovered and uncovered remainder. Admin/finance."""
+    if not _sees_all(token):
+        raise HTTPException(
+            status_code=403,
+            detail="Réservé à la finance et aux admins CNP.",
+        )
+    provider = get_cost_provider()
+    if not hasattr(provider, "platform_report"):
+        return PlatformReport(app_slots=platform.app_slots())
+    start, end = _platform_range(period, date.today())
+    return PlatformReport(**provider.platform_report(start, end))
 
 
 @router.get("/breakdown", response_model=Breakdown)
@@ -246,7 +858,7 @@ def get_breakdown(
 ):
     deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    apps = _cost_specs(provider, deployments, token, project, app)
     return Breakdown(**provider.breakdown(apps))
 
 
@@ -258,8 +870,29 @@ def get_apps(
 ):
     deployments = _load_deployments(db, token, project)
     provider = get_cost_provider()
-    apps = provider.specs(deployments)
+    apps = _cost_specs(provider, deployments, token, project)
     return [AppCostRow(**r) for r in provider.app_rows(apps)]
+
+
+@router.get("/estimates", response_model=list[AppCloudEstimate])
+def get_estimates(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+    project: str | None = None,
+):
+    """Monthly compute cost of each app on on-prem, AWS and GCP, from its usage."""
+    if settings.FINOPS_PROVIDER != "real":
+        return []
+    deployments = _load_deployments(db, token, project)
+    provider = get_cost_provider()
+    apps = _cost_specs(provider, deployments, token, project)
+    today = date.today()
+    return [
+        AppCloudEstimate(**row)
+        for row in estimate.for_apps(
+            db, apps, today, fx.usd_per_eur(db, today)
+        )
+    ]
 
 
 @router.get("/recommendations", response_model=list[Recommendation])
@@ -514,7 +1147,7 @@ def get_alerts(
     if project:
         _require_project_role(db, token, project)
         q = q.filter(CostAlert.project_name == project)
-    elif not is_cnp_admin(token):
+    elif not _sees_all(token):
         projects = _user_project_names(token)
         if not projects:
             return []

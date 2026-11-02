@@ -496,3 +496,48 @@ def test_project_admins_are_grafana_editors_not_admins():
     from app.services.grafana_service import _map_role_to_grafana
 
     assert _map_role_to_grafana("admin") == "Editor"
+
+
+def test_namespace_projects_adds_cloud_projects_from_db(session_factory):
+    from app.models.deployment import (
+        Deployment,
+        DeploymentStatus,
+        ProviderType,
+    )
+    from app.models.project import Project, TargetCloud
+
+    with session_factory() as db:
+        db.add(
+            Project(
+                project_name="shop",
+                owner_username="a",
+                target_cloud=TargetCloud.AWS,
+            )
+        )
+        for name, status in (
+            ("api", DeploymentStatus.RUNNING),
+            ("old", DeploymentStatus.DELETED),
+            ("Not_A_Namespace", DeploymentStatus.RUNNING),
+        ):
+            db.add(
+                Deployment(
+                    name=name,
+                    template_id="k3s-gitops-app",
+                    provider_type=ProviderType.KUBERNETES,
+                    project_id="shop",
+                    status=status,
+                )
+            )
+        db.commit()
+
+    with (
+        mock.patch.object(src, "kube_list", return_value=[]),
+        mock.patch.object(src, "SessionLocal", session_factory),
+    ):
+        mapping = src.namespace_projects()
+
+    assert mapping == {
+        "shop-system": "shop",
+        "shop-api": "shop",
+        "shop-api-stg": "shop",
+    }

@@ -1,0 +1,25 @@
+# Monthly subscriptions outside Kubernetes, as one FOCUS line per month each.
+# Today every service runs on a free plan (GitHub via the student pack), so the
+# platform pays nothing; list_eur_per_month is what the same use would cost a
+# company and feeds ListCost, billed_eur_per_month feeds BilledCost.
+subscriptions:
+  - provider: GitHub
+    service: GitHub Free
+    billed_eur_per_month: 0
+    list_eur_per_month: 0
+    allocation: platform
+    effective_from: "2026-01-01"
+  - provider: Cloudflare
+    service: Cloudflare Free
+    billed_eur_per_month: 0
+    list_eur_per_month: 0
+    allocation: platform
+    effective_from: "2026-01-01"
+  - provider: Anthropic
+    service: Claude API credits
+    # Prepaid credits are consumed through the AI gateway and valued there
+    # (ai-prices.yaml); this line only records the money actually spent.
+    billed_eur_per_month: 0
+    list_eur_per_month: 0
+    allocation: platform
+    effective_from: "2026-11-02"

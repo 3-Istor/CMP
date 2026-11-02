@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # FinOps — comma-separated Keycloak usernames granted the global
     # "Admin CNP" role (visibility over every project's costs).
     FINOPS_ADMIN_USERS: str = ""
+    # Usernames granted the finance role (read and export every project's
+    # costs) in addition to the ``cnp-finance`` Keycloak group.
+    FINOPS_FINANCE_USERS: str = ""
+    # Post last month's summary to the platform Discord on the 5th.
+    FINOPS_MONTHLY_REPORT_ENABLED: bool = False
 
     # Repository imports remain disabled until all reviewed branches are deployed.
     IMPORT_ENABLED: bool = False
@@ -122,6 +127,53 @@ class Settings(BaseSettings):
     # Days of audit history read from Loki the first time the collector runs.
     ACTIVITY_BACKFILL_DAYS: int = 7
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
+
+    # FinOps: "simulated" keeps the demo engine, "real" reads cost_line_items.
+    FINOPS_PROVIDER: str = "simulated"
+    FINOPS_INGEST_ENABLED: bool = False
+    FINOPS_INGEST_INTERVAL_SECONDS: int = 3600
+    # Days replayed on every run: OpenCost and billing exports revise them.
+    FINOPS_REPLAY_DAYS: int = 3
+    # First day ingested: OpenCost needs its own price metrics in
+    # VictoriaMetrics, which start the day it is installed.
+    FINOPS_INGEST_SINCE: str = "2026-10-27"
+    # Versioned prices (K3s repo finops/), mounted from a ConfigMap.
+    FINOPS_DATA_DIR: str = "/etc/cnp-finops"
+    OPENCOST_URL: str = "http://opencost.opencost.svc.cluster.local:9003"
+    # Cloud clusters' OpenCost over the VPN, "aws=http://...,gcp=http://...".
+    # Empty until the cloud activation runbook is done.
+    FINOPS_OPENCOST_CLUSTERS: str = ""
+    # Namespaces that predate CMP projects and carry no project label: each is
+    # its own project. Any other unlabelled namespace is platform cost.
+    FINOPS_LEGACY_NAMESPACES: str = (
+        "qcm,mepa-app,roadmap,linmap-bot,3istor-sessions,dev-sandbox,demo-app"
+    )
+    # Target capacity (10 projects x 2-3 apps): the cost of the platform
+    # namespaces and idle capacity is divided by it into a fixed fee per app.
+    FINOPS_PLATFORM_APP_SLOTS: int = 25
+    # Token metrics of the AI gateway (OpenTelemetry GenAI conventions).
+    FINOPS_AI_TOKEN_METRIC: str = "gen_ai_client_token_usage_sum"
+    # AWS Data Exports "FOCUS 1.2 with AWS columns" (Parquet). Empty bucket
+    # disables the source. The prefix is the export root, i.e. the folder that
+    # holds metadata/ and data/ (<prefix>/<export-name>). Credentials come
+    # from the standard AWS_* environment variables.
+    FINOPS_AWS_EXPORT_BUCKET: str = ""
+    FINOPS_AWS_EXPORT_PREFIX: str = ""
+    FINOPS_AWS_REGION: str = "eu-west-3"
+    # BigQuery billing export. The FOCUS view wins over the detailed table
+    # when both are set; neither set disables the source. Tables are fully
+    # qualified: project.dataset.table.
+    FINOPS_GCP_FOCUS_VIEW: str = ""
+    FINOPS_GCP_BILLING_TABLE: str = ""
+    # Project the query jobs run (and are billed) in.
+    FINOPS_GCP_PROJECT: str = ""
+    # Service account key; falls back to GOOGLE_APPLICATION_CREDENTIALS.
+    FINOPS_GCP_CREDENTIALS_FILE: str = ""
+    # A day is an anomaly when an app costs more than the median of its
+    # previous 14 days by this share AND by this many euros: on-prem apps
+    # cost cents a day, where a relative jump alone is noise.
+    FINOPS_ANOMALY_PCT: float = 0.5
+    FINOPS_ANOMALY_MIN_EUR: float = 0.05
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     # Enable the account-link action only after the broker is configured and tested.

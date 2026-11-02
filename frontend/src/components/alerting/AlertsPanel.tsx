@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { getAlertCatalog, updateCatalogAlert } from "@/lib/api";
+import { NotConnected } from "@/components/clusters/NotConnected";
+import { getAlertCatalog, isNotConnected, updateCatalogAlert } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AlertCatalog, CatalogAlert } from "@/types";
 import { AlertTriangle, BellRing, ExternalLink, Loader2 } from "lucide-react";
@@ -156,7 +157,7 @@ export function AlertsPanel({
   app?: string;
 }) {
   const [catalog, setCatalog] = useState<AlertCatalog | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(
     () =>
@@ -165,7 +166,7 @@ export function AlertsPanel({
           setCatalog(c);
           setError(null);
         },
-        (e) => setError(message(e)),
+        (e) => setError(e),
       ),
     [project, app],
   );
@@ -174,10 +175,12 @@ export function AlertsPanel({
     load();
   }, [load]);
 
-  if (error && !catalog) {
+  if (error != null && !catalog) {
+    const nc = isNotConnected(error);
+    if (nc) return <NotConnected cloud={nc.cloud} />;
     return (
       <p className="flex items-center gap-2 text-sm text-destructive">
-        <AlertTriangle className="h-4 w-4" /> {error}
+        <AlertTriangle className="h-4 w-4" /> {message(error)}
       </p>
     );
   }

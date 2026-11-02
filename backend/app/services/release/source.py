@@ -1,15 +1,15 @@
 """
 Where the Release tab reads an app's Argo Rollout from.
 
-``ReleaseSource`` is the seam: the in-cluster implementation below talks to
-the Kubernetes API with the CMP's service account. A remote cluster will get
-an implementation over the Argo CD API instead, without touching the view.
+``ReleaseSource`` is the seam: the implementation below talks to the
+Kubernetes API of the app's cluster, on-prem or a public cloud's.
 """
 
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from app.models.project import TargetCloud
 from app.services.kube_client import kube_get, kube_list, kube_merge_patch
 
 logger = logging.getLogger(__name__)
@@ -32,11 +32,17 @@ class RolloutSnapshot:
 
 
 class ReleaseSource(Protocol):
-    def fetch(self, namespace: str, app_name: str) -> RolloutSnapshot | None:
+    def fetch(
+        self, namespace: str, app_name: str, cloud: TargetCloud
+    ) -> RolloutSnapshot | None:
         """The app's Rollout and its children, or None if it has none."""
 
     def patch_status(
-        self, namespace: str, rollout_name: str, body: dict[str, Any]
+        self,
+        namespace: str,
+        rollout_name: str,
+        body: dict[str, Any],
+        cloud: TargetCloud,
     ) -> None:
         """Merge-patch the Rollout's status subresource."""
 
@@ -89,11 +95,15 @@ def analysis_templates(rollout: dict[str, Any]) -> set[tuple[bool, str]]:
 
 
 class KubeReleaseSource:
-    """Reads the Rollout through the CMP's own service account."""
+    """Reads the Rollout from the Kubernetes API of the app's cluster."""
 
-    def fetch(self, namespace: str, app_name: str) -> RolloutSnapshot | None:
+    def fetch(
+        self, namespace: str, app_name: str, cloud: TargetCloud
+    ) -> RolloutSnapshot | None:
         rollout = pick_rollout(
-            kube_list(f"{ROLLOUTS_API}/namespaces/{namespace}/rollouts"),
+            kube_list(
+                f"{ROLLOUTS_API}/namespaces/{namespace}/rollouts", cloud=cloud
+            ),
             app_name,
         )
         if rollout is None:
@@ -116,6 +126,7 @@ class KubeReleaseSource:
             for rs in kube_list(
                 f"/apis/apps/v1/namespaces/{namespace}/replicasets",
                 {"labelSelector": selector},
+                cloud=cloud,
             )
             if _owned_by(rs, uid)
         ]
@@ -129,6 +140,7 @@ class KubeReleaseSource:
                             f"{HASH_LABEL}={status['currentPodHash']}"
                         )
                     },
+                    cloud=cloud,
                 )
                 if _owned_by(run, uid)
             ]
@@ -142,16 +154,21 @@ class KubeReleaseSource:
                 else f"{ROLLOUTS_API}/namespaces/{namespace}"
                 f"/analysistemplates/{name}"
             )
-            template = kube_get(path)
+            template = kube_get(path, cloud=cloud)
             if template is not None:
                 snapshot.templates[(cluster_scope, name)] = template
         return snapshot
 
     def patch_status(
-        self, namespace: str, rollout_name: str, body: dict[str, Any]
+        self,
+        namespace: str,
+        rollout_name: str,
+        body: dict[str, Any],
+        cloud: TargetCloud,
     ) -> None:
         kube_merge_patch(
             f"{ROLLOUTS_API}/namespaces/{namespace}/rollouts/"
             f"{rollout_name}/status",
             body,
+            cloud=cloud,
         )

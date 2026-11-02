@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.deployment import Deployment, ProviderType
 from app.models.release import ReleaseEvent
 from app.schemas.release import ReleaseView
+from app.services.clusters.state import project_cloud
 from app.services.release import history
 from app.services.release.source import ReleaseSource, RolloutSnapshot
 from app.services.release.view import (
@@ -45,12 +46,15 @@ def compute(
 ) -> tuple[ReleaseView, RolloutSnapshot | None, ReleaseEvent | None]:
     """Read the Rollout, map it, and bring the history in line.
 
-    Raises KubeUnavailableError when the cluster cannot be reached.
+    Raises KubeUnavailableError when the cluster cannot be reached,
+    ClusterNotConnectedError when it is a public cloud's that is not up.
     """
     app_target = target(deployment)
     if app_target is None:
         return disabled_view(), None, None
-    snapshot = source.fetch(*app_target)
+    snapshot = source.fetch(
+        *app_target, project_cloud(db, deployment.project_id)
+    )
     if snapshot is None:
         return disabled_view(), None, None
 

@@ -3,9 +3,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { NotConnected } from "@/components/clusters/NotConnected";
 import {
   getSecurityBackups,
   getSecurityDatabases,
+  isNotConnected,
   requestSecurityBackup,
   type SecurityBackup,
   type SecurityDatabase,
@@ -38,7 +40,7 @@ export function BackupsCard({
 }) {
   const [backups, setBackups] = useState<SecurityBackup[] | null>(null);
   const [databases, setDatabases] = useState<SecurityDatabase[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState<SecurityBackup | null>(null);
 
@@ -50,7 +52,7 @@ export function BackupsCard({
           setDatabases(clusters);
           setError(null);
         },
-        (e) => setError(errorMessage(e)),
+        (e) => setError(e),
       ),
     [project, app],
   );
@@ -118,8 +120,12 @@ export function BackupsCard({
             ))}
           </ul>
         )}
-        {error ? (
-          <p className="text-destructive">{error}</p>
+        {error != null ? (
+          isNotConnected(error) ? (
+            <NotConnected cloud={isNotConnected(error)!.cloud} />
+          ) : (
+            <p className="text-destructive">{errorMessage(error)}</p>
+          )
         ) : backups === null ? (
           <p className="text-muted-foreground">Chargement…</p>
         ) : backups.length === 0 ? (

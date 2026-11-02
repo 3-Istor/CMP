@@ -2,7 +2,15 @@
 
 import { UserNav } from "@/components/layout/UserNav";
 import { cn } from "@/lib/utils";
-import { Lightbulb, TrendingUp, Wallet } from "lucide-react";
+import { useFinopsMeta } from "@/lib/hooks";
+import {
+  Landmark,
+  Leaf,
+  Lightbulb,
+  Sprout,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,6 +22,8 @@ const TABS = [
     icon: Lightbulb,
     exact: false,
   },
+  { href: "/finops/savings", label: "Économies", icon: Leaf, exact: false },
+  { href: "/finops/greenops", label: "GreenOps", icon: Sprout, exact: false },
   {
     href: "/finops/budgets",
     label: "Budgets & Alertes",
@@ -22,12 +32,22 @@ const TABS = [
   },
 ];
 
+const FINANCE_TAB = {
+  href: "/finops/finance",
+  label: "Finance",
+  icon: Landmark,
+  exact: false,
+};
+
 export default function FinopsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const role = useFinopsMeta()?.role;
+  const tabs =
+    role === "admin" || role === "finance" ? [...TABS, FINANCE_TAB] : TABS;
 
   return (
     <div className="min-h-screen">
@@ -43,7 +63,7 @@ export default function FinopsLayout({
         </div>
 
         <nav className="mt-4 flex gap-1">
-          {TABS.map((tab) => {
+          {tabs.map((tab) => {
             const active = tab.exact
               ? pathname === tab.href
               : pathname.startsWith(tab.href);

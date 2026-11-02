@@ -280,13 +280,17 @@ export interface KeycloakUserResult {
 
 // ── FinOps ────────────────────────────────────────────────────────────────────
 
-export type FinopsResource = "cpu" | "ram" | "storage" | "network";
+export type FinopsResource = "cpu" | "ram" | "storage" | "network" | "ai" | "platform";
+
+export type FinopsCloud = "onprem" | "aws" | "gcp";
 
 export interface CostBreakdown {
   cpu: number;
   ram: number;
   storage: number;
   network: number;
+  ai?: number;
+  platform?: number;
 }
 
 export interface CostSummary {
@@ -306,6 +310,8 @@ export interface CostSeriesPoint {
   ram: number;
   storage: number;
   network: number;
+  ai?: number;
+  platform?: number;
   total: number;
 }
 
@@ -317,6 +323,25 @@ export interface AppCostRow {
   cost_month_estimate_eur: number;
   month_to_date_eur: number;
   trend_pct: number | null;
+  platform_eur?: number;
+}
+
+export interface PlatformReport {
+  total_eur: number;
+  by_namespace: { namespace: string; eur: number }[];
+  idle_eur: number;
+  recovered_eur: number;
+  uncovered_eur: number;
+  app_slots: number;
+  active_apps_avg: number;
+  fee_per_app_month_eur: number;
+  daily: {
+    date: string;
+    platform_eur: number;
+    idle_eur: number;
+    recovered_eur: number;
+    uncovered_eur: number;
+  }[];
 }
 
 export interface Budget {
@@ -333,11 +358,118 @@ export interface Budget {
   updated_at: string | null;
 }
 
+export interface FinopsSavingsYtd {
+  avoided_eur: number;
+  realized_eur: number;
+}
+
 export interface FinopsOverview {
   summary: CostSummary;
   budget: Budget | null;
   apps: AppCostRow[];
   timeline: CostSeriesPoint[];
+  by_cloud: Record<FinopsCloud, number>;
+  savings_ytd: FinopsSavingsYtd;
+  /** Real costs only: the forecast behind summary.projected_month_eur. */
+  forecast?: CostForecast | null;
+}
+
+export interface ForecastDay {
+  date: string;
+  eur: number;
+  low_eur: number;
+  high_eur: number;
+}
+
+export interface CostForecast {
+  projected_eur: number;
+  low_eur: number;
+  high_eur: number;
+  actual_eur: number;
+  method: "weekday_mean" | "mean" | "none";
+  days_of_history: number;
+  low_history: boolean;
+  confidence: number;
+  budget_eur: number | null;
+  overrun_date: string | null;
+  daily: ForecastDay[];
+}
+
+export interface CostAnomalyEvent {
+  kind: "argocd_sync" | "release" | "config_change";
+  time: string;
+  actor: string | null;
+  revision: string | null;
+  summary: string;
+}
+
+export interface CostAnomaly {
+  app_id: number;
+  app_name: string;
+  project_id: string | null;
+  date: string;
+  cost_eur: number;
+  baseline_eur: number;
+  delta_eur: number;
+  delta_pct: number | null;
+  cause: string;
+  events: CostAnomalyEvent[];
+}
+
+export type FinopsSavingsCategory =
+  | "offhours"
+  | "rightsizing_applied"
+  | "idle_cleanup";
+
+export interface FinopsSavings {
+  totals: {
+    avoided_eur: number;
+    realized_eur: number;
+    energy_avoided_kwh: number;
+    co2e_avoided_kg: number;
+  };
+  by_category: {
+    category: FinopsSavingsCategory;
+    avoided_eur: number;
+    realized_eur: number;
+  }[];
+  timeline: { date: string; avoided_eur: number; realized_eur: number }[];
+  rows: {
+    project: string;
+    app: string;
+    category: FinopsSavingsCategory;
+    avoided_eur: number;
+    realized_eur: number;
+    energy_avoided_kwh: number;
+    days: number;
+  }[];
+  since: string | null;
+}
+
+export interface FinopsSourceMeta {
+  source: string;
+  last_ingested_at: string | null;
+  latest_day: string | null;
+  final_through: string | null;
+  has_estimate: boolean;
+}
+
+export interface FinopsMeta {
+  provider: "simulated" | "real";
+  sources: FinopsSourceMeta[];
+  role?: "admin" | "finance" | "member";
+}
+
+export interface FinopsCostCenter {
+  project_name: string;
+  cost_center: string | null;
+  budget_owner: string | null;
+}
+
+export interface FinopsMonthClose {
+  billing_period: string;
+  closed_by: string;
+  closed_at: string | null;
 }
 
 export type RecommendationType =
@@ -470,7 +602,7 @@ export interface SecuritySummary {
   segments: SecuritySegment[];
   apps: SecurityAppSummary[];
   scans: SecurityScan[];
-  guarantees: { label: string; ok: boolean }[];
+  guarantees: { label: string; ok: boolean | null }[];
 }
 
 export interface SecurityTrendPoint {
@@ -965,4 +1097,47 @@ export interface StagingOffhours {
   sleepAt: string;
   wakeAt: string;
   timezone: string;
+}
+
+/** Monthly compute cost of an app on each cluster, from its measured usage. */
+export interface FinopsCloudEstimate {
+  app_id: number;
+  app_name: string;
+  project_id: string | null;
+  measured_on: FinopsCloud[];
+  avg_cores: number;
+  avg_ram_gib: number;
+  hours_measured: number;
+  monthly_eur: Partial<Record<FinopsCloud, number>>;
+  estimated: Partial<Record<FinopsCloud, boolean>>;
+}
+
+export interface FinopsCarbon {
+  totals: {
+    energy_kwh: number;
+    co2e_direct_kg: number;
+    co2e_lca_kg: number;
+    co2e_avoided_kg: number;
+  };
+  methods: {
+    id: "direct" | "lca";
+    label: string;
+    source: string;
+    g_per_kwh: number | null;
+  }[];
+  timeline: {
+    date: string;
+    energy_kwh: number;
+    co2e_kg: number;
+    g_per_kwh: number | null;
+  }[];
+  rows: {
+    project: string;
+    app: string;
+    energy_kwh: number;
+    co2e_direct_kg: number;
+    co2e_lca_kg: number;
+  }[];
+  latest: { g_per_kwh: number; day: string; source: string } | null;
+  has_estimate: boolean;
 }

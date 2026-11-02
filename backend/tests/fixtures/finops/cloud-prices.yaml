@@ -1,0 +1,27 @@
+# Public on-demand list prices of the nodes the clouds run (Cloud repo, node_instance_type and
+# node_machine_type). USD per hour; the CMP converts at the ECB rate of the day. They price the
+# rightsizing and savings advice of apps on EKS and GKE, and the estimate of what an app would
+# cost on another cloud. The invoice stays the truth for what was actually paid.
+#
+# A node's price is split between its vCPUs and its memory with the ratio of GCP's E2 unit prices
+# (us-central1: 0.021811 USD per vCPU-hour, 0.002923 USD per GiB-hour), the only provider that
+# publishes such a split. OpenCost splits node prices the same way.
+cpu_to_gib_price_ratio: 7.46
+
+clouds:
+  aws:
+    node: m7i-flex.large
+    region: eu-west-3
+    vcpu: 2
+    ram_gib: 8
+    usd_per_hour: 0.11172
+    source: "AWS Price List, EC2 on-demand, EU (Paris), Linux, read 2026-10-27"
+  gcp:
+    node: e2-standard-2
+    region: europe-west9
+    vcpu: 2
+    ram_gib: 8
+    usd_per_hour: 0.0777
+    source: "gcloud-compute.com europe-west9 table, read 2026-10-27"
+    # Aggregator figure: check it against the Compute Engine pricing page.
+    mock: true

@@ -336,6 +336,7 @@ export function useFinopsOverview(
   project?: string,
   period = "30d",
   granularity = "daily",
+  cloud?: string,
 ) {
   const [data, setData] = useState<import("@/types").FinopsOverview | null>(
     null,
@@ -348,7 +349,12 @@ export function useFinopsOverview(
     if (!initialLoadDone.current) setLoading(true);
     try {
       const { getFinopsOverview } = await import("./api");
-      const res = await getFinopsOverview({ project, period, granularity });
+      const res = await getFinopsOverview({
+        project,
+        period,
+        granularity,
+        cloud,
+      });
       setData(res);
       setError(null);
       initialLoadDone.current = true;
@@ -357,13 +363,217 @@ export function useFinopsOverview(
     } finally {
       setLoading(false);
     }
-  }, [project, period, granularity]);
+  }, [project, period, granularity, cloud]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   return { data, loading, error, refresh };
+}
+
+/** Savings ledger (évité / encaissé), re-fetched when the filters change. */
+export function useFinopsSavings(project?: string, period = "ytd") {
+  const [data, setData] = useState<import("@/types").FinopsSavings | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsSavings }) => getFinopsSavings({ project, period }))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch savings",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, period]);
+
+  return { data, loading, error };
+}
+
+/** Energy and carbon of on-prem workloads, re-fetched when the filters change. */
+export function useFinopsCarbon(project?: string, period = "30d") {
+  const [data, setData] = useState<import("@/types").FinopsCarbon | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsCarbon }) => getFinopsCarbon({ project, period }))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch carbon",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, period]);
+
+  return { data, loading, error };
+}
+
+/** What each app would cost per month on-prem, on AWS and on GCP. */
+export function useFinopsEstimates(project?: string) {
+  const [data, setData] = useState<
+    import("@/types").FinopsCloudEstimate[] | null
+  >(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsEstimates }) => getFinopsEstimates({ project }))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch estimates",
+          );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project]);
+
+  return { data, error };
+}
+
+/** Nature (simulé / réel) and freshness of the FinOps data. */
+export function useFinopsMeta() {
+  const [meta, setMeta] = useState<import("@/types").FinopsMeta | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsMeta }) => getFinopsMeta())
+      .then((res) => {
+        if (!cancelled) setMeta(res);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return meta;
+}
+
+/** Closed months and cost centers of the Finance tab, with their refresh. */
+export function useFinopsFinance() {
+  const [closes, setCloses] = useState<import("@/types").FinopsMonthClose[]>([]);
+  const [centers, setCenters] = useState<import("@/types").FinopsCostCenter[]>(
+    [],
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const { getFinopsCloses, getFinopsCostCenters } = await import("./api");
+      const [c, cc] = await Promise.all([
+        getFinopsCloses(),
+        getFinopsCostCenters(),
+      ]);
+      setCloses(c);
+      setCenters(cc);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Chargement impossible");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { closes, centers, error, refresh };
+}
+
+/** Platform cost report; the endpoint refuses non admin/finance callers. */
+export function useFinopsPlatform(period: string, enabled: boolean) {
+  const [data, setData] = useState<import("@/types").PlatformReport | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsPlatform }) => getFinopsPlatform(period))
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "Chargement impossible");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, enabled]);
+
+  return { data: enabled ? data : null, error };
+}
+
+/** Daily cost anomalies per app; skipped when disabled (non-daily view). */
+export function useFinopsAnomalies(
+  project?: string,
+  period = "30d",
+  enabled = true,
+) {
+  const [data, setData] = useState<import("@/types").CostAnomaly[]>([]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    import("./api")
+      .then(({ getFinopsAnomalies }) => getFinopsAnomalies({ project, period }))
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .catch(() => {
+        if (!cancelled) setData([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, period, enabled]);
+
+  return enabled ? data : [];
 }
 
 /** Fetch members of a specific project. */

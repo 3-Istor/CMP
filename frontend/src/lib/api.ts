@@ -87,6 +87,20 @@ export class ApiError extends Error {
   }
 }
 
+/** The cloud whose cluster is down, from a 503 `cluster_not_connected` body; accepts an error or its raw message. */
+export function isNotConnected(err: unknown): { cloud: string } | null {
+  const text = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  try {
+    const body = JSON.parse(text);
+    if (body?.detail === "cluster_not_connected" && typeof body.cloud === "string") {
+      return { cloud: body.cloud };
+    }
+  } catch {
+    // not JSON: an ordinary error
+  }
+  return null;
+}
+
 // ── Access-token cache ────────────────────────────────────────────────────────
 // `getSession()` performs a network round-trip to `/api/auth/session` on every
 // call. With polling hooks (deployments refresh every 3s, plus the sidebar),
@@ -490,10 +504,122 @@ export const getFinopsOverview = (opts: {
   project?: string;
   period?: string;
   granularity?: string;
+  cloud?: string;
 } = {}) =>
   request<import("@/types").FinopsOverview>(
     `/finops/overview${finopsQuery(opts)}`,
   );
+
+export const getFinopsSavings = (opts: { project?: string; period?: string } = {}) =>
+  request<import("@/types").FinopsSavings>(
+    `/finops/savings${finopsQuery(opts)}`,
+  );
+
+export const getFinopsCarbon = (opts: { project?: string; period?: string } = {}) =>
+  request<import("@/types").FinopsCarbon>(
+    `/finops/carbon${finopsQuery(opts)}`,
+  );
+
+export const getFinopsEstimates = (opts: { project?: string } = {}) =>
+  request<import("@/types").FinopsCloudEstimate[]>(
+    `/finops/estimates${finopsQuery(opts)}`,
+  );
+
+export const getFinopsPlatform = (period = "30d") =>
+  request<import("@/types").PlatformReport>(
+    `/finops/platform${finopsQuery({ period })}`,
+  );
+
+export const getFinopsMeta = () =>
+  request<import("@/types").FinopsMeta>("/finops/meta");
+
+export const getFinopsAnomalies = (
+  opts: { project?: string; period?: string } = {},
+) =>
+  request<import("@/types").CostAnomaly[]>(
+    `/finops/anomalies${finopsQuery(opts)}`,
+  );
+
+/** The endpoint needs the bearer token, so a plain link cannot download it. */
+export async function downloadFinopsCsv(opts: {
+  project?: string;
+  period?: string;
+  cloud?: string;
+}): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/finops/export.csv${finopsQuery(opts)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.text());
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `finops-${opts.project || "tous"}-${opts.period ?? "30d"}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export type FinopsFileKind = "xlsx" | "parquet" | "statement";
+
+/** Same bearer-token download as the CSV, for the finance pack files. */
+export async function downloadFinopsFile(
+  kind: FinopsFileKind,
+  period: string,
+  project?: string,
+): Promise<void> {
+  const token = await getAccessToken();
+  const path = {
+    xlsx: "export.xlsx",
+    parquet: "export.parquet",
+    statement: "statement.pdf",
+  }[kind];
+  const res = await fetch(
+    `${BASE}/finops/${path}${finopsQuery({ period, project })}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.text());
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download =
+    kind === "statement"
+      ? `releve-${project}-${period}.pdf`
+      : `finops-${period}.${kind}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const getFinopsCloses = () =>
+  request<import("@/types").FinopsMonthClose[]>("/finops/closes");
+
+export const closeFinopsMonth = (period: string, force = false) =>
+  request<import("@/types").FinopsMonthClose>(
+    `/finops/close/${encodeURIComponent(period)}${finopsQuery({ force: force ? "true" : undefined })}`,
+    { method: "POST" },
+  );
+
+export const getFinopsCostCenters = () =>
+  request<import("@/types").FinopsCostCenter[]>("/finops/cost-centers");
+
+export const putFinopsCostCenters = (
+  centers: import("@/types").FinopsCostCenter[],
+) =>
+  request<import("@/types").FinopsCostCenter[]>("/finops/cost-centers", {
+    method: "PUT",
+    body: JSON.stringify({ centers }),
+  });
 
 export const getFinopsTimeline = (opts: {
   project?: string;

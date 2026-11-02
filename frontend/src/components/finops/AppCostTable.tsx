@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { AppCostRow } from "@/types";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
-import { formatEUR } from "./format";
+import { RESOURCE_META, formatEUR } from "./format";
 
 function Trend({ pct }: { pct: number | null }) {
   if (pct === null) {
@@ -48,6 +48,12 @@ export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
             <th className="px-3 py-2 font-medium">Projet</th>
             <th className="px-3 py-2 text-right font-medium">Coût / jour</th>
             <th className="px-3 py-2 text-right font-medium">Coût / mois est.</th>
+            <th
+              className="px-3 py-2 text-right font-medium"
+              title={RESOURCE_META.platform.hint}
+            >
+              Dont forfait plateforme
+            </th>
             <th className="px-3 py-2 text-right font-medium">Tendance</th>
           </tr>
         </thead>
@@ -72,6 +78,9 @@ export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
                 {formatEUR(app.cost_month_estimate_eur)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                {formatEUR(app.platform_eur ?? 0)}
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end">

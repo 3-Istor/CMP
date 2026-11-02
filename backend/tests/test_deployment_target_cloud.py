@@ -26,7 +26,11 @@ def test_app_config_gets_the_project_cloud(
     session_factory, cloud, sent, expected  # noqa: F811
 ):
     with session_factory() as db:
-        db.add(Project(project_name="demo", owner_username="u", target_cloud=cloud))
+        db.add(
+            Project(
+                project_name="demo", owner_username="u", target_cloud=cloud
+            )
+        )
         db.commit()
 
     app = FastAPI()
@@ -66,7 +70,13 @@ def test_app_config_gets_the_project_cloud(
 
 def _post_deploy(session_factory, project_cloud, cluster):  # noqa: F811
     with session_factory() as db:
-        db.add(Project(project_name="demo", owner_username="u", target_cloud=project_cloud))
+        db.add(
+            Project(
+                project_name="demo",
+                owner_username="u",
+                target_cloud=project_cloud,
+            )
+        )
         db.commit()
     app = FastAPI()
     app.include_router(router.router, prefix="/api")
@@ -101,7 +111,9 @@ def test_deploy_refused_when_cluster_down(session_factory):  # noqa: F811
 
 
 def test_deploy_allowed_when_cluster_up(session_factory):  # noqa: F811
-    assert _post_deploy(session_factory, TargetCloud.AWS, "up").status_code == 202
+    assert (
+        _post_deploy(session_factory, TargetCloud.AWS, "up").status_code == 202
+    )
 
 
 def test_onprem_ignores_cluster_state(session_factory):  # noqa: F811
@@ -109,14 +121,22 @@ def test_onprem_ignores_cluster_state(session_factory):  # noqa: F811
     assert r.status_code == 202
 
 
-def test_mcp_release_guard_uses_the_project_cloud(session_factory):  # noqa: F811
+def test_mcp_release_guard_uses_the_project_cloud(
+    session_factory,
+):  # noqa: F811
     import asyncio
 
     from app import mcp_server
     from app.services.agents import internal_api
 
     with session_factory() as db:
-        db.add(Project(project_name="demo", owner_username="u", target_cloud=TargetCloud.AWS))
+        db.add(
+            Project(
+                project_name="demo",
+                owner_username="u",
+                target_cloud=TargetCloud.AWS,
+            )
+        )
         db.commit()
 
     caller = object.__new__(mcp_server.Caller)

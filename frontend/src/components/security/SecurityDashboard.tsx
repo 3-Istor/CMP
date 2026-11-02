@@ -3,11 +3,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotConnected } from "@/components/clusters/NotConnected";
 import {
   getSecurityExceptions,
   getSecurityFindings,
   getSecurityRole,
   getSecuritySummary,
+  isNotConnected,
   getSecurityTrend,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -61,7 +63,7 @@ async function fetchSecurityData(
 
 function useSecurityData(project: string, app: string | null, view: SecurityView) {
   const [data, setData] = useState<Data | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const refresh = useCallback(
     () =>
@@ -70,7 +72,7 @@ function useSecurityData(project: string, app: string | null, view: SecurityView
           setData(next);
           setError(null);
         },
-        (e) => setError(errorMessage(e)),
+        (e) => setError(e),
       ),
     [project, app, view],
   );
@@ -176,11 +178,13 @@ export function SecurityDashboard({
     pendingScroll.current = null;
   }, [tab]);
 
-  if (error && !data) {
+  if (error != null && !data) {
+    const nc = isNotConnected(error);
+    if (nc) return <NotConnected cloud={nc.cloud} />;
     return (
       <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
         <AlertCircle className="h-4 w-4" />
-        {error}
+        {errorMessage(error)}
       </div>
     );
   }
@@ -351,10 +355,17 @@ export function SecurityDashboard({
                         <span
                           className={cn(
                             "h-2 w-2 rounded-full",
-                            g.ok ? "bg-green-600" : "bg-red-600",
+                            g.ok === null
+                              ? "bg-muted-foreground/40"
+                              : g.ok
+                                ? "bg-green-600"
+                                : "bg-red-600",
                           )}
                         />
                         {g.label}
+                        {g.ok === null && (
+                          <span className="text-xs text-muted-foreground">non applicable</span>
+                        )}
                       </p>
                     ))}
                     <p className="pt-1 text-xs text-muted-foreground">

@@ -7,6 +7,9 @@ import {
   FinopsFilters,
   type FinopsFilterState,
 } from "@/components/finops/FinopsFilters";
+import { CloudEstimateTable } from "@/components/finops/CloudEstimateTable";
+import { CloudSplit } from "@/components/finops/CloudSplit";
+import { DataFreshness } from "@/components/finops/DataFreshness";
 import { KpiCards } from "@/components/finops/KpiCards";
 import {
   Card,
@@ -15,9 +18,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useFinopsOverview, useProjects } from "@/lib/hooks";
+import { Button } from "@/components/ui/button";
+import { downloadFinopsCsv } from "@/lib/api";
+import {
+  useFinopsAnomalies,
+  useFinopsEstimates,
+  useFinopsMeta,
+  useFinopsOverview,
+  useProjects,
+} from "@/lib/hooks";
 import type { FinopsResource } from "@/types";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Download } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -29,7 +40,10 @@ function OverviewInner() {
     project: initialProject,
     period: "30d",
     granularity: "daily",
+    cloud: "",
   });
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [selectedResource, setSelectedResource] =
     useState<FinopsResource | null>(null);
 
@@ -38,11 +52,67 @@ function OverviewInner() {
     filters.project || undefined,
     filters.period,
     filters.granularity,
+    filters.cloud || undefined,
   );
+  const meta = useFinopsMeta();
+  const estimates = useFinopsEstimates(filters.project || undefined);
+  // Forecast and anomalies are daily figures: drawn on the daily view only.
+  const daily = filters.granularity === "daily";
+  const anomalies = useFinopsAnomalies(
+    filters.project || undefined,
+    filters.period,
+    daily,
+  );
+
+  const exportCsv = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadFinopsCsv({
+        project: filters.project || undefined,
+        period: filters.period,
+        cloud: filters.cloud || undefined,
+      });
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? err.message : "Échec de l'export CSV",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <FinopsFilters state={filters} onChange={setFilters} projects={projects} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <FinopsFilters
+          state={filters}
+          onChange={setFilters}
+          projects={projects}
+          showCloud
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={exportCsv}
+          disabled={exporting || meta?.provider === "simulated"}
+          title={
+            meta?.provider === "simulated"
+              ? "L'export n'est disponible qu'avec des coûts réels."
+              : undefined
+          }
+        >
+          <Download className="h-4 w-4" />
+          Exporter CSV
+        </Button>
+      </div>
+
+      {exportError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4" />
+          {exportError}
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -53,8 +123,8 @@ function OverviewInner() {
 
       {loading && !data ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} className="h-40 rounded-xl" />
             ))}
           </div>
@@ -66,12 +136,30 @@ function OverviewInner() {
             summary={data.summary}
             budget={data.budget}
             project={filters.project || undefined}
+            meta={meta}
+            savings={data.savings_ytd}
+            forecast={data.forecast ?? null}
           />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Répartition par cloud</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CloudSplit
+                byCloud={data.by_cloud}
+                currency={data.summary.currency}
+              />
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="flex-row items-center justify-between">
-                <CardTitle>Évolution des dépenses</CardTitle>
+                <div className="space-y-1">
+                  <CardTitle>Évolution des dépenses</CardTitle>
+                  <DataFreshness meta={meta} />
+                </div>
                 {selectedResource && (
                   <button
                     onClick={() => setSelectedResource(null)}
@@ -85,6 +173,8 @@ function OverviewInner() {
                 <CostTimeline
                   data={data.timeline}
                   focus={selectedResource}
+                  forecast={daily ? (data.forecast ?? null) : null}
+                  anomalies={anomalies}
                 />
               </CardContent>
             </Card>
@@ -92,6 +182,7 @@ function OverviewInner() {
             <Card>
               <CardHeader>
                 <CardTitle>Distribution des coûts</CardTitle>
+                <DataFreshness meta={meta} />
               </CardHeader>
               <CardContent>
                 <CostDonut
@@ -111,6 +202,17 @@ function OverviewInner() {
               <AppCostTable apps={data.apps} />
             </CardContent>
           </Card>
+
+          {estimates.data && estimates.data.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Où faire tourner chaque application</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CloudEstimateTable rows={estimates.data} />
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       ) : null}
     </div>

@@ -35,6 +35,30 @@ def test_fresh_state_maps_argocd_health(app, expected):
     )
 
 
+def _stale(sync="Synced", conditions=()):
+    return {
+        "status": {
+            "health": {"status": "Healthy"},
+            "sync": {"status": sync},
+            "conditions": [{"type": t} for t in conditions],
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "app,expected",
+    [
+        (_stale(sync="Unknown"), "down"),
+        (_stale(conditions=["ComparisonError"]), "down"),
+        (_stale(conditions=["UnknownError"]), "down"),
+        (_stale(sync="OutOfSync"), "up"),  # drift is not an outage
+    ],
+)
+def test_healthy_is_up_only_if_argocd_can_reach_the_cluster(app, expected):
+    with mock.patch.object(state, "kube_get", return_value=app):
+        assert state.fresh_state(AWS) == expected
+
+
 def test_fresh_state_read_error_is_unknown():
     with mock.patch.object(
         state, "kube_get", side_effect=KubeUnavailableError("boom")
@@ -77,7 +101,9 @@ def test_guard_waits_for_a_stable_state():
 
 def test_guard_gives_up_on_persistent_unknown():
     exc, sleeps = _guard(TargetCloud.GCP, *["unknown"] * 10)
-    assert exc.status_code == 503 and "GCP cluster state is unknown" in exc.detail
+    assert (
+        exc.status_code == 503 and "GCP cluster state is unknown" in exc.detail
+    )
     assert sleeps == state.GUARD_RETRIES
 
 

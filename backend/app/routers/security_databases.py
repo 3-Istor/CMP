@@ -27,6 +27,7 @@ from app.routers.security import (
     _username,
 )
 from app.services import app_security_data as security_data
+from app.services.clusters.state import project_cloud
 from app.services.github_service import (
     FileNotInRepoError,
     GitHubAppError,
@@ -60,10 +61,12 @@ async def request_backup(
     await _require_admin(token, payload.project)
     _app_deployment(db, payload.project, payload.app)
     namespace = f"{payload.project}-{payload.app}"
+    cloud = project_cloud(db, payload.project)
     try:
         clusters = await run_in_threadpool(
             kube_list,
             f"/apis/postgresql.cnpg.io/v1/namespaces/{namespace}/clusters",
+            cloud=cloud,
         )
         enabled = [
             c["metadata"]["name"]
@@ -98,6 +101,7 @@ async def request_backup(
                         },
                     },
                 },
+                cloud=cloud,
             )
     except KubeUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -139,6 +143,7 @@ async def list_backups(
         backups = await run_in_threadpool(
             kube_list,
             f"/apis/postgresql.cnpg.io/v1/namespaces/{project}-{app}/backups",
+            cloud=project_cloud(db, project),
         )
     except KubeUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -183,6 +188,7 @@ async def list_databases(
         clusters = await run_in_threadpool(
             kube_list,
             f"/apis/postgresql.cnpg.io/v1/namespaces/{project}-{app}/clusters",
+            cloud=project_cloud(db, project),
         )
     except KubeUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -217,10 +223,15 @@ async def request_restore(
     if target_time is not None and target_time.tzinfo is not None:
         target_time = target_time.astimezone(timezone.utc).replace(tzinfo=None)
 
+    cloud = project_cloud(db, payload.project)
     try:
         cnpg = f"/apis/postgresql.cnpg.io/v1/namespaces/{namespace}"
-        backups = await run_in_threadpool(kube_list, f"{cnpg}/backups")
-        clusters = await run_in_threadpool(kube_list, f"{cnpg}/clusters")
+        backups = await run_in_threadpool(
+            kube_list, f"{cnpg}/backups", cloud=cloud
+        )
+        clusters = await run_in_threadpool(
+            kube_list, f"{cnpg}/clusters", cloud=cloud
+        )
     except KubeUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     backup = next(
