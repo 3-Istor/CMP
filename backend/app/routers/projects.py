@@ -39,6 +39,7 @@ from app.services.authz import RequireAdmin, RequireGuest, RequireMember
 from app.services.grafana_service import (
     add_user_to_project_org,
     remove_user_from_project_org,
+    sync_project_org,
 )
 from app.services.keycloak_service import (
     ProjectGroupMissingError,
@@ -440,18 +441,8 @@ async def create_project(
                 payload.project_name,
             )
 
-            # Sync to Grafana (best-effort: failures are logged, not raised)
-            try:
-                await add_user_to_project_org(
-                    payload.project_name, username, "admin"
-                )
-            except Exception as grafana_exc:
-                logger.warning(
-                    "Grafana sync failed for creator '%s' in project '%s': %s",
-                    username,
-                    payload.project_name,
-                    grafana_exc,
-                )
+            # The bootstrap that just succeeded created the Grafana org.
+            await sync_project_org(payload.project_name, username)
 
         except Exception as e:
             logger.error(
