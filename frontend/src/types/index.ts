@@ -45,6 +45,18 @@ export interface Deployment {
  */
 export type ProjectRole = "owner" | "admin" | "member" | "guest";
 
+export interface ProjectLink {
+  id: string;
+  label_key: string;
+  url: string;
+  external: boolean;
+  group: "view" | "code" | "admin";
+  min_role: ProjectRole;
+  requires: "grafana_member" | null;
+  component: string | null;
+  app: string | null;
+}
+
 /** The roles an admin can hand out. `owner` is not among them. */
 export type AssignableRole = Exclude<ProjectRole, "owner">;
 
