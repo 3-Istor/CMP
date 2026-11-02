@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Excluded until fix/cnp-89-finops-small-amounts is merged: that branch owns these frontend finops directories.
-EXCLUDED_PATHS='^frontend/src/(components|app)/finops/'
 PATTERN='\x{2014}|[\x{1F000}-\x{1FAFF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}]'
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,8 +16,6 @@ if [[ $grep_status -gt 1 ]]; then
   echo "grep failed with status $grep_status" >&2
   exit "$grep_status"
 fi
-
-matches="$(grep -Ev "$EXCLUDED_PATHS" <<<"$matches" || true)"
 
 if [[ -n "$matches" ]]; then
   echo "$matches"
