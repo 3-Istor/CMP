@@ -2206,5 +2206,55 @@
       "outputs": "Terraform outputs",
       "noOutputs": "No outputs yet."
     }
+  },
+  "appIcon": {
+    "menu": "Change icon",
+    "title": "App icon",
+    "description": "Pick an icon and a colour for {name}, or upload your own image.",
+    "preview": "Preview",
+    "shape": "Icon",
+    "color": "Colour",
+    "reset": "Reset to default icon",
+    "cancel": "Cancel",
+    "save": "Save",
+    "panel": {
+      "title": "Icon",
+      "description": "Shown in app lists and in the app header."
+    },
+    "upload": {
+      "title": "Or upload an image",
+      "choose": "Choose an image",
+      "limits": "PNG, JPEG or WebP, 512 KB maximum. The image is cropped to a square and resized to 256 px.",
+      "selected": "Selected image: {name}"
+    },
+    "errors": {
+      "wrongType": "File type refused. Use a PNG, JPEG or WebP image.",
+      "tooBig": "Image too large. The maximum size is 512 KB.",
+      "storage": "Image storage is unavailable. Built-in icons still work.",
+      "forbidden": "You are not allowed to change this app's icon.",
+      "generic": "The icon could not be saved. Try again."
+    },
+    "icons": {
+      "MessageCircle": "Message",
+      "Globe": "Globe",
+      "Database": "Database",
+      "ShoppingCart": "Shopping cart",
+      "BarChart3": "Chart",
+      "Cpu": "Processor",
+      "Mail": "Mail",
+      "Calendar": "Calendar",
+      "Lock": "Lock",
+      "Gamepad2": "Game controller",
+      "Leaf": "Leaf",
+      "Package": "Package"
+    },
+    "colors": {
+      "indigo": "Indigo",
+      "emerald": "Emerald",
+      "amber": "Amber",
+      "rose": "Rose",
+      "sky": "Sky",
+      "slate": "Slate"
+    }
   }
 }

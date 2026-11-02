@@ -1,6 +1,7 @@
 "use client";
 
-import { TemplateIcon } from "@/components/catalog/TemplateIcon";
+import { AppIcon } from "@/components/app-icon/AppIcon";
+import { AppIconDialog } from "@/components/app-icon/AppIconDialog";
 
 import { useAppContext } from "@/components/projects/AppContext";
 import {
@@ -39,6 +40,7 @@ import {
   FileCode,
   Globe,
   History,
+  Image as ImageIcon,
   Layers,
   MoreHorizontal,
   Moon,
@@ -90,6 +92,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   >(null);
 
   const canDelete = can("app.delete");
+  const canEditIcon = can("app.editIcon");
+  const [iconOpen, setIconOpen] = useState(false);
+  const tIcon = useTranslations("appIcon");
   const canOperate = can("app.operate");
   const canViewLogs = can("app.viewLogs");
   const canViewConfig = can("app.viewConfig");
@@ -272,9 +277,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            {current.template_icon && (
-              <TemplateIcon icon={current.template_icon} className="h-9 w-9" />
-            )}
+            <AppIcon
+              appId={current.id}
+              templateIcon={current.template_icon}
+              icon={current.icon}
+              className="h-9 w-9"
+            />
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-2xl font-bold">{current.name}</h1>
@@ -351,7 +359,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             >
               <RefreshCw aria-hidden />
             </Button>
-            {(canOperate || canViewConfig || canDelete) && (
+            {(canOperate || canViewConfig || canDelete || canEditIcon) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -403,6 +411,15 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                         />
                       </DropdownMenuItem>
                     </>
+                  )}
+                  {canEditIcon && (
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => setIconOpen(true)}
+                    >
+                      <ImageIcon className="h-4 w-4" aria-hidden />
+                      {tIcon("menu")}
+                    </DropdownMenuItem>
                   )}
                   {isKubernetes && canViewConfig && (
                     <DropdownMenuItem asChild className="gap-2">
@@ -474,6 +491,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <div className="space-y-6">{children}</div>
       </main>
 
+      <AppIconDialog
+        deployment={current}
+        open={iconOpen}
+        onOpenChange={setIconOpen}
+        onSaved={() => void refresh()}
+      />
       <ConfirmDialog
         open={confirming === "sleep"}
         onOpenChange={(open) => !open && setConfirming(null)}

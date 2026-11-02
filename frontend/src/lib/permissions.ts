@@ -26,6 +26,7 @@ export type Capability =
   | "app.deploy"
   | "app.operate"
   | "app.delete"
+  | "app.editIcon"
   | "app.viewLogs"
   | "app.viewConfig"
   | "app.editConfig"
@@ -53,6 +54,7 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "app.deploy": "admin",
   "app.operate": "member",
   "app.delete": "admin",
+  "app.editIcon": "member",
   "app.viewLogs": "member",
   "app.viewConfig": "member",
   "app.editConfig": "admin",

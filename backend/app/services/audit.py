@@ -105,6 +105,8 @@ ACTIONS: dict[tuple[str, str], str] = {
         "DELETE",
         "/api/deployments/{deployment_id}/release/traffic",
     ): "release.traffic.stop",
+    ("PUT", "/api/deployments/{deployment_id}/icon"): "app.icon.update",
+    ("DELETE", "/api/deployments/{deployment_id}/icon"): "app.icon.reset",
     ("POST", "/api/deployments/{deployment_id}/sleep"): "app.sleep",
     ("POST", "/api/deployments/{deployment_id}/wake"): "app.wake",
     ("POST", "/api/deployments/{deployment_id}/restart"): "app.restart",

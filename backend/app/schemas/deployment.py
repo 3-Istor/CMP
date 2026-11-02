@@ -21,6 +21,13 @@ _EMOJI = re.compile(
 )
 
 
+class AppIconRead(BaseModel):
+    kind: str
+    name: str | None = None
+    color: str | None = None
+    hash: str | None = None
+
+
 class DeploymentRead(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -45,6 +52,7 @@ class DeploymentRead(BaseModel):
     argocd_app_name: str | None
     k8s_namespace: str | None
     created_via: str | None = None
+    icon: AppIconRead | None = None
 
     terraform_outputs: str | None  # JSON string
     resource_count: int | None
