@@ -1,5 +1,6 @@
 "use client";
 
+import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 import { Badge } from "@/components/ui/badge";
 import {
     Card,
@@ -11,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { createProject, deleteProject } from "@/lib/api";
-import { GROUP_SUFFIX, ROLE_BLURB } from "@/lib/permissions";
+import { GROUP_SUFFIX } from "@/lib/permissions";
 import type { Project, ProjectRole } from "@/types";
 import { isProjectFailed, isProjectInFlight } from "@/types";
 import {
@@ -24,6 +25,7 @@ import {
     ShieldCheck,
     Users,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -42,6 +44,7 @@ const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
 };
 
 export function ProjectCard({ project, onRetried }: Props) {
+    const t = useTranslations("projects");
     const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
@@ -64,7 +67,7 @@ export function ProjectCard({ project, onRetried }: Props) {
             onRetried?.();
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            toast.error(`Retry failed: ${msg}`);
+            toast.error(t("card.retryFailed", { message: msg }));
         } finally {
             setRetrying(false);
         }
@@ -90,17 +93,17 @@ export function ProjectCard({ project, onRetried }: Props) {
                     {isCreating ? (
                         <Badge variant="outline" className="shrink-0 gap-1">
                             <Loader2 className="h-3 w-3 animate-spin" />
-                            Creating
+                            {t("card.creating")}
                         </Badge>
                     ) : isDeleting ? (
                         <Badge variant="destructive" className="shrink-0 gap-1">
                             <Loader2 className="h-3 w-3 animate-spin" />
-                            Deleting
+                            {t("card.deleting")}
                         </Badge>
                     ) : isFailed ? (
                         <Badge variant="destructive" className="shrink-0 gap-1">
                             <AlertTriangle className="h-3 w-3" />
-                            Failed
+                            {t("card.failed")}
                         </Badge>
                     ) : (
                         <Badge
@@ -114,15 +117,20 @@ export function ProjectCard({ project, onRetried }: Props) {
                             className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
                         >
                             <RoleIcon className="mr-1 h-3 w-3" />
-                            {project.role}
+                            {t(`roles.${project.role}`)}
                         </Badge>
                     )}
                 </div>
-                <CardTitle className="text-base mt-2 capitalize">
-                    {project.name}
-                </CardTitle>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                    <CardTitle className="text-base capitalize">
+                        {project.name}
+                    </CardTitle>
+                    {!isInFlight && !isFailed && (
+                        <FavoriteToggle kind="project" id={project.name} />
+                    )}
+                </div>
                 <CardDescription className="text-xs">
-                    {`Kubernetes project · ${ROLE_BLURB[project.role]}`}
+                    {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-0 space-y-1.5">
@@ -157,7 +165,7 @@ export function ProjectCard({ project, onRetried }: Props) {
                             ) : (
                                 <RotateCw className="mr-2 h-3 w-3" />
                             )}
-                            Retry
+                            {t("card.retry")}
                         </Button>
                     </>
                 ) : (
@@ -179,12 +187,12 @@ export function ProjectCard({ project, onRetried }: Props) {
                 className="block cursor-not-allowed select-none"
                 title={
                     isDeleting
-                        ? "This project is being deleted"
+                        ? t("card.deletingTitle")
                         : isCreating
-                          ? "This project is still being created"
+                          ? t("card.creatingTitle")
                           : project.status === "decommission_failed"
-                            ? "This project could not be deleted"
-                            : "This project could not be created"
+                            ? t("card.deleteFailedTitle")
+                            : t("card.createFailedTitle")
                 }
                 aria-disabled="true"
             >

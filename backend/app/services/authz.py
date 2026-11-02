@@ -15,15 +15,15 @@ parameter::
     async def delete_project(ctx: RequireAdmin, ...):
         ...
 
-For the cases where the project is not in the path — it comes off a
-deployment row, say — call :func:`assert_project_role` directly.
+For the cases where the project is not in the path, it comes off a
+deployment row, say, call :func:`assert_project_role` directly.
 
 Note on the shape: the factory takes only the minimum role. The dependency
 it returns declares ``project_name`` in its own signature, which is what
 lets FastAPI bind it from the request path. The previous attempt at this
 (``verify_project_access(project_name, ...)``, now deleted) took the project
 name as a factory argument, so it was resolved at import time and could
-never see the actual request — which is why every router ended up inlining
+never see the actual request, which is why every router ended up inlining
 the check by hand.
 """
 
@@ -175,7 +175,7 @@ def require_project_role(
     return _dep
 
 
-# Built once, at import time — see require_project_role's docstring.
+# Built once, at import time, see require_project_role's docstring.
 RequireGuest = Annotated[
     ProjectContext, Depends(require_project_role(ProjectRole.GUEST))
 ]

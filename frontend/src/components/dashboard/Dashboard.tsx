@@ -1,14 +1,17 @@
 "use client";
 
+import { CloudLightning } from "lucide-react";
 import { deleteDeployment } from "@/lib/api";
 import { useDeploymentsList, useProjects } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
 import type { ProjectRole } from "@/types";
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { DeploymentCard } from "./DeploymentCard";
 
 export function Dashboard() {
+  const t = useTranslations("dashboard");
   // Fast (3s) only while a deployment is in progress; idle every 10s otherwise.
   const { deployments, loading, refresh } = useDeploymentsList(3000, 10000);
   const { projects, loading: loadingProjects } = useProjects();
@@ -36,15 +39,15 @@ export function Dashboard() {
       ? roleByProject.get(deployment.project_id)
       : undefined;
     if (!can(role, "app.delete")) {
-      toast.error("Only project admins can delete an application");
+      toast.error(t("deleteDenied"));
       return;
     }
     try {
       await deleteDeployment(id);
-      toast.success("Deletion started");
+      toast.success(t("deletionStarted"));
       refresh();
     } catch (err) {
-      toast.error(`Failed to delete: ${err}`);
+      toast.error(t("deleteFailed", { error: String(err) }));
     }
   };
 
@@ -61,11 +64,9 @@ export function Dashboard() {
   if (visible.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-        <span className="text-5xl mb-4">🌩️</span>
-        <p className="text-lg font-medium">No deployments yet</p>
-        <p className="text-sm">
-          Deploy an app from the catalog to get started.
-        </p>
+        <CloudLightning className="h-12 w-12 mb-4 text-muted-foreground" />
+        <p className="text-lg font-medium">{t("emptyTitle")}</p>
+        <p className="text-sm">{t("emptyText")}</p>
       </div>
     );
   }

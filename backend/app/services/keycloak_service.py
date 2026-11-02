@@ -12,7 +12,7 @@ Example: project-sandbox-admins, project-sandbox-guests
 The ``guests`` group is created by the ``project-bootstrap`` Terraform
 module alongside the other two. Projects bootstrapped before guests existed
 have no such group: every read path here degrades to "nobody is a guest",
-and only the write path complains — loudly, via
+and only the write path complains, loudly, via
 :class:`ProjectGroupMissingError`.
 
 Note that group membership is always resolved against the Admin API, never
@@ -116,13 +116,13 @@ def get_user_id_from_token(token_payload: dict) -> str:
     username = token_payload.get("preferred_username", "")
 
     # If sub is empty but we have username, lookup user_id from Keycloak.
-    # Every token issued in this environment is missing 'sub' — not an
+    # Every token issued in this environment is missing 'sub', not an
     # intermittent anomaly, so warning on every single request adds nothing
     # (see CMP#38). Worth root-causing separately: this also means an extra
     # Keycloak admin API round-trip on every request.
     if not user_id and username:
         logger.debug(
-            "⚠️  Token missing 'sub' claim, looking up user_id from "
+            "Token missing 'sub' claim, looking up user_id from "
             "username '%s'",
             username,
         )
@@ -132,7 +132,7 @@ def get_user_id_from_token(token_payload: dict) -> str:
             if user:
                 user_id = user["id"]
                 logger.debug(
-                    "✅ Found user_id '%s' for username '%s'",
+                    "Found user_id '%s' for username '%s'",
                     user_id,
                     username,
                 )
@@ -144,7 +144,7 @@ def get_user_id_from_token(token_payload: dict) -> str:
         except HTTPException:
             raise
         except Exception as exc:
-            logger.error("❌ Failed to lookup user: %s", exc)
+            logger.error("Failed to lookup user: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to lookup user: {exc}",
@@ -192,7 +192,7 @@ def _get_admin_token() -> str:
     token = data["access_token"]
     ttl = max(data.get("expires_in", 60) - 30, 0)
     _admin_token_cache = (token, now + ttl)
-    logger.debug("🔑 Fetched fresh Keycloak admin token (cached %ss)", ttl)
+    logger.debug("Fetched fresh Keycloak admin token (cached %ss)", ttl)
     return token
 
 
@@ -225,7 +225,7 @@ def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     """
     Search for a Keycloak group by exact name.
 
-    Hits are cached for 5 minutes — group IDs rarely change. Misses are NOT
+    Hits are cached for 5 minutes, group IDs rarely change. Misses are NOT
     cached: a project's guests group may be created by Terraform at any
     moment, and caching the "not found" would keep rejecting guest
     assignments for minutes after the operator fixed the project.
@@ -246,7 +246,7 @@ def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     )
     response.raise_for_status()
     groups = response.json()
-    # Keycloak search returns partial matches — filter exact
+    # Keycloak search returns partial matches, filter exact
     group = next((g for g in groups if g.get("name") == group_name), None)
     if group is not None:
         _group_cache[group_name] = (group, now + _GROUP_CACHE_TTL)
@@ -332,7 +332,7 @@ def _project_roles_from_groups(groups: list[dict]) -> dict[str, ProjectRole]:
     """
     Map Keycloak groups to ``{project_name: role}``.
 
-    A user can sit in several groups of one project — being added as admin
+    A user can sit in several groups of one project, being added as admin
     never removed them from ``-members``. The strongest role wins.
     """
     projects: dict[str, ProjectRole] = {}
@@ -364,13 +364,13 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         List of project dicts, sorted by name:
         ``[{"name": "sandbox", "role": "admin"}, ...]``
     """
-    logger.debug("🔍 Fetching groups from Keycloak for user_id: %s", user_id)
+    logger.debug("Fetching groups from Keycloak for user_id: %s", user_id)
 
     groups = _fetch_user_groups(user_id)
     logger.debug("Raw groups: %s", [g.get("name") for g in groups])
 
     projects = _project_roles_from_groups(groups)
-    logger.debug("📊 Extracted %d projects: %s", len(projects), list(projects))
+    logger.debug("Extracted %d projects: %s", len(projects), list(projects))
 
     return [
         {"name": name, "role": role.value}
@@ -385,7 +385,7 @@ def get_user_project_role(
     Return the user's role on one project, or None if they have none.
 
     This is the primitive every authorization check is built on. It costs a
-    single Admin API call — the user's own group list — and matches locally.
+    single Admin API call, the user's own group list, and matches locally.
     The alternative (looking up each project group's id, then probing
     membership) costs up to six calls and grows with every new role.
 
@@ -393,7 +393,7 @@ def get_user_project_role(
     that has a session resolves it. See ``app.services.authz``.
 
     Raises:
-        requests.RequestException: If Keycloak is unreachable — callers turn
+        requests.RequestException: If Keycloak is unreachable, callers turn
             it into a 503 rather than a misleading 403.
     """
     groups = _fetch_user_groups_or_raise(user_id)
@@ -404,7 +404,7 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
     """
     Add a user to a project Keycloak group.
 
-    Does not clear the user's other groups on the project — callers changing
+    Does not clear the user's other groups on the project, callers changing
     someone's role must call :func:`remove_user_from_project` first, or the
     old group lingers and the stronger role keeps winning.
 
@@ -497,7 +497,7 @@ def remove_user_from_project(username: str, project_name: str) -> None:
         group = _find_group_by_name(group_name, admin_token)
 
         if not group:
-            logger.debug("Group '%s' not found — skipping", group_name)
+            logger.debug("Group '%s' not found, skipping", group_name)
             continue
 
         group_id = group["id"]
@@ -505,7 +505,7 @@ def remove_user_from_project(username: str, project_name: str) -> None:
         # Check if user is in this group first
         if not _check_user_in_group_realtime(user_id, group_id, admin_token):
             logger.debug(
-                "User '%s' not in group '%s' — skipping", username, group_name
+                "User '%s' not in group '%s', skipping", username, group_name
             )
             continue
 
@@ -555,7 +555,7 @@ def list_project_members(project_name: str) -> list[dict]:
         group = _find_group_by_name(group_name, admin_token)
         if not group:
             logger.info(
-                "Group '%s' does not exist — treating it as empty. Re-run "
+                "Group '%s' does not exist, treating it as empty. Re-run "
                 "the project-bootstrap Terraform module for '%s' to create "
                 "it.",
                 group_name,

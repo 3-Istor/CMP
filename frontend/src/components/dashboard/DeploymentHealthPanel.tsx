@@ -12,14 +12,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppHealth } from "@/lib/hooks";
 import type { VMInstance } from "@/types";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Cloud,
-  Database,
-  RefreshCw,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Cloud, Database, Moon, PlugZap, RefreshCw, XCircle } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 interface Props {
   deploymentId: number;
@@ -34,6 +28,7 @@ export function DeploymentHealthPanel({
   open,
   onClose,
 }: Props) {
+  const t = useTranslations("dashboard");
   const { health, loading, error, refresh } = useAppHealth(
     open ? deploymentId : null,
     5000,
@@ -47,6 +42,10 @@ export function DeploymentHealthPanel({
         return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
       case "down":
         return <XCircle className="h-5 w-5 text-red-500" />;
+      case "asleep":
+        return <Moon className="h-5 w-5 text-indigo-400" />;
+      case "not_connected":
+        return <PlugZap className="h-5 w-5 text-gray-400" />;
       default:
         return <AlertTriangle className="h-5 w-5 text-gray-400" />;
     }
@@ -57,7 +56,7 @@ export function DeploymentHealthPanel({
       <DialogContent className="max-w-7xl sm:max-w-7xl md:max-w-7xl lg:max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Health Details: {deploymentName}
+            {t("healthPanel.title", { name: deploymentName })}
             <Button
               variant="ghost"
               size="sm"
@@ -71,7 +70,7 @@ export function DeploymentHealthPanel({
             </Button>
           </DialogTitle>
           <DialogDescription>
-            Real-time health status from cloud APIs
+            {t("healthPanel.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -86,7 +85,7 @@ export function DeploymentHealthPanel({
             <XCircle className="h-5 w-5 text-destructive" />
             <div>
               <p className="font-medium text-destructive">
-                Failed to fetch health data
+                {t("healthPanel.fetchFailed")}
               </p>
               <p className="text-sm text-muted-foreground">{error}</p>
             </div>
@@ -98,15 +97,15 @@ export function DeploymentHealthPanel({
               <div className="flex items-center gap-3">
                 {getStatusIcon(health.status)}
                 <div>
-                  <p className="font-medium text-sm">Overall Status</p>
+                  <p className="font-medium text-sm">{t("healthPanel.overall")}</p>
                   <p className="text-xs text-muted-foreground">
                     {health.status === "healthy"
-                      ? "All components operational"
+                      ? t("healthPanel.overallHealthy")
                       : health.status === "degraded"
-                        ? "Some components unhealthy"
+                        ? t("healthPanel.overallDegraded")
                         : health.status === "down"
-                          ? "No healthy components"
-                          : "Unable to determine"}
+                          ? t("healthPanel.overallDown")
+                          : t("healthPanel.overallUnknown")}
                   </p>
                 </div>
               </div>
@@ -116,11 +115,13 @@ export function DeploymentHealthPanel({
                     ? "default"
                     : health.status === "degraded"
                       ? "secondary"
-                      : "destructive"
+                      : health.status === "down"
+                        ? "destructive"
+                        : "outline"
                 }
                 className="text-sm capitalize"
               >
-                {health.status}
+                {t(`health.${health.status}`)}
               </Badge>
             </div>
 
@@ -132,30 +133,36 @@ export function DeploymentHealthPanel({
                   <div className="flex items-center gap-2">
                     <Cloud className="h-4 w-4 text-muted-foreground" />
                     <h3 className="font-semibold text-sm">
-                      AWS Frontend Layer
+                      {t("healthPanel.awsLayer")}
                     </h3>
                   </div>
 
                   <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">ASG Name:</span>
+                      <span className="text-muted-foreground">
+                        {t("healthPanel.asgName")}:
+                      </span>
                       <span className="font-mono text-xs">
                         {health.aws_frontend.asg_name}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">
-                        Desired Capacity:
+                        {t("healthPanel.desiredCapacity")}:
                       </span>
                       <span className="font-mono text-xs">
                         {health.aws_frontend.desired_capacity}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Health:</span>
+                      <span className="text-muted-foreground">
+                        {t("healthPanel.health")}:
+                      </span>
                       <span className="font-semibold text-xs">
-                        {health.aws_frontend.healthy_count} /{" "}
-                        {health.aws_frontend.total_count} healthy
+                        {t("healthPanel.counts", {
+                          healthy: health.aws_frontend.healthy_count,
+                          total: health.aws_frontend.total_count,
+                        })}
                       </span>
                     </div>
                   </div>
@@ -163,7 +170,9 @@ export function DeploymentHealthPanel({
                   {health.aws_frontend.instances.length > 0 ? (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Instances ({health.aws_frontend.instances.length}):
+                        {t("healthPanel.instances", {
+                          count: health.aws_frontend.instances.length,
+                        })}
                       </p>
                       {health.aws_frontend.instances.map((instance) => (
                         <InstanceCard
@@ -174,7 +183,7 @@ export function DeploymentHealthPanel({
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      No instances found
+                      {t("healthPanel.noInstances")}
                     </p>
                   )}
                 </div>
@@ -185,15 +194,21 @@ export function DeploymentHealthPanel({
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Database className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="font-semibold text-sm">OpenStack Layer</h3>
+                    <h3 className="font-semibold text-sm">
+                      {t("healthPanel.openstackLayer")}
+                    </h3>
                   </div>
 
                   <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Health:</span>
+                      <span className="text-muted-foreground">
+                        {t("healthPanel.health")}:
+                      </span>
                       <span className="font-semibold text-xs">
-                        {health.openstack_backend.healthy_count} /{" "}
-                        {health.openstack_backend.total_count} healthy
+                        {t("healthPanel.counts", {
+                          healthy: health.openstack_backend.healthy_count,
+                          total: health.openstack_backend.total_count,
+                        })}
                       </span>
                     </div>
                   </div>
@@ -201,7 +216,9 @@ export function DeploymentHealthPanel({
                   {health.openstack_backend.servers.length > 0 ? (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Servers ({health.openstack_backend.servers.length}):
+                        {t("healthPanel.servers", {
+                          count: health.openstack_backend.servers.length,
+                        })}
                       </p>
                       {health.openstack_backend.servers.map((server) => (
                         <InstanceCard
@@ -212,7 +229,7 @@ export function DeploymentHealthPanel({
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      No servers found
+                      {t("healthPanel.noServers")}
                     </p>
                   )}
                 </div>
@@ -221,10 +238,9 @@ export function DeploymentHealthPanel({
 
             {!health.aws_frontend && !health.openstack_backend && (
               <div className="text-center py-8 text-muted-foreground">
-                <p>No infrastructure components found</p>
+                <p>{t("healthPanel.noComponents")}</p>
                 <p className="text-xs mt-1">
-                  This deployment may not have been created yet or uses a
-                  different architecture
+                  {t("healthPanel.noComponentsHelp")}
                 </p>
               </div>
             )}
@@ -236,6 +252,7 @@ export function DeploymentHealthPanel({
 }
 
 function InstanceCard({ instance }: { instance: VMInstance }) {
+  const t = useTranslations("dashboard");
   const isHealthy = instance.health === "healthy";
   const isUnhealthy = instance.health === "unhealthy";
   const isActive = instance.state === "active" || instance.state === "running";
@@ -277,7 +294,9 @@ function InstanceCard({ instance }: { instance: VMInstance }) {
             }
             className="text-[10px] h-5 px-2"
           >
-            {instance.health}
+            {isHealthy || isUnhealthy
+              ? t(`instanceHealth.${instance.health}`)
+              : instance.health}
           </Badge>
         )}
       </div>

@@ -11,12 +11,26 @@ from typing import Dict
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
-from app.services import discord_service, monitoring_service
+from app.services import discord_service, monitoring_service, notifications
 
 logger = logging.getLogger(__name__)
 
 # In-memory state tracking for infrastructure components
 previous_infra_state: Dict[str, str] = {}
+
+
+async def _notify_health(deployment: Deployment, kind: str) -> None:
+    if not deployment.project_id:
+        return
+    await asyncio.to_thread(
+        notifications.notify_project,
+        deployment.project_id,
+        kind="alert",
+        title_key=kind,
+        params={"app": deployment.name},
+        link=f"/projects/{deployment.project_id}/apps/{deployment.id}",
+        app=deployment.name,
+    )
 
 
 async def check_app_health() -> None:
@@ -69,6 +83,7 @@ async def check_app_health() -> None:
                             new_state="DEGRADED",
                             details=details,
                         )
+                        await _notify_health(deployment, "app_degraded")
 
                 elif current_db_status == DeploymentStatus.DEGRADED:
                     if health_status == "healthy":
@@ -82,6 +97,7 @@ async def check_app_health() -> None:
                             new_state="RUNNING",
                             details="All components are now healthy",
                         )
+                        await _notify_health(deployment, "app_recovered")
 
                 # Update DB if needed
                 if should_update:

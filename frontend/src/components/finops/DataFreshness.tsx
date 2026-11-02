@@ -1,7 +1,8 @@
 "use client";
 
 import type { FinopsMeta } from "@/types";
-import { formatAge } from "./format";
+import { useLocale, useTranslations } from "next-intl";
+import { formatAge, intlLocale } from "./format";
 
 const PILL = "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px]";
 
@@ -23,6 +24,8 @@ export function DataFreshness({
   /** Nature badge only, for data that has no cost-line freshness. */
   compact?: boolean;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   if (!meta) return null;
   const real = compact || meta.provider === "real";
   const detailed = real && !compact;
@@ -44,25 +47,28 @@ export function DataFreshness({
             : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
         }`}
       >
-        {real ? "réel" : "simulé"}
+        {real ? t("dataFreshness.real") : t("dataFreshness.simulated")}
       </span>
       {detailed && meta.sources.some((s) => s.has_estimate) && (
         <span
           className={`${PILL} bg-amber-500/15 text-amber-600 dark:text-amber-400`}
-          title="Une partie des coûts repose sur un prix provisoire."
+          title={t("dataFreshness.estimateNote")}
         >
-          estimé
+          {t("dataFreshness.estimated")}
         </span>
       )}
       {detailed && (
         <span className={`${PILL} bg-muted text-muted-foreground`}>
-          màj {formatAge(ingested)}
+          {t("dataFreshness.updated", {
+            age: formatAge(ingested, t),
+          })}
         </span>
       )}
       {detailed && finalThrough && (
         <span className={`${PILL} bg-muted text-muted-foreground`}>
-          définitif jusqu&apos;au{" "}
-          {new Date(finalThrough).toLocaleDateString("fr-FR")}
+          {t("dataFreshness.finalUntil", {
+            date: new Date(finalThrough).toLocaleDateString(locale),
+          })}
         </span>
       )}
     </div>

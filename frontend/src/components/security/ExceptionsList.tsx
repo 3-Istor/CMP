@@ -5,17 +5,14 @@ import { Button } from "@/components/ui/button";
 import { approveSecurityException, revokeSecurityException } from "@/lib/api";
 import type { SecurityException } from "@/types";
 import { Loader2 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-  errorMessage,
-  EXCEPTION_STATUS_LABELS,
-  JUSTIFICATION_LABELS,
-} from "./labels";
+import { errorMessage } from "./labels";
 
-function date(iso: string): string {
+function date(iso: string, locale: string): string {
   return new Date(iso.length === 10 ? `${iso}T00:00:00Z` : `${iso}Z`).toLocaleDateString(
-    "fr-FR",
+    locale,
   );
 }
 
@@ -30,6 +27,8 @@ export function ExceptionsList({
   username: string;
   onChanged: () => void;
 }) {
+  const t = useTranslations("security");
+  const locale = useLocale();
   const [busy, setBusy] = useState<number | null>(null);
 
   async function run(id: number, action: () => Promise<unknown>, done: string) {
@@ -46,7 +45,7 @@ export function ExceptionsList({
   }
 
   if (exceptions.length === 0) {
-    return <p className="text-sm text-muted-foreground">Aucune alerte ignorée.</p>;
+    return <p className="text-sm text-muted-foreground">{t("exceptions.empty")}</p>;
   }
 
   return (
@@ -59,28 +58,34 @@ export function ExceptionsList({
                 {e.rule}
                 <span className="font-normal text-muted-foreground">
                   {" "}
-                  · {e.app ?? "projet"}
+                  · {e.app ?? t("common.project")}
                 </span>
               </p>
               <div className="flex flex-wrap gap-1.5">
-                <Badge variant="outline">{EXCEPTION_STATUS_LABELS[e.status]}</Badge>
+                <Badge variant="outline">{t(`exceptionStatus.${e.status}`)}</Badge>
                 {e.justification && (
-                  <Badge variant="outline">{JUSTIFICATION_LABELS[e.justification]}</Badge>
+                  <Badge variant="outline">
+                    {t(`justifications.${e.justification}`)}
+                  </Badge>
                 )}
                 {e.pending_approval && (
                   <Badge
                     variant="outline"
                     className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                   >
-                    En attente de validation
+                    {t("exceptions.awaitingApproval")}
                   </Badge>
                 )}
               </div>
               <p>{e.statement}</p>
               <p className="text-xs text-muted-foreground">
-                Par {e.author} le {date(e.created_at)}
-                {e.approved_by && `, validée par ${e.approved_by}`} · expire le{" "}
-                {date(e.expires_on)}
+                {t("exceptions.byOn", {
+                  author: e.author,
+                  date: date(e.created_at, locale),
+                })}
+                {e.approved_by &&
+                  `, ${t("exceptions.approvedBy", { approver: e.approved_by })}`}{" "}
+                · {t("exceptions.expiresOn", { date: date(e.expires_on, locale) })}
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
@@ -89,11 +94,11 @@ export function ExceptionsList({
                   size="sm"
                   disabled={busy === e.id}
                   onClick={() =>
-                    run(e.id, () => approveSecurityException(e.id), "Exception validée")
+                    run(e.id, () => approveSecurityException(e.id), t("exceptions.approved"))
                   }
                 >
                   {busy === e.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Valider
+                  {t("exceptions.approve")}
                 </Button>
               )}
               <Button
@@ -101,10 +106,10 @@ export function ExceptionsList({
                 variant="outline"
                 disabled={busy === e.id}
                 onClick={() =>
-                  run(e.id, () => revokeSecurityException(e.id), "Alerte réactivée")
+                  run(e.id, () => revokeSecurityException(e.id), t("exceptions.reactivated"))
                 }
               >
-                Réactiver
+                {t("exceptions.reactivate")}
               </Button>
             </div>
           </div>

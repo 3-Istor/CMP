@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 export type MascotMood = "idle" | "working" | "happy";
 
@@ -13,17 +14,12 @@ export function Mascot({
   mood?: MascotMood;
   className?: string;
 }) {
+  const t = useTranslations("agents");
   return (
     <svg
       viewBox="0 0 120 96"
       role="img"
-      aria-label={
-        mood === "working"
-          ? "Nimbus is working"
-          : mood === "happy"
-            ? "Nimbus is happy"
-            : "Nimbus"
-      }
+      aria-label={t(`mascot.${mood}`)}
       className={cn(
         "text-primary motion-safe:animate-[nimbus-float_4s_ease-in-out_infinite]",
         className,

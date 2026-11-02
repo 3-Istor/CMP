@@ -1,5 +1,6 @@
 "use client";
 
+import { intlLocale, type Translate } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { useCan, useRelease, useReleaseHistory } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import type { ReleaseEvent, ReleaseRevision, ReleaseView } from "@/types";
 import { AlertTriangle, ArrowRight, CheckCircle2, Rocket, XCircle } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { DemoTrafficCard } from "./DemoTrafficCard";
@@ -27,43 +29,43 @@ import {
   formatTime,
   imageTag,
   isVisibleStep,
-  OUTCOME,
-  PHASE,
-  STRATEGY,
+  outcomeLabel,
+  PHASE_TONE,
   TONE,
 } from "./format";
 
 type Confirming = null | "full" | "abort";
 
+function releaseName(revision: number | null | undefined, t: Translate): string {
+  return revision != null ? t("name.numbered", { revision }) : t("name.plain");
+}
+
 function DisabledCard() {
+  const t = useTranslations("release");
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Rocket className="h-4 w-4 text-muted-foreground" />
-          Release non activée
+          {t("disabled.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm text-muted-foreground">
         <p>
-          Cette application est mise à jour en rolling update : chaque nouvelle
-          version remplace les pods directement. Pour la livrer progressivement,
-          avec une part du trafic d&apos;abord, une analyse automatique des
-          erreurs et une validation manuelle, passez la stratégie en Canary
-          dans les réglages ci-dessous, ou dans la section{" "}
-          <code className="font-mono">release</code> du fichier values du dépôt.
+          {t.rich("disabled.rolling", {
+            code: (chunks) => <code className="font-mono">{chunks}</code>,
+          })}
         </p>
-        <p>
-          Une fois le changement synchronisé par Argo CD, la version suivante
-          passe par les étapes du preset.
-        </p>
+        <p>{t("disabled.synced")}</p>
       </CardContent>
     </Card>
   );
 }
 
 function Banner({ view }: { view: ReleaseView }) {
-  const rev = view.revision != null ? ` #${view.revision}` : "";
+  const t = useTranslations("release");
+  const locale = intlLocale(useLocale());
+  const release = releaseName(view.revision, t);
   const stable = imageTag(view.stableImage);
 
   if (view.phase === "Aborted" || view.phase === "Degraded") {
@@ -71,27 +73,30 @@ function Banner({ view }: { view: ReleaseView }) {
     const failedMetrics =
       failedStep?.metrics.filter((m) => m.phase === "Failed" || m.phase === "Error") ?? [];
     const title = failedStep
-      ? `Canary rejeté automatiquement · release${rev}`
+      ? t("banner.canaryRejected", { release })
       : view.phase === "Aborted"
-        ? `Release${rev} abortée`
-        : `Release${rev} dégradée`;
+        ? t("banner.aborted", { release })
+        : t("banner.degraded", { release });
     return (
       <div role="alert" className={cn("flex gap-3 rounded-xl border p-4", TONE.bad)}>
         <XCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
         <div className="space-y-1 text-sm">
           <p className="font-semibold">{title}</p>
-          {failedMetrics.map((m) => (
-            <p key={m.name}>
-              {m.name} a atteint {formatMetricValue(m.value, m.unit)}
-              {m.threshold != null &&
-                ` pour un seuil de ${formatMetricValue(m.threshold, m.unit)}`}
-              .
-            </p>
-          ))}
-          <p className="text-foreground/80">
-            Le stable {stable} sert 100 % du trafic. Pour corriger, poussez un
-            nouveau commit : la prochaine version repartira en canary.
-          </p>
+          {failedMetrics.map((m) => {
+            const value = formatMetricValue(m.value, m.unit, t, locale);
+            return (
+              <p key={m.name}>
+                {m.threshold != null
+                  ? t("banner.metricReachedThreshold", {
+                      name: m.name,
+                      value,
+                      threshold: formatMetricValue(m.threshold, m.unit, t, locale),
+                    })
+                  : t("banner.metricReached", { name: m.name, value })}
+              </p>
+            );
+          })}
+          <p className="text-foreground/80">{t("banner.stableServes", { stable })}</p>
         </div>
       </div>
     );
@@ -102,11 +107,8 @@ function Banner({ view }: { view: ReleaseView }) {
       <div role="status" className={cn("flex gap-3 rounded-xl border p-4", TONE.warn)}>
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
         <div className="space-y-1 text-sm">
-          <p className="font-semibold">Release{rev} promue de force</p>
-          <p className="text-foreground/80">
-            {stable} sert 100 % du trafic. Des étapes ont été ignorées, le motif
-            est enregistré dans l&apos;historique.
-          </p>
+          <p className="font-semibold">{t("banner.forced", { release })}</p>
+          <p className="text-foreground/80">{t("banner.forcedBody", { stable })}</p>
         </div>
       </div>
     );
@@ -117,8 +119,8 @@ function Banner({ view }: { view: ReleaseView }) {
       <div role="status" className={cn("flex gap-3 rounded-xl border p-4", TONE.ok)}>
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
         <p className="text-sm">
-          <span className="font-semibold">Release{rev} promue</span>
-          <span className="text-foreground/80"> · {stable} est le stable.</span>
+          <span className="font-semibold">{t("banner.promoted", { release })}</span>
+          <span className="text-foreground/80"> · {t("banner.stableIs", { stable })}</span>
         </p>
       </div>
     );
@@ -128,17 +130,18 @@ function Banner({ view }: { view: ReleaseView }) {
 }
 
 function TrafficSplit({ view }: { view: ReleaseView }) {
+  const t = useTranslations("release");
   const canary = view.weights?.canary ?? 0;
   const stable = view.weights?.stable ?? 100 - canary;
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Répartition du trafic</CardTitle>
+        <CardTitle className="text-sm">{t("split.title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div
           role="img"
-          aria-label={`Stable ${stable} %, canary ${canary} %`}
+          aria-label={t("split.ariaLabel", { stable, canary })}
           className="flex h-7 overflow-hidden rounded-md bg-muted font-mono text-xs font-medium"
         >
           {stable > 0 && (
@@ -146,7 +149,7 @@ function TrafficSplit({ view }: { view: ReleaseView }) {
               className="flex items-center justify-center bg-primary text-primary-foreground transition-[width] duration-500"
               style={{ width: `${stable}%` }}
             >
-              {stable >= 10 && `${stable} %`}
+              {stable >= 10 && t("split.percent", { value: stable })}
             </div>
           )}
           {canary > 0 && (
@@ -154,19 +157,19 @@ function TrafficSplit({ view }: { view: ReleaseView }) {
               className="flex items-center justify-center bg-amber-500 text-amber-950 transition-[width] duration-500"
               style={{ width: `${canary}%` }}
             >
-              {canary >= 10 && `${canary} %`}
+              {canary >= 10 && t("split.percent", { value: canary })}
             </div>
           )}
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <i className="size-2.5 rounded-sm bg-primary" aria-hidden />
-            Stable {imageTag(view.stableImage)}
+            {t("split.stableTag", { tag: imageTag(view.stableImage) })}
           </span>
           {view.canaryHash && view.canaryHash !== view.stableHash && (
             <span className="flex items-center gap-1.5">
               <i className="size-2.5 rounded-sm bg-amber-500" aria-hidden />
-              Canary {imageTag(view.canaryImage)}
+              {t("split.canaryTag", { tag: imageTag(view.canaryImage) })}
             </span>
           )}
         </div>
@@ -176,6 +179,7 @@ function TrafficSplit({ view }: { view: ReleaseView }) {
 }
 
 function Pods({ ready, desired }: { ready: number; desired: number }) {
+  const t = useTranslations("release");
   const shown = Math.min(desired, 10);
   return (
     <span className="flex items-center gap-2">
@@ -192,21 +196,22 @@ function Pods({ ready, desired }: { ready: number; desired: number }) {
       </span>
       <span className="font-mono text-xs tabular-nums">
         {ready}/{desired}
-        <span className="sr-only"> pods prêts</span>
+        <span className="sr-only"> {t("pods.ready")}</span>
       </span>
     </span>
   );
 }
 
 function Revisions({ revisions }: { revisions: ReleaseRevision[] }) {
+  const t = useTranslations("release");
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Révisions</CardTitle>
+        <CardTitle className="text-sm">{t("revisions.title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {revisions.length === 0 && (
-          <p className="text-sm text-muted-foreground">Aucun ReplicaSet actif.</p>
+          <p className="text-sm text-muted-foreground">{t("revisions.empty")}</p>
         )}
         {revisions.map((r) => (
           <div key={r.hash} className="flex items-center gap-2 text-sm">
@@ -214,7 +219,7 @@ function Revisions({ revisions }: { revisions: ReleaseRevision[] }) {
               variant="outline"
               className={r.role === "canary" ? TONE.warn : TONE.info}
             >
-              {r.role}
+              {t(`role.${r.role}`)}
             </Badge>
             <span className="min-w-0 flex-1 truncate font-mono text-xs" title={r.image}>
               {imageTag(r.image)} · {r.hash}
@@ -228,35 +233,38 @@ function Revisions({ revisions }: { revisions: ReleaseRevision[] }) {
 }
 
 function Activity({ event }: { event: ReleaseEvent | undefined }) {
+  const t = useTranslations("release");
+  const locale = intlLocale(useLocale());
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Activité</CardTitle>
+        <CardTitle className="text-sm">{t("activity.title")}</CardTitle>
       </CardHeader>
       <CardContent>
         {!event ? (
-          <p className="text-sm text-muted-foreground">
-            Aucune activité enregistrée pour cette release.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("activity.empty")}</p>
         ) : (
           <ul className="space-y-2 text-sm">
             <li className="flex gap-3">
               <time className="w-11 shrink-0 font-mono text-xs leading-5 text-muted-foreground">
-                {formatTime(event.started_at)}
+                {formatTime(event.started_at, locale)}
               </time>
-              <span>Release #{event.revision} démarrée</span>
+              <span>{t("activity.started", { revision: event.revision })}</span>
             </li>
             {[...(event.actors ?? [])]
               .sort((a, b) => a.at.localeCompare(b.at))
               .map((a, i) => (
                 <li key={`${a.at}-${i}`} className="flex gap-3">
                   <time className="w-11 shrink-0 font-mono text-xs leading-5 text-muted-foreground">
-                    {formatTime(a.at)}
+                    {formatTime(a.at, locale)}
                   </time>
                   <span>
-                    <span className="font-medium">{a.user}</span> {actionLabel(a.action)}
+                    <span className="font-medium">{a.user}</span> {actionLabel(a.action, t)}
                     {a.reason && (
-                      <span className="text-muted-foreground"> · motif : « {a.reason} »</span>
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {t("activity.reason", { reason: a.reason })}
+                      </span>
                     )}
                   </span>
                 </li>
@@ -264,9 +272,9 @@ function Activity({ event }: { event: ReleaseEvent | undefined }) {
             {event.finished_at && (
               <li className="flex gap-3">
                 <time className="w-11 shrink-0 font-mono text-xs leading-5 text-muted-foreground">
-                  {formatTime(event.finished_at)}
+                  {formatTime(event.finished_at, locale)}
                 </time>
-                <span>{OUTCOME[event.outcome]?.label ?? event.outcome}</span>
+                <span>{outcomeLabel(event.outcome, t)}</span>
               </li>
             )}
           </ul>
@@ -283,6 +291,8 @@ export function ReleaseTab({
   deploymentId: number;
   projectName: string;
 }) {
+  const t = useTranslations("release");
+  const locale = intlLocale(useLocale());
   const { view, error, live, refresh } = useRelease(deploymentId);
   const {
     events,
@@ -329,11 +339,11 @@ export function ReleaseTab({
       confirming === "full"
         ? await run(
             () => promoteRelease(deploymentId, "full", trimmed),
-            "Release promue à 100 %",
+            t("toast.promotedAll"),
           )
         : await run(
             () => abortRelease(deploymentId, trimmed || null),
-            "Release abortée, le stable sert 100 % du trafic",
+            t("toast.aborted"),
           );
     if (ok) closeConfirm();
   };
@@ -345,7 +355,7 @@ export function ReleaseTab({
       return (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
-            Impossible de lire l&apos;état de la release : {errorMessage(new Error(error))}
+            {t("errors.readState", { error: errorMessage(new Error(error)) })}
           </CardContent>
         </Card>
       );
@@ -368,7 +378,7 @@ export function ReleaseTab({
         {events.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Historique des releases</CardTitle>
+              <CardTitle className="text-sm">{t("history.title")}</CardTitle>
             </CardHeader>
             <CardContent>
               <ReleaseHistoryTable events={events} />
@@ -379,7 +389,6 @@ export function ReleaseTab({
     );
   }
 
-  const phase = view.phase ? PHASE[view.phase] : null;
   const hasCanary = Boolean(view.canaryHash && view.canaryHash !== view.stableHash);
   const inProgress =
     hasCanary && (view.phase === "Progressing" || view.phase === "Paused");
@@ -402,10 +411,11 @@ export function ReleaseTab({
     events.find((e) => e.outcome === "running");
   const eta =
     view.etaSeconds != null
-      ? `≈ ${formatDuration(view.etaSeconds)}`
+      ? t("eta.approx", { duration: formatDuration(view.etaSeconds, t) })
       : view.phase === "Paused"
-        ? "après validation"
+        ? t("eta.afterApproval")
         : "-";
+  const release = releaseName(view.revision, t);
 
   return (
     <div className="space-y-6">
@@ -414,22 +424,20 @@ export function ReleaseTab({
       <Card>
         <CardContent className="space-y-4 pt-6">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="mr-1 text-lg font-semibold">
-              Release{view.revision != null && ` #${view.revision}`}
-            </h2>
-            {phase && (
-              <Badge variant="outline" className={TONE[phase.tone]}>
-                {phase.label}
+            <h2 className="mr-1 text-lg font-semibold">{release}</h2>
+            {view.phase && (
+              <Badge variant="outline" className={TONE[PHASE_TONE[view.phase]]}>
+                {t(`phase.${view.phase}`)}
               </Badge>
             )}
             {view.forced && (
               <Badge variant="outline" className={TONE.warn}>
-                Forcée
+                {t("badges.forced")}
               </Badge>
             )}
             {view.strategy && (
               <Badge variant="secondary">
-                {STRATEGY[view.strategy] ?? view.strategy}
+                {t.has(`strategyNames.${view.strategy}`) ? t(`strategyNames.${view.strategy}`) : view.strategy}
                 {view.preset && ` · ${view.preset}`}
               </Badge>
             )}
@@ -442,23 +450,26 @@ export function ReleaseTab({
                 )}
               />
               {live === "stream"
-                ? "Temps réel"
+                ? t("live.stream")
                 : live === "polling"
-                  ? "Actualisé toutes les 3 s"
-                  : "Connexion…"}
+                  ? t("live.polling")
+                  : t("live.connecting")}
             </span>
           </div>
 
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
             <div className="col-span-2 min-w-0">
-              <dt className="text-xs text-muted-foreground">Version</dt>
+              <dt className="text-xs text-muted-foreground">{t("fields.version")}</dt>
               <dd className="flex items-center gap-1.5 truncate font-mono">
                 {hasCanary ? (
                   <>
                     <span title={view.stableImage ?? undefined}>
                       {imageTag(view.stableImage)}
                     </span>
-                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="vers" />
+                    <ArrowRight
+                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                      aria-label={t("fields.toward")}
+                    />
                     <span title={view.canaryImage ?? undefined}>
                       {imageTag(view.canaryImage)}
                     </span>
@@ -471,20 +482,20 @@ export function ReleaseTab({
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Étape</dt>
+              <dt className="text-xs text-muted-foreground">{t("fields.step")}</dt>
               <dd className="font-mono tabular-nums">
                 {stepCurrent != null ? `${stepCurrent}/${stepTotal}` : "-"}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Fin estimée</dt>
+              <dt className="text-xs text-muted-foreground">{t("fields.eta")}</dt>
               <dd>{eta}</dd>
             </div>
             {view.startedAt && (
               <div className="col-span-2 sm:col-span-4">
-                <dt className="sr-only">Démarrée</dt>
+                <dt className="sr-only">{t("fields.startedSr")}</dt>
                 <dd className="text-xs text-muted-foreground">
-                  Démarrée le {formatDateTime(view.startedAt)}
+                  {t("fields.startedOn", { date: formatDateTime(view.startedAt, locale) })}
                 </dd>
               </div>
             )}
@@ -501,7 +512,7 @@ export function ReleaseTab({
                     onClick={() => setConfirming("full")}
                     disabled={busy}
                   >
-                    Tout promouvoir
+                    {t("actions.promoteAll")}
                   </Button>
                 )}
                 {view.actions.abort && (
@@ -511,7 +522,7 @@ export function ReleaseTab({
                     onClick={() => setConfirming("abort")}
                     disabled={busy}
                   >
-                    Abort
+                    {t("actions.abort")}
                   </Button>
                 )}
               </div>
@@ -530,16 +541,18 @@ export function ReleaseTab({
             >
               <p className="text-sm font-semibold">
                 {confirming === "full"
-                  ? "Tout promouvoir maintenant ?"
-                  : "Aborter la release ?"}
+                  ? t("confirm.promoteAllTitle")
+                  : t("confirm.abortTitle")}
               </p>
               <p className="text-xs text-foreground/80">
                 {confirming === "full"
-                  ? "Les étapes restantes, analyses comprises, seront ignorées. La release sera marquée « forcée »."
-                  : "Le trafic repasse à 100 % sur le stable. La version rejetée reste dans Git jusqu'au prochain commit."}
+                  ? t("confirm.promoteAllBody")
+                  : t("confirm.abortBody")}
               </p>
               <Label htmlFor={reasonId} className="text-xs text-foreground">
-                {confirming === "full" ? "Motif" : "Motif (facultatif)"}
+                {confirming === "full"
+                  ? t("confirm.reason")
+                  : t("confirm.reasonOptional")}
               </Label>
               <Input
                 id={reasonId}
@@ -556,10 +569,10 @@ export function ReleaseTab({
                   variant={confirming === "abort" ? "destructive" : "default"}
                   disabled={busy || (confirming === "full" && !reason.trim())}
                 >
-                  Confirmer
+                  {t("confirm.submit")}
                 </Button>
                 <Button size="sm" variant="ghost" type="button" onClick={closeConfirm}>
-                  Annuler
+                  {t("confirm.cancel")}
                 </Button>
               </div>
             </form>
@@ -571,33 +584,28 @@ export function ReleaseTab({
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-baseline gap-2 text-sm">
-              Étapes
+              {t("steps.title")}
               {view.preset && (
                 <span className="text-xs font-normal text-muted-foreground">
-                  preset {view.preset}
+                  {t("steps.preset", { preset: view.preset })}
                 </span>
               )}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {stepTotal === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Aucune étape progressive pour cette stratégie.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("steps.empty")}</p>
             ) : (
               <ReleaseStepper
                 view={view}
                 canOperate={canOperate}
                 busy={busy}
                 onContinue={() =>
-                  run(() => promoteRelease(deploymentId, "next", null), "Étape suivante lancée")
+                  run(() => promoteRelease(deploymentId, "next", null), t("toast.nextStep"))
                 }
                 onAbort={() => setConfirming("abort")}
                 onSkip={(skipReason) =>
-                  run(
-                    () => skipReleaseStep(deploymentId, skipReason),
-                    "Étape passée, release marquée « forcée »",
-                  )
+                  run(() => skipReleaseStep(deploymentId, skipReason), t("toast.stepSkipped"))
                 }
               />
             )}
@@ -622,7 +630,7 @@ export function ReleaseTab({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Historique des releases</CardTitle>
+          <CardTitle className="text-sm">{t("history.title")}</CardTitle>
         </CardHeader>
         <CardContent>
           {historyLoading ? (

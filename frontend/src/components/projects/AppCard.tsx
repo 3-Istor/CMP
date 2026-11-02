@@ -1,10 +1,17 @@
 "use client";
 
+import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
+import { AppIcon } from "@/components/app-icon/AppIcon";
+import { intlLocale } from "@/components/finops/format";
+
+import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { hasScorecard, useScorecards } from "@/lib/scorecard";
 import type { Deployment } from "@/types";
 import { CheckCircle2, Clock, GitBranch, Loader2, XCircle } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 
 interface Props {
@@ -30,18 +37,6 @@ const STATUS_PROGRESS: Record<Deployment["status"], number> = {
   failed: 100,
   deleting: 50,
   deleted: 100,
-};
-
-const STATUS_LABEL: Record<Deployment["status"], string> = {
-  pending: "Queued",
-  initializing: "Initializing",
-  planning: "Planning",
-  deploying: "Deploying",
-  running: "Running",
-  degraded: "Degraded",
-  failed: "Failed",
-  deleting: "Deleting",
-  deleted: "Deleted",
 };
 
 function StatusIcon({ status }: { status: Deployment["status"] }) {
@@ -70,8 +65,11 @@ const STATUS_VARIANT: Record<
 };
 
 export function AppCard({ app, projectName }: Props) {
+  const t = useTranslations("apps");
+  const locale = intlLocale(useLocale());
   const isActive = ACTIVE_STATUSES.has(app.status);
   const progress = STATUS_PROGRESS[app.status] ?? 0;
+  const card = useScorecards([app.id], hasScorecard(app))[app.id];
 
   return (
     <Link
@@ -82,28 +80,35 @@ export function AppCard({ app, projectName }: Props) {
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              {app.template_icon && (
-                <span className="text-2xl shrink-0">{app.template_icon}</span>
-              )}
+              <AppIcon
+                appId={app.id}
+                templateIcon={app.template_icon}
+                icon={app.icon}
+                className="h-6 w-6 shrink-0"
+              />
               <CardTitle className="text-base leading-tight truncate">
                 {app.name}
               </CardTitle>
               {app.created_via && (
                 <span
                   className="shrink-0 rounded-full border border-primary/40 px-1.5 text-[10px] text-primary"
-                  title={`Created through ${app.created_via}`}
+                  title={t("card.createdVia", { source: app.created_via })}
                 >
-                  AI
+                  {t("card.ai")}
                 </span>
               )}
             </div>
-            <Badge
-              variant={STATUS_VARIANT[app.status]}
-              className="shrink-0 capitalize gap-1"
-            >
-              <StatusIcon status={app.status} />
-              {STATUS_LABEL[app.status]}
-            </Badge>
+            <div className="flex shrink-0 items-center gap-1">
+              <ScoreBadge card={card} />
+              <Badge
+                variant={STATUS_VARIANT[app.status]}
+                className="capitalize gap-1"
+              >
+                <StatusIcon status={app.status} />
+                {t(`status.${app.status}`)}
+              </Badge>
+              <FavoriteToggle kind="app" id={app.id} />
+            </div>
           </div>
         </CardHeader>
 
@@ -144,12 +149,12 @@ export function AppCard({ app, projectName }: Props) {
 
           {app.k8s_namespace && (
             <div className="rounded bg-muted/50 px-2 py-0.5 text-xs font-mono text-muted-foreground">
-              ns: {app.k8s_namespace}
+              {t("namespace", { namespace: app.k8s_namespace })}
             </div>
           )}
 
           <p className="text-xs text-muted-foreground">
-            {new Date(app.created_at).toLocaleDateString(undefined, {
+            {new Date(app.created_at).toLocaleDateString(locale, {
               day: "numeric",
               month: "short",
               year: "numeric",

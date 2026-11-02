@@ -1,5 +1,5 @@
 """
-FinOps Router — costs, budgets, recommendations and alerts.
+FinOps Router, costs, budgets, recommendations and alerts.
 
 Cost figures come from the provider behind
 :func:`app.services.finops.provider.get_cost_provider` (simulated or read from
@@ -7,15 +7,15 @@ the ingested cost store); budgets, alert history and recommendation decisions
 are persisted here.
 
 Access control (spec matrix):
-  * **Admin CNP** (``FINOPS_ADMIN_USERS``) — sees every project's costs.
-  * **Finance** (``cnp-finance`` group, ``FINOPS_FINANCE_USERS``) — reads and
+  * **Admin CNP** (``FINOPS_ADMIN_USERS``), sees every project's costs.
+  * **Finance** (``cnp-finance`` group, ``FINOPS_FINANCE_USERS``), reads and
     exports every project's costs, savings and budgets, and nothing else:
     no recommendation, no budget edit, nothing outside ``/api/finops``.
-  * **Any role on a project, guests included** — sees that project's costs.
-  * **Project admins/owner** — the only roles allowed to act on a
+  * **Any role on a project, guests included**, sees that project's costs.
+  * **Project admins/owner**, the only roles allowed to act on a
     recommendation (applying one commits to GitOps and changes running
     infrastructure).
-  * **Project Owner** — the ONLY role allowed to set a project budget.
+  * **Project Owner**, the ONLY role allowed to set a project budget.
 """
 
 import csv
@@ -110,7 +110,7 @@ def _username(token: dict) -> str:
 def _user_project_names(token: dict) -> list[str]:
     """
     Projects the caller belongs to, resolved in real time via the Keycloak
-    Admin API — the same mechanism the projects/apps routers use. This avoids
+    Admin API, the same mechanism the projects/apps routers use. This avoids
     relying on the JWT ``groups`` claim, which is not populated in this setup.
 
     Includes projects where the caller is only a guest: guests are allowed to
@@ -625,6 +625,9 @@ def get_meta(
         latest = db.scalar(
             select(func.max(CostLineItem.charge_period_start)).where(scoped)
         )
+        first = db.scalar(
+            select(func.min(CostLineItem.charge_period_start)).where(scoped)
+        )
         final = db.scalar(
             select(func.max(CostLineItem.charge_period_start)).where(
                 scoped, CostLineItem.x_is_final.is_(True)
@@ -643,6 +646,7 @@ def get_meta(
                 last_ingested_at=db.scalar(
                     select(func.max(CostLineItem.x_ingested_at)).where(scoped)
                 ),
+                first_day=first.date() if first else None,
                 latest_day=latest.date() if latest else None,
                 final_through=final.date() if final else None,
                 has_estimate=bool(estimated),
@@ -1089,7 +1093,7 @@ def put_budget(
     token: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    """Create/update a project budget — **Project Owner only**."""
+    """Create/update a project budget, **Project Owner only**."""
     username = _username(token)
     if not _is_owner(db, project_name, username):
         raise HTTPException(

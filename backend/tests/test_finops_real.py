@@ -387,6 +387,16 @@ def test_meta_reports_freshness_and_estimates_per_source(seeded, monkeypatch):
     ) == (date(2026, 11, 4), date(2026, 11, 3), True)
 
 
+def test_meta_reports_first_day_of_each_source(seeded, monkeypatch):
+    monkeypatch.setattr(settings, "FINOPS_PROVIDER", "real")
+    with seeded() as db:
+        meta = router.get_meta({}, db)
+
+    opencost = next(s for s in meta.sources if s.source == "opencost")
+    assert opencost.first_day is not None
+    assert opencost.first_day <= opencost.latest_day
+
+
 def test_meta_says_simulated_by_default(factory):
     with factory() as db:
         assert router.get_meta({}, db).provider == "simulated"

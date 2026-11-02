@@ -10,65 +10,132 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppHealth } from "@/lib/hooks";
-import type { VMInstance } from "@/types";
+import type { AppHealthStatus, ComponentHealth, VMInstance } from "@/types";
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Cloud,
+  CloudOff,
   Database,
+  HelpCircle,
+  Moon,
   RefreshCw,
   XCircle,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 interface Props {
   deploymentId: number;
 }
 
-function statusIcon(status: string) {
-  switch (status) {
-    case "healthy":
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-    case "degraded":
-      return <AlertTriangle className="h-5 w-5 text-orange-500" />;
-    case "down":
-      return <XCircle className="h-5 w-5 text-red-500" />;
-    default:
-      return <AlertTriangle className="h-5 w-5 text-gray-400" />;
-  }
+const STATE_STYLE: Record<
+  AppHealthStatus,
+  { Icon: typeof CheckCircle2; color: string }
+> = {
+  healthy: { Icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
+  degraded: { Icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400" },
+  down: { Icon: XCircle, color: "text-red-600 dark:text-red-400" },
+  asleep: { Icon: Moon, color: "text-blue-600 dark:text-blue-400" },
+  not_connected: { Icon: CloudOff, color: "text-slate-600 dark:text-slate-400" },
+  unknown: { Icon: HelpCircle, color: "text-gray-500 dark:text-gray-400" },
+};
+
+function stateStyle(state: string) {
+  return STATE_STYLE[state as AppHealthStatus] ?? STATE_STYLE.unknown;
+}
+
+function StateIcon({ state }: { state: string }) {
+  const { Icon, color } = stateStyle(state);
+  return <Icon className={`h-5 w-5 ${color}`} aria-hidden="true" />;
+}
+
+export function StateLabel({ state }: { state: string }) {
+  const t = useTranslations("health.states");
+  const { Icon, color } = stateStyle(state);
+  return (
+    <span className={`inline-flex items-center gap-1 font-medium ${color}`}>
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      {t.has(state) ? t(state) : t("unknown")}
+    </span>
+  );
+}
+
+function ComponentRow({ component }: { component: ComponentHealth }) {
+  const t = useTranslations("health");
+  const argocd = [component.argocd_sync, component.argocd_health].filter(Boolean);
+  return (
+    <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-semibold text-sm">
+          {t.has(`components.${component.name}`)
+            ? t(`components.${component.name}`)
+            : component.name}
+        </span>
+        <StateLabel state={component.state} />
+      </div>
+      {component.reason && (
+        <p className="text-muted-foreground">
+          {t.has(`reasons.${component.reason}`)
+            ? t(`reasons.${component.reason}`)
+            : component.reason}
+        </p>
+      )}
+      <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div>
+          <dt className="text-muted-foreground">{t("replicas")}</dt>
+          <dd className="font-mono">
+            {component.ready} / {component.desired}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("restarts")}</dt>
+          <dd className="font-mono">{component.restarts_15m ?? "-"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("argocd")}</dt>
+          <dd className="font-mono">
+            {argocd.length > 0 ? argocd.join(" / ") : t("argocdUnknown")}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+export function badgeVariant(state: string) {
+  if (state === "healthy") return "default" as const;
+  if (state === "degraded" || state === "asleep" || state === "not_connected")
+    return "secondary" as const;
+  return "destructive" as const;
 }
 
 /**
- * Inline, collapsible health panel (same data as the old dialog, but expandable
- * in-page like the logs console). Collapsed by default; the header always shows
- * the overall status so it's readable at a glance.
+ * Inline, collapsible health panel. Collapsed by default; the header always
+ * shows the overall state. Kubernetes apps list one row per component, VM apps
+ * keep their AWS and OpenStack layers.
  */
 export function DeploymentHealth({ deploymentId }: Props) {
+  const t = useTranslations("health");
   const [isExpanded, setIsExpanded] = useState(false);
   const { health, loading, error, refresh } = useAppHealth(deploymentId, 10_000);
+  const components = health?.components ?? [];
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          {health ? statusIcon(health.status) : (
-            <AlertTriangle className="h-5 w-5 text-gray-400" />
+          {health ? (
+            <StateIcon state={health.status} />
+          ) : (
+            <HelpCircle className="h-5 w-5 text-gray-500" aria-hidden="true" />
           )}
-          Health Summary
+          {t("title")}
           {health && (
-            <Badge
-              variant={
-                health.status === "healthy"
-                  ? "default"
-                  : health.status === "degraded"
-                    ? "secondary"
-                    : "destructive"
-              }
-              className="capitalize text-xs"
-            >
-              {health.status}
+            <Badge variant={badgeVariant(health.status)} className="text-xs">
+              <StateLabel state={health.status} />
             </Badge>
           )}
         </CardTitle>
@@ -79,7 +146,8 @@ export function DeploymentHealth({ deploymentId }: Props) {
             onClick={refresh}
             disabled={loading}
             className="h-8 w-8"
-            title="Refresh health"
+            title={t("refresh")}
+            aria-label={t("refresh")}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -88,7 +156,8 @@ export function DeploymentHealth({ deploymentId }: Props) {
             size="icon"
             onClick={() => setIsExpanded((v) => !v)}
             className="h-8 w-8"
-            title={isExpanded ? "Collapse" : "Expand"}
+            title={isExpanded ? t("collapse") : t("expand")}
+            aria-label={isExpanded ? t("collapse") : t("expand")}
           >
             {isExpanded ? (
               <ChevronUp className="h-4 w-4" />
@@ -108,75 +177,72 @@ export function DeploymentHealth({ deploymentId }: Props) {
             </div>
           ) : error ? (
             <div className="flex items-center gap-3 p-4 bg-destructive/10 rounded-lg border border-destructive">
-              <XCircle className="h-5 w-5 text-destructive" />
+              <XCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
               <div>
-                <p className="font-medium text-destructive">
-                  Failed to fetch health data
-                </p>
+                <p className="font-medium text-destructive">{t("fetchFailed")}</p>
                 <p className="text-sm text-muted-foreground">{error}</p>
               </div>
             </div>
           ) : health ? (
             <div className="space-y-4">
-              {/* Overall status */}
               <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  {statusIcon(health.status)}
+                  <StateIcon state={health.status} />
                   <div>
-                    <p className="font-medium text-sm">Overall Status</p>
+                    <p className="font-medium text-sm">{t("overall")}</p>
                     <p className="text-xs text-muted-foreground">
-                      {health.status === "healthy"
-                        ? "All components operational"
-                        : health.status === "degraded"
-                          ? "Some components unhealthy"
-                          : health.status === "down"
-                            ? "No healthy components"
-                            : "Unable to determine"}
+                      {t.has(`summary.${health.status}`)
+                        ? t(`summary.${health.status}`)
+                        : t("summary.unknown")}
                     </p>
                   </div>
                 </div>
-                <Badge
-                  variant={
-                    health.status === "healthy"
-                      ? "default"
-                      : health.status === "degraded"
-                        ? "secondary"
-                        : "destructive"
-                  }
-                  className="text-sm capitalize"
-                >
-                  {health.status}
+                <Badge variant={badgeVariant(health.status)} className="text-sm">
+                  <StateLabel state={health.status} />
                 </Badge>
               </div>
 
-              {/* AWS Frontend */}
+              {components.length > 0 && (
+                <div className="space-y-2">
+                  {components.map((component) => (
+                    <ComponentRow key={component.name} component={component} />
+                  ))}
+                </div>
+              )}
+
               {health.aws_frontend && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Cloud className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="font-semibold text-sm">AWS Frontend Layer</h3>
+                    <h3 className="font-semibold text-sm">{t("legacy.aws")}</h3>
                   </div>
 
                   <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">ASG Name:</span>
+                      <span className="text-muted-foreground">
+                        {t("legacy.asgName")}
+                      </span>
                       <span className="font-mono text-xs">
                         {health.aws_frontend.asg_name}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">
-                        Desired Capacity:
+                        {t("legacy.desired")}
                       </span>
                       <span className="font-mono text-xs">
                         {health.aws_frontend.desired_capacity}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Health:</span>
+                      <span className="text-muted-foreground">
+                        {t("legacy.health")}
+                      </span>
                       <span className="font-semibold text-xs">
-                        {health.aws_frontend.healthy_count} /{" "}
-                        {health.aws_frontend.total_count} healthy
+                        {t("legacy.healthyOf", {
+                          healthy: health.aws_frontend.healthy_count,
+                          total: health.aws_frontend.total_count,
+                        })}
                       </span>
                     </div>
                   </div>
@@ -184,7 +250,9 @@ export function DeploymentHealth({ deploymentId }: Props) {
                   {health.aws_frontend.instances.length > 0 ? (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Instances ({health.aws_frontend.instances.length}):
+                        {t("legacy.instances", {
+                          count: health.aws_frontend.instances.length,
+                        })}
                       </p>
                       {health.aws_frontend.instances.map((instance) => (
                         <InstanceCard
@@ -195,26 +263,31 @@ export function DeploymentHealth({ deploymentId }: Props) {
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      No instances found
+                      {t("legacy.noInstances")}
                     </p>
                   )}
                 </div>
               )}
 
-              {/* OpenStack Backend */}
               {health.openstack_backend && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Database className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="font-semibold text-sm">OpenStack Layer</h3>
+                    <h3 className="font-semibold text-sm">
+                      {t("legacy.openstack")}
+                    </h3>
                   </div>
 
                   <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Health:</span>
+                      <span className="text-muted-foreground">
+                        {t("legacy.health")}
+                      </span>
                       <span className="font-semibold text-xs">
-                        {health.openstack_backend.healthy_count} /{" "}
-                        {health.openstack_backend.total_count} healthy
+                        {t("legacy.healthyOf", {
+                          healthy: health.openstack_backend.healthy_count,
+                          total: health.openstack_backend.total_count,
+                        })}
                       </span>
                     </div>
                   </div>
@@ -222,7 +295,9 @@ export function DeploymentHealth({ deploymentId }: Props) {
                   {health.openstack_backend.servers.length > 0 ? (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Servers ({health.openstack_backend.servers.length}):
+                        {t("legacy.servers", {
+                          count: health.openstack_backend.servers.length,
+                        })}
                       </p>
                       {health.openstack_backend.servers.map((server) => (
                         <InstanceCard
@@ -233,17 +308,19 @@ export function DeploymentHealth({ deploymentId }: Props) {
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      No servers found
+                      {t("legacy.noServers")}
                     </p>
                   )}
                 </div>
               )}
 
-              {!health.aws_frontend && !health.openstack_backend && (
-                <div className="text-center py-6 text-muted-foreground">
-                  <p>No infrastructure components found</p>
-                </div>
-              )}
+              {components.length === 0 &&
+                !health.aws_frontend &&
+                !health.openstack_backend && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <p>{t("noComponents")}</p>
+                  </div>
+                )}
             </div>
           ) : null}
         </CardContent>

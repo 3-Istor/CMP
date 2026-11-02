@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.deployment import Deployment
+from app.models.deployment import Deployment, ProviderType
 from app.services import monitoring_service
+from app.services.app_health import get_kubernetes_app_health
 from app.services.clusters.state import cluster_states
 from app.services.keycloak_service import get_current_user
 from app.services.monitoring_service import (
@@ -66,6 +67,9 @@ async def get_deployment_health(
     - "down": No healthy components
     - "unknown": Unable to determine status
 
+    Kubernetes apps also report asleep, not_connected and one entry per
+    component in "components".
+
     Note: This uses direct SDK calls to get real-time status,
     bypassing Terraform state which may be stale for auto-scaling resources.
     """
@@ -74,6 +78,8 @@ async def get_deployment_health(
         raise HTTPException(status_code=404, detail="Deployment not found")
 
     try:
+        if deployment.provider_type == ProviderType.KUBERNETES:
+            return await get_kubernetes_app_health(deployment)
         return await monitoring_service.get_app_health(deployment.name)
     except Exception as exc:
         raise HTTPException(

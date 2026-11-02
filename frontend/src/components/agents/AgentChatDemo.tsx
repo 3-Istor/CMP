@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Globe, Lock, RotateCcw } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { cn } from "@/lib/utils";
@@ -10,42 +11,24 @@ import { Mascot, type MascotMood } from "./Mascot";
 const CLIENTS = ["Claude", "ChatGPT", "Codex", "OpenCode", "Cursor"] as const;
 
 type Line =
-  | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string }
-  | { kind: "tool"; name: string; detail: string }
+  | { kind: "user"; key: string }
+  | { kind: "assistant"; key: string }
+  | { kind: "tool"; name: string; detail: string; count?: number }
   | { kind: "result" };
 
 // A non-technical employee on their laptop. The tool names are the real
 // ones of the CNP MCP server; the app and its URL are an example.
 const SCRIPT: { line: Line; wait: number }[] = [
-  {
-    line: {
-      kind: "user",
-      text: "I need a page with the October seminar agenda and the speakers. Can you put it online for the team?",
-    },
-    wait: 900,
-  },
-  { line: { kind: "tool", name: "whoami", detail: "your CNP space" }, wait: 1100 },
-  {
-    line: {
-      kind: "assistant",
-      text: "You don't have a sandbox yet. Can I create “alice-sandbox” for your experiments?",
-    },
-    wait: 1500,
-  },
-  { line: { kind: "user", text: "Yes, go ahead." }, wait: 1200 },
+  { line: { kind: "user", key: "userRequest" }, wait: 900 },
+  { line: { kind: "tool", name: "whoami", detail: "yourSpace" }, wait: 1100 },
+  { line: { kind: "assistant", key: "noSandbox" }, wait: 1500 },
+  { line: { kind: "user", key: "yesGo" }, wait: 1200 },
   { line: { kind: "tool", name: "create_project", detail: "sandbox" }, wait: 1000 },
-  { line: { kind: "tool", name: "create_app", detail: "static site" }, wait: 1000 },
-  { line: { kind: "tool", name: "push_files", detail: "4 files" }, wait: 900 },
-  { line: { kind: "tool", name: "cut_release", detail: "v0.1.0" }, wait: 900 },
+  { line: { kind: "tool", name: "create_app", detail: "staticSite" }, wait: 1000 },
+  { line: { kind: "tool", name: "push_files", detail: "files", count: 4 }, wait: 900 },
+  { line: { kind: "tool", name: "cut_release", detail: "version" }, wait: 900 },
   { line: { kind: "tool", name: "wait_for_app", detail: "running" }, wait: 1300 },
-  {
-    line: {
-      kind: "assistant",
-      text: "It's online, behind the company login. Want me to add the venue map?",
-    },
-    wait: 600,
-  },
+  { line: { kind: "assistant", key: "online" }, wait: 600 },
   { line: { kind: "result" }, wait: 4500 },
 ];
 
@@ -64,6 +47,7 @@ function usePrefersReducedMotion() {
 }
 
 export function AgentChatDemo() {
+  const t = useTranslations("agents.chatDemo");
   const reduced = usePrefersReducedMotion();
   const [client, setClient] = useState<(typeof CLIENTS)[number]>("Claude");
   const [shown, setShown] = useState(SCRIPT.length);
@@ -102,7 +86,7 @@ export function AgentChatDemo() {
   return (
     <div className="mx-auto w-full max-w-2xl text-left">
       <div className="mb-3 flex flex-wrap items-center justify-center gap-1.5">
-        <span className="mr-1 text-xs text-muted-foreground">Works with</span>
+        <span className="mr-1 text-xs text-muted-foreground">{t("worksWith")}</span>
         {CLIENTS.map((name) => (
           <button
             key={name}
@@ -127,16 +111,16 @@ export function AgentChatDemo() {
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
           <span className="ml-3 text-xs text-muted-foreground">
-            {client} · CNP connected
+            {t("clientStatus", { client })}
           </span>
           <button
             type="button"
             onClick={() => setRun((r) => r + 1)}
             className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Replay the demo"
+            aria-label={t("replayLabel")}
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Replay
+            {t("replay")}
           </button>
         </div>
 
@@ -158,24 +142,25 @@ export function AgentChatDemo() {
         </div>
       </div>
       <p className="mt-2 text-center text-[11px] text-muted-foreground/70">
-        Example conversation. The tools are the real CNP ones.
+        {t("note")}
       </p>
     </div>
   );
 }
 
 function ChatLine({ line }: { line: Line }) {
+  const t = useTranslations("agents.chatDemo");
   if (line.kind === "user") {
     return (
       <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
-        {line.text}
+        {t(line.key)}
       </p>
     );
   }
   if (line.kind === "assistant") {
     return (
       <p className="w-fit max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2 text-sm">
-        {line.text}
+        {t(line.key)}
       </p>
     );
   }
@@ -184,7 +169,9 @@ function ChatLine({ line }: { line: Line }) {
       <p className="inline-flex items-center gap-2 rounded-md border border-border px-2.5 py-1 font-mono text-xs text-muted-foreground">
         <Check className="h-3.5 w-3.5 text-primary" />
         {line.name}
-        <span className="text-muted-foreground/70">· {line.detail}</span>
+        <span className="text-muted-foreground/70">
+          · {t(`detail.${line.detail}`, { count: line.count ?? 0 })}
+        </span>
       </p>
     );
   }
@@ -193,9 +180,9 @@ function ChatLine({ line }: { line: Line }) {
       <Globe className="h-4 w-4 text-primary" />
       <span className="font-mono text-xs">seminar-october.3istor.com</span>
       <span className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
-        <Lock className="h-3 w-3" /> company login
+        <Lock className="h-3 w-3" /> {t("companyLogin")}
       </span>
-      <span className="ml-auto text-xs text-muted-foreground">4 min</span>
+      <span className="ml-auto text-xs text-muted-foreground">{t("duration")}</span>
     </div>
   );
 }

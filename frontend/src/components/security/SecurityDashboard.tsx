@@ -23,13 +23,14 @@ import type {
 } from "@/types";
 import { AlertCircle, AlertTriangle, CheckCircle2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExceptionDialog } from "./ExceptionDialog";
 import { ExceptionsList } from "./ExceptionsList";
 import { FindingCard } from "./FindingCard";
 import { AlertsCard } from "./AlertsCard";
 import { BackupsCard } from "./BackupsCard";
-import { CATEGORY_META, errorMessage, TABS, type SecurityTab } from "./labels";
+import { CATEGORY_TAB, errorMessage, TABS, type SecurityTab } from "./labels";
 import { ScansCard } from "./ScansCard";
 import { ScoreRing } from "./ScoreRing";
 import { AppSettingsCard, ProjectPolicyCard } from "./SettingsCard";
@@ -100,6 +101,7 @@ function CoreBanner({
   findings: SecurityFinding[];
   onShow: (finding: SecurityFinding) => void;
 }) {
+  const t = useTranslations("security");
   const core = findings.filter((f) => f.tier === "core" && !f.exception);
   if (core.length === 0) return null;
   const first = core[0];
@@ -107,13 +109,12 @@ function CoreBanner({
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3">
       <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
       <p className="flex-1 text-sm font-medium">
-        {core.length === 1
-          ? "1 action de sécurité obligatoire"
-          : `${core.length} actions de sécurité obligatoires`}
+        {t("banner.count", { count: core.length })}
         <span className="font-normal text-muted-foreground">
           {" "}
-          · {first.title}
-          {first.app ? ` dans ${first.app}` : ""}
+          · {first.app
+            ? t("banner.inApp", { title: first.title, app: first.app })
+            : first.title}
         </span>
       </p>
       <button
@@ -121,7 +122,7 @@ function CoreBanner({
         onClick={() => onShow(first)}
         className="text-sm font-medium text-red-700 hover:underline dark:text-red-300"
       >
-        Voir l&apos;action →
+        {t("banner.show")}
       </button>
     </div>
   );
@@ -136,14 +137,17 @@ function CategorySection({
   findings: SecurityFinding[];
   render: (f: SecurityFinding) => React.ReactNode;
 }) {
+  const t = useTranslations("security");
   const items = findings.filter((f) => f.category === category);
   return (
     <section id={`security-${category}`} className="scroll-mt-24 space-y-3">
-      <h3 className="text-base font-semibold">{CATEGORY_META[category].question}</h3>
+      <h3 className="text-base font-semibold">
+        {t(`categories.${category}.question`)}
+      </h3>
       {items.length === 0 ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <CheckCircle2 className="h-4 w-4 text-green-600" />
-          Rien à signaler.
+          {t("dashboard.nothingToReport")}
         </p>
       ) : (
         <div className="space-y-2">{items.map(render)}</div>
@@ -171,6 +175,7 @@ export function SecurityDashboard({
   const [tab, setTab] = useState<SecurityTab>("overview");
   const pendingScroll = useRef<string | null>(null);
   const [ignoring, setIgnoring] = useState<SecurityFinding | null>(null);
+  const t = useTranslations("security");
 
   useEffect(() => {
     if (!pendingScroll.current) return;
@@ -206,7 +211,7 @@ export function SecurityDashboard({
 
   function showCategory(category: SecurityCategory) {
     const target = `security-${category}`;
-    const next = CATEGORY_META[category].tab;
+    const next = CATEGORY_TAB[category];
     if (next === tab) {
       scrollToSection(target);
     } else {
@@ -231,25 +236,25 @@ export function SecurityDashboard({
       <CoreBanner findings={findings} onShow={(f) => showCategory(f.category)} />
 
       <div className="flex flex-wrap items-center gap-1 border-b pb-2">
-        {TABS.map((t) => {
+        {TABS.map((item) => {
           const count =
-            t.value === "ignored"
+            item.value === "ignored"
               ? exceptions.length
-              : findings.filter((f) => t.categories.includes(f.category)).length;
+              : findings.filter((f) => item.categories.includes(f.category)).length;
           return (
             <button
-              key={t.value}
+              key={item.value}
               type="button"
-              onClick={() => setTab(t.value)}
+              onClick={() => setTab(item.value)}
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
-                tab === t.value
+                tab === item.value
                   ? "bg-primary/10 font-medium text-primary"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
-              {t.label}
-              {t.value !== "overview" && count > 0 && (
+              {t(`tabs.${item.value}`)}
+              {item.value !== "overview" && count > 0 && (
                 <Badge variant="outline" className="h-5 px-1.5 text-[11px]">
                   {count}
                 </Badge>
@@ -262,7 +267,7 @@ export function SecurityDashboard({
             href={`/security?project=${encodeURIComponent(project)}${app ? `&app=${encodeURIComponent(app)}` : ""}`}
             className="ml-auto text-xs text-primary hover:underline"
           >
-            Ouvrir dans Sécurité →
+            {t("dashboard.openFullPage")}
           </Link>
         )}
       </div>
@@ -272,7 +277,7 @@ export function SecurityDashboard({
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Niveau de sécurité</CardTitle>
+                <CardTitle>{t("dashboard.score")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ScoreRing
@@ -284,15 +289,14 @@ export function SecurityDashboard({
                 />
                 {summary.excepted > 0 && (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    {summary.excepted} alerte{summary.excepted > 1 ? "s" : ""} ignorée
-                    {summary.excepted > 1 ? "s" : ""}, hors score.
+                    {t("dashboard.excepted", { count: summary.excepted })}
                   </p>
                 )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Scans</CardTitle>
+                <CardTitle>{t("dashboard.scans")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ScansCard project={project} scans={summary.scans} onRequested={refresh} />
@@ -303,22 +307,22 @@ export function SecurityDashboard({
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle>Actions prioritaires</CardTitle>
+                <CardTitle>{t("dashboard.priority")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {findings.length === 0 ? (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <ShieldCheck className="h-4 w-4 text-green-600" />
-                    Aucune action en attente.
+                    {t("dashboard.noAction")}
                   </p>
                 ) : (
                   <>
                     {findings.slice(0, PRIORITY_LIMIT).map(card)}
                     {findings.length > PRIORITY_LIMIT && (
                       <p className="pt-1 text-xs text-muted-foreground">
-                        Et {findings.length - PRIORITY_LIMIT} autre
-                        {findings.length - PRIORITY_LIMIT > 1 ? "s" : ""}, dans les
-                        onglets ci-dessus.
+                        {t("dashboard.moreActions", {
+                          count: findings.length - PRIORITY_LIMIT,
+                        })}
                       </p>
                     )}
                   </>
@@ -328,9 +332,9 @@ export function SecurityDashboard({
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Nouvelles failles majeures</CardTitle>
+                  <CardTitle>{t("dashboard.newMajor")}</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Par semaine, socle et important
+                    {t("dashboard.newMajorDescription")}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -347,7 +351,7 @@ export function SecurityDashboard({
               {view === "developer" && (
                 <Card className="bg-muted/40">
                   <CardHeader>
-                    <CardTitle>Garanties plateforme</CardTitle>
+                    <CardTitle>{t("dashboard.guarantees")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-1.5 text-sm">
                     {summary.guarantees.map((g) => (
@@ -364,12 +368,14 @@ export function SecurityDashboard({
                         />
                         {g.label}
                         {g.ok === null && (
-                          <span className="text-xs text-muted-foreground">non applicable</span>
+                          <span className="text-xs text-muted-foreground">
+                            {t("dashboard.notApplicable")}
+                          </span>
                         )}
                       </p>
                     ))}
                     <p className="pt-1 text-xs text-muted-foreground">
-                      Assurées par la plateforme, rien à faire.
+                      {t("dashboard.guaranteesNote")}
                     </p>
                   </CardContent>
                 </Card>
@@ -380,7 +386,7 @@ export function SecurityDashboard({
           <div className="grid gap-4 lg:grid-cols-3">
             <Card>
               <CardHeader>
-                <CardTitle>Score sur 90 jours</CardTitle>
+                <CardTitle>{t("dashboard.trend")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ScoreTrendChart points={trend} />
@@ -389,19 +395,19 @@ export function SecurityDashboard({
             {!app && (
               <Card className="lg:col-span-2">
                 <CardHeader>
-                  <CardTitle>Apps du projet</CardTitle>
+                  <CardTitle>{t("dashboard.apps")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {summary.apps.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Aucune app.</p>
+                    <p className="text-sm text-muted-foreground">{t("dashboard.noApp")}</p>
                   ) : (
                     <table className="w-full text-sm">
                       <thead className="text-left text-xs text-muted-foreground">
                         <tr>
-                          <th className="pb-2 font-medium">App</th>
-                          <th className="pb-2 font-medium">Note</th>
-                          <th className="pb-2 font-medium">Actions</th>
-                          <th className="pb-2 font-medium">Obligatoires</th>
+                          <th className="pb-2 font-medium">{t("dashboard.app")}</th>
+                          <th className="pb-2 font-medium">{t("dashboard.grade")}</th>
+                          <th className="pb-2 font-medium">{t("dashboard.appActions")}</th>
+                          <th className="pb-2 font-medium">{t("dashboard.appMandatory")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -441,7 +447,7 @@ export function SecurityDashboard({
 
       {tab !== "overview" && tab !== "ignored" && tab !== "journal" && (
         <div className="space-y-8">
-          {TABS.find((t) => t.value === tab)?.categories.map((category) => (
+          {TABS.find((item) => item.value === tab)?.categories.map((category) => (
             <CategorySection
               key={category}
               category={category}
@@ -457,8 +463,7 @@ export function SecurityDashboard({
 
       {tab === "journal" && (
         <p className="text-sm text-muted-foreground">
-          Le journal arrive avec la phase 2 : déploiements, lectures de secrets,
-          connexions et flux refusés, filtrés sur le projet.
+          {t("dashboard.journalSoon")}
         </p>
       )}
 

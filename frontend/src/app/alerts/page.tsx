@@ -2,6 +2,7 @@
 
 import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { useProjects } from "@/lib/hooks";
+import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -9,6 +10,8 @@ const SELECT =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 function AlertsInner() {
+  const t = useTranslations("alerts.page");
+  const tc = useTranslations("common");
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -19,13 +22,11 @@ function AlertsInner() {
     <main className="mx-auto max-w-7xl space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Alertes</h1>
-          <p className="text-sm text-muted-foreground">
-            Les alertes prêtes à l&apos;emploi de chaque projet.
-          </p>
+          <h1 className="text-xl font-semibold">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("description")}</p>
         </div>
         <select
-          aria-label="Projet"
+          aria-label={tc("project")}
           className={SELECT}
           value={selected}
           onChange={(e) =>
@@ -44,7 +45,7 @@ function AlertsInner() {
       {selected ? (
         <AlertsPanel key={selected} project={selected} />
       ) : (
-        <p className="text-sm text-muted-foreground">Aucun projet.</p>
+        <p className="text-sm text-muted-foreground">{tc("noProjects")}</p>
       )}
     </main>
   );

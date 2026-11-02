@@ -1,4 +1,9 @@
-import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
+import type {
+  AppIconValue,
+  CatalogTemplate,
+  Deployment,
+  TerraformOutputs,
+} from "@/types";
 import { getSession, signIn } from "next-auth/react";
 
 // Declare runtime config type
@@ -24,7 +29,7 @@ const BASE = getApiUrl();
  * A non-2xx response from the backend.
  *
  * Extends Error, so existing `err instanceof Error` / `err.message` handling
- * keeps working — but carries the status, so callers can tell a 403 (role
+ * keeps working, but carries the status, so callers can tell a 403 (role
  * changed under them) from a 409 (the project's guests group does not exist
  * yet) without matching on the message text.
  */
@@ -70,7 +75,7 @@ export async function getAccessToken(): Promise<string | null> {
     return _tokenCache.token;
   }
   // De-duplicate the session fetch: on first paint many hooks call this at
-  // once — collapse them into a single getSession() round-trip.
+  // once, collapse them into a single getSession() round-trip.
   if (_tokenInflight) return _tokenInflight;
 
   _tokenInflight = (async () => {
@@ -123,7 +128,7 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   // 204 No Content (e.g. DELETE endpoints) and empty bodies have no JSON to
-  // parse — return undefined instead of throwing on res.json().
+  // parse, return undefined instead of throwing on res.json().
   if (res.status === 204) {
     return undefined as T;
   }
@@ -146,7 +151,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   const promise = doRequest<T>(path, options);
   _inflight.set(path, promise);
-  // Clean up on settle. Use then(handler, handler) — NOT .finally() — so this
+  // Clean up on settle. Use then(handler, handler), NOT .finally(), so this
   // bookkeeping branch handles rejection itself instead of leaving a floating
   // rejected promise (which surfaces as an unhandledRejection). The original
   // `promise` is returned to the caller, which handles its own errors.
@@ -269,6 +274,18 @@ export const deleteDeployment = (id: number) =>
     method: "DELETE",
   });
 
+export const getPower = (id: number) =>
+  request<{ asleep: boolean; scheduled: boolean }>(`/deployments/${id}/power`);
+
+export const sleepDeployment = (id: number) =>
+  request<{ schedules: number }>(`/deployments/${id}/sleep`, { method: "POST" });
+
+export const wakeDeployment = (id: number) =>
+  request<{ schedules: number }>(`/deployments/${id}/wake`, { method: "POST" });
+
+export const restartDeployment = (id: number) =>
+  request<{ restarted: string[] }>(`/deployments/${id}/restart`, { method: "POST" });
+
 export const getDeploymentOutputs = (id: number) =>
   request<TerraformOutputs>(`/deployments/${id}/outputs`);
 
@@ -281,9 +298,57 @@ export const getAppHealth = (deploymentId: number) =>
     `/infra/deployments/${deploymentId}/health`,
   );
 
+export const getAppMetrics = (deploymentId: number, window = "24h") =>
+  request<import("@/types").AppMetrics>(
+    `/deployments/${deploymentId}/metrics?window=${window}`,
+  );
+
+export const getAppLogs = (
+  deploymentId: number,
+  opts: {
+    limit?: number;
+    since?: string;
+    level?: string;
+    component?: string;
+    q?: string;
+  } = {},
+) =>
+  request<import("@/types").AppLogLine[]>(
+    `/deployments/${deploymentId}/logs${finopsQuery(opts)}`,
+  );
+
+export const getAppEvents = (deploymentId: number, limit = 10) =>
+  request<import("@/types").AppEvent[]>(
+    `/deployments/${deploymentId}/events?limit=${limit}`,
+  );
+
 // Account & Profile
 export const getCurrentUser = () =>
   request<import("@/types").UserProfile>("/account/me");
+
+export const updatePreferences = (preferences: {
+  locale: import("@/i18n/config").Locale | null;
+}) =>
+  request<{ locale: import("@/i18n/config").Locale | null }>(
+    "/account/preferences",
+    { method: "PUT", body: JSON.stringify(preferences) },
+  );
+
+export interface Favorites {
+  projects: string[];
+  apps: number[];
+}
+
+export const getFavorites = () =>
+  request<{ favorites: Favorites }>("/account/preferences").then(
+    (r) => r.favorites,
+  );
+
+export const updateFavorites = (favorites: Favorites) =>
+  request<Favorites>("/account/favorites", {
+    method: "PUT",
+    body: JSON.stringify(favorites),
+  });
 
 export const getGitHubStatus = async (): Promise<
   import("@/types").GitHubStatus
@@ -394,6 +459,14 @@ export const updateDeploymentConfig = (
 
 export const getSecurityData = (id: number) =>
   request<import("@/types").SecurityData>(`/deployments/${id}/security-data`);
+
+export const getScorecard = (id: number) =>
+  request<import("@/types").Scorecard>(`/deployments/${id}/scorecard`);
+
+export const getSecretPresence = (id: number) =>
+  request<import("@/types").SecretPresence>(
+    `/deployments/${id}/secrets/presence`,
+  );
 
 export const updateSecurityData = (
   id: number,
@@ -864,8 +937,13 @@ function alertingQuery(project: string, app?: string | null) {
 export const getAlertCatalog = (project: string, app?: string | null) =>
   request<import("@/types").AlertCatalog>(`/alerting?${alertingQuery(project, app)}`);
 
-export const getProjectGrafanaUrl = (project: string) =>
-  request<{ url: string | null }>(`/alerting/grafana?${alertingQuery(project)}`);
+export const getProjectLinks = (project: string) =>
+  request<import("@/types").ProjectLink[]>(
+    `/projects/${encodeURIComponent(project)}/links`,
+  );
+
+export const getDeploymentLinks = (id: number) =>
+  request<import("@/types").ProjectLink[]>(`/deployments/${id}/links`);
 
 export const updateCatalogAlert = (
   project: string,
@@ -883,6 +961,9 @@ export const updateCatalogAlert = (
 
 export const getEnvironments = (deploymentId: number) =>
   request<import("@/types").EnvironmentsView>(`/deployments/${deploymentId}/environments`);
+
+export const getEnvironmentsDiff = (deploymentId: number) =>
+  request<import("@/types").EnvDiff>(`/deployments/${deploymentId}/environments/diff`);
 
 export const enableStaging = (deploymentId: number, offhours: import("@/types").StagingOffhours) =>
   request<import("@/types").StagingStatus>(`/deployments/${deploymentId}/environments/staging`, {
@@ -1180,3 +1261,84 @@ export const updateAgentSettings = (
 
 export const getAgentPublicStats = () =>
   request<import("@/types").AgentPublicStats>("/agents/stats");
+
+export const setBuiltinAppIcon = (
+  id: number,
+  icon: { name: string; color: string },
+) =>
+  request<AppIconValue>(`/deployments/${id}/icon`, {
+    method: "PUT",
+    body: JSON.stringify({ kind: "builtin", ...icon }),
+  });
+
+export const resetAppIcon = (id: number) =>
+  request<void>(`/deployments/${id}/icon`, { method: "DELETE" });
+
+export async function uploadAppIcon(
+  id: number,
+  file: File,
+): Promise<AppIconValue> {
+  const form = new FormData();
+  form.append("file", file);
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${id}/icon`, {
+    method: "PUT",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.text());
+  return res.json();
+}
+
+export async function fetchAppIconBlob(id: number): Promise<Blob> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${id}/icon`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.text());
+  return res.blob();
+}
+
+export type NotificationKind =
+  | "deployment_succeeded"
+  | "deployment_failed"
+  | "app_deleted"
+  | "alert"
+  | "member_added"
+  | "approval_request";
+
+export interface AppNotification {
+  id: number;
+  project: string | null;
+  app: string | null;
+  kind: NotificationKind;
+  title_key: string;
+  params: Record<string, string | number>;
+  link: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+export const getNotifications = (
+  options: { unread?: boolean; limit?: number; before?: number } = {},
+) => {
+  const query = new URLSearchParams();
+  if (options.unread) query.set("unread", "true");
+  if (options.limit) query.set("limit", String(options.limit));
+  if (options.before) query.set("before", String(options.before));
+  const qs = query.toString();
+  return request<AppNotification[]>(`/notifications${qs ? `?${qs}` : ""}`);
+};
+
+export const getUnreadNotificationCount = () =>
+  request<{ count: number }>("/notifications/unread-count").then(
+    (r) => r.count,
+  );
+
+export const markNotificationRead = (id: number) =>
+  request<AppNotification>(`/notifications/${id}/read`, { method: "POST" });
+
+export const markAllNotificationsRead = () =>
+  request<{ updated: number }>("/notifications/read-all", { method: "POST" });

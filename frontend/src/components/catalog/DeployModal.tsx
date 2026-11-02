@@ -1,7 +1,9 @@
 "use client";
+import { TemplateIcon } from "./TemplateIcon";
 
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -22,16 +24,17 @@ interface Props {
 /**
  * Validates an app name against the backend / GitHub repository rule:
  * only alphanumeric characters, underscores or hyphens, and 45 chars or less.
+ * Returns the translation key of the error, if any.
  */
-function validateAppName(name: string): string | null {
+function validateAppName(name: string): "nameTooLong" | "nameChars" | null {
   if (!name) return null; // empty handled by the required/disabled state
-  if (name.length > 45) return "Name must be 45 characters or less.";
-  if (!/^[a-zA-Z0-9_-]+$/.test(name))
-    return "Only letters, numbers, underscores (_) and hyphens (-) are allowed — no spaces or other characters.";
+  if (name.length > 45) return "nameTooLong";
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) return "nameChars";
   return null;
 }
 
 export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
+  const t = useTranslations("catalog");
   const [appName, setAppName] = useState("");
   const [fieldValues, setFieldValues] = useState<
     Record<string, string | number>
@@ -81,12 +84,13 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const setField = (name: string, value: string | number) =>
     setFieldValues((prev) => ({ ...prev, [name]: value }));
 
-  const nameError = validateAppName(appName.trim());
+  const nameErrorKey = validateAppName(appName.trim());
+  const nameError = nameErrorKey ? t(`modal.${nameErrorKey}`) : null;
 
   // Check if all required fields are filled
   const isFormValid = () => {
     if (!appName.trim()) return false;
-    if (nameError) return false;
+    if (nameErrorKey) return false;
     if (!template) return false;
 
     // Check all required fields
@@ -131,14 +135,14 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-6 py-5">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">{template.icon}</span>
+                <TemplateIcon icon={template.icon} />
                 <div>
                   <h2 className="text-base font-semibold">
-                    Deploy {template.name}
+                    {t("modal.title", { name: template.name })}
                   </h2>
                   {!isKubernetes && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      2 OpenStack VMs + 2 AWS instances via ASG
+                      {t("modal.vmsSubtitle")}
                     </p>
                   )}
                 </div>
@@ -147,7 +151,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                 onClick={onClose}
                 disabled={loading}
                 className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                aria-label="Close"
+                aria-label={t("modal.close")}
               >
                 <svg
                   className="h-4 w-4"
@@ -174,18 +178,18 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                 {/* App name */}
                 <div className="space-y-2">
                   <Label htmlFor="app-name" className="text-sm font-medium">
-                    App Name <span className="text-destructive">*</span>
+                    {t("modal.appName")} <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     ref={inputRef}
                     id="app-name"
-                    placeholder={`my-${template.id}`}
+                    placeholder={t("modal.namePlaceholder", { id: template.id })}
                     value={appName}
                     maxLength={45}
                     onChange={(e) => setAppName(e.target.value)}
-                    aria-invalid={!!nameError}
+                    aria-invalid={!!nameErrorKey}
                     className={
-                      nameError ? "border-destructive focus-visible:ring-destructive" : ""
+                      nameErrorKey ? "border-destructive focus-visible:ring-destructive" : ""
                     }
                     required
                   />
@@ -194,7 +198,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                       <p className="text-xs text-destructive">{nameError}</p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        Letters, numbers, underscores or hyphens. Must be unique.
+                        {t("modal.nameHint")}
                       </p>
                     )}
                     <p className={`text-xs tabular-nums shrink-0 ${appName.length > 40 ? "text-destructive" : "text-muted-foreground"}`}>
@@ -207,7 +211,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                 {template.fields.length > 0 && (
                   <div className="space-y-4">
                     <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Configuration
+                      {t("modal.configuration")}
                     </div>
                     {template.fields.map((field) => (
                       <div key={field.name} className="space-y-2">
@@ -234,7 +238,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                           >
                             {field.required && (
                               <option value="" disabled>
-                                Select an option...
+                                {t("modal.selectOption")}
                               </option>
                             )}
                             {field.options.map((opt) => (
@@ -260,7 +264,9 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                             }
                             required={field.required}
                             placeholder={
-                              field.required ? "Required" : "Optional"
+                              field.required
+                                ? t("modal.required")
+                                : t("modal.optional")
                             }
                           />
                         )}
@@ -273,15 +279,14 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                 {isKubernetes && !checkingGitHub && !hasGitHub && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>GitHub Account Required</AlertTitle>
+                    <AlertTitle>{t("modal.githubTitle")}</AlertTitle>
                     <AlertDescription>
-                      To deploy Kubernetes applications, you need to link your
-                      GitHub account first.{" "}
+                      {t("modal.githubText")}{" "}
                       <Link
                         href="/account"
                         className="underline font-medium hover:no-underline"
                       >
-                        Go to Account Settings
+                        {t("modal.githubLink")}
                       </Link>
                     </AlertDescription>
                   </Alert>
@@ -290,36 +295,36 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                 {/* Info box */}
                 <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-1.5 text-xs text-muted-foreground">
                   <div className="font-medium text-foreground">
-                    What will be provisioned
+                    {t("modal.provisionedTitle")}
                   </div>
                   {isKubernetes ? (
                     <>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
-                        Private GitHub repository with template code
+                        {t("modal.repo")}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                        Kubernetes namespace with RBAC
+                        {t("modal.namespace")}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                        ArgoCD Application for GitOps
+                        {t("modal.argocd")}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
-                        Vault secrets path
+                        {t("modal.vault")}
                       </div>
                     </>
                   ) : (
                     <>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                        2× OpenStack VMs - stateful DB layer
+                        {t("modal.vmDb")}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                        2× AWS t3.micro - stateless web layer (ASG + ALB)
+                        {t("modal.vmWeb")}
                       </div>
                     </>
                   )}
@@ -334,16 +339,16 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                   onClick={onClose}
                   disabled={loading}
                 >
-                  Cancel
+                  {t("modal.cancel")}
                 </Button>
                 <Button type="submit" disabled={loading || !canDeploy}>
                   {loading ? (
                     <span className="flex items-center gap-2">
                       <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      Deploying…
+                      {t("modal.deploying")}
                     </span>
                   ) : (
-                    "Deploy"
+                    t("deploy")
                   )}
                 </Button>
               </div>

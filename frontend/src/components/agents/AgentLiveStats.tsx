@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { getAgentPublicStats } from "@/lib/api";
 import type { AgentPublicStats } from "@/types";
 
 /** Real figures from the platform, shown only once there is something to show. */
 export function AgentLiveStats() {
+  const t = useTranslations("agents");
   const [stats, setStats] = useState<AgentPublicStats | null>(null);
   useEffect(() => {
     getAgentPublicStats()
@@ -19,11 +21,7 @@ export function AgentLiveStats() {
       <span className="font-heading text-lg font-bold text-primary">
         {stats.apps_created_this_month}
       </span>{" "}
-      apps created through AI assistants this month, by{" "}
-      <span className="font-semibold text-foreground">
-        {stats.connected_assistants}
-      </span>{" "}
-      connected assistants. Live figure.
+      {t("liveStats", { assistants: stats.connected_assistants })}
     </p>
   );
 }
