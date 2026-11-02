@@ -256,7 +256,7 @@ def _kube(pods_by_namespace):
 
 
 class TestApi:
-    def test_a_guest_reads_the_differences_without_any_secret(
+    def test_a_guest_reads_the_fields_but_not_the_configuration_values(
         self, client, db
     ):
         _enable_staging(db)
@@ -273,6 +273,34 @@ class TestApi:
             diff, "kube_list", _kube(pods)
         ):
             response = client("guest").get(
+                "/api/deployments/7/environments/diff"
+            )
+
+        body = response.json()
+        assert response.status_code == 200
+        assert "vaultPath" not in response.text
+        assert body["values"] == []
+        assert {f["key"]: f["differs"] for f in body["fields"]}[
+            "imageTag"
+        ] is True
+
+    def test_a_member_reads_the_differences_without_any_secret(
+        self, client, db
+    ):
+        _enable_staging(db)
+        pods = {
+            "shop-web-stg": [_pod("1.4.0-rc.2", DIGEST_B)],
+            "shop-web": [_pod("1.3.0", DIGEST_A)],
+        }
+
+        with mock.patch.object(
+            gitops, "read_values", _read_values
+        ), mock.patch.object(
+            gitops, "token_for", mock.AsyncMock(return_value="t")
+        ), mock.patch.object(
+            diff, "kube_list", _kube(pods)
+        ):
+            response = client("dev").get(
                 "/api/deployments/7/environments/diff"
             )
 
