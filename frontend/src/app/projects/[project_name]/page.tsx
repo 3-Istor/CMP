@@ -4,22 +4,25 @@ import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { AppCard } from "@/components/projects/AppCard";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NotConnected } from "@/components/clusters/NotConnected";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,23 +33,27 @@ import {
   getProjectLinks,
   isNotConnected,
 } from "@/lib/api";
-import { LinkButtons } from "@/lib/links";
 import { ROLE_LABEL } from "@/lib/permissions";
 import type { CatalogTemplate, ProjectLink } from "@/types";
 import {
   FolderKanban,
   Loader2,
+  MoreHorizontal,
   Plus,
   Rocket,
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function ProjectPage() {
   const router = useRouter();
+  const ta = useTranslations("actions");
+  const tc = useTranslations("confirm");
   const {
     projectName,
     role,
@@ -59,7 +66,6 @@ export default function ProjectPage() {
   } = useProjectContext();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   // What this user may do here. Every can() is false while the role loads,
   // so action buttons stay absent instead of flashing into view and then
@@ -93,7 +99,7 @@ export default function ProjectPage() {
       const data = await getCatalog();
       setTemplates(data);
     } catch {
-      toast.error("Failed to load templates");
+      toast.error(ta("errors.loadTemplates"));
     } finally {
       setLoadingCatalog(false);
     }
@@ -103,7 +109,7 @@ export default function ProjectPage() {
     // Guard as well as hide: the role can change between the render that drew
     // the button and the click.
     if (!canDeploy) {
-      toast.error("Only project admins can deploy applications");
+      toast.error(ta("errors.notAllowed"));
       return;
     }
     setShowCatalog(true);
@@ -137,47 +143,22 @@ export default function ProjectPage() {
             : {}),
         },
       });
-      toast.success(`Deployment of "${name}" started`);
+      toast.success(ta("errors.deployStarted", { name }));
       setSelectedTemplate(null);
       setShowCatalog(false);
       refreshApps();
     } catch (err) {
-      toast.error(`Deploy failed: ${err}`);
+      toast.error(ta("errors.deploy", { message: String(err) }));
     } finally {
       setDeploying(false);
     }
   };
 
   const handleDeleteProject = async () => {
-    if (!canDeleteProject) {
-      toast.error("Only project admins can delete a project");
-      setShowDeleteDialog(false);
-      return;
-    }
-
-    if (apps.length > 0) {
-      toast.error(
-        `Cannot delete project: ${apps.length} active application(s). Delete all apps first.`,
-      );
-      setShowDeleteDialog(false);
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      await deleteProject(projectName);
-
-      // The call only schedules teardown. The project list reports it as
-      // "deleting" until the background destroy finishes.
-      toast.success(`Deletion of "${projectName}" started`);
-      router.push("/");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to delete project: ${msg}`);
-    } finally {
-      setDeleting(false);
-      setShowDeleteDialog(false);
-    }
+    if (!canDeleteProject) throw new Error(ta("errors.notAllowed"));
+    await deleteProject(projectName);
+    toast.success(ta("toasts.projectDeleting", { name: projectName }));
+    router.push("/");
   };
 
   return (
@@ -200,6 +181,36 @@ export default function ProjectPage() {
             <Badge variant="outline" className="font-mono text-xs">
               {apps.length} app{apps.length !== 1 ? "s" : ""}
             </Badge>
+            {canViewObservability && <ToolsMenu links={links} />}
+            {canDeploy && (
+              <Button size="sm" onClick={handleOpenCatalog}>
+                <Plus aria-hidden />
+                {ta("newApp")}
+              </Button>
+            )}
+            {canDeleteProject && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title={ta("more")}
+                    aria-label={ta("more")}
+                  >
+                    <MoreHorizontal aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[14rem]">
+                  <DropdownMenuItem
+                    className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                    {ta("deleteProject")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -213,17 +224,6 @@ export default function ProjectPage() {
         )}
 
         <Separator />
-
-        {links.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Project Links</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <LinkButtons links={links} className="justify-start" />
-            </CardContent>
-          </Card>
-        )}
 
         <div className="space-y-6">
           <div className="flex items-center justify-between gap-4">
@@ -243,37 +243,18 @@ export default function ProjectPage() {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
                 onClick={refreshApps}
                 disabled={loadingApps}
+                title={ta("refresh")}
+                aria-label={ta("refresh")}
               >
                 <RefreshCw
-                  className={`h-4 w-4 ${loadingApps ? "animate-spin" : ""}`}
+                  className={loadingApps ? "animate-spin" : undefined}
+                  aria-hidden
                 />
               </Button>
-              {canDeploy && (
-                <Button size="sm" onClick={handleOpenCatalog}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Deploy App
-                </Button>
-              )}
-              {canDeleteProject && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setShowDeleteDialog(true)}
-                  disabled={apps.length > 0}
-                  title={
-                    apps.length > 0
-                      ? `Delete all ${apps.length} app(s) first`
-                      : "Delete this project"
-                  }
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Project
-                </Button>
-              )}
             </div>
           </div>
 
@@ -346,7 +327,7 @@ export default function ProjectPage() {
                   onClick={handleOpenCatalog}
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Deploy App
+                  {ta("newApp")}
                 </Button>
               )}
             </div>
@@ -368,46 +349,54 @@ export default function ProjectPage() {
         loading={deploying}
       />
 
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <ConfirmDialog
+        open={showDeleteDialog && apps.length === 0}
+        onOpenChange={setShowDeleteDialog}
+        level={2}
+        destructive
+        title={tc("deleteProject.title", { name: projectName })}
+        description={tc("deleteProject.description")}
+        consequences={[
+          tc("deleteProject.consequences.apps"),
+          tc("deleteProject.consequences.vault"),
+          tc("deleteProject.consequences.grafana"),
+          tc("deleteProject.consequences.keycloak"),
+          tc("deleteProject.consequences.argocd"),
+        ]}
+        expectedName={projectName}
+        confirmLabel={tc("deleteProject.confirm")}
+        onConfirm={handleDeleteProject}
+      />
+
+      <Dialog
+        open={showDeleteDialog && apps.length > 0}
+        onOpenChange={setShowDeleteDialog}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Project &quot;{projectName}&quot;?</DialogTitle>
+            <DialogTitle>
+              {tc("projectHasApps.title", { name: projectName })}
+            </DialogTitle>
+            <DialogDescription>
+              {tc("projectHasApps.description", { count: apps.length })}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 text-sm text-muted-foreground">
-            <p>This will permanently delete:</p>
-            <ul className="list-disc list-inside text-sm space-y-1 ml-2">
-              <li>Keycloak groups (admins, members & guests)</li>
-              <li>Vault policies</li>
-              <li>ArgoCD AppProject</li>
-            </ul>
-            <p className="font-semibold text-destructive pt-2">
-              This action cannot be undone.
-            </p>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteDialog(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteProject}
-              disabled={deleting}
-            >
-              {deleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Project
-                </>
-              )}
+          <ul className="space-y-1 text-sm">
+            {apps.map((app) => (
+              <li key={app.id}>
+                <Link
+                  href={`/projects/${encodeURIComponent(projectName)}/apps/${app.id}`}
+                  className="font-medium text-primary hover:underline"
+                  aria-label={tc("projectHasApps.open", { name: app.name })}
+                >
+                  {app.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              {tc("close")}
             </Button>
           </DialogFooter>
         </DialogContent>

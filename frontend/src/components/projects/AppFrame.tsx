@@ -9,21 +9,26 @@ import {
 } from "@/components/projects/ProjectContext";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { ToolsMenu } from "@/components/projects/ToolsMenu";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { deleteDeployment, getDeploymentLinks } from "@/lib/api";
-import { LinkButtons } from "@/lib/links";
+import {
+  deleteDeployment,
+  getDeploymentLinks,
+  getPower,
+  restartDeployment,
+  sleepDeployment,
+  wakeDeployment,
+} from "@/lib/api";
 import { cn, appUrlOf } from "@/lib/utils";
 import type { Deployment, ProjectLink } from "@/types";
 import {
@@ -35,10 +40,14 @@ import {
   History,
   Layers,
   Loader2,
+  MoreHorizontal,
+  Moon,
   RefreshCw,
   Rocket,
+  RotateCw,
   Settings,
   Shield,
+  Sun,
   Trash2,
   Wallet,
   XCircle,
@@ -47,7 +56,7 @@ import {
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const STATUS_VARIANT: Record<
@@ -110,11 +119,14 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     useAppContext();
   const { can } = useProjectContext();
 
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteConfirmName, setDeleteConfirmName] = useState("");
-  const [deleting, setDeleting] = useState(false);
+  const ta = useTranslations("actions");
+  const tc = useTranslations("confirm");
+  const [confirming, setConfirming] = useState<
+    "sleep" | "restart" | "delete" | null
+  >(null);
 
   const canDelete = can("app.delete");
+  const canOperate = can("app.operate");
   const canViewLogs = can("app.viewLogs");
   const canViewConfig = can("app.viewConfig");
   const canViewFinops = can("finops.view");
@@ -134,24 +146,77 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       .catch(() => setLinks([]));
   }, [appId, linksReady, current.github_repo_url]);
 
-  const handleDelete = async () => {
-    if (!canDelete) {
-      toast.error("Only project admins can delete an application");
-      setDeleteOpen(false);
-      return;
-    }
-    if (deleteConfirmName !== current.name) return;
-    setDeleting(true);
+  const inProgress = IN_PROGRESS_STATUSES.includes(current.status);
+  const gone = current.status === "deleted";
+  const powerReadable =
+    canOperate &&
+    isKubernetes &&
+    (current.status === "running" || current.status === "degraded");
+
+  const [power, setPower] = useState<{
+    asleep: boolean;
+    scheduled: boolean;
+  } | null>(null);
+  const [powerFailed, setPowerFailed] = useState(false);
+  const loadPower = useCallback(() => {
+    getPower(appId)
+      .then((state) => {
+        setPower(state);
+        setPowerFailed(false);
+      })
+      .catch(() => setPowerFailed(true));
+  }, [appId]);
+  useEffect(() => {
+    if (powerReadable) loadPower();
+  }, [powerReadable, loadPower, current.status]);
+
+  const powerReason = (): string | null => {
+    if (inProgress || gone) return ta("reasons.busy");
+    if (powerFailed) return ta("reasons.unavailable");
+    if (!power) return ta("reasons.loading");
+    if (!power.scheduled) return ta("reasons.noSchedule");
+    return null;
+  };
+  const restartReason = (): string | null => {
+    if (inProgress || gone) return ta("reasons.busy");
+    if (powerFailed) return ta("reasons.unavailable");
+    if (!power) return ta("reasons.loading");
+    if (power.asleep) return ta("reasons.asleep");
+    return null;
+  };
+
+  const handleWake = async () => {
     try {
-      await deleteDeployment(appId);
-      toast.success(`Deletion of "${current.name}" started`);
-      setDeleteOpen(false);
-      markDeleting();
+      await wakeDeployment(appId);
+      toast.success(ta("toasts.woken", { name: current.name }));
+      loadPower();
     } catch (err) {
-      toast.error(`Delete failed: ${err}`);
-    } finally {
-      setDeleting(false);
+      toast.error(ta("errors.wake", { message: String(err) }));
     }
+  };
+
+  const handleSleep = async () => {
+    await sleepDeployment(appId);
+    toast.success(ta("toasts.sleeping", { name: current.name }));
+    loadPower();
+  };
+
+  const handleRestart = async () => {
+    await restartDeployment(appId);
+    toast.success(ta("toasts.restarting", { name: current.name }));
+  };
+
+  const handleDelete = async () => {
+    if (!canDelete) throw new Error(ta("errors.notAllowed"));
+    await deleteDeployment(appId);
+    toast.success(ta("toasts.deleting", { name: current.name }));
+    markDeleting();
+  };
+
+  const handleRefresh = () => {
+    refresh();
+    if (powerReadable) loadPower();
+    toast.success(ta("refreshed"));
   };
 
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
@@ -267,6 +332,19 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   </Badge>
                 )}
               </div>
+              {isKubernetes && canViewLogs && appUrl && (
+                <a
+                  href={appUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  aria-label={`${ta("openApp")}, ${ta("externalLink")}`}
+                >
+                  <Globe className="h-3.5 w-3.5" aria-hidden />
+                  {appUrl.replace(/^https?:\/\//, "")}
+                  <ExternalLink className="h-3 w-3" aria-hidden />
+                </a>
+              )}
               <p className="text-xs text-muted-foreground mt-1.5">
                 {current.template_name || current.template_id} · Deployed{" "}
                 {new Date(current.created_at).toLocaleDateString(undefined, {
@@ -278,24 +356,95 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={refresh}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh
+          <div className="flex items-center gap-2">
+            {linksReady && <ToolsMenu links={links} />}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              title={ta("refresh")}
+              aria-label={ta("refresh")}
+            >
+              <RefreshCw aria-hidden />
             </Button>
-            {canDelete && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  setDeleteConfirmName("");
-                  setDeleteOpen(true);
-                }}
-                disabled={["deleting", "deleted"].includes(current.status)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete App
-              </Button>
+            {(canOperate || canViewConfig || canDelete) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title={ta("more")}
+                    aria-label={ta("more")}
+                  >
+                    <MoreHorizontal aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[15rem]">
+                  {canOperate && isKubernetes && (
+                    <>
+                      {power?.asleep ? (
+                        <DropdownMenuItem
+                          className="gap-2"
+                          disabled={powerReason() !== null}
+                          onClick={handleWake}
+                        >
+                          <Sun className="h-4 w-4" aria-hidden />
+                          <MenuText
+                            label={ta("wake")}
+                            reason={powerReason()}
+                          />
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          className="gap-2"
+                          disabled={powerReason() !== null}
+                          onClick={() => setConfirming("sleep")}
+                        >
+                          <Moon className="h-4 w-4" aria-hidden />
+                          <MenuText
+                            label={ta("sleep")}
+                            reason={powerReason()}
+                          />
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        className="gap-2"
+                        disabled={restartReason() !== null}
+                        onClick={() => setConfirming("restart")}
+                      >
+                        <RotateCw className="h-4 w-4" aria-hidden />
+                        <MenuText
+                          label={ta("restart")}
+                          reason={restartReason()}
+                        />
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {isKubernetes && canViewConfig && (
+                    <DropdownMenuItem asChild className="gap-2">
+                      <Link href={`${base}/config`}>
+                        <Settings className="h-4 w-4" aria-hidden />
+                        {ta("settings")}
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {canDelete && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
+                        disabled={["deleting", "deleted"].includes(
+                          current.status,
+                        )}
+                        onClick={() => setConfirming("delete")}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                        {ta("deleteApp")}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -338,91 +487,57 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             })}
         </nav>
 
-        {((isKubernetes && canViewLogs && appUrl) || links.length > 0) && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-muted-foreground mr-1">
-              Quick links
-            </span>
-            {isKubernetes && canViewLogs && appUrl && (
-              <a
-                href={appUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                <Globe className="mr-2 h-4 w-4" />
-                Open Application
-                <ExternalLink className="ml-2 h-3 w-3" />
-              </a>
-            )}
-            <LinkButtons links={links} />
-          </div>
-        )}
-
         <div className="space-y-6">{children}</div>
       </main>
 
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={(v) => !deleting && !v && setDeleteOpen(false)}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-destructive flex items-center gap-2">
-              <Trash2 className="h-5 w-5" />
-              Delete Application
-            </DialogTitle>
-            <DialogDescription>
-              This will destroy all cloud resources for{" "}
-              <span className="font-semibold">&quot;{current.name}&quot;</span>{" "}
-              via Terraform. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2">
-            <Label htmlFor="confirm-name" className="text-sm">
-              Type{" "}
-              <span className="font-mono font-semibold">{current.name}</span> to
-              confirm:
-            </Label>
-            <Input
-              id="confirm-name"
-              value={deleteConfirmName}
-              onChange={(e) => setDeleteConfirmName(e.target.value)}
-              placeholder={current.name}
-              disabled={deleting}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting || deleteConfirmName !== current.name}
-            >
-              {deleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting…
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete permanently
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirming === "sleep"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        level={1}
+        title={tc("sleep.title", { name: current.name })}
+        description={tc("sleep.description")}
+        confirmLabel={tc("sleep.confirm")}
+        onConfirm={handleSleep}
+      />
+      <ConfirmDialog
+        open={confirming === "restart"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        level={1}
+        title={tc("restart.title", { name: current.name })}
+        description={tc("restart.description")}
+        confirmLabel={tc("restart.confirm")}
+        onConfirm={handleRestart}
+      />
+      <ConfirmDialog
+        open={confirming === "delete"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        level={2}
+        destructive
+        title={tc("deleteApp.title", { name: current.name })}
+        description={tc("deleteApp.description")}
+        consequences={[
+          tc("deleteApp.consequences.resources"),
+          tc("deleteApp.consequences.data"),
+          tc("deleteApp.consequences.users"),
+        ]}
+        expectedName={current.name}
+        confirmLabel={tc("deleteApp.confirm")}
+        onConfirm={handleDelete}
+      />
     </div>
+  );
+}
+
+function MenuText({ label, reason }: { label: string; reason: string | null }) {
+  return (
+    <span className="flex flex-col">
+      <span>{label}</span>
+      {reason && (
+        <span className="text-xs font-normal text-muted-foreground">
+          {reason}
+        </span>
+      )}
+    </span>
   );
 }
 

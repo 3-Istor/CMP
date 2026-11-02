@@ -1576,5 +1576,92 @@
       "noInstances": "Aucune instance trouvée",
       "noServers": "Aucun serveur trouvé"
     }
+  },
+  "actions": {
+    "tools": "Outils",
+    "toolsGroups": {
+      "view": "Voir",
+      "code": "Code",
+      "admin": "Admin"
+    },
+    "toolsEmpty": "Aucun outil disponible",
+    "openApp": "Ouvrir l'application",
+    "more": "Plus d'actions",
+    "refresh": "Actualiser",
+    "refreshed": "Données actualisées",
+    "sleep": "Endormir maintenant",
+    "wake": "Réveiller",
+    "restart": "Redémarrer",
+    "settings": "Paramètres",
+    "deleteApp": "Supprimer l'application…",
+    "newApp": "Nouvelle app",
+    "deleteProject": "Supprimer le projet…",
+    "externalLink": "S'ouvre dans un nouvel onglet",
+    "reasons": {
+      "loading": "Lecture de l'état en cours",
+      "noSchedule": "Aucune planification de mise en veille sur cette application",
+      "unavailable": "Le cluster n'autorise pas cette action pour l'instant",
+      "asleep": "Réveillez l'application avant de la redémarrer",
+      "busy": "Opération en cours sur l'application"
+    },
+    "toasts": {
+      "sleeping": "{name} est en cours de mise en veille",
+      "woken": "{name} se réveille",
+      "restarting": "{name} redémarre",
+      "deleting": "Suppression de {name} lancée",
+      "projectDeleting": "Suppression du projet {name} lancée"
+    },
+    "errors": {
+      "loadTemplates": "Impossible de charger les modèles",
+      "deploy": "Échec du déploiement : {message}",
+      "deployStarted": "Déploiement de {name} lancé",
+      "wake": "Échec du réveil : {message}",
+      "notAllowed": "Votre rôle ne permet pas cette action"
+    }
+  },
+  "confirm": {
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "pending": "En cours…",
+    "typeToConfirm": "Tapez {name} pour confirmer",
+    "consequencesLabel": "Ce qui sera perdu",
+    "failed": "Échec : {message}",
+    "sleep": {
+      "title": "Endormir {name} maintenant ?",
+      "description": "L'application sera indisponible pour tous ses utilisateurs jusqu'à son réveil, manuel ou planifié. Ses données ne sont pas touchées.",
+      "confirm": "Endormir"
+    },
+    "restart": {
+      "title": "Redémarrer {name} ?",
+      "description": "Les pods sont recréés progressivement. Les utilisateurs connectés peuvent voir des erreurs ou perdre leur session pendant quelques secondes.",
+      "confirm": "Redémarrer"
+    },
+    "deleteApp": {
+      "title": "Supprimer l'application {name} ?",
+      "description": "Cette action est définitive et ne peut pas être annulée. Tous les membres du projet perdent l'accès à cette application.",
+      "consequences": {
+        "resources": "Toutes les ressources déployées, détruites avec Terraform",
+        "data": "Les données et la configuration de l'application dans le cluster",
+        "users": "L'accès de ses utilisateurs, immédiatement"
+      },
+      "confirm": "Supprimer l'application"
+    },
+    "deleteProject": {
+      "title": "Supprimer le projet {name} ?",
+      "description": "Cette action est définitive et ne peut pas être annulée. Tous les membres du projet perdent l'accès.",
+      "consequences": {
+        "apps": "Les applications du projet (aucune ne reste à ce stade)",
+        "vault": "Les secrets Vault du projet",
+        "grafana": "L'organisation Grafana et ses tableaux de bord",
+        "keycloak": "Les groupes Keycloak (admins, membres, invités)",
+        "argocd": "Le projet Argo CD (AppProject)"
+      },
+      "confirm": "Supprimer le projet"
+    },
+    "projectHasApps": {
+      "title": "Impossible de supprimer {name}",
+      "description": "{count, plural, one {# application reste} other {# applications restantes}} dans ce projet. Supprimez-les d'abord, puis revenez ici.",
+      "open": "Ouvrir {name}"
+    }
   }
 }

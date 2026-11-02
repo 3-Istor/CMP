@@ -269,6 +269,18 @@ export const deleteDeployment = (id: number) =>
     method: "DELETE",
   });
 
+export const getPower = (id: number) =>
+  request<{ asleep: boolean; scheduled: boolean }>(`/deployments/${id}/power`);
+
+export const sleepDeployment = (id: number) =>
+  request<{ schedules: number }>(`/deployments/${id}/sleep`, { method: "POST" });
+
+export const wakeDeployment = (id: number) =>
+  request<{ schedules: number }>(`/deployments/${id}/wake`, { method: "POST" });
+
+export const restartDeployment = (id: number) =>
+  request<{ restarted: string[] }>(`/deployments/${id}/restart`, { method: "POST" });
+
 export const getDeploymentOutputs = (id: number) =>
   request<TerraformOutputs>(`/deployments/${id}/outputs`);
 
