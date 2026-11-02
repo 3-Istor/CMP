@@ -28,6 +28,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -62,6 +63,7 @@ function useCollapsed(): [boolean, () => void] {
 export function AppSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const t = useTranslations("shell.sidebar");
   const [collapsed, toggle] = useCollapsed();
 
   // Poll so the list reflects projects created/deleted elsewhere (15s active).
@@ -88,7 +90,7 @@ export function AppSidebar() {
     session?.user?.name ||
     `${session?.user?.given_name ?? ""} ${session?.user?.family_name ?? ""}`.trim() ||
     session?.user?.email ||
-    "Profile";
+    t("profileFallback");
 
   return (
     <aside
@@ -105,7 +107,7 @@ export function AppSidebar() {
             "flex items-center gap-2 min-w-0 rounded-md hover:bg-accent transition-colors px-2 py-1.5",
             collapsed ? "justify-center w-full" : "flex-1",
           )}
-          title="Home"
+          title={t("home")}
         >
           <Logo className="h-7 w-7 shrink-0" />
           {!collapsed && (
@@ -116,7 +118,7 @@ export function AppSidebar() {
           <button
             onClick={toggle}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-            title="Collapse sidebar"
+            title={t("collapse")}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -127,7 +129,7 @@ export function AppSidebar() {
         <button
           onClick={toggle}
           className="mx-auto mt-2 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          title="Expand sidebar"
+          title={t("expand")}
         >
           <PanelLeft className="h-4 w-4" />
         </button>
@@ -140,21 +142,21 @@ export function AppSidebar() {
           active={pathname === "/"}
           collapsed={collapsed}
           icon={<Home className="h-4 w-4 shrink-0" />}
-          label="Home"
+          label={t("home")}
         />
         <NavLink
           href="/finops"
           active={pathname.startsWith("/finops")}
           collapsed={collapsed}
           icon={<Wallet className="h-4 w-4 shrink-0" />}
-          label="FinOps"
+          label={t("finops")}
         />
         <NavLink
           href="/security"
           active={pathname.startsWith("/security")}
           collapsed={collapsed}
           icon={<Shield className="h-4 w-4 shrink-0" />}
-          label="Sécurité"
+          label={t("security")}
           alert={coreProjects.size > 0}
         />
         <NavLink
@@ -162,27 +164,27 @@ export function AppSidebar() {
           active={pathname.startsWith("/activity")}
           collapsed={collapsed}
           icon={<History className="h-4 w-4 shrink-0" />}
-          label="Activité"
+          label={t("activity")}
         />
         <NavLink
           href="/alerts"
           active={pathname.startsWith("/alerts")}
           collapsed={collapsed}
           icon={<BellRing className="h-4 w-4 shrink-0" />}
-          label="Alertes"
+          label={t("alerts")}
         />
         <NavLink
           href="/connect-ai"
           active={pathname.startsWith("/connect-ai")}
           collapsed={collapsed}
           icon={<Bot className="h-4 w-4 shrink-0" />}
-          label="Assistants IA"
+          label={t("assistants")}
         />
         <ExternalNavLink
           href="https://3-istor.github.io/cnp-docs/"
           collapsed={collapsed}
           icon={<BookOpen className="h-4 w-4 shrink-0" />}
-          label="Docs"
+          label={t("docs")}
         />
       </nav>
 
@@ -190,7 +192,7 @@ export function AppSidebar() {
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4">
         {/* Projects */}
         <Section
-          title="Projects"
+          title={t("projects")}
           icon={<FolderKanban className="h-3.5 w-3.5" />}
           collapsed={collapsed}
         >
@@ -199,7 +201,7 @@ export function AppSidebar() {
           ) : projects.length === 0 ? (
             !collapsed && (
               <p className="px-2 py-1 text-xs text-muted-foreground">
-                No projects
+                {t("noProjects")}
               </p>
             )
           ) : (
@@ -230,7 +232,7 @@ export function AppSidebar() {
 
         {/* Apps */}
         <Section
-          title="Apps"
+          title={t("apps")}
           icon={<Boxes className="h-3.5 w-3.5" />}
           collapsed={collapsed}
         >
@@ -238,7 +240,9 @@ export function AppSidebar() {
             <ListSkeleton collapsed={collapsed} />
           ) : apps.length === 0 ? (
             !collapsed && (
-              <p className="px-2 py-1 text-xs text-muted-foreground">No apps</p>
+              <p className="px-2 py-1 text-xs text-muted-foreground">
+                {t("noApps")}
+              </p>
             )
           ) : (
             apps.map((app) => {
@@ -291,7 +295,7 @@ export function AppSidebar() {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium truncate">{displayName}</p>
               <p className="text-xs text-muted-foreground truncate">
-                {session?.user?.email ?? "My Account"}
+                {session?.user?.email ?? t("myAccount")}
               </p>
             </div>
           )}
@@ -349,6 +353,7 @@ function NavLink({
   /** Red dot: a mandatory security action is open. */
   alert?: boolean;
 }) {
+  const t = useTranslations("shell.sidebar");
   return (
     <Link
       href={href}
@@ -373,7 +378,7 @@ function NavLink({
       {alert && !collapsed && (
         <span
           className="ml-auto h-2 w-2 shrink-0 rounded-full bg-red-600"
-          title="Action de sécurité obligatoire"
+          title={t("securityAlert")}
         />
       )}
     </Link>

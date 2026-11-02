@@ -1,0 +1,71 @@
+{
+  "shell": {
+    "meta": {
+      "title": "CNP - Plateforme cloud native",
+      "description": "Plateforme cloud native en libre-service"
+    },
+    "sidebar": {
+      "home": "Accueil",
+      "finops": "FinOps",
+      "security": "Sécurité",
+      "activity": "Activité",
+      "alerts": "Alertes",
+      "assistants": "Assistants IA",
+      "docs": "Documentation",
+      "projects": "Projets",
+      "apps": "Applications",
+      "noProjects": "Aucun projet",
+      "noApps": "Aucune application",
+      "myAccount": "Mon compte",
+      "profileFallback": "Profil",
+      "collapse": "Réduire le menu",
+      "expand": "Déplier le menu",
+      "securityAlert": "Action de sécurité obligatoire"
+    },
+    "userNav": {
+      "myAccount": "Mon compte",
+      "logout": "Se déconnecter",
+      "language": "Langue",
+      "userFallback": "Utilisateur"
+    },
+    "home": {
+      "welcome": "Bienvenue, <name></name>",
+      "fallbackName": "Développeur"
+    }
+  },
+  "projects": {
+    "home": {
+      "title": "Mes projets",
+      "subtitle": "Chaque projet est un espace d'équipe isolé, avec ses propres groupes Keycloak, ses politiques Vault et son AppProject ArgoCD.",
+      "new": "Nouveau projet",
+      "emptyTitle": "Aucun projet pour l'instant",
+      "emptyBody": "Créez votre premier projet pour déployer des applications, ou <assistant>demandez à votre assistant IA</assistant> de le faire.",
+      "create": "Créer un projet"
+    }
+  },
+  "apps": {
+    "home": {
+      "allDeployments": "Tous mes déploiements"
+    }
+  },
+  "finops": {},
+  "security": {},
+  "activity": {},
+  "alerts": {},
+  "account": {
+    "language": {
+      "title": "Langue",
+      "description": "Langue de l'interface. Le choix est enregistré sur votre compte et suivi sur tous vos navigateurs."
+    }
+  },
+  "common": {
+    "language": {
+      "label": "Langue de l'interface",
+      "saveFailed": "Langue appliquée sur ce navigateur, mais non enregistrée sur votre compte.",
+      "names": {
+        "fr": "Français",
+        "en": "English"
+      }
+    }
+  }
+}

@@ -12,11 +12,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { LogOut, User } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 export function UserNav() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const t = useTranslations("shell.userNav");
 
   const user = session?.user;
   const loading = status === "loading";
@@ -64,7 +67,7 @@ export function UserNav() {
         <button className="relative h-8 w-8 rounded-full ring-2 ring-border hover:ring-primary transition-all">
           <Avatar
             src={user.image}
-            alt={displayName || user.email || "User"}
+            alt={displayName || user.email || t("userFallback")}
             fallback={displayName || user.email || "U"}
             className="h-8 w-8"
           />
@@ -82,12 +85,19 @@ export function UserNav() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => router.push("/account")}>
           <User className="mr-2 h-4 w-4" />
-          <span>My Account</span>
+          <span>{t("myAccount")}</span>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5">
+          <p className="mb-1.5 text-xs text-muted-foreground">
+            {t("language")}
+          </p>
+          <LanguageSwitcher />
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOut className="mr-2 h-4 w-4" />
-          <span>Logout</span>
+          <span>{t("logout")}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
