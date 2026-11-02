@@ -5,6 +5,7 @@ import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { useAppContext } from "@/components/projects/AppContext";
 import { AppSection } from "@/components/projects/AppFrame";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { SecretsPresencePanel } from "@/components/projects/SecretsPresencePanel";
 import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -124,6 +125,7 @@ export default function AppConfigPage() {
           <div id="security-data" className="scroll-mt-24">
             <SecurityDataPanel deploymentId={appId} />
           </div>
+          <SecretsPresencePanel deploymentId={appId} />
           <AppConfigPanel
             deploymentId={appId}
             readOnly={!can("app.editConfig")}

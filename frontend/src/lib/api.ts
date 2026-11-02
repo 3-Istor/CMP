@@ -460,6 +460,11 @@ export const updateDeploymentConfig = (
 export const getSecurityData = (id: number) =>
   request<import("@/types").SecurityData>(`/deployments/${id}/security-data`);
 
+export const getSecretPresence = (id: number) =>
+  request<import("@/types").SecretPresence>(
+    `/deployments/${id}/secrets/presence`,
+  );
+
 export const updateSecurityData = (
   id: number,
   payload: import("@/types").SecurityDataUpdate,

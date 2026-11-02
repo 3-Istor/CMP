@@ -169,6 +169,12 @@ export interface SecurityData {
   } | null;
 }
 
+export interface SecretPresence {
+  expected: { name: string; set: boolean }[];
+  extra: string[];
+  vault_path: string | null;
+}
+
 export interface SecurityDataUpdate {
   exposure?: ExposurePreset;
   backup?: {

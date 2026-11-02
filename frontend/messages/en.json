@@ -2572,5 +2572,17 @@
       "approval_request": "{user} needs your approval: {summary}",
       "unknown": "New notification"
     }
+  },
+  "secretsPresence": {
+    "title": "Secrets",
+    "description": "The secrets this application expects. Only names are shown, never values.",
+    "set": "Set",
+    "missing": "Missing",
+    "define": "Set",
+    "defineHint": "Opens Vault to set {name}",
+    "extraTitle": "Present but not expected",
+    "noneExpected": "This application does not declare any expected secret. Declare them under <code>secrets.keys</code> in <code>deploy/values*.yaml</code>.",
+    "loadFailed": "Unable to check the secrets: {message}",
+    "reload": "Check again"
   }
 }
