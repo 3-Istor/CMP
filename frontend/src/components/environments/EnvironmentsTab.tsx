@@ -1,5 +1,6 @@
 "use client";
 
+import { intlLocale } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +31,7 @@ import type {
   VerificationRun,
 } from "@/types";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Loader2, Play, XCircle } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage, formatDateTime, TONE } from "../release/format";
@@ -38,21 +40,21 @@ import { StagingSettingsCard } from "./StagingSettingsCard";
 
 const POLL_MS = 5000;
 
-const RUN_STATUS: Record<RunStatus, { label: string; tone: keyof typeof TONE }> = {
-  running: { label: "En cours", tone: "info" },
-  passed: { label: "OK", tone: "ok" },
-  failed: { label: "Échec", tone: "bad" },
-  inconclusive: { label: "Inconclusif", tone: "warn" },
-  cancelled: { label: "Annulé", tone: "muted" },
-  error: { label: "Erreur", tone: "bad" },
+const RUN_TONE: Record<RunStatus, keyof typeof TONE> = {
+  running: "info",
+  passed: "ok",
+  failed: "bad",
+  inconclusive: "warn",
+  cancelled: "muted",
+  error: "bad",
 };
 
-const PROMOTION_STATUS: Record<Promotion["status"], { label: string; tone: keyof typeof TONE }> = {
-  running: { label: "En cours", tone: "info" },
-  waiting_approval: { label: "En attente", tone: "warn" },
-  done: { label: "En prod", tone: "ok" },
-  failed: { label: "Échouée", tone: "bad" },
-  cancelled: { label: "Annulée", tone: "muted" },
+const PROMOTION_TONE: Record<Promotion["status"], keyof typeof TONE> = {
+  running: "info",
+  waiting_approval: "warn",
+  done: "ok",
+  failed: "bad",
+  cancelled: "muted",
 };
 
 function shortDigest(digest: string): string {
@@ -61,6 +63,7 @@ function shortDigest(digest: string): string {
 }
 
 function Lane({ env, onWake }: { env: EnvironmentState; onWake?: () => void }) {
+  const t = useTranslations("environments");
   const staging = env.name === "staging";
   return (
     <div className="min-w-0 flex-1 space-y-2 rounded-lg border bg-muted/30 p-4">
@@ -81,16 +84,16 @@ function Lane({ env, onWake }: { env: EnvironmentState; onWake?: () => void }) {
       ))}
       <p className="text-xs">
         {!env.reachable
-          ? "Cluster injoignable"
+          ? t("lane.unreachable")
           : env.asleep
-            ? "En veille (offhours)"
+            ? t("lane.asleep")
             : env.converged
-              ? "Une seule version, pods prêts"
-              : "Déploiement en cours ou pods pas prêts"}
+              ? t("lane.converged")
+              : t("lane.notConverged")}
       </p>
       {staging && env.asleep && onWake && (
         <Button variant="outline" size="sm" onClick={onWake}>
-          Réveiller
+          {t("lane.wake")}
         </Button>
       )}
     </div>
@@ -106,13 +109,6 @@ function StepIcon({ status }: { status: PromotionStep["status"] }) {
   return <Circle className="h-4 w-4 text-muted-foreground" />;
 }
 
-const STEP_LABEL: Record<PromotionStep["kind"], string> = {
-  run: "Vérification",
-  soak: "Temps en staging",
-  approve: "Approbation",
-  promote: "Mise en prod",
-};
-
 function PromotionCard({
   deploymentId,
   promotion,
@@ -124,6 +120,8 @@ function PromotionCard({
   view: EnvironmentsView;
   onChanged: () => void;
 }) {
+  const t = useTranslations("environments");
+  const locale = intlLocale(useLocale());
   const act = async (action: () => Promise<unknown>) => {
     try {
       await action();
@@ -132,18 +130,20 @@ function PromotionCard({
       toast.error(errorMessage(e));
     }
   };
-  const status = PROMOTION_STATUS[promotion.status];
+  const requestedAt = formatDateTime(promotion.createdAt, locale);
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-          Promotion de {promotion.version ?? "la release"} vers la prod
-          <Badge variant="outline" className={TONE[status.tone]}>
-            {status.label}
+          {promotion.version
+            ? t("promotion.titleVersion", { version: promotion.version })
+            : t("promotion.titleRelease")}
+          <Badge variant="outline" className={TONE[PROMOTION_TONE[promotion.status]]}>
+            {t(`promotionStatus.${promotion.status}`)}
           </Badge>
           {promotion.emergency && (
             <Badge variant="outline" className={TONE.bad}>
-              Urgence
+              {t("promotion.emergency")}
             </Badge>
           )}
         </CardTitle>
@@ -155,7 +155,7 @@ function PromotionCard({
               <StepIcon status={step.status} />
               <div className="min-w-0 flex-1">
                 <p>
-                  <span className="font-medium">{STEP_LABEL[step.kind]}</span>
+                  <span className="font-medium">{t(`stepKind.${step.kind}`)}</span>
                   {step.kind === "run" && <span className="font-mono"> · {step.name}</span>}
                 </p>
                 {step.detail && <p className="break-words text-xs text-muted-foreground">{step.detail}</p>}
@@ -166,12 +166,12 @@ function PromotionCard({
                   variant="outline"
                   onClick={() => act(() => acceptPromotionStep(deploymentId, promotion.id, index))}
                 >
-                  Accepter
+                  {t("promotion.accept")}
                 </Button>
               )}
               {step.kind === "approve" && step.status === "waiting" && view.canAdminister && (
                 <Button size="sm" onClick={() => act(() => approvePromotion(deploymentId, promotion.id))}>
-                  Approuver
+                  {t("promotion.approve")}
                 </Button>
               )}
             </li>
@@ -179,12 +179,17 @@ function PromotionCard({
         </ol>
         {promotion.detail && <p className="text-xs text-muted-foreground">{promotion.detail}</p>}
         <p className="text-xs text-muted-foreground">
-          Demandée par {promotion.actor} le {formatDateTime(promotion.createdAt)}
-          {promotion.reason ? ` · ${promotion.reason}` : ""}
+          {promotion.reason
+            ? t("promotion.requestedByReason", {
+                actor: promotion.actor,
+                date: requestedAt,
+                reason: promotion.reason,
+              })
+            : t("promotion.requestedBy", { actor: promotion.actor, date: requestedAt })}
         </p>
         {(promotion.status === "running" || promotion.status === "waiting_approval") && view.canOperate && (
           <Button variant="ghost" size="sm" onClick={() => act(() => cancelPromotion(deploymentId, promotion.id))}>
-            Annuler la promotion
+            {t("promotion.cancel")}
           </Button>
         )}
       </CardContent>
@@ -203,11 +208,13 @@ function RunsCard({
   runs: VerificationRun[];
   onChanged: () => void;
 }) {
+  const t = useTranslations("environments");
+  const locale = intlLocale(useLocale());
   const suites = ["smoke", ...view.policy.suites.map((s) => s.name)];
   const launch = async (suite: string) => {
     try {
       await startRun(deploymentId, "staging", suite);
-      toast.success(`Suite ${suite} lancée sur staging`);
+      toast.success(t("runs.launched", { suite }));
       onChanged();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -216,7 +223,7 @@ function RunsCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Suites de vérification sur staging</CardTitle>
+        <CardTitle className="text-base">{t("runs.title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {view.canOperate && (
@@ -230,17 +237,17 @@ function RunsCard({
           </div>
         )}
         {runs.length === 0 ? (
-          <p className="text-muted-foreground">Aucune suite lancée sur staging pour l&apos;instant.</p>
+          <p className="text-muted-foreground">{t("runs.empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="text-muted-foreground">
                 <tr>
-                  <th className="py-1 pr-3 font-medium">Suite</th>
-                  <th className="py-1 pr-3 font-medium">Version</th>
-                  <th className="py-1 pr-3 font-medium">Résultat</th>
-                  <th className="py-1 pr-3 font-medium">Détail</th>
-                  <th className="py-1 pr-3 font-medium">Lancée</th>
+                  <th className="py-1 pr-3 font-medium">{t("runs.columns.suite")}</th>
+                  <th className="py-1 pr-3 font-medium">{t("runs.columns.version")}</th>
+                  <th className="py-1 pr-3 font-medium">{t("runs.columns.result")}</th>
+                  <th className="py-1 pr-3 font-medium">{t("runs.columns.detail")}</th>
+                  <th className="py-1 pr-3 font-medium">{t("runs.columns.startedAt")}</th>
                   <th />
                 </tr>
               </thead>
@@ -250,20 +257,20 @@ function RunsCard({
                     <td className="py-1.5 pr-3 font-mono">{run.suite}</td>
                     <td className="py-1.5 pr-3 font-mono">{run.version ?? "-"}</td>
                     <td className="py-1.5 pr-3">
-                      <Badge variant="outline" className={TONE[RUN_STATUS[run.status].tone]}>
-                        {RUN_STATUS[run.status].label}
+                      <Badge variant="outline" className={TONE[RUN_TONE[run.status]]}>
+                        {t(`runStatus.${run.status}`)}
                       </Badge>
                     </td>
                     <td className="py-1.5 pr-3">
                       {run.summary}
                       {run.detailsUrl && (
                         <a className="ml-1 underline" href={run.detailsUrl} target="_blank" rel="noreferrer">
-                          logs
+                          {t("runs.logs")}
                         </a>
                       )}
                     </td>
                     <td className="py-1.5 pr-3 whitespace-nowrap">
-                      {formatDateTime(run.startedAt)} · {run.actor}
+                      {formatDateTime(run.startedAt, locale)} · {run.actor}
                     </td>
                     <td className="py-1.5">
                       {run.status === "running" && view.canOperate && (
@@ -272,7 +279,7 @@ function RunsCard({
                           size="sm"
                           onClick={() => cancelRun(deploymentId, run.id).then(onChanged, (e) => toast.error(errorMessage(e)))}
                         >
-                          Annuler
+                          {t("runs.cancel")}
                         </Button>
                       )}
                     </td>
@@ -298,11 +305,13 @@ function HistoryCard({
   promotions: Promotion[];
   onChanged: () => void;
 }) {
+  const t = useTranslations("environments");
+  const locale = intlLocale(useLocale());
   const prod = view.environments.find((e) => e.name === "prod");
   const goBack = async (promotion: Promotion) => {
     try {
       await startPromotion(deploymentId, { rollbackTo: promotion.id });
-      toast.success(`Retour à ${promotion.version} lancé`);
+      toast.success(t("history.rolledBackStarted", { version: promotion.version ?? "" }));
       onChanged();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -312,43 +321,44 @@ function HistoryCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Historique des promotions</CardTitle>
+        <CardTitle className="text-base">{t("history.title")}</CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="text-muted-foreground">
             <tr>
-              <th className="py-1 pr-3 font-medium">Version</th>
-              <th className="py-1 pr-3 font-medium">Statut</th>
-              <th className="py-1 pr-3 font-medium">Par</th>
-              <th className="py-1 pr-3 font-medium">Quand</th>
-              <th className="py-1 pr-3 font-medium">Commit</th>
+              <th className="py-1 pr-3 font-medium">{t("history.columns.version")}</th>
+              <th className="py-1 pr-3 font-medium">{t("history.columns.status")}</th>
+              <th className="py-1 pr-3 font-medium">{t("history.columns.by")}</th>
+              <th className="py-1 pr-3 font-medium">{t("history.columns.when")}</th>
+              <th className="py-1 pr-3 font-medium">{t("history.columns.commit")}</th>
               <th />
             </tr>
           </thead>
           <tbody>
             {promotions.map((promotion) => {
-              const status = PROMOTION_STATUS[promotion.status];
               const current =
                 prod && JSON.stringify(prod.digests) === JSON.stringify(promotion.digests);
               return (
                 <tr key={promotion.id} className="border-t">
                   <td className="py-1.5 pr-3 font-mono">
                     {promotion.version ?? "-"}
-                    {promotion.rollbackOf ? " (retour)" : ""}
+                    {promotion.rollbackOf ? ` ${t("history.rollbackTag")}` : ""}
                   </td>
                   <td className="py-1.5 pr-3">
-                    <Badge variant="outline" className={TONE[status.tone]}>
-                      {status.label}
+                    <Badge variant="outline" className={TONE[PROMOTION_TONE[promotion.status]]}>
+                      {t(`promotionStatus.${promotion.status}`)}
                     </Badge>
                   </td>
                   <td className="py-1.5 pr-3">{promotion.actor}</td>
-                  <td className="py-1.5 pr-3 whitespace-nowrap">{formatDateTime(promotion.createdAt)}</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">
+                    {formatDateTime(promotion.createdAt, locale)}
+                  </td>
                   <td className="py-1.5 pr-3 font-mono">{promotion.commitSha?.slice(0, 8) ?? "-"}</td>
                   <td className="py-1.5">
                     {promotion.status === "done" && !current && view.canOperate && !view.activePromotion && (
                       <Button variant="ghost" size="sm" onClick={() => goBack(promotion)}>
-                        Revenir à cette version
+                        {t("history.rollback")}
                       </Button>
                     )}
                   </td>
@@ -363,6 +373,7 @@ function HistoryCard({
 }
 
 export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
+  const t = useTranslations("environments");
   const [view, setView] = useState<EnvironmentsView | null>(null);
   const [runs, setRuns] = useState<VerificationRun[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -433,7 +444,7 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
                 env={staging}
                 onWake={() =>
                   wakeStaging(deploymentId).then(
-                    () => toast.success("Staging se réveille"),
+                    () => toast.success(t("wakeStarted")),
                     (e) => toast.error(errorMessage(e)),
                   )
                 }
@@ -447,38 +458,38 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
               <div className="space-y-3">
                 {emergency && (
                   <div className="space-y-1">
-                    <Label htmlFor="emergency-reason">Raison de l&apos;urgence (tracée et notifiée)</Label>
+                    <Label htmlFor="emergency-reason">{t("emergency.reasonLabel")}</Label>
                     <Input
                       id="emergency-reason"
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
-                      placeholder="Correctif du paiement en échec en prod"
+                      placeholder={t("emergency.reasonPlaceholder")}
                     />
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-2">
                   <Button onClick={promote} disabled={!promotable || starting || (emergency && !reason)}>
                     {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {emergency ? "Mettre en prod en urgence" : view.canAdminister ? "Mettre en prod" : "Demander la mise en prod"}
+                    {emergency
+                      ? t("promote.emergency")
+                      : view.canAdminister
+                        ? t("promote.now")
+                        : t("promote.request")}
                   </Button>
                   {view.canAdminister && (
                     <Button variant="ghost" size="sm" onClick={() => setEmergency((v) => !v)}>
-                      {emergency ? "Annuler l'urgence" : "Urgence…"}
+                      {emergency ? t("emergency.cancel") : t("emergency.toggle")}
                     </Button>
                   )}
                   {!promotable && (
                     <span className="text-xs text-muted-foreground">
                       {staging.converged
-                        ? "La prod tourne déjà la version de staging."
-                        : "Staging doit tourner une seule version, pods prêts."}
+                        ? t("promote.alreadyInProd")
+                        : t("promote.stagingNotReady")}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  La mise en prod envoie l&apos;image exacte qui tourne en staging, puis la
-                  stratégie de release de la prod (canary ou rolling) prend le relais dans
-                  l&apos;onglet Release.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("promote.explainer")}</p>
               </div>
             )}
           </CardContent>

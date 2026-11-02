@@ -1,23 +1,26 @@
 "use client";
 
+import { intlLocale, type Translate } from "@/components/finops/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { ReleaseMetric, ReleaseStep, ReleaseView } from "@/types";
 import { Check, Loader2, Pause, SkipForward, X } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useId, useState } from "react";
 import {
   formatDuration,
   formatMetricValue,
   isVisibleStep,
   metricTone,
-  STEP_KIND,
   TEXT_BAD,
   TEXT_OK,
 } from "./format";
 
 function Metrics({ metrics }: { metrics: ReleaseMetric[] }) {
+  const t = useTranslations("release");
+  const locale = intlLocale(useLocale());
   if (metrics.length === 0) return null;
   return (
     <dl className="mt-2 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 gap-y-1 rounded-lg bg-muted/50 px-3 py-2 text-xs">
@@ -33,14 +36,20 @@ function Metrics({ metrics }: { metrics: ReleaseMetric[] }) {
                 tone === "bad" && TEXT_BAD,
               )}
             >
-              {formatMetricValue(m.value, m.unit)}
+              {formatMetricValue(m.value, m.unit, t, locale)}
               <span className="sr-only">
-                {tone === "ok" ? " (conforme)" : tone === "bad" ? " (hors seuil)" : ""}
+                {tone === "ok"
+                  ? ` ${t("metrics.compliant")}`
+                  : tone === "bad"
+                    ? ` ${t("metrics.outOfRange")}`
+                    : ""}
               </span>
             </dd>
             <dd className="text-right font-mono tabular-nums text-muted-foreground">
               {m.threshold != null
-                ? `seuil ${formatMetricValue(m.threshold, m.unit)}`
+                ? t("metrics.threshold", {
+                    value: formatMetricValue(m.threshold, m.unit, t, locale),
+                  })
                 : ""}
             </dd>
           </div>
@@ -85,20 +94,9 @@ function StepDot({ status }: { status: ReleaseStep["status"] }) {
   }
 }
 
-const STATUS_SR: Record<ReleaseStep["status"], string> = {
-  done: "terminée",
-  active: "en pause, action requise",
-  running: "en cours",
-  pending: "à venir",
-  failed: "en échec",
-  skipped: "ignorée",
-};
-
 /** Argo Rollouts' messages say what happened, not what to do: say both. */
-function stepMessage(message: string): string {
-  if (/Inconclusive/i.test(message)) {
-    return "Pas assez de trafic sur la nouvelle version pour conclure : le nombre de requêtes canary est resté sous le minimum. La release attend votre décision : passer l'étape, tout promouvoir ou abort.";
-  }
+function stepMessage(message: string, t: Translate): string {
+  if (/Inconclusive/i.test(message)) return t("stepMessage.inconclusive");
   return message;
 }
 
@@ -117,6 +115,7 @@ export function ReleaseStepper({
   onAbort: () => void;
   onSkip: (reason: string) => Promise<boolean>;
 }) {
+  const t = useTranslations("release");
   const [skipping, setSkipping] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const reasonId = useId();
@@ -152,11 +151,14 @@ export function ReleaseStepper({
         const scale = preparing.get(step.index);
         const isFinished = step.status === "done" || step.status === "failed";
         const time = isFinished
-          ? formatDuration(step.durationSeconds)
+          ? formatDuration(step.durationSeconds, t)
           : step.status === "pending" && step.durationSeconds
-            ? `≈ ${formatDuration(step.durationSeconds)}`
+            ? t("time.approx", { duration: formatDuration(step.durationSeconds, t) })
             : step.status === "running" && step.expectedSeconds
-              ? `${formatDuration(step.durationSeconds ?? 0)} / ≈ ${formatDuration(step.expectedSeconds)}`
+              ? t("time.runningOf", {
+                  elapsed: formatDuration(step.durationSeconds ?? 0, t),
+                  expected: formatDuration(step.expectedSeconds, t),
+                })
               : "";
         // "active" is an analysis that ended inconclusive and paused the
         // release: it waits for someone to decide, like a running one.
@@ -195,7 +197,7 @@ export function ReleaseStepper({
             >
               <div className="flex items-baseline gap-2 text-sm">
                 <span className="w-14 shrink-0 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {STEP_KIND[step.kind] ?? step.kind}
+                  {t(`stepKind.${step.kind}`)}
                 </span>
                 <span
                   className={cn(
@@ -205,7 +207,10 @@ export function ReleaseStepper({
                 >
                   {step.label}
                 </span>
-                <span className="sr-only">, {STATUS_SR[step.status]}</span>
+                <span className="sr-only">
+                  {", "}
+                  {t(`stepStatus.${step.status}`)}
+                </span>
                 {time && (
                   <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
                     {time}
@@ -226,17 +231,19 @@ export function ReleaseStepper({
                   {scale.status !== "failed" && (
                     <Loader2 className="size-3 animate-spin" aria-hidden />
                   )}
-                  Préparation des pods canary
+                  {t("scale.preparing")}
                   {scale.label ? ` · ${scale.label}` : ""}
                   {scale.message ? ` · ${scale.message}` : ""}
                 </p>
               )}
 
               {step.message && (
-                <p className="mt-1 text-xs text-muted-foreground">{stepMessage(step.message)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {stepMessage(step.message, t)}
+                </p>
               )}
               {step.status === "running" && !step.message && (
-                <p className="mt-1 text-xs text-muted-foreground">En cours…</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t("stepper.running")}</p>
               )}
 
               {showMetrics && <Metrics metrics={step.metrics} />}
@@ -245,12 +252,12 @@ export function ReleaseStepper({
                 <div className="mt-2 flex flex-wrap gap-2">
                   {view.actions.promote && (
                     <Button size="sm" onClick={onContinue} disabled={busy}>
-                      Continuer
+                      {t("stepper.continue")}
                     </Button>
                   )}
                   {view.actions.abort && (
                     <Button size="sm" variant="destructive" onClick={onAbort} disabled={busy}>
-                      Abort
+                      {t("actions.abort")}
                     </Button>
                   )}
                 </div>
@@ -265,7 +272,7 @@ export function ReleaseStepper({
                     disabled={busy}
                   >
                     <SkipForward />
-                    Passer l&apos;étape
+                    {t("skip.button")}
                   </Button>
                 </div>
               )}
@@ -278,11 +285,9 @@ export function ReleaseStepper({
                     submitSkip();
                   }}
                 >
-                  <p className="text-xs text-muted-foreground">
-                    L&apos;analyse sera arrêtée et la release marquée « forcée ».
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("skip.warning")}</p>
                   <Label htmlFor={reasonId} className="text-xs">
-                    Motif
+                    {t("skip.reason")}
                   </Label>
                   <Input
                     id={reasonId}
@@ -294,7 +299,7 @@ export function ReleaseStepper({
                   />
                   <div className="flex gap-2">
                     <Button size="sm" type="submit" disabled={busy || !reason.trim()}>
-                      Passer l&apos;étape
+                      {t("skip.button")}
                     </Button>
                     <Button
                       size="sm"
@@ -305,7 +310,7 @@ export function ReleaseStepper({
                         setReason("");
                       }}
                     >
-                      Annuler
+                      {t("skip.cancel")}
                     </Button>
                   </div>
                 </form>

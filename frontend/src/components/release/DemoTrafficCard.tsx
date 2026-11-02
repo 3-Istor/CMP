@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translate } from "@/components/finops/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,6 +14,7 @@ import { startTraffic, stopTraffic, streamTraffic } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { TrafficEvent, TrafficFrame } from "@/types";
 import { Activity, Loader2, Play, Square } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "./format";
@@ -38,10 +40,12 @@ interface Bubble {
   size: number;
 }
 
-function formatRemaining(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return m > 0 ? `${m} min ${String(s).padStart(2, "0")} s` : `${s} s`;
+function formatRemaining(seconds: number, t: Translate): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes > 0
+    ? t("traffic.remainingMinutes", { minutes, seconds: String(rest).padStart(2, "0") })
+    : t("traffic.remainingSeconds", { seconds: rest });
 }
 
 /**
@@ -58,6 +62,7 @@ export function DemoTrafficCard({
   canOperate: boolean;
   weights: { stable: number; canary: number } | null;
 }) {
+  const t = useTranslations("release");
   const [frame, setFrame] = useState<TrafficFrame>({ running: false });
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [rps, setRps] = useState(10);
@@ -159,20 +164,21 @@ export function DemoTrafficCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm">
           <Activity className="h-4 w-4 text-muted-foreground" />
-          Trafic de démo
+          {t("traffic.title")}
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Le CMP joue des visiteurs : un utilisateur technique se connecte par le SSO de
-          l&apos;app, puis chaque requête arrive comme un nouveau visiteur. Envoy les
-          répartit selon les poids du canary, et l&apos;analyse les compte comme du vrai
-          trafic.
+          {t("traffic.intro")}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div
           className="relative h-40 overflow-hidden rounded-lg border bg-muted/40"
           role="img"
-          aria-label={`${counts.stable} réponses stable, ${counts.canary} canary, ${counts.error} en erreur`}
+          aria-label={t("traffic.ariaCounts", {
+            stable: counts.stable,
+            canary: counts.canary,
+            error: counts.error,
+          })}
         >
           <style>{`@keyframes cnp-rise {
             0% { transform: translateY(0) scale(.6); opacity: 0; }
@@ -193,7 +199,7 @@ export function DemoTrafficCard({
           ))}
           {!frame.running && bubbles.length === 0 && (
             <p className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
-              Aucun trafic de démo en cours
+              {t("traffic.idle")}
             </p>
           )}
         </div>
@@ -201,28 +207,31 @@ export function DemoTrafficCard({
         <div className="grid grid-cols-3 gap-2 text-center text-xs">
           {(
             [
-              ["stable", "Stable", "bg-primary"],
-              ["canary", "Canary", "bg-amber-500"],
-              ["error", "Erreurs", "bg-red-600"],
+              ["stable", "bg-primary"],
+              ["canary", "bg-amber-500"],
+              ["error", "bg-red-600"],
             ] as const
-          ).map(([key, label, swatch]) => (
+          ).map(([key, swatch]) => (
             <div key={key} className="rounded-md border px-2 py-1.5">
               <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
                 <i className={cn("size-2.5 rounded-sm", swatch)} aria-hidden />
-                {label}
+                {t(`traffic.labels.${key}`)}
               </div>
               <div className="font-mono text-sm tabular-nums">{share(recent[key])} %</div>
               <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                {counts[key]} au total
+                {t("traffic.total", { count: counts[key] })}
               </div>
             </div>
           ))}
         </div>
         {weights && recentTotal > 0 && (
           <p className="text-xs text-muted-foreground">
-            Sur les 10 dernières secondes, Envoy a envoyé {share(recent.stable)} % des
-            requêtes sur stable et {share(recent.canary)} % sur canary, pour des poids
-            configurés de {weights.stable} % / {weights.canary} %.
+            {t("traffic.split", {
+              stable: share(recent.stable),
+              canary: share(recent.canary),
+              weightStable: weights.stable,
+              weightCanary: weights.canary,
+            })}
           </p>
         )}
 
@@ -230,36 +239,39 @@ export function DemoTrafficCard({
           (frame.running ? (
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs text-muted-foreground">
-                {frame.rps} req/s · reste {formatRemaining(frame.remainingSeconds ?? 0)}
-                {frame.startedBy && ` · lancé par ${frame.startedBy}`}
+                {t("traffic.running", {
+                  rps: frame.rps ?? 0,
+                  remaining: formatRemaining(frame.remainingSeconds ?? 0, t),
+                })}
+                {frame.startedBy && ` · ${t("traffic.startedBy", { user: frame.startedBy })}`}
               </span>
               <Button variant="outline" size="sm" onClick={stop} disabled={busy}>
                 <Square className="mr-2 h-3.5 w-3.5" />
-                Arrêter
+                {t("traffic.stop")}
               </Button>
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Select value={String(rps)} onValueChange={(v) => setRps(Number(v))}>
                 <SelectTrigger size="sm">
-                  <SelectValue>{(v) => `${v} req/s`}</SelectValue>
+                  <SelectValue>{(v) => t("traffic.rate", { count: Number(v) })}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {RATES.map((r) => (
                     <SelectItem key={r} value={String(r)}>
-                      {r} req/s
+                      {t("traffic.rate", { count: r })}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Select value={String(minutes)} onValueChange={(v) => setMinutes(Number(v))}>
                 <SelectTrigger size="sm">
-                  <SelectValue>{(v) => `${v} min`}</SelectValue>
+                  <SelectValue>{(v) => t("traffic.minutes", { count: Number(v) })}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {DURATIONS.map((d) => (
                     <SelectItem key={d} value={String(d)}>
-                      {d} min
+                      {t("traffic.minutes", { count: d })}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -270,7 +282,7 @@ export function DemoTrafficCard({
                 ) : (
                   <Play className="mr-2 h-3.5 w-3.5" />
                 )}
-                Générer du trafic
+                {t("traffic.start")}
               </Button>
             </div>
           ))}

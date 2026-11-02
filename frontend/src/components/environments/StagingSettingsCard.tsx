@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import type { StagingOffhours, StagingStatus } from "@/types";
 import { Loader2, Moon, Save } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage, TONE } from "../release/format";
@@ -24,13 +25,6 @@ export const DEFAULT_OFFHOURS: StagingOffhours = {
   timezone: "Europe/Paris",
 };
 
-const STATE_LABEL: Record<StagingStatus["state"], string> = {
-  provisioning: "Création en cours",
-  ready: "Actif",
-  failed: "En échec",
-  removing: "Suppression en cours",
-};
-
 function OffhoursFields({
   value,
   onChange,
@@ -40,15 +34,13 @@ function OffhoursFields({
   onChange: (next: StagingOffhours) => void;
   disabled: boolean;
 }) {
+  const t = useTranslations("environments");
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Label htmlFor="staging-offhours">Mettre staging en veille hors des heures ouvrées</Label>
-          <p className="text-xs text-muted-foreground">
-            Offhours-guard endort les pods de staging, jamais ceux de la prod. La base reste
-            allumée. Une release candidate ou un test réveille staging le temps de tourner.
-          </p>
+          <Label htmlFor="staging-offhours">{t("offhours.label")}</Label>
+          <p className="text-xs text-muted-foreground">{t("offhours.hint")}</p>
         </div>
         <Switch
           id="staging-offhours"
@@ -60,7 +52,7 @@ function OffhoursFields({
       {value.enabled && (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1">
-            <Label htmlFor="staging-sleep">Mise en veille (cron)</Label>
+            <Label htmlFor="staging-sleep">{t("offhours.sleepCron")}</Label>
             <Input
               id="staging-sleep"
               className="font-mono"
@@ -70,7 +62,7 @@ function OffhoursFields({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="staging-wake">Réveil (cron)</Label>
+            <Label htmlFor="staging-wake">{t("offhours.wakeCron")}</Label>
             <Input
               id="staging-wake"
               className="font-mono"
@@ -80,7 +72,7 @@ function OffhoursFields({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="staging-tz">Fuseau</Label>
+            <Label htmlFor="staging-tz">{t("offhours.timezone")}</Label>
             <Input
               id="staging-tz"
               value={value.timezone}
@@ -105,6 +97,7 @@ export function StagingSettingsCard({
   canAdminister: boolean;
   onChanged: () => void;
 }) {
+  const t = useTranslations("environments");
   const [offhours, setOffhours] = useState<StagingOffhours>(DEFAULT_OFFHOURS);
   const [busy, setBusy] = useState(false);
   const [confirmOff, setConfirmOff] = useState(false);
@@ -135,29 +128,28 @@ export function StagingSettingsCard({
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Environnement staging</CardTitle>
+          <CardTitle className="text-base">{t("staging.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           {staging?.state === "failed" && (
             <p className={`rounded-md border px-3 py-2 ${TONE.bad}`}>{staging.detail}</p>
           )}
           <p className="text-muted-foreground">
-            Avec staging, un tag <code className="font-mono">vX.Y.Z-rc.N</code> déploie la version
-            en staging seulement. La prod ne change plus que par une promotion depuis cet onglet,
-            qui envoie exactement l&apos;image testée. Staging double à peu près la mémoire de
-            l&apos;app en journée : gardez-le pour les apps qui en ont l&apos;usage.
+            {t.rich("staging.intro", {
+              code: (chunks) => <code className="font-mono">{chunks}</code>,
+            })}
           </p>
           <OffhoursFields value={offhours} onChange={setOffhours} disabled={!canAdminister || busy} />
           {canAdminister ? (
             <Button
-              onClick={() => act(() => enableStaging(deploymentId, offhours), "Création de staging lancée")}
+              onClick={() => act(() => enableStaging(deploymentId, offhours), t("staging.enableStarted"))}
               disabled={busy}
             >
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Activer staging
+              {t("staging.enable")}
             </Button>
           ) : (
-            <p className="text-xs text-muted-foreground">Seul un admin du projet peut activer staging.</p>
+            <p className="text-xs text-muted-foreground">{t("staging.adminOnly")}</p>
           )}
         </CardContent>
       </Card>
@@ -169,7 +161,7 @@ export function StagingSettingsCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Moon className="h-4 w-4 text-muted-foreground" />
-          Staging · {STATE_LABEL[staging.state]}
+          {t("staging.titleWithState", { state: t(`stagingState.${staging.state}`) })}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
@@ -182,24 +174,24 @@ export function StagingSettingsCard({
                 <Button
                   variant="outline"
                   onClick={() =>
-                    act(() => updateStagingOffhours(deploymentId, offhours), "Veille de staging enregistrée")
+                    act(() => updateStagingOffhours(deploymentId, offhours), t("staging.scheduleSaved"))
                   }
                   disabled={busy}
                 >
                   <Save className="mr-2 h-4 w-4" />
-                  Enregistrer la veille
+                  {t("staging.saveSchedule")}
                 </Button>
                 {confirmOff ? (
                   <Button
                     variant="destructive"
-                    onClick={() => act(() => disableStaging(deploymentId), "Suppression de staging lancée")}
+                    onClick={() => act(() => disableStaging(deploymentId), t("staging.deleteStarted"))}
                     disabled={busy}
                   >
-                    Confirmer : supprimer staging et sa base
+                    {t("staging.confirmDelete")}
                   </Button>
                 ) : (
                   <Button variant="ghost" onClick={() => setConfirmOff(true)} disabled={busy}>
-                    Désactiver staging
+                    {t("staging.disable")}
                   </Button>
                 )}
               </div>
