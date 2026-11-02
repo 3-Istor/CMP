@@ -21,7 +21,7 @@ import { toast } from "sonner";
 interface CloudOption {
     value: TargetCloud;
     label: string;
-    /** Why you'd pick this cloud, shown even while it's disabled — the point
+    /** Why you'd pick this cloud, shown even while it's disabled, the point
      * is to let people plan ahead, not just to fill space. */
     advantages: string[];
     available: boolean;
@@ -34,7 +34,7 @@ const CLOUDS: CloudOption[] = [
         advantages: [
             "No data egress cost",
             "Full infrastructure control",
-            "Already live — zero setup wait",
+            "Already live, zero setup wait",
         ],
         available: true,
     },
@@ -128,7 +128,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                     <DialogDescription>
                         A project groups your Kubernetes applications under a shared
                         Keycloak team, Vault policy, and ArgoCD AppProject. Bootstrap runs
-                        in the background — it takes ~30 seconds.
+                        in the background. It takes ~30 seconds.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -222,9 +222,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                             AWS and GCP need a cluster registered by the infra team before
                             they can be selected.{" "}
                             <span className="text-foreground">
-                                This cannot be changed later
+                                This cannot be changed later.
                             </span>{" "}
-                            — moving a project means re-creating it.
+                            Moving a project means re-creating it.
                         </p>
                     </div>
 

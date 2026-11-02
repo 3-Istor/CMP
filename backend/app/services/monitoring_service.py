@@ -23,7 +23,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Exceptions that just mean "OpenStack isn't reachable right now" — VPN down or
+# Exceptions that just mean "OpenStack isn't reachable right now", VPN down or
 # the Keystone endpoint offline. These are expected operational states, not code
 # errors, so we log them concisely (no stack trace) and report status unknown.
 OPENSTACK_UNREACHABLE = (

@@ -24,9 +24,9 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "CNP — Ship to hybrid cloud in a few clicks",
+  title: "CNP: Ship to hybrid cloud in a few clicks",
   description:
-    "CNP is a self-service platform to deploy, secure and monitor your applications across OpenStack and AWS — no CLI, no Terraform, no IT ticket.",
+    "CNP is a self-service platform to deploy, secure and monitor your applications across OpenStack and AWS. No CLI, no Terraform, no IT ticket.",
 };
 
 const PLATFORM = "CNP";
@@ -44,17 +44,17 @@ const SERVICES = [
   {
     icon: MousePointerClick,
     title: "One-click deployments",
-    desc: "Push your project live in a single click. CNP provisions the infrastructure, wires the networking and rolls out your app — you just press Deploy.",
+    desc: "Push your project live in a single click. CNP provisions the infrastructure, wires the networking and rolls out your app. You just press Deploy.",
   },
   {
     icon: LayoutTemplate,
     title: "Ready-made templates",
-    desc: "Start from a curated template (FastAPI · Python, static HTML/CSS) or bring your own — import any existing Git repository and we take it from there.",
+    desc: "Start from a curated template (FastAPI · Python, static HTML/CSS) or bring your own. Import any existing Git repository and we take it from there.",
   },
   {
     icon: KeyRound,
     title: "Secret management",
-    desc: "Store API keys, tokens and credentials in a vault-backed store. Secrets are encrypted, scoped to your project and injected at runtime — never in your code.",
+    desc: "Store API keys, tokens and credentials in a vault-backed store. Secrets are encrypted, scoped to your project and injected at runtime, never in your code.",
   },
   {
     icon: Users,
@@ -64,7 +64,7 @@ const SERVICES = [
   {
     icon: Eye,
     title: "Apps visible in-platform",
-    desc: "Every deployed app gets a live entry on CNP — open it, share it and reach your running service directly from the dashboard.",
+    desc: "Every deployed app gets a live entry on CNP: open it, share it and reach your running service directly from the dashboard.",
   },
   {
     icon: Activity,
@@ -74,7 +74,7 @@ const SERVICES = [
   {
     icon: DollarSign,
     title: "Built-in FinOps",
-    desc: "Track the cost of each deployment in real time, spot the expensive ones and keep your cloud bill under control — no spreadsheets required.",
+    desc: "Track the cost of each deployment in real time, spot the expensive ones and keep your cloud bill under control, no spreadsheets required.",
   },
   {
     icon: Fingerprint,
@@ -88,7 +88,7 @@ const BENEFITS = [
   {
     icon: ListChecks,
     title: "See every deployment step live",
-    desc: "Watch each stage of your deployment unfold in real time — provisioning, build, rollout — with full transparency instead of a black box.",
+    desc: "Watch each stage of your deployment unfold in real time, provisioning, build, rollout, with full transparency instead of a black box.",
   },
   {
     icon: SlidersHorizontal,
@@ -108,7 +108,7 @@ const BENEFITS = [
   {
     icon: FileText,
     title: "Documentation, automatically",
-    desc: "CNP generates documentation straight onto the repository of every deployed application — your project stays documented without the busywork.",
+    desc: "CNP generates documentation straight onto the repository of every deployed application. Your project stays documented without the busywork.",
   },
 ];
 
@@ -174,7 +174,7 @@ export default async function WelcomePage({
 
             <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground sm:text-lg">
               {PLATFORM} lets your team deploy, secure and monitor full
-              application stacks across a hybrid cloud — no CLI, no Terraform
+              application stacks across a hybrid cloud. No CLI, no Terraform
               knowledge, no IT ticket. From Git repo to a running, monitored app
               in under two minutes.
             </p>
@@ -185,7 +185,7 @@ export default async function WelcomePage({
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-7 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/85 sm:w-auto"
               >
                 <Rocket className="h-4 w-4" />
-                Get started — log in
+                Get started: log in
               </Link>
               <Link
                 href="/connect-ai"
@@ -210,7 +210,7 @@ export default async function WelcomePage({
               Everything you need to ship
             </h2>
             <p className="mt-4 text-muted-foreground">
-              One platform that covers the whole journey — from your first
+              One platform that covers the whole journey, from your first
               deploy to running apps in production, with the cost and access
               controls to keep them healthy.
             </p>
@@ -249,7 +249,7 @@ export default async function WelcomePage({
                 </h2>
                 <p className="mt-4 text-muted-foreground">
                   {PLATFORM} removes the friction between your code and the
-                  cloud, so your team spends its energy on the product — not on
+                  cloud, so your team spends its energy on the product, not on
                   infrastructure.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">

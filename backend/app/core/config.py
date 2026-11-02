@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "CMP API"
     DEBUG: bool = True
 
-    # FinOps — comma-separated Keycloak usernames granted the global
+    # FinOps, comma-separated Keycloak usernames granted the global
     # "Admin CNP" role (visibility over every project's costs).
     FINOPS_ADMIN_USERS: str = ""
     # Usernames granted the finance role (read and export every project's
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
 
-    # Project registry — the Git source of truth for project placement (D-01)
+    # Project registry, the Git source of truth for project placement (D-01)
     CNP_REGISTRY_REPO: str = "3-Istor/cnp-projects"
     CNP_REGISTRY_BRANCH: str = "main"
     CNP_REGISTRY_PATH_PREFIX: str = "registry/projects"
@@ -154,7 +154,7 @@ class Settings(BaseSettings):
 
     # GitHub App Integration (for Kubernetes GitOps provisioning)
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
-    # Installation ID of the GitHub App on the 3-Istor org — used to mint
+    # Installation ID of the GitHub App on the 3-Istor org, used to mint
     # installation tokens for org-level Terraform operations (e.g. project bootstrap)
     GITHUB_INSTALLATION_ID: str = ""
 

@@ -1,5 +1,5 @@
 """
-Cost engine — turns application quotas + simulated usage into euro figures.
+Cost engine, turns application quotas + simulated usage into euro figures.
 
 Pure and deterministic: it never touches the network, so it always works (no
 cluster / GitHub dependency) and history over any date range is computed on the

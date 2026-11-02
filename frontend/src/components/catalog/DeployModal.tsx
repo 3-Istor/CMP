@@ -1,4 +1,5 @@
 "use client";
+import { TemplateIcon } from "./TemplateIcon";
 
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -27,7 +28,7 @@ function validateAppName(name: string): string | null {
   if (!name) return null; // empty handled by the required/disabled state
   if (name.length > 45) return "Name must be 45 characters or less.";
   if (!/^[a-zA-Z0-9_-]+$/.test(name))
-    return "Only letters, numbers, underscores (_) and hyphens (-) are allowed — no spaces or other characters.";
+    return "Only letters, numbers, underscores (_) and hyphens (-) are allowed, no spaces or other characters.";
   return null;
 }
 
@@ -131,7 +132,7 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-6 py-5">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">{template.icon}</span>
+                <TemplateIcon icon={template.icon} />
                 <div>
                   <h2 className="text-base font-semibold">
                     Deploy {template.name}

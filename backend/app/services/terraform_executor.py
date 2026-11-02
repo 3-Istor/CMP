@@ -209,7 +209,7 @@ class TerraformExecutor:
 
         # If streaming is requested, log output in real-time
         if stream_output:
-            self._log_message("📺 Streaming Terraform output in real-time...")
+            self._log_message("Streaming Terraform output in real-time...")
             import time
 
             env["TF_IN_AUTOMATION"] = (
@@ -229,7 +229,7 @@ class TerraformExecutor:
             stdout_lines = []
             start_time = time.time()
 
-            self._log_message("⏱️  Waiting for Terraform output...")
+            self._log_message("Waiting for Terraform output...")
 
             # Read with timeout detection
             import selectors
@@ -267,7 +267,7 @@ class TerraformExecutor:
                             int(elapsed) % 10 == 0 and int(elapsed) > 0
                         ):  # Every 10 seconds
                             self._log_message(
-                                f"⏱️  Still waiting for Terraform... ({int(elapsed)}s elapsed)"
+                                f"Still waiting for Terraform... ({int(elapsed)}s elapsed)"
                             )
             finally:
                 sel.close()
@@ -275,13 +275,13 @@ class TerraformExecutor:
             stdout_output = "\n".join(stdout_lines)
             elapsed_time = time.time() - start_time
             self._log_message(
-                f"⏱️  Terraform command completed in {elapsed_time:.1f}s"
+                f"Terraform command completed in {elapsed_time:.1f}s"
             )
 
             if process.returncode != 0:
                 raise_if_state_locked(stdout_output)
                 self._log_message(
-                    f"❌ Command failed with exit code {process.returncode}",
+                    f"Command failed with exit code {process.returncode}",
                     logging.ERROR,
                 )
                 self._log_message(
@@ -442,7 +442,7 @@ provider "openstack" {{
                 )
 
             logger.info(
-                "📦 Using S3 backend: s3://%s/%s",
+                "Using S3 backend: s3://%s/%s",
                 settings.TF_BACKEND_S3_BUCKET,
                 s3_key,
             )
@@ -487,7 +487,7 @@ provider "openstack" {{
             var_args.extend(["-var", f"{key}={value}"])
 
         # Apply with auto-approve and stream output
-        logger.info("🚀 Starting terraform apply (streaming output)...")
+        logger.info("Starting terraform apply (streaming output)...")
         self._run_command(
             [
                 "terraform",
@@ -499,7 +499,7 @@ provider "openstack" {{
             ],
             stream_output=True,  # Enable real-time logging
         )
-        logger.info("✅ Terraform apply completed successfully")
+        logger.info("Terraform apply completed successfully")
 
         # Get outputs
         return self.get_outputs()
@@ -532,7 +532,7 @@ provider "openstack" {{
             # The subprocess handles shell escaping automatically
             var_args.extend(["-var", f"{key}={value}"])
 
-        logger.info("🗑️  Starting terraform destroy (streaming output)...")
+        logger.info("Starting terraform destroy (streaming output)...")
         self._run_command(
             [
                 "terraform",
@@ -544,7 +544,7 @@ provider "openstack" {{
             ],
             stream_output=True,  # Enable real-time logging
         )
-        logger.info("✅ Terraform destroy completed successfully")
+        logger.info("Terraform destroy completed successfully")
 
     def get_state_summary(self) -> dict[str, Any]:
         """Get a summary of the current Terraform state."""

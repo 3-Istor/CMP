@@ -1,5 +1,6 @@
 "use client";
 
+import { CloudLightning } from "lucide-react";
 import { deleteDeployment } from "@/lib/api";
 import { useDeploymentsList, useProjects } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
@@ -61,7 +62,7 @@ export function Dashboard() {
   if (visible.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-        <span className="text-5xl mb-4">🌩️</span>
+        <CloudLightning className="h-12 w-12 mb-4 text-muted-foreground" />
         <p className="text-lg font-medium">No deployments yet</p>
         <p className="text-sm">
           Deploy an app from the catalog to get started.
