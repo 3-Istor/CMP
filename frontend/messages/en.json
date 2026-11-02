@@ -1518,5 +1518,61 @@
     "grafana_org": "Grafana",
     "github_repo": "GitHub repository",
     "github_actions": "GitHub Actions"
+  },
+  "health": {
+    "title": "Health",
+    "overall": "Overall status",
+    "refresh": "Refresh",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "fetchFailed": "Failed to fetch health data",
+    "noComponents": "No components found",
+    "states": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Down",
+      "asleep": "Asleep",
+      "not_connected": "Not connected",
+      "unknown": "Unknown"
+    },
+    "summary": {
+      "healthy": "All components operational",
+      "degraded": "A component is degraded",
+      "down": "A component has no ready replica",
+      "asleep": "Outside service hours",
+      "not_connected": "The cluster is unreachable",
+      "unknown": "Unable to determine the state"
+    },
+    "reasons": {
+      "crashloop": "The container keeps crashing",
+      "no_ready_replica": "No ready replica",
+      "rollout_slow": "Replicas not ready for over 5 minutes",
+      "restarts": "Repeated restarts in 15 minutes",
+      "sleeping": "Offhours schedule active",
+      "cluster_unreachable": "Cluster unreachable",
+      "scaled_to_zero": "No replica requested",
+      "no_workload": "No workload found"
+    },
+    "components": {
+      "frontend": "Frontend",
+      "backend": "Backend",
+      "app": "Application"
+    },
+    "replicas": "Replicas",
+    "restarts": "Restarts (15 min)",
+    "argocd": "Argo CD",
+    "argocdUnknown": "Argo CD unavailable",
+    "legacy": {
+      "aws": "AWS frontend layer",
+      "openstack": "OpenStack layer",
+      "asgName": "ASG name",
+      "desired": "Desired capacity",
+      "health": "Health",
+      "healthyOf": "{healthy} / {total} healthy",
+      "instances": "Instances ({count})",
+      "servers": "Servers ({count})",
+      "noInstances": "No instances found",
+      "noServers": "No servers found"
+    }
   }
 }

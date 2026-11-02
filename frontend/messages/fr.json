@@ -1518,5 +1518,61 @@
     "grafana_org": "Grafana",
     "github_repo": "Dépôt GitHub",
     "github_actions": "GitHub Actions"
+  },
+  "health": {
+    "title": "Santé",
+    "overall": "État global",
+    "refresh": "Actualiser",
+    "expand": "Déplier",
+    "collapse": "Replier",
+    "fetchFailed": "Impossible de récupérer la santé",
+    "noComponents": "Aucun composant trouvé",
+    "states": {
+      "healthy": "Sain",
+      "degraded": "Dégradé",
+      "down": "Arrêté",
+      "asleep": "Endormie",
+      "not_connected": "Non connecté",
+      "unknown": "Inconnu"
+    },
+    "summary": {
+      "healthy": "Tous les composants fonctionnent",
+      "degraded": "Un composant est dégradé",
+      "down": "Un composant n'a aucun réplica prêt",
+      "asleep": "Hors des heures de service",
+      "not_connected": "Le cluster est injoignable",
+      "unknown": "État impossible à déterminer"
+    },
+    "reasons": {
+      "crashloop": "Le conteneur redémarre en boucle",
+      "no_ready_replica": "Aucun réplica prêt",
+      "rollout_slow": "Réplicas non prêts depuis plus de 5 minutes",
+      "restarts": "Redémarrages répétés en 15 minutes",
+      "sleeping": "Planification hors-heures active",
+      "cluster_unreachable": "Cluster injoignable",
+      "scaled_to_zero": "Aucun réplica demandé",
+      "no_workload": "Aucune charge de travail trouvée"
+    },
+    "components": {
+      "frontend": "Frontend",
+      "backend": "Backend",
+      "app": "Application"
+    },
+    "replicas": "Réplicas",
+    "restarts": "Redémarrages (15 min)",
+    "argocd": "Argo CD",
+    "argocdUnknown": "Argo CD indisponible",
+    "legacy": {
+      "aws": "Couche frontend AWS",
+      "openstack": "Couche OpenStack",
+      "asgName": "Nom de l'ASG",
+      "desired": "Capacité souhaitée",
+      "health": "Santé",
+      "healthyOf": "{healthy} / {total} sains",
+      "instances": "Instances ({count})",
+      "servers": "Serveurs ({count})",
+      "noInstances": "Aucune instance trouvée",
+      "noServers": "Aucun serveur trouvé"
+    }
   }
 }
