@@ -31,6 +31,7 @@ from app.routers import (
     power,
     projects,
     releases,
+    secrets_presence,
     security,
     security_alerts,
     security_databases,
@@ -386,6 +387,7 @@ app.include_router(finops_finance.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")
+app.include_router(secrets_presence.router, prefix="/api")
 
 
 internal_api.bind(app)

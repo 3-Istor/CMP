@@ -48,3 +48,36 @@ async def write_kv(mount: str, path: str, data: dict[str, Any]) -> None:
         raise VaultError(f"Vault unreachable: {exc}") from exc
     if response.status_code not in (200, 204):
         raise VaultError(f"Vault write failed ({response.status_code})")
+
+
+async def read_key_names(mount: str, path: str) -> list[str]:
+    """
+    The names of the keys of a secret, never its values.
+
+    KV v2 has no endpoint listing a secret's keys without its data, so the
+    response is read here and reduced to ``sorted(data.keys())`` before
+    anything leaves this function. Nothing from the response body is logged,
+    cached or put in an exception message.
+    """
+    names: list[str] | None = None
+    failure: str | None = None
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.get(
+                _url(mount, path),
+                headers={"X-Vault-Token": settings.VAULT_TOKEN},
+            )
+        if response.status_code == 404:
+            names = []
+        elif response.status_code != 200:
+            failure = f"Vault read failed ({response.status_code})"
+        else:
+            data = (response.json().get("data") or {}).get("data") or {}
+            names = sorted(str(key) for key in data.keys())
+    except httpx.HTTPError:
+        failure = "Vault unreachable"
+    except (ValueError, AttributeError, TypeError):
+        failure = "Vault answered with an unexpected response"
+    if names is None:
+        raise VaultError(failure or "Vault read failed")
+    return names
