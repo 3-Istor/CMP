@@ -24,6 +24,7 @@ export const ROLE_RANK: Record<ProjectRole, number> = {
 export type Capability =
   | "project.delete"
   | "app.deploy"
+  | "app.operate"
   | "app.delete"
   | "app.viewLogs"
   | "app.viewConfig"
@@ -50,6 +51,7 @@ export type Capability =
 const MIN_ROLE: Record<Capability, ProjectRole> = {
   "project.delete": "admin",
   "app.deploy": "admin",
+  "app.operate": "member",
   "app.delete": "admin",
   "app.viewLogs": "member",
   "app.viewConfig": "member",

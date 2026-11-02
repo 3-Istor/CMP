@@ -1576,5 +1576,92 @@
       "noInstances": "No instances found",
       "noServers": "No servers found"
     }
+  },
+  "actions": {
+    "tools": "Tools",
+    "toolsGroups": {
+      "view": "View",
+      "code": "Code",
+      "admin": "Admin"
+    },
+    "toolsEmpty": "No tools available",
+    "openApp": "Open application",
+    "more": "More actions",
+    "refresh": "Refresh",
+    "refreshed": "Data refreshed",
+    "sleep": "Sleep now",
+    "wake": "Wake",
+    "restart": "Restart",
+    "settings": "Settings",
+    "deleteApp": "Delete application…",
+    "newApp": "New app",
+    "deleteProject": "Delete project…",
+    "externalLink": "Opens in a new tab",
+    "reasons": {
+      "loading": "Reading the current state",
+      "noSchedule": "This application has no sleep schedule",
+      "unavailable": "The cluster does not allow this action right now",
+      "asleep": "Wake the application before restarting it",
+      "busy": "An operation is running on the application"
+    },
+    "toasts": {
+      "sleeping": "{name} is going to sleep",
+      "woken": "{name} is waking up",
+      "restarting": "{name} is restarting",
+      "deleting": "Deletion of {name} started",
+      "projectDeleting": "Deletion of project {name} started"
+    },
+    "errors": {
+      "loadTemplates": "Failed to load templates",
+      "deploy": "Deploy failed: {message}",
+      "deployStarted": "Deployment of {name} started",
+      "wake": "Wake failed: {message}",
+      "notAllowed": "Your role does not allow this action"
+    }
+  },
+  "confirm": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "pending": "Working…",
+    "typeToConfirm": "Type {name} to confirm",
+    "consequencesLabel": "What will be lost",
+    "failed": "Failed: {message}",
+    "sleep": {
+      "title": "Sleep {name} now?",
+      "description": "The application will be unavailable to all its users until it wakes up, manually or on schedule. Its data is not touched.",
+      "confirm": "Sleep"
+    },
+    "restart": {
+      "title": "Restart {name}?",
+      "description": "Pods are recreated progressively. Signed-in users may see errors or lose their session for a few seconds.",
+      "confirm": "Restart"
+    },
+    "deleteApp": {
+      "title": "Delete application {name}?",
+      "description": "This is permanent and cannot be undone. Every project member loses access to this application.",
+      "consequences": {
+        "resources": "Every deployed resource, destroyed with Terraform",
+        "data": "The application's data and configuration in the cluster",
+        "users": "Its users' access, immediately"
+      },
+      "confirm": "Delete application"
+    },
+    "deleteProject": {
+      "title": "Delete project {name}?",
+      "description": "This is permanent and cannot be undone. Every project member loses access.",
+      "consequences": {
+        "apps": "The project's applications (none remain at this point)",
+        "vault": "The project's Vault secrets",
+        "grafana": "The Grafana organization and its dashboards",
+        "keycloak": "The Keycloak groups (admins, members, guests)",
+        "argocd": "The Argo CD project (AppProject)"
+      },
+      "confirm": "Delete project"
+    },
+    "projectHasApps": {
+      "title": "Cannot delete {name}",
+      "description": "{count, plural, one {# application remains} other {# applications remain}} in this project. Delete them first, then come back.",
+      "open": "Open {name}"
+    }
   }
 }
