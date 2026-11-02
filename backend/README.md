@@ -45,12 +45,10 @@ backend/
 │   ├── core/           # Configuration, database
 │   ├── models/         # SQLAlchemy models
 │   ├── routers/        # FastAPI routes
-│   ├── services/       # Business logic
-│   │   ├── github_service.py      # GitHub App integration
-│   │   ├── saga_orchestrator.py   # Multi-provider orchestration
-│   │   └── monitoring_service.py  # Health monitoring
-│   └── terraform/      # Terraform modules
-│       └── github_bootstrap/      # Kubernetes Day-0 provisioning
+│   └── services/       # Business logic
+│       ├── github_service.py      # GitHub App integration
+│       ├── saga_orchestrator.py   # Multi-provider orchestration
+│       └── monitoring_service.py  # Health monitoring
 ├── alembic/            # Database migrations
 ├── data/               # Templates and static data
 └── tests/              # Unit tests

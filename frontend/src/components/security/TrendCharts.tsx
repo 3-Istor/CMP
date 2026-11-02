@@ -1,6 +1,7 @@
 "use client";
 
 import type { SecurityTrendPoint } from "@/types";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Bar,
   BarChart,
@@ -22,25 +23,27 @@ const TOOLTIP_STYLE = {
 };
 
 /** Monday of the week of an ISO day, as "12 oct.". */
-function weekLabel(day: string): string {
+function weekLabel(day: string, locale: string): string {
   const date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
-  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  return date.toLocaleDateString(locale, { day: "numeric", month: "short" });
 }
 
-function weekly(points: SecurityTrendPoint[]) {
+function weekly(points: SecurityTrendPoint[], locale: string) {
   const weeks = new Map<string, number>();
   for (const p of points) {
-    const key = weekLabel(p.day);
+    const key = weekLabel(p.day, locale);
     weeks.set(key, (weeks.get(key) ?? 0) + p.new_major);
   }
   return [...weeks.entries()].slice(-12).map(([week, count]) => ({ week, count }));
 }
 
 export function NewMajorChart({ points }: { points: SecurityTrendPoint[] }) {
-  const data = weekly(points);
+  const t = useTranslations("security.trend");
+  const locale = useLocale();
+  const data = weekly(points, locale);
   if (data.length === 0) {
-    return <p className="text-sm text-muted-foreground">Pas encore d&apos;historique.</p>;
+    return <p className="text-sm text-muted-foreground">{t("noHistory")}</p>;
   }
   return (
     <div className="h-40">
@@ -51,8 +54,8 @@ export function NewMajorChart({ points }: { points: SecurityTrendPoint[] }) {
           <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickLine={false} />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
-            formatter={(value) => [String(value), "Nouvelles failles majeures"]}
-            labelFormatter={(label) => `Semaine du ${label}`}
+            formatter={(value) => [String(value), t("newMajor")]}
+            labelFormatter={(label) => t("weekOf", { date: String(label) })}
           />
           <Bar dataKey="count" fill={TIER_META.important.color} radius={[3, 3, 0, 0]} />
         </BarChart>
@@ -62,11 +65,13 @@ export function NewMajorChart({ points }: { points: SecurityTrendPoint[] }) {
 }
 
 export function ScoreTrendChart({ points }: { points: SecurityTrendPoint[] }) {
+  const t = useTranslations("security.trend");
+  const locale = useLocale();
   if (points.length < 2) {
-    return <p className="text-sm text-muted-foreground">Pas encore d&apos;historique.</p>;
+    return <p className="text-sm text-muted-foreground">{t("noHistory")}</p>;
   }
   const data = points.map((p) => ({
-    day: new Date(`${p.day}T00:00:00Z`).toLocaleDateString("fr-FR", {
+    day: new Date(`${p.day}T00:00:00Z`).toLocaleDateString(locale, {
       day: "numeric",
       month: "short",
     }),
@@ -84,7 +89,7 @@ export function ScoreTrendChart({ points }: { points: SecurityTrendPoint[] }) {
             contentStyle={TOOLTIP_STYLE}
             formatter={(value, _name, item) => [
               `${value}/100 · ${item.payload.grade}`,
-              "Score",
+              t("score"),
             ]}
           />
           <Line

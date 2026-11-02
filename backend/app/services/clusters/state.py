@@ -169,3 +169,20 @@ async def ensure_cluster_up(cloud: TargetCloud) -> None:
         raise HTTPException(
             503, f"The {name} cluster state is unknown; retry later."
         )
+
+
+def pick_public_cloud(
+    states: dict[TargetCloud, str], last: TargetCloud | None
+) -> TargetCloud:
+    """Cloud for a new public project: an up one, not ``last`` if both are up; 409 if none is."""
+    up = [c for c in PUBLIC_CLOUDS if states.get(c) == "up"]
+    if not up:
+        seen = ", ".join(
+            f"{c.value.upper()}: {states.get(c)}" for c in PUBLIC_CLOUDS
+        )
+        raise HTTPException(
+            409,
+            f"No public cloud is up ({seen}); retry later or choose on-prem.",
+        )
+    # ponytail: alternation until OpenCost average total cost exists, then pick the cheapest up cloud.
+    return next((c for c in up if c != last), up[0])

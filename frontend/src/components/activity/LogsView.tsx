@@ -18,6 +18,7 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilterBar } from "./FilterBar";
 import { errorMessage } from "./labels";
@@ -71,8 +72,8 @@ function colourOf(stream: string): string {
   return PALETTE[Math.abs(hash) % PALETTE.length];
 }
 
-function clock(iso: string): string {
-  return new Date(iso).toLocaleTimeString("fr-FR", {
+function clock(iso: string, locale: string): string {
+  return new Date(iso).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -166,6 +167,8 @@ export function LogsView({
   const newest = useRef<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  const t = useTranslations("activity");
+  const locale = useLocale();
 
   useEffect(() => {
     getLogTargets(project).then(setTargets, (e) => setError(e));
@@ -308,11 +311,11 @@ export function LogsView({
           <>
             {!namespace && (
               <NativeSelect
-                aria-label="Namespace"
+                aria-label={t("logs.aria.namespace")}
                 value={filters.namespace ?? ""}
                 onChange={(v) => set({ namespace: v || null, pod: null })}
               >
-                <option value="">Tous les namespaces</option>
+                <option value="">{t("logs.allNamespaces")}</option>
                 {targets?.namespaces.map((n) => (
                   <option key={n} value={n}>
                     {n.replace(`${project}-`, "")}
@@ -321,11 +324,11 @@ export function LogsView({
               </NativeSelect>
             )}
             <NativeSelect
-              aria-label="Pod"
+              aria-label={t("logs.aria.pod")}
               value={filters.pod ?? ""}
               onChange={(v) => set({ pod: v || null })}
             >
-              <option value="">Tous les pods</option>
+              <option value="">{t("logs.allPods")}</option>
               {targets?.pods
                 .filter(
                   (p) => !filters.namespace || p.startsWith(filters.namespace),
@@ -337,11 +340,11 @@ export function LogsView({
                 ))}
             </NativeSelect>
             <NativeSelect
-              aria-label="Conteneur"
+              aria-label={t("logs.aria.container")}
               value={filters.container ?? ""}
               onChange={(v) => set({ container: v || null })}
             >
-              <option value="">Tous les conteneurs</option>
+              <option value="">{t("logs.allContainers")}</option>
               {targets?.containers.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -349,24 +352,24 @@ export function LogsView({
               ))}
             </NativeSelect>
             <NativeSelect
-              aria-label="Niveau"
+              aria-label={t("logs.aria.level")}
               value={filters.level ?? ""}
               onChange={(v) =>
                 set({ level: (v || null) as LogFilters["level"] })
               }
             >
-              <option value="">Tous les niveaux</option>
-              <option value="error">Erreurs</option>
-              <option value="warn">Avertissements</option>
+              <option value="">{t("logs.allLevels")}</option>
+              <option value="error">{t("logs.errors")}</option>
+              <option value="warn">{t("logs.warnings")}</option>
             </NativeSelect>
             <NativeSelect
-              aria-label="Période"
+              aria-label={t("logs.aria.period")}
               value={period}
               onChange={setPeriod}
             >
               {PERIODS.map((p) => (
                 <option key={p.value} value={p.value}>
-                  {p.label}
+                  {t(`periods.${p.value}`)}
                 </option>
               ))}
             </NativeSelect>
@@ -380,14 +383,14 @@ export function LogsView({
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Rechercher…"
+                placeholder={t("logs.search")}
                 className="h-8 min-w-0 flex-1"
               />
               <Button
                 type="submit"
                 variant="ghost"
                 size="sm"
-                title="Rechercher"
+                title={t("logs.searchButton")}
               >
                 <Search className="h-4 w-4" />
               </Button>
@@ -402,7 +405,7 @@ export function LogsView({
                 checked={wrap}
                 onChange={(e) => setWrap(e.target.checked)}
               />
-              Retour à la ligne
+              {t("logs.lineWrap")}
             </label>
             <label className="flex items-center gap-1.5">
               <input
@@ -410,10 +413,10 @@ export function LogsView({
                 checked={showTime}
                 onChange={(e) => setShowTime(e.target.checked)}
               />
-              Horodatage
+              {t("logs.timestamp")}
             </label>
             <span className="text-muted-foreground">
-              {shown.length} ligne{shown.length > 1 ? "s" : ""}
+              {t("logs.lineCount", { count: shown.length })}
             </span>
           </>
         }
@@ -424,7 +427,7 @@ export function LogsView({
               size="sm"
               onClick={load}
               disabled={loading}
-              title="Rafraîchir"
+              title={t("common.refresh")}
             >
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             </Button>
@@ -432,7 +435,7 @@ export function LogsView({
               variant="ghost"
               size="sm"
               onClick={download}
-              title="Télécharger les lignes affichées"
+              title={t("logs.download")}
             >
               <Download className="h-4 w-4" />
             </Button>
@@ -441,7 +444,7 @@ export function LogsView({
                 href={`/projects/${project}/logs`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Ouvrir dans un nouvel onglet"
+                title={t("logs.openNewTab")}
                 className="inline-flex h-8 items-center rounded-md px-2.5 hover:bg-muted"
               >
                 <ExternalLink className="h-4 w-4" />
@@ -452,7 +455,7 @@ export function LogsView({
               size="sm"
               onClick={() => setFullscreen((v) => !v)}
               title={
-                fullscreen ? "Quitter le plein écran (Échap)" : "Plein écran"
+                fullscreen ? t("logs.exitFullscreen") : t("logs.fullscreen")
               }
             >
               {fullscreen ? (
@@ -471,7 +474,7 @@ export function LogsView({
               ) : (
                 <Play className="mr-1.5 h-4 w-4" />
               )}
-              {live ? "En direct" : "Suivre"}
+              {t(live ? "logs.live" : "logs.follow")}
             </Button>
           </>
         }
@@ -487,7 +490,7 @@ export function LogsView({
               key={s}
               type="button"
               onClick={() => toggleStream(s)}
-              title={hidden.has(s) ? "Afficher ce flux" : "Masquer ce flux"}
+              title={t(hidden.has(s) ? "logs.showStream" : "logs.hideStream")}
               className={cn(
                 "rounded-full border px-2.5 py-0.5 font-mono text-xs transition-opacity",
                 colourOf(s),
@@ -511,12 +514,9 @@ export function LogsView({
 
       {context && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-          <span>
-            Contexte : une minute avant et après la ligne choisie, même
-            conteneur.
-          </span>
+          <span>{t("logs.contextBanner")}</span>
           <Button variant="ghost" size="sm" onClick={() => setContext(null)}>
-            Retour aux résultats
+            {t("logs.backToResults")}
           </Button>
         </div>
       )}
@@ -534,11 +534,9 @@ export function LogsView({
         )}
       >
         {source === null ? (
-          <p className="p-4 text-muted-foreground">Chargement…</p>
+          <p className="p-4 text-muted-foreground">{t("common.loading")}</p>
         ) : shown.length === 0 ? (
-          <p className="p-4 text-muted-foreground">
-            Aucune ligne pour ces filtres.
-          </p>
+          <p className="p-4 text-muted-foreground">{t("logs.noLines")}</p>
         ) : (
           shown.map((l, i) => {
             const s = streamOf(l, project);
@@ -550,7 +548,7 @@ export function LogsView({
               <div
                 key={key(l)}
                 onClick={() => !context && showContext(l)}
-                title={context ? undefined : "Voir le contexte"}
+                title={context ? undefined : t("logs.showContext")}
                 className={cn(
                   "flex cursor-pointer gap-3 border-l-2 border-transparent px-3 hover:bg-muted/60",
                   first && i > 0 && "mt-1 border-t border-t-border/70 pt-1",
@@ -561,7 +559,7 @@ export function LogsView({
               >
                 {showTime && (
                   <span className="shrink-0 text-muted-foreground">
-                    {clock(l.time)}
+                    {clock(l.time, locale)}
                   </span>
                 )}
                 <span

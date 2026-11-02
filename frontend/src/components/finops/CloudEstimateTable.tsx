@@ -1,7 +1,8 @@
 "use client";
 
 import type { FinopsCloud, FinopsCloudEstimate } from "@/types";
-import { CLOUDS, CLOUD_META, formatEUR } from "./format";
+import { useLocale, useTranslations } from "next-intl";
+import { CLOUDS, CLOUD_META, formatEUR, intlLocale } from "./format";
 
 function cheapest(row: FinopsCloudEstimate): FinopsCloud | null {
   let best: FinopsCloud | null = null;
@@ -19,10 +20,13 @@ export function CloudEstimateTable({
 }: {
   rows: FinopsCloudEstimate[];
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
+
   if (rows.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        Pas encore assez de mesures pour estimer les applications.
+        {t("cloudEstimate.empty")}
       </p>
     );
   }
@@ -33,14 +37,16 @@ export function CloudEstimateTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 font-medium">Application</th>
-              <th className="px-3 py-2 font-medium">Mesurée sur</th>
+              <th className="px-3 py-2 font-medium">{t("common.application")}</th>
+              <th className="px-3 py-2 font-medium">
+                {t("cloudEstimate.measuredOn")}
+              </th>
               <th className="px-3 py-2 text-right font-medium">
-                CPU / RAM moyens
+                {t("cloudEstimate.averageCpuRam")}
               </th>
               {CLOUDS.map((cloud) => (
                 <th key={cloud} className="px-3 py-2 text-right font-medium">
-                  {CLOUD_META[cloud].label} / mois
+                  {CLOUD_META[cloud].label} {t("common.perMonth")}
                 </th>
               ))}
             </tr>
@@ -53,7 +59,7 @@ export function CloudEstimateTable({
                   <td className="px-3 py-2">
                     <div className="font-medium">{row.app_name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {row.project_id ?? "—"}
+                      {row.project_id ?? t("common.na")}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-xs">
@@ -62,8 +68,10 @@ export function CloudEstimateTable({
                       .join(", ")}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
-                    {row.avg_cores.toFixed(2)} cœur ·{" "}
-                    {row.avg_ram_gib.toFixed(2)} Gio
+                    {t("cloudEstimate.cpuRam", {
+                      cores: row.avg_cores.toFixed(2),
+                      ram: row.avg_ram_gib.toFixed(2),
+                    })}
                   </td>
                   {CLOUDS.map((cloud) => {
                     const value = row.monthly_eur[cloud];
@@ -75,13 +83,13 @@ export function CloudEstimateTable({
                         }`}
                         title={
                           row.estimated[cloud]
-                            ? "Prix à confirmer : valeur provisoire"
+                            ? t("cloudEstimate.provisional")
                             : undefined
                         }
                       >
                         {value === undefined
-                          ? "—"
-                          : `${formatEUR(value, "EUR")}${
+                          ? t("common.na")
+                          : `${formatEUR(value, "EUR", locale)}${
                               row.estimated[cloud] ? " *" : ""
                             }`}
                       </td>
@@ -94,9 +102,7 @@ export function CloudEstimateTable({
         </table>
       </div>
       <p className="text-xs text-muted-foreground">
-        CPU et mémoire moyens des 30 derniers jours, au prix de chaque cible
-        (TCO on-prem, prix catalogue des nœuds EKS et GKE). Hors stockage,
-        réseau et forfait plateforme. * prix provisoire.
+        {t("cloudEstimate.footnote")}
       </p>
     </div>
   );

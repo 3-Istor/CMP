@@ -3,6 +3,7 @@ import * as React from "react";
 
 interface DropdownMenuProps {
   children: React.ReactNode;
+  className?: string;
 }
 
 interface DropdownMenuTriggerProps {
@@ -13,11 +14,13 @@ interface DropdownMenuTriggerProps {
 interface DropdownMenuContentProps {
   children: React.ReactNode;
   align?: "start" | "center" | "end";
+  side?: "bottom" | "top";
   className?: string;
 }
 
 interface DropdownMenuItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
+  asChild?: boolean;
 }
 
 const DropdownMenuContext = React.createContext<{
@@ -28,12 +31,12 @@ const DropdownMenuContext = React.createContext<{
   setOpen: () => {},
 });
 
-function DropdownMenu({ children }: DropdownMenuProps) {
+function DropdownMenu({ children, className }: DropdownMenuProps) {
   const [open, setOpen] = React.useState(false);
 
   return (
     <DropdownMenuContext.Provider value={{ open, setOpen }}>
-      <div className="relative inline-block">{children}</div>
+      <div className={cn("relative inline-block", className)}>{children}</div>
     </DropdownMenuContext.Provider>
   );
 }
@@ -45,15 +48,22 @@ function DropdownMenuTrigger({ children, asChild }: DropdownMenuTriggerProps) {
 
   if (asChild && React.isValidElement(children)) {
     return React.cloneElement(
-      children as React.ReactElement<{ onClick?: () => void }>,
+      children as React.ReactElement<Record<string, unknown>>,
       {
         onClick: handleClick,
+        "aria-haspopup": "menu",
+        "aria-expanded": open,
       },
     );
   }
 
   return (
-    <button onClick={handleClick} type="button">
+    <button
+      onClick={handleClick}
+      type="button"
+      aria-haspopup="menu"
+      aria-expanded={open}
+    >
       {children}
     </button>
   );
@@ -62,6 +72,7 @@ function DropdownMenuTrigger({ children, asChild }: DropdownMenuTriggerProps) {
 function DropdownMenuContent({
   children,
   align = "end",
+  side = "bottom",
   className,
 }: DropdownMenuContentProps) {
   const { open, setOpen } = React.useContext(DropdownMenuContext);
@@ -74,12 +85,18 @@ function DropdownMenuContent({
       }
     };
 
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
     if (open) {
       document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEscape);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
     };
   }, [open, setOpen]);
 
@@ -94,8 +111,10 @@ function DropdownMenuContent({
   return (
     <div
       ref={ref}
+      role="menu"
       className={cn(
-        "absolute z-50 mt-2 min-w-[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+        "absolute z-50 min-w-[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+        side === "top" ? "bottom-full mb-2" : "mt-2",
         alignClass,
         className,
       )}
@@ -108,17 +127,40 @@ function DropdownMenuContent({
 function DropdownMenuItem({
   children,
   className,
+  asChild,
+  onClick,
   ...props
 }: DropdownMenuItemProps) {
   const { setOpen } = React.useContext(DropdownMenuContext);
+  const itemClass = cn(
+    "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+    className,
+  );
+
+  if (asChild && React.isValidElement(children)) {
+    const child = children as React.ReactElement<{
+      className?: string;
+      onClick?: React.MouseEventHandler;
+    }>;
+    return React.cloneElement(child, {
+      role: "menuitem",
+      className: cn(itemClass, child.props.className),
+      onClick: (event: React.MouseEvent) => {
+        child.props.onClick?.(event);
+        setOpen(false);
+      },
+    } as Record<string, unknown>);
+  }
 
   return (
     <button
-      className={cn(
-        "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
-        className,
-      )}
-      onClick={() => setOpen(false)}
+      type="button"
+      role="menuitem"
+      className={itemClass}
+      onClick={(event) => {
+        onClick?.(event);
+        setOpen(false);
+      }}
       {...props}
     >
       {children}
@@ -127,7 +169,7 @@ function DropdownMenuItem({
 }
 
 function DropdownMenuSeparator() {
-  return <div className="my-1 h-px bg-border" />;
+  return <div role="separator" className="my-1 h-px bg-border" />;
 }
 
 function DropdownMenuLabel({

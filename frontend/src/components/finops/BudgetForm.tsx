@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { putBudget } from "@/lib/api";
 import type { Budget } from "@/types";
 import { Loader2, Save } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -24,6 +25,7 @@ export function BudgetForm({
   canEdit: boolean;
   onSaved?: (b: Budget) => void;
 }) {
+  const t = useTranslations("finops");
   const [amount, setAmount] = useState(
     budget?.monthly_amount_eur ? String(budget.monthly_amount_eur) : "",
   );
@@ -38,11 +40,11 @@ export function BudgetForm({
     const warnNum = parseInt(warn, 10);
     const criticalNum = parseInt(critical, 10);
     if (isNaN(amountNum) || amountNum < 0) {
-      toast.error("Montant invalide.");
+      toast.error(t("budgetForm.invalidAmount"));
       return;
     }
     if (warnNum >= criticalNum) {
-      toast.error("Le seuil d'attention doit être inférieur au seuil critique.");
+      toast.error(t("budgetForm.thresholdOrder"));
       return;
     }
     setSaving(true);
@@ -52,13 +54,13 @@ export function BudgetForm({
         threshold_warn: warnNum,
         threshold_critical: criticalNum,
       });
-      toast.success("Budget enregistré.");
+      toast.success(t("budgetForm.saved"));
       onSaved?.(saved);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Échec de l'enregistrement";
+      const msg = err instanceof Error ? err.message : t("budgetForm.saveFailed");
       toast.error(
         msg.includes("403") || msg.toLowerCase().includes("owner")
-          ? "Seul le Project Owner peut modifier le budget."
+          ? t("budgetForm.ownerRequired")
           : msg,
       );
     } finally {
@@ -69,7 +71,7 @@ export function BudgetForm({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="budget-amount">Enveloppe mensuelle (EUR)</Label>
+        <Label htmlFor="budget-amount">{t("budgetForm.amountLabel")}</Label>
         <Input
           id="budget-amount"
           type="number"
@@ -78,12 +80,12 @@ export function BudgetForm({
           value={amount}
           disabled={!canEdit}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="ex : 500"
+          placeholder={t("budgetForm.amountPlaceholder")}
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="budget-warn">Seuil d&apos;attention (%)</Label>
+          <Label htmlFor="budget-warn">{t("budgetForm.warnLabel")}</Label>
           <Input
             id="budget-warn"
             type="number"
@@ -95,7 +97,7 @@ export function BudgetForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="budget-critical">Seuil critique (%)</Label>
+          <Label htmlFor="budget-critical">{t("budgetForm.criticalLabel")}</Label>
           <Input
             id="budget-critical"
             type="number"
@@ -115,12 +117,13 @@ export function BudgetForm({
           ) : (
             <Save className="mr-2 h-4 w-4" />
           )}
-          Enregistrer le budget
+          {t("budgetForm.save")}
         </Button>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Seul le <span className="font-medium">Project Owner</span> peut définir
-          le budget de ce projet.
+          {t.rich("budgetForm.ownerOnly", {
+            owner: (chunks) => <span className="font-medium">{chunks}</span>,
+          })}
         </p>
       )}
     </div>

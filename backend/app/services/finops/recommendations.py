@@ -1,5 +1,5 @@
 """
-Recommendation engine — spots over-provisioning from quota vs simulated usage.
+Recommendation engine, spots over-provisioning from quota vs simulated usage.
 
 All four spec typologies are covered: replica reduction, CPU/RAM rightsizing,
 prolonged inactivity, and oversized storage. Recommendations are **coherent and

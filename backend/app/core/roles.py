@@ -10,7 +10,7 @@ from :data:`GROUP_SUFFIX`: it is the ``projects.owner_username`` column, set
 once when the project is created and never moved, so there is no group to
 put anybody in.
 
-This module holds no imports beyond the stdlib on purpose — routers,
+This module holds no imports beyond the stdlib on purpose, routers,
 services and the authorization dependency all import it, and anything
 heavier here would close an import cycle.
 
@@ -39,7 +39,7 @@ _RANK: dict[ProjectRole, int] = {
 }
 
 
-# Keycloak group suffix per role. ``owner`` has none — see the module
+# Keycloak group suffix per role. ``owner`` has none, see the module
 # docstring.
 GROUP_SUFFIX: dict[ProjectRole, str] = {
     ProjectRole.ADMIN: "admins",

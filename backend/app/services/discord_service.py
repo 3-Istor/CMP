@@ -40,19 +40,15 @@ async def send_app_alert(
     # Determine color based on new state
     if new_state.lower() in ["healthy", "running"]:
         color = 0x00FF00  # Green
-        emoji = "✅"
     elif new_state.lower() in ["degraded"]:
         color = 0xFFA500  # Orange
-        emoji = "⚠️"
     elif new_state.lower() in ["down", "failed"]:
         color = 0xFF0000  # Red
-        emoji = "🔴"
     else:
         color = 0x808080  # Gray
-        emoji = "❓"
 
     embed = {
-        "title": f"{emoji} Application Health Alert",
+        "title": "Application Health Alert",
         "description": f"**{app_name}** health status changed",
         "color": color,
         "fields": [
@@ -114,12 +110,12 @@ async def send_budget_alert(
         return False
 
     if level == "critical":
-        color, emoji = 0xEF4444, "🔴"
+        color = 0xEF4444
     else:
-        color, emoji = 0xF59E0B, "🟡"
+        color = 0xF59E0B
 
     embed = {
-        "title": f"{emoji} Alerte budgétaire FinOps",
+        "title": "Alerte budgétaire FinOps",
         "description": (
             f"Le projet **{project_name}** a consommé "
             f"**{consumed_pct:.0f}%** de son budget mensuel."
@@ -165,8 +161,8 @@ async def send_finops_recommendation(
         return False
 
     embed = {
-        "title": "💡 Recommandation d'optimisation FinOps",
-        "description": (f"**{app_name}** ({project_name}) — {title}"),
+        "title": "Recommandation d'optimisation FinOps",
+        "description": f"**{app_name}** ({project_name}): {title}",
         "color": 0x3B82F6,
         "fields": [
             {
@@ -225,7 +221,7 @@ async def send_forecast_alert(
     """The month-end forecast of a project crosses its budget."""
     return await _post_finops_embed(
         {
-            "title": "🟠 Dépassement de budget prévu",
+            "title": "Dépassement de budget prévu",
             "description": (
                 f"Le projet **{project_name}** devrait dépasser son budget "
                 f"mensuel : dépassement prévu le **{overrun_date}**."
@@ -262,7 +258,7 @@ async def send_cost_anomaly(
     """An app cost far more on one day than over the previous two weeks."""
     return await _post_finops_embed(
         {
-            "title": "📈 Anomalie de coût FinOps",
+            "title": "Anomalie de coût FinOps",
             "description": (
                 f"**{app_name}** ({project_name}) a coûté "
                 f"**{cost_eur:.2f} €** le {day}, contre "
@@ -305,16 +301,13 @@ async def send_infra_alert(
 
     if new_state.lower() in healthy_states:
         color = 0x00FF00  # Green
-        emoji = "✅"
     elif new_state.lower() in unhealthy_states:
         color = 0xFF0000  # Red
-        emoji = "🔴"
     else:
         color = 0xFFA500  # Orange
-        emoji = "⚠️"
 
     embed = {
-        "title": f"{emoji} Infrastructure Alert",
+        "title": "Infrastructure Alert",
         "description": f"**{component_name}** ({component_type}) state changed",
         "color": color,
         "fields": [

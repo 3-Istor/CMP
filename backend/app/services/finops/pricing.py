@@ -1,5 +1,5 @@
 """
-FinOps pricing — the single knob for the whole simulation.
+FinOps pricing, the single knob for the whole simulation.
 
 Edit the constants below to change how much money the FinOps module reports.
 Everything else (timeline graph, breakdown donut, budgets, recommendations,

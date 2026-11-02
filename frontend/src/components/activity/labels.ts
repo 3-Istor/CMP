@@ -1,14 +1,16 @@
 import type { ActivityEvent, ActivitySource } from "@/types";
 
-export const SOURCE_META: Record<
-  ActivitySource,
-  { label: string; color: string }
-> = {
-  cmp: { label: "CMP", color: "#2563eb" },
-  kubernetes: { label: "kubectl", color: "#ea580c" },
-  vault: { label: "Vault", color: "#059669" },
-  keycloak: { label: "Keycloak", color: "#7c3aed" },
-  deployment: { label: "Déploiements", color: "#db2777" },
+export type Translate = (
+  key: string,
+  values?: Record<string, string | number>,
+) => string;
+
+export const SOURCE_META: Record<ActivitySource, { color: string }> = {
+  cmp: { color: "#2563eb" },
+  kubernetes: { color: "#ea580c" },
+  vault: { color: "#059669" },
+  keycloak: { color: "#7c3aed" },
+  deployment: { color: "#db2777" },
 };
 
 export const SOURCE_ORDER: ActivitySource[] = [
@@ -19,31 +21,77 @@ export const SOURCE_ORDER: ActivitySource[] = [
   "deployment",
 ];
 
-export const ACTION_GROUPS: { value: string; label: string }[] = [
-  { value: "project.", label: "Projet et membres" },
-  { value: "app.", label: "Applications" },
-  { value: "security.", label: "Sécurité" },
-  { value: "database.", label: "Bases de données" },
-  { value: "finops.", label: "FinOps" },
-  { value: "kubernetes.exec", label: "Shells dans un pod" },
-  { value: "vault.", label: "Secrets Vault" },
-  { value: "keycloak.login_error", label: "Échecs de connexion" },
-  { value: "deployment.", label: "Déploiements" },
+export const ACTION_GROUPS: { value: string; labelKey: string }[] = [
+  { value: "project.", labelKey: "groups.project" },
+  { value: "app.", labelKey: "groups.apps" },
+  { value: "security.", labelKey: "groups.security" },
+  { value: "database.", labelKey: "groups.databases" },
+  { value: "finops.", labelKey: "groups.finops" },
+  { value: "kubernetes.exec", labelKey: "groups.shells" },
+  { value: "vault.", labelKey: "groups.vault" },
+  { value: "keycloak.login_error", labelKey: "groups.logins" },
+  { value: "deployment.", labelKey: "groups.deployments" },
 ];
 
-const EXPOSURE: Record<string, string> = {
+const EXPOSURE_KEYS: Record<string, string> = {
   public: "public",
-  project_users: "utilisateurs du projet",
-  project_members: "membres du projet",
-  project_admins: "admins du projet",
-  custom: "personnalisée",
+  project_users: "projectUsers",
+  project_members: "projectMembers",
+  project_admins: "projectAdmins",
+  custom: "custom",
+};
+
+const K8S_VERB_KEYS: Record<string, string> = {
+  create: "create",
+  update: "update",
+  patch: "update",
+  delete: "delete",
+  get: "get",
+  list: "list",
+};
+
+const APP_ACTION_KEYS: Record<string, string> = {
+  "app.sleep": "appSleep",
+  "app.wake": "appWake",
+  "app.restart": "appRestart",
+  "app.icon.update": "iconUpdate",
+  "app.icon.reset": "iconReset",
+  "release.promote": "releasePromote",
+  "release.skip": "releaseSkip",
+  "release.abort": "releaseAbort",
+  "release.retry": "releaseRetry",
+  "release.settings.update": "releaseSettings",
+  "release.traffic.start": "trafficStart",
+  "release.traffic.stop": "trafficStop",
+};
+
+const PLAIN_ACTION_KEYS: Record<string, string> = {
+  "project.agents.update": "agentsUpdate",
+  "agent.connect": "agentConnect",
+  "agent.disconnect": "agentDisconnect",
+  "finops.month.close": "monthClose",
+  "finops.cost_centers.update": "costCenters",
+  "catalog.sync": "catalogSync",
 };
 
 function str(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
 }
 
-function configChanges(details: Record<string, unknown>): string {
+export function sourceLabel(t: Translate, source: string): string {
+  return source in SOURCE_META ? t(`sources.${source}`) : source;
+}
+
+function exposureLabel(t: Translate, value: string): string {
+  const key = EXPOSURE_KEYS[value];
+  return key ? t(`exposure.${key}`) : value;
+}
+
+function roleLabel(t: Translate, role: string): string {
+  return role === "admin" || role === "member" ? t(`roles.${role}`) : role;
+}
+
+function configChanges(t: Translate, details: Record<string, unknown>): string {
   const changes =
     (details.changes as { path: string; before: unknown; after: unknown }[]) ??
     [];
@@ -52,116 +100,126 @@ function configChanges(details: Record<string, unknown>): string {
     .slice(0, 2)
     .map((c) => `${c.path} ${str(c.before) || "∅"} → ${str(c.after)}`)
     .join(", ");
-  return changes.length > 2
-    ? ` (${shown}, +${changes.length - 2})`
-    : ` (${shown})`;
+  const list = changes.length > 2 ? `${shown}, +${changes.length - 2}` : shown;
+  return ` ${t("events.detail", { detail: list })}`;
 }
 
-function kubernetesWhat(e: ActivityEvent): string {
+function kubernetesWhat(t: Translate, e: ActivityEvent): string {
   const [resource, name, sub] = e.target.split("/");
   const verb = e.action.replace("kubernetes.", "");
-  if (sub === "exec") return `a ouvert un shell dans ${name}`;
-  if (sub === "attach") return `s'est attaché à ${name}`;
-  if (sub === "portforward") return `a ouvert un port-forward vers ${name}`;
+  if (sub === "exec") return t("events.k8sShell", { name: name ?? "" });
+  if (sub === "attach") return t("events.k8sAttach", { name: name ?? "" });
+  if (sub === "portforward")
+    return t("events.k8sPortForward", { name: name ?? "" });
   if (resource === "secrets" && (verb === "get" || verb === "list"))
-    return `a lu le secret ${name ?? ""}`.trim();
-  const verbs: Record<string, string> = {
-    create: "a créé",
-    update: "a modifié",
-    patch: "a modifié",
-    delete: "a supprimé",
-    get: "a lu",
-    list: "a listé",
-  };
-  return `${verbs[verb] ?? verb} ${resource}${name ? ` ${name}` : ""}`;
+    return t("events.k8sReadSecret", { name: name ?? "" }).trim();
+  const verbKey = K8S_VERB_KEYS[verb];
+  const verbText = verbKey ? t(`events.k8sVerbs.${verbKey}`) : verb;
+  return `${verbText} ${resource}${name ? ` ${name}` : ""}`;
 }
 
 /** The event as one sentence, without its author. */
-export function describe(e: ActivityEvent): string {
+export function describe(e: ActivityEvent, t: Translate): string {
   const d = e.details;
   const app = e.app ?? e.target;
+  const appKey = APP_ACTION_KEYS[e.action];
+  if (appKey) return t(`events.${appKey}`, { app });
+  const plainKey = PLAIN_ACTION_KEYS[e.action];
+  if (plainKey) return t(`events.${plainKey}`);
   switch (e.action) {
     case "project.create":
-      return `a créé le projet ${e.project ?? ""}`;
+      return t("events.projectCreate", { project: e.project ?? "" });
     case "project.delete":
-      return `a supprimé le projet ${e.project ?? ""}`;
+      return t("events.projectDelete", { project: e.project ?? "" });
     case "project.member.add":
-      return `a ajouté ${str(d.username) || e.target} au projet (${str(d.role) || "member"})`;
+      return t("events.memberAdd", {
+        user: str(d.username) || e.target,
+        role: roleLabel(t, str(d.role) || "member"),
+      });
     case "project.member.remove":
-      return `a retiré ${e.target} du projet`;
+      return t("events.memberRemove", { user: e.target });
     case "app.create":
-      return `a créé l'app ${app}`;
+      return t("events.appCreate", { app });
     case "app.delete":
-      return `a supprimé l'app ${app}`;
+      return t("events.appDelete", { app });
     case "app.config.update":
-      return `a modifié la config de ${app}${configChanges(d)}`;
+      return `${t("events.configUpdate", { app })}${configChanges(t, d)}`;
     case "app.exposure.update": {
-      const before = EXPOSURE[str(d.exposure_before)] ?? str(d.exposure_before);
-      const after = EXPOSURE[str(d.exposure)] ?? str(d.exposure);
+      const before = exposureLabel(t, str(d.exposure_before));
+      const after = exposureLabel(t, str(d.exposure));
       if (after)
-        return `a passé l'exposition de ${app} de ${before || "?"} à ${after}`;
-      return `a modifié les sauvegardes de ${app}`;
+        return t("events.exposureChange", {
+          app,
+          from: before || "?",
+          to: after,
+        });
+      return t("events.backupsChange", { app });
     }
     case "security.scan.request":
-      return `a lancé un scan de sécurité de ${app}`;
+      return t("events.scanRequest", { app });
     case "security.exception.request":
-      return `a demandé une exception de sécurité sur ${app}`;
+      return t("events.exceptionRequest", { app });
     case "security.exception.approve":
-      return `a approuvé une exception de sécurité`;
+      return t("events.exceptionApprove");
     case "security.exception.revoke":
-      return `a révoqué une exception de sécurité`;
+      return t("events.exceptionRevoke");
     case "security.settings.update":
-      return `a modifié les réglages de sécurité de ${app}`;
+      return t("events.settingsUpdate", { app });
     case "security.policy.update":
-      return `a modifié la politique de sécurité du projet`;
+      return t("events.policyUpdate");
     case "security.alerts.update":
-      return `a modifié la cible des alertes de sécurité`;
+      return t("events.alertsUpdate");
     case "security.alerts.test":
-      return `a testé les alertes de sécurité`;
+      return t("events.alertsTest");
     case "database.backup":
-      return `a lancé une sauvegarde de la base de ${app}`;
+      return t("events.databaseBackup", { app });
     case "database.restore":
-      return `a restauré la base de ${app}`;
+      return t("events.databaseRestore", { app });
     case "finops.budget.update":
-      return `a modifié le budget du projet`;
+      return t("events.budgetUpdate");
     case "finops.recommendation.apply":
-      return `a appliqué une recommandation FinOps`;
+      return t("events.recommendationApply");
     case "finops.recommendation.ignore":
-      return `a ignoré une recommandation FinOps`;
+      return t("events.recommendationIgnore");
     case "finops.recommendation.notify":
-      return `a notifié une recommandation FinOps`;
+      return t("events.recommendationNotify");
     case "alerting.update":
-      return `a ${d.enabled === false ? "désactivé" : "réglé"} une alerte du catalogue (${e.target})`;
+      return t(
+        d.enabled === false ? "events.alertDisabled" : "events.alertUpdated",
+        { target: e.target },
+      );
     case "deployment.sync":
-      return `a déployé ${e.target}`;
+      return t("events.deploymentSync", { target: e.target });
     case "keycloak.login":
-      return `s'est connecté (${e.target})`;
+      return t("events.login", { target: e.target });
     case "keycloak.login_error":
-      return `a échoué à se connecter${d.error ? ` (${str(d.error)})` : ""}`;
+      return d.error
+        ? `${t("events.loginFailed")} ${t("events.detail", { detail: str(d.error) })}`
+        : t("events.loginFailed");
     case "vault.read":
-      return `a lu le secret ${e.target}`;
+      return t("events.vaultRead", { target: e.target });
     case "vault.list":
-      return `a listé les secrets ${e.target}`;
+      return t("events.vaultList", { target: e.target });
     case "vault.create":
     case "vault.update":
-      return `a écrit le secret ${e.target}`;
+      return t("events.vaultWrite", { target: e.target });
     case "vault.delete":
-      return `a supprimé le secret ${e.target}`;
+      return t("events.vaultDelete", { target: e.target });
   }
-  if (e.source === "kubernetes") return kubernetesWhat(e);
+  if (e.source === "kubernetes") return kubernetesWhat(t, e);
   return `${e.action} ${e.target}`.trim();
 }
 
-export function timeLabel(iso: string): string {
+export function timeLabel(t: Translate, locale: string, iso: string): string {
   const when = new Date(iso);
   const today = new Date();
   const sameDay = when.toDateString() === today.toDateString();
-  const hm = when.toLocaleTimeString("fr-FR", {
+  const hm = when.toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
   });
-  if (sameDay) return `aujourd'hui ${hm}`;
-  return `${when.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} ${hm}`;
+  if (sameDay) return t("time.today", { time: hm });
+  return `${when.toLocaleDateString(locale, { day: "numeric", month: "short" })} ${hm}`;
 }
 
 export function errorMessage(e: unknown): string {

@@ -199,3 +199,24 @@ def test_a_failed_resync_keeps_the_refreshed_state():
     after = {AWS: "up", GCP: "up"}
     _refresh({}, after, side_effect=KubeUnavailableError("boom"))
     assert state._cache == after
+
+
+@pytest.mark.parametrize(
+    "states,last,expected",
+    [
+        ({AWS: "up", GCP: "up"}, AWS, GCP),  # alternates
+        ({AWS: "up", GCP: "up"}, GCP, AWS),
+        ({AWS: "up", GCP: "up"}, None, AWS),
+        ({AWS: "down", GCP: "up"}, GCP, GCP),  # only one up
+        ({AWS: "up", GCP: "starting"}, AWS, AWS),
+    ],
+)
+def test_pick_public_cloud_alternates_among_up_clouds(states, last, expected):
+    assert state.pick_public_cloud(states, last) == expected
+
+
+def test_pick_public_cloud_refuses_when_none_is_up():
+    with pytest.raises(HTTPException) as excinfo:
+        state.pick_public_cloud({AWS: "starting", GCP: "unknown"}, AWS)
+    assert excinfo.value.status_code == 409
+    assert "No public cloud is up" in excinfo.value.detail

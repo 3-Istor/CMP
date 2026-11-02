@@ -1,23 +1,21 @@
 "use client";
 
-import { UserNav } from "@/components/layout/UserNav";
+import { useTranslations } from "next-intl";
 
 export default function SecurityLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const t = useTranslations("security.layout");
   return (
     <div className="min-h-screen">
       <header className="border-b px-6 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-semibold">Sécurité</h1>
-            <p className="text-xs text-muted-foreground">
-              Ce qu&apos;il faut corriger dans tes apps, et comment.
-            </p>
+            <h1 className="text-lg font-semibold">{t("title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("subtitle")}</p>
           </div>
-          <UserNav />
         </div>
       </header>
 

@@ -13,7 +13,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, Any
+from typing import Annotated, Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -181,6 +181,12 @@ def _visible(event: ActivityEvent, role: str, me: set[str]) -> bool:
     return True
 
 
+class RowFilter(NamedTuple):
+    app: str | None = None
+    actor: str | None = None
+    action: str | None = None
+
+
 # ── Collection ───────────────────────────────────────────────────────────────
 
 
@@ -190,12 +196,19 @@ def _cmp_rows(
     since: datetime,
     until: datetime,
     limit: int,
+    scope: RowFilter,
 ) -> list[AuditEvent]:
     stmt = select(AuditEvent).where(
         AuditEvent.created_at >= since, AuditEvent.created_at < until
     )
     if project:
         stmt = stmt.where(AuditEvent.project == project)
+    if scope.app:
+        stmt = stmt.where(AuditEvent.app == scope.app)
+    if scope.actor:
+        stmt = stmt.where(AuditEvent.actor == scope.actor)
+    if scope.action:
+        stmt = stmt.where(AuditEvent.action.startswith(scope.action))
     stmt = stmt.order_by(AuditEvent.id.desc()).limit(limit)
     return list(db.scalars(stmt))
 
@@ -250,6 +263,7 @@ def _collected_rows(
     until: datetime,
     limit: int,
     include_reads: bool,
+    scope: RowFilter,
 ) -> list[ActivityRecord]:
     stmt = select(ActivityRecord).where(
         ActivityRecord.source.in_(wanted),
@@ -258,6 +272,12 @@ def _collected_rows(
     )
     if project:
         stmt = stmt.where(ActivityRecord.project == project)
+    if scope.app:
+        stmt = stmt.where(ActivityRecord.app == scope.app)
+    if scope.actor:
+        stmt = stmt.where(ActivityRecord.actor == scope.actor)
+    if scope.action:
+        stmt = stmt.where(ActivityRecord.action.startswith(scope.action))
     if not include_reads:
         stmt = stmt.where(ActivityRecord.is_read.is_(False))
     stmt = stmt.order_by(ActivityRecord.time.desc()).limit(limit)
@@ -272,16 +292,18 @@ async def _collect(
     until: datetime,
     limit: int,
     include_reads: bool,
+    scope: RowFilter | None = None,
 ) -> tuple[list[ActivityEvent], list[str]]:
     """The CMP journal and the collected sources, read from the database."""
+    scope = scope or RowFilter()
     events: list[ActivityEvent] = []
     if "cmp" in wanted:
-        rows = _cmp_rows(db, project, since, until, limit)
+        rows = _cmp_rows(db, project, since, until, limit, scope)
         events += [_from_row(r) for r in rows]
     collected = wanted - {"cmp"}
     if collected:
         records = _collected_rows(
-            db, project, collected, since, until, limit, include_reads
+            db, project, collected, since, until, limit, include_reads, scope
         )
         events += [_from_record(r) for r in records]
     return events, []
@@ -361,7 +383,14 @@ async def list_activity(
     role = await _role(token, project)
     start, end = _window(since, until)
     events, unavailable = await _collect(
-        db, project, _sources(source), start, end, limit, include_reads
+        db,
+        project,
+        _sources(source),
+        start,
+        end,
+        limit,
+        include_reads,
+        RowFilter(app, actor, action),
     )
     kept = _filter(events, role, token, actor, action, app, notable_only)
     return ActivityFeed(events=kept[:limit], unavailable=unavailable)
@@ -551,15 +580,18 @@ async def export_activity(
     format: Annotated[str, Query(pattern="^(csv|json)$")] = "csv",
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """The filtered feed as CSV or JSON. Project admins and up."""
+    """The filtered feed as CSV or JSON, limited to what the role may see."""
     role = await _role(token, project)
-    if role == "member":
-        raise HTTPException(
-            status_code=403, detail="Exporting is for project admins."
-        )
     start, end = _window(since, until)
     events, _ = await _collect(
-        db, project, _sources(source), start, end, 5000, include_reads
+        db,
+        project,
+        _sources(source),
+        start,
+        end,
+        5000,
+        include_reads,
+        RowFilter(app, actor, action),
     )
     kept = _filter(events, role, token, actor, action, app, notable_only)
     rows = [e.model_dump(mode="json") for e in kept]

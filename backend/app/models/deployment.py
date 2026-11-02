@@ -76,6 +76,14 @@ class Deployment(Base):
     template_name: Mapped[str | None] = mapped_column(String(100))
     template_icon: Mapped[str | None] = mapped_column(String(50))
     template_category: Mapped[str | None] = mapped_column(String(50))
+
+    # ── App icon: NULL kind means the template icon ───────────────────────
+    icon_kind: Mapped[str | None] = mapped_column(String(16))
+    icon_name: Mapped[str | None] = mapped_column(String(32))
+    icon_color: Mapped[str | None] = mapped_column(String(16))
+    icon_key: Mapped[str | None] = mapped_column(String(255))
+    icon_hash: Mapped[str | None] = mapped_column(String(64))
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()  # pylint: disable=not-callable
     )
@@ -84,3 +92,15 @@ class Deployment(Base):
         server_default=func.now(),  # pylint: disable=not-callable
         onupdate=func.now(),  # pylint: disable=not-callable
     )
+
+    @property
+    def icon(self) -> dict | None:
+        if self.icon_kind == "builtin":
+            return {
+                "kind": "builtin",
+                "name": self.icon_name,
+                "color": self.icon_color,
+            }
+        if self.icon_kind == "upload":
+            return {"kind": "upload", "hash": self.icon_hash}
+        return None

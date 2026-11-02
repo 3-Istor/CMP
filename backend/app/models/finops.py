@@ -27,7 +27,7 @@ from app.core.database import Base
 
 
 class ProjectBudget(Base):
-    """Monthly budget of a project — editable only by the Project Owner."""
+    """Monthly budget of a project, editable only by the Project Owner."""
 
     __tablename__ = "project_budgets"
 

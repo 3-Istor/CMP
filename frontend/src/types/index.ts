@@ -11,6 +11,10 @@ export type DeploymentStatus =
 
 export type ProviderType = "legacy_hybrid" | "kubernetes";
 
+export type AppIconValue =
+  | { kind: "builtin"; name: string; color: string }
+  | { kind: "upload"; hash: string };
+
 export interface Deployment {
   id: number;
   name: string;
@@ -33,6 +37,7 @@ export interface Deployment {
   k8s_namespace: string | null;
   /** The AI assistant that created the app, null when a person did. */
   created_via?: string | null;
+  icon?: AppIconValue | null;
 }
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────
@@ -44,6 +49,18 @@ export interface Deployment {
  * Keycloak groups. See `src/lib/permissions.ts` for what each one may do.
  */
 export type ProjectRole = "owner" | "admin" | "member" | "guest";
+
+export interface ProjectLink {
+  id: string;
+  label_key: string;
+  url: string;
+  external: boolean;
+  group: "view" | "code" | "admin";
+  min_role: ProjectRole;
+  requires: "grafana_member" | null;
+  component: string | null;
+  app: string | null;
+}
 
 /** The roles an admin can hand out. `owner` is not among them. */
 export type AssignableRole = Exclude<ProjectRole, "owner">;
@@ -120,7 +137,7 @@ export interface DeploymentConfig {
   file_path: string;
   /** Selectable components; empty when the app has a single values file. */
   components: string[];
-  /** File SHA — must be echoed back in PATCH requests */
+  /** File SHA, must be echoed back in PATCH requests */
   _sha: string;
   config: Record<string, unknown>;
 }
@@ -150,6 +167,27 @@ export interface SecurityData {
       retention_policy: string | null;
     };
   } | null;
+}
+
+export interface ScorecardCriterion {
+  key: "security" | "cost" | "reliability" | "documentation" | "owner";
+  points: number;
+  max: number;
+  reasons: string[];
+  actions: string[];
+}
+
+export interface Scorecard {
+  score: number;
+  max: number;
+  grade: "A" | "B" | "C" | "D" | "E";
+  criteria: ScorecardCriterion[];
+}
+
+export interface SecretPresence {
+  expected: { name: string; set: boolean }[];
+  extra: string[];
+  vault_path: string | null;
 }
 
 export interface SecurityDataUpdate {
@@ -227,13 +265,31 @@ export interface OpenStackBackendHealth {
   total_count: number;
 }
 
-export type AppHealthStatus = "healthy" | "degraded" | "down" | "unknown";
+export type AppHealthStatus =
+  | "healthy"
+  | "degraded"
+  | "down"
+  | "asleep"
+  | "not_connected"
+  | "unknown";
+
+export interface ComponentHealth {
+  name: string;
+  state: AppHealthStatus;
+  ready: number;
+  desired: number;
+  restarts_15m: number | null;
+  argocd_sync: string | null;
+  argocd_health: string | null;
+  reason: string | null;
+}
 
 export interface AppHealthResponse {
   deployment_name: string;
   status: AppHealthStatus;
   aws_frontend: AWSFrontendHealth | null;
   openstack_backend: OpenStackBackendHealth | null;
+  components: ComponentHealth[];
 }
 
 // ── Account & Profile ─────────────────────────────────────────────────────────
@@ -247,6 +303,8 @@ export interface UserProfile {
   picture: string | null;
   groups: string[];
   github_installation_id?: string | null; // Phase 3: GitHub App integration
+  locale?: "fr" | "en" | null;
+  cnp_admin?: boolean;
 }
 
 export interface GitHubStatus {
@@ -441,6 +499,7 @@ export interface FinopsSavings {
 export interface FinopsSourceMeta {
   source: string;
   last_ingested_at: string | null;
+  first_day?: string | null;
   latest_day: string | null;
   final_through: string | null;
   has_estimate: boolean;
@@ -1084,6 +1143,25 @@ export interface EnvironmentsView {
   canAdminister: boolean;
 }
 
+export interface EnvDiffField {
+  key: string;
+  staging: string | null;
+  prod: string | null;
+  differs: boolean;
+}
+
+export interface EnvDiffValue {
+  path: string;
+  staging: unknown;
+  prod: unknown;
+}
+
+export interface EnvDiff {
+  stagingAvailable: boolean;
+  fields: EnvDiffField[];
+  values: EnvDiffValue[];
+}
+
 export interface StagingOffhours {
   enabled: boolean;
   sleepAt: string;
@@ -1132,4 +1210,45 @@ export interface FinopsCarbon {
   }[];
   latest: { g_per_kwh: number; day: string; source: string } | null;
   has_estimate: boolean;
+}
+
+// ── App overview ──────────────────────────────────────────────────────────────
+
+export interface MetricPoint {
+  time: string;
+  value: number;
+}
+
+export interface MetricSeries {
+  points: MetricPoint[];
+  current: number | null;
+}
+
+export interface AppMetrics {
+  window: string;
+  step_seconds: number;
+  requests_per_second: MetricSeries | null;
+  errors_5xx_percent: MetricSeries | null;
+  cpu_millicores: MetricSeries | null;
+  cpu_request_millicores: number | null;
+}
+
+export type AppLogLevel = "error" | "warn" | "info" | "debug";
+
+export interface AppLogLine {
+  time: string;
+  component: string | null;
+  pod: string;
+  level: AppLogLevel | null;
+  line: string;
+}
+
+export interface AppEvent {
+  time: string;
+  type: string;
+  reason: string;
+  message: string;
+  count: number;
+  kind: string;
+  object: string;
 }

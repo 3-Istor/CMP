@@ -1,7 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-
+import { useTheme, type Theme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,69 +9,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useTranslations } from "next-intl";
 
-// Read before first paint by the inline script in app/layout.tsx.
-const STORAGE_KEY = "cnp-theme";
-
-type Theme = "system" | "light" | "dark";
-
-const OPTIONS: { value: Theme; label: string }[] = [
-  { value: "system", label: "Navigateur" },
-  { value: "light", label: "Clair" },
-  { value: "dark", label: "Sombre" },
-];
-
-declare global {
-  interface Window {
-    __applyTheme?: () => void;
-  }
-}
-
-const listeners = new Set<() => void>();
-
-function readTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored === "light" || stored === "dark" ? stored : "system";
-  } catch {
-    // Storage blocked: the browser's theme applies.
-    return "system";
-  }
-}
-
-function subscribe(onChange: () => void) {
-  listeners.add(onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    listeners.delete(onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
+const OPTIONS: Theme[] = ["system", "light", "dark"];
 
 export function ThemeCard() {
-  const theme = useSyncExternalStore(subscribe, readTheme, () => "system");
-
-  const choose = (value: Theme) => {
-    try {
-      if (value === "system") localStorage.removeItem(STORAGE_KEY);
-      else localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-      // Storage blocked: the choice is not kept.
-    }
-    listeners.forEach((onChange) => onChange());
-    window.__applyTheme?.();
-  };
+  const t = useTranslations("account");
+  const [theme, choose] = useTheme();
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Apparence</CardTitle>
-        <CardDescription>
-          Par défaut, le thème suit celui du navigateur. Choix gardé sur ce navigateur.
-        </CardDescription>
+        <CardTitle>{t("theme.title")}</CardTitle>
+        <CardDescription>{t("theme.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex gap-2">
-        {OPTIONS.map(({ value, label }) => (
+        {OPTIONS.map((value) => (
           <Button
             key={value}
             size="sm"
@@ -80,7 +32,7 @@ export function ThemeCard() {
             aria-pressed={theme === value}
             onClick={() => choose(value)}
           >
-            {label}
+            {t(`theme.${value}`)}
           </Button>
         ))}
       </CardContent>

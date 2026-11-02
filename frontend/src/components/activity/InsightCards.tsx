@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ActivitySummary } from "@/types";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Bar,
   BarChart,
@@ -20,14 +21,21 @@ const TOOLTIP_STYLE = {
   border: "1px solid var(--border)",
 };
 
-const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+/** 2024-01-01 is a Monday, so index 0 is Monday as in the API heatmap. */
+function weekdayLabel(locale: string, index: number): string {
+  return new Date(Date.UTC(2024, 0, 1 + index)).toLocaleDateString(locale, {
+    weekday: "short",
+    timeZone: "UTC",
+  });
+}
 
 function TopList({ title, rows }: { title: string; rows: [string, number][] }) {
+  const t = useTranslations("activity.insights");
   return (
     <div className="min-w-0">
       <p className="mb-1 text-xs font-medium text-muted-foreground">{title}</p>
       {rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Aucun.</p>
+        <p className="text-xs text-muted-foreground">{t("none")}</p>
       ) : (
         <ul className="space-y-0.5 text-sm">
           {rows.map(([name, count]) => (
@@ -52,21 +60,21 @@ export function LoginsCard({
 }: {
   logins: NonNullable<ActivitySummary["logins"]>;
 }) {
+  const t = useTranslations("activity.insights.logins");
+  const locale = useLocale();
   const data = logins.days.map((d) => ({
-    day: new Date(`${d.day}T00:00:00Z`).toLocaleDateString("fr-FR", {
+    day: new Date(`${d.day}T00:00:00Z`).toLocaleDateString(locale, {
       day: "numeric",
       month: "short",
     }),
-    Réussies: d.success,
-    Échouées: d.failure,
+    success: d.success,
+    failure: d.failure,
   }));
   const any = logins.days.some((d) => d.success || d.failure);
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          Connexions au realm du projet
-        </CardTitle>
+        <CardTitle className="text-base">{t("title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {any ? (
@@ -85,9 +93,15 @@ export function LoginsCard({
                 />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Réussies" stackId="l" fill="#16a34a" />
                 <Bar
-                  dataKey="Échouées"
+                  dataKey="success"
+                  name={t("success")}
+                  stackId="l"
+                  fill="#16a34a"
+                />
+                <Bar
+                  dataKey="failure"
+                  name={t("failure")}
                   stackId="l"
                   fill="#dc2626"
                   radius={[3, 3, 0, 0]}
@@ -97,12 +111,12 @@ export function LoginsCard({
           </div>
         ) : (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Aucune connexion sur la période.
+            {t("empty")}
           </p>
         )}
         <div className="grid grid-cols-2 gap-4">
-          <TopList title="Comptes en échec" rows={logins.top_failed_users} />
-          <TopList title="IP en échec" rows={logins.top_failed_ips} />
+          <TopList title={t("failingAccounts")} rows={logins.top_failed_users} />
+          <TopList title={t("failingIps")} rows={logins.top_failed_ips} />
         </div>
       </CardContent>
     </Card>
@@ -111,19 +125,19 @@ export function LoginsCard({
 
 /** Actions by people per weekday and hour: what happens at 3 am stands out. */
 export function HeatmapCard({ heatmap }: { heatmap: number[][] }) {
+  const t = useTranslations("activity.insights.heatmap");
+  const locale = useLocale();
   const max = Math.max(1, ...heatmap.flat());
   const total = heatmap.flat().reduce((a, b) => a + b, 0);
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          Quand l&apos;activité humaine a lieu
-        </CardTitle>
+        <CardTitle className="text-base">{t("title")}</CardTitle>
       </CardHeader>
       <CardContent>
         {total === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Aucune action humaine sur la période.
+            {t("empty")}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -136,18 +150,22 @@ export function HeatmapCard({ heatmap }: { heatmap: number[][] }) {
               <span />
               {Array.from({ length: 24 }, (_, h) => (
                 <span key={h} className="text-center">
-                  {h % 3 === 0 ? `${h}h` : ""}
+                  {h % 3 === 0 ? t("hour", { hour: h }) : ""}
                 </span>
               ))}
               {heatmap.map((row, d) => (
                 <div key={d} className="contents">
                   <span className="pr-1 text-right leading-5">
-                    {WEEKDAYS[d]}
+                    {weekdayLabel(locale, d)}
                   </span>
                   {row.map((count, h) => (
                     <span
                       key={h}
-                      title={`${WEEKDAYS[d]} ${h}h : ${count} action${count > 1 ? "s" : ""}`}
+                      title={t("cell", {
+                        day: weekdayLabel(locale, d),
+                        hour: h,
+                        count,
+                      })}
                       className="h-5 rounded-sm"
                       style={{
                         background:
@@ -161,8 +179,7 @@ export function HeatmapCard({ heatmap }: { heatmap: number[][] }) {
               ))}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Heure de Paris. Les nuits et les week-ends chargés méritent un
-              regard.
+              {t("note")}
             </p>
           </div>
         )}

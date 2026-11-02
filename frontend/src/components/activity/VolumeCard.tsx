@@ -4,6 +4,7 @@ import { getLogVolume } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { LogVolume } from "@/types";
 import { BarChart3, ChevronDown } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import {
   Area,
@@ -16,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import { NativeSelect } from "./NativeSelect";
+import type { Translate } from "./labels";
 
 const COLOURS = [
   "#2563eb",
@@ -27,17 +29,20 @@ const COLOURS = [
   "#ca8a04",
 ];
 const PERIODS = [
-  { hours: 1, label: "1 heure" },
-  { hours: 6, label: "6 heures" },
-  { hours: 24, label: "24 heures" },
-  { hours: 168, label: "7 jours" },
+  { hours: 1, labelKey: "1h" },
+  { hours: 6, labelKey: "6h" },
+  { hours: 24, labelKey: "24h" },
+  { hours: 168, labelKey: "7d" },
 ];
 
-function size(bytes: number): string {
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} Go`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} Mo`;
-  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(0)} Ko`;
-  return `${bytes} o`;
+function size(t: Translate, bytes: number): string {
+  if (bytes >= 1e9)
+    return t("volume.size.gb", { value: (bytes / 1e9).toFixed(2) });
+  if (bytes >= 1e6)
+    return t("volume.size.mb", { value: (bytes / 1e6).toFixed(1) });
+  if (bytes >= 1e3)
+    return t("volume.size.kb", { value: (bytes / 1e3).toFixed(0) });
+  return t("volume.size.b", { value: bytes });
 }
 
 /** How much each app logs: a sudden climb is often the first sign of trouble. */
@@ -48,6 +53,8 @@ export function VolumeCard({
   project: string;
   namespace?: string;
 }) {
+  const t = useTranslations("activity");
+  const locale = useLocale();
   const [open, setOpen] = useState(true);
   const [hours, setHours] = useState(24);
   const [volume, setVolume] = useState<LogVolume | null>(null);
@@ -67,7 +74,7 @@ export function VolumeCard({
     for (const s of volume.series) {
       for (const p of s.points) {
         const row = rows.get(p.time) ?? {
-          time: new Date(p.time).toLocaleString("fr-FR", {
+          time: new Date(p.time).toLocaleString(locale, {
             day: hours > 24 ? "numeric" : undefined,
             month: hours > 24 ? "short" : undefined,
             hour: "2-digit",
@@ -82,7 +89,7 @@ export function VolumeCard({
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, r]) => r);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [volume, hours]);
+  }, [volume, hours, locale]);
 
   const totalBytes = volume?.series.reduce((a, s) => a + s.total_bytes, 0) ?? 0;
 
@@ -94,10 +101,10 @@ export function VolumeCard({
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
       >
         <BarChart3 className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">Volume de logs</span>
+        <span className="font-medium">{t("volume.title")}</span>
         {volume && (
           <span className="text-muted-foreground">
-            {size(totalBytes)} sur la période
+            {t("volume.total", { size: size(t, totalBytes) })}
           </span>
         )}
         <ChevronDown
@@ -111,17 +118,17 @@ export function VolumeCard({
         <div className="space-y-3 border-t p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
-              Lignes par minute, par app.
+              {t("volume.description")}
             </p>
             <div className="w-36">
               <NativeSelect
-                aria-label="Période du volume"
+                aria-label={t("volume.aria")}
                 value={String(hours)}
                 onChange={(v) => setHours(Number(v))}
               >
                 {PERIODS.map((p) => (
                   <option key={p.hours} value={p.hours}>
-                    {p.label}
+                    {t(`periods.${p.labelKey}`)}
                   </option>
                 ))}
               </NativeSelect>
@@ -129,11 +136,11 @@ export function VolumeCard({
           </div>
           {!volume ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              Chargement…
+              {t("common.loading")}
             </p>
           ) : volume.series.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              Aucun log sur la période.
+              {t("volume.empty")}
             </p>
           ) : (
             <>
@@ -158,7 +165,7 @@ export function VolumeCard({
                         background: "var(--popover)",
                         border: "1px solid var(--border)",
                       }}
-                      formatter={(v) => [`${v} lignes/min`]}
+                      formatter={(v) => [t("volume.tooltip", { value: String(v) })]}
                     />
                     {volume.series.length > 1 && (
                       <Legend
@@ -183,10 +190,10 @@ export function VolumeCard({
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-muted-foreground">
                   <tr>
-                    <th className="py-1 font-medium">App</th>
-                    <th className="py-1 text-right font-medium">Taille</th>
-                    <th className="py-1 text-right font-medium">Lignes</th>
-                    <th className="py-1 text-right font-medium">Pic / min</th>
+                    <th className="py-1 font-medium">{t("volume.table.app")}</th>
+                    <th className="py-1 text-right font-medium">{t("volume.table.size")}</th>
+                    <th className="py-1 text-right font-medium">{t("volume.table.lines")}</th>
+                    <th className="py-1 text-right font-medium">{t("volume.table.peak")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -200,13 +207,13 @@ export function VolumeCard({
                         {name(s.namespace)}
                       </td>
                       <td className="py-1 text-right tabular-nums">
-                        {size(s.total_bytes)}
+                        {size(t, s.total_bytes)}
                       </td>
                       <td className="py-1 text-right tabular-nums">
-                        {s.total_lines.toLocaleString("fr-FR")}
+                        {s.total_lines.toLocaleString(locale)}
                       </td>
                       <td className="py-1 text-right tabular-nums">
-                        {Math.round(s.peak_per_minute).toLocaleString("fr-FR")}
+                        {Math.round(s.peak_per_minute).toLocaleString(locale)}
                       </td>
                     </tr>
                   ))}

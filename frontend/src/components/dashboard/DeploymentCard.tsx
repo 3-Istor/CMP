@@ -1,5 +1,7 @@
 "use client";
 
+import { AppIcon } from "@/components/app-icon/AppIcon";
+
 import { DeploymentHealthPanel } from "@/components/dashboard/DeploymentHealthPanel";
 import { Github } from "@/components/icons/Github";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
@@ -23,7 +25,8 @@ import {
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import { appUrlOf } from "@/lib/utils";
 import type { Deployment } from "@/types";
-import { Activity, ExternalLink, FileCode, Globe, Shield } from "lucide-react";
+import { Activity, AlertTriangle, ExternalLink, FileCode, Globe, Shield } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 const ACTIVE_STATUSES = new Set([
@@ -49,6 +52,7 @@ export function DeploymentCard({
   onDelete,
   canDelete = true,
 }: Props) {
+  const t = useTranslations("dashboard");
   const isActive = ACTIVE_STATUSES.has(deployment.status);
   // Poll only while the deployment is in a transient state
   const polled = useDeploymentPolling(isActive ? deployment.id : null);
@@ -90,24 +94,30 @@ export function DeploymentCard({
     // For running/degraded deployments, use actual health check
     if (["running", "degraded"].includes(currentDeployment.status)) {
       if (!health) {
-        return { label: "Checking...", variant: "outline" as const };
+        return { key: "checking", variant: "outline" as const };
       }
 
       if (health.status === "healthy") {
-        return { label: "Healthy", variant: "default" as const };
+        return { key: "healthy", variant: "default" as const };
       }
       if (health.status === "degraded") {
-        return { label: "Degraded", variant: "secondary" as const };
+        return { key: "degraded", variant: "secondary" as const };
       }
       if (health.status === "down") {
-        return { label: "Down", variant: "destructive" as const };
+        return { key: "down", variant: "destructive" as const };
       }
-      return { label: "Unknown", variant: "outline" as const };
+      if (health.status === "asleep") {
+        return { key: "asleep", variant: "outline" as const };
+      }
+      if (health.status === "not_connected") {
+        return { key: "not_connected", variant: "outline" as const };
+      }
+      return { key: "unknown", variant: "outline" as const };
     }
 
     // For failed deployments
     if (currentDeployment.status === "failed") {
-      return { label: "Failed", variant: "destructive" as const };
+      return { key: "failed", variant: "destructive" as const };
     }
 
     return null;
@@ -116,20 +126,20 @@ export function DeploymentCard({
   // Get progress badge info
   const getProgressBadge = () => {
     if (currentDeployment.status === "pending") {
-      return { label: "Queued", variant: "outline" as const };
+      return { key: "queued", variant: "outline" as const };
     }
     if (
       ["initializing", "planning", "deploying"].includes(
         currentDeployment.status,
       )
     ) {
-      return { label: "Deploying", variant: "default" as const };
+      return { key: "deploying", variant: "default" as const };
     }
     if (currentDeployment.status === "deleting") {
-      return { label: "Deleting", variant: "destructive" as const };
+      return { key: "deleting", variant: "destructive" as const };
     }
     if (currentDeployment.status === "deleted") {
-      return { label: "Deleted", variant: "outline" as const };
+      return { key: "deleted", variant: "outline" as const };
     }
     return null;
   };
@@ -154,25 +164,26 @@ export function DeploymentCard({
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base flex items-center gap-2">
-              {currentDeployment.template_icon && (
-                <span className="text-lg">
-                  {currentDeployment.template_icon}
-                </span>
-              )}
+              <AppIcon
+                appId={currentDeployment.id}
+                templateIcon={currentDeployment.template_icon}
+                icon={currentDeployment.icon}
+                className="h-5 w-5"
+              />
               {currentDeployment.name}
             </CardTitle>
             <div className="flex items-center gap-2">
               {healthBadge && (
                 <Badge
                   variant={healthBadge.variant}
-                  className={`text-xs ${healthBadge.label === "Degraded" ? "bg-orange-500 text-white hover:bg-orange-600" : ""}`}
+                  className={`text-xs ${healthBadge.key === "degraded" ? "bg-orange-500 text-white hover:bg-orange-600" : ""}`}
                 >
-                  {healthBadge.label}
+                  {t(`health.${healthBadge.key}`)}
                 </Badge>
               )}
               {progressBadge && (
                 <Badge variant={progressBadge.variant} className="text-xs">
-                  {progressBadge.label}
+                  {t(`progress.${progressBadge.key}`)}
                 </Badge>
               )}
               <Badge variant="outline" className="text-xs capitalize">
@@ -192,7 +203,7 @@ export function DeploymentCard({
             currentDeployment.github_repo_url && (
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">
-                  Quick Actions
+                  {t("card.quickActions")}
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                   {appUrl && (
@@ -207,7 +218,7 @@ export function DeploymentCard({
                       })}
                     >
                       <Globe className="h-4 w-4 mr-2" />
-                      Open Application
+                      {t("card.openApp")}
                       <ExternalLink className="h-3 w-3 ml-auto" />
                     </a>
                   )}
@@ -222,7 +233,7 @@ export function DeploymentCard({
                     })}
                   >
                     <Github className="h-4 w-4 mr-2" />
-                    Open GitHub Repository
+                    {t("card.openRepo")}
                     <ExternalLink className="h-3 w-3 ml-auto" />
                   </a>
                   {currentDeployment.argocd_app_name && (
@@ -237,7 +248,7 @@ export function DeploymentCard({
                       })}
                     >
                       <FileCode className="h-4 w-4 mr-2" />
-                      View in ArgoCD
+                      {t("card.viewArgocd")}
                       <ExternalLink className="h-3 w-3 ml-auto" />
                     </a>
                   )}
@@ -253,14 +264,16 @@ export function DeploymentCard({
                       })}
                     >
                       <Shield className="h-4 w-4 mr-2" />
-                      Manage Secrets
+                      {t("card.manageSecrets")}
                       <ExternalLink className="h-3 w-3 ml-auto" />
                     </a>
                   )}
                 </div>
                 {currentDeployment.k8s_namespace && (
                   <div className="rounded-md bg-muted p-2 text-xs">
-                    <span className="text-muted-foreground">Namespace: </span>
+                    <span className="text-muted-foreground">
+                      {t("card.namespace")}{" "}
+                    </span>
                     <span className="font-mono">
                       {currentDeployment.k8s_namespace}
                     </span>
@@ -275,7 +288,7 @@ export function DeploymentCard({
             Object.keys(outputs).length > 0 && (
               <div className="rounded-md bg-muted p-3 space-y-1 text-xs font-mono">
                 <div className="font-semibold text-muted-foreground mb-2">
-                  Outputs:
+                  {t("card.outputs")}
                 </div>
                 {Object.entries(outputs).map(([key, value]) => (
                   <div key={key}>
@@ -307,7 +320,7 @@ export function DeploymentCard({
                 onClick={() => setHealthOpen(true)}
               >
                 <Activity className="h-4 w-4 mr-1.5" />
-                Health Details
+                {t("card.healthDetails")}
               </Button>
             )}
             {canDelete && (
@@ -319,7 +332,7 @@ export function DeploymentCard({
                   currentDeployment.status,
                 )}
               >
-                Delete
+                {t("card.delete")}
               </Button>
             )}
           </div>
@@ -332,23 +345,35 @@ export function DeploymentCard({
           <DialogHeader>
             <DialogTitle>
               {confirmStep === 1
-                ? "Delete deployment?"
-                : "⚠️ Are you absolutely sure?"}
+                ? t("card.confirmTitle")
+                : (
+                  <span className="inline-flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    {t("card.confirmSureTitle")}
+                  </span>
+                )}
             </DialogTitle>
             <DialogDescription>
               {confirmStep === 1
-                ? `This will destroy all cloud resources for &ldquo;${currentDeployment.name}&rdquo; using Terraform. This cannot be undone.`
-                : `All resources (${currentDeployment.resource_count || "unknown"} resources) for &ldquo;${currentDeployment.name}&rdquo; will be permanently destroyed. Click confirm to proceed.`}
+                ? t("card.confirmText", { name: currentDeployment.name })
+                : currentDeployment.resource_count
+                  ? t("card.confirmSureText", {
+                      count: currentDeployment.resource_count,
+                      name: currentDeployment.name,
+                    })
+                  : t("card.confirmSureUnknownText", {
+                      name: currentDeployment.name,
+                    })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              Cancel
+              {t("card.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleConfirm}>
               {confirmStep === 1
-                ? "Yes, delete"
-                : "Confirm - destroy everything"}
+                ? t("card.yesDelete")
+                : t("card.confirmDestroy")}
             </Button>
           </DialogFooter>
         </DialogContent>

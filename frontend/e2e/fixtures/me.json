@@ -1,0 +1,11 @@
+{
+  "sub": "e2e-demo-user",
+  "email": "e2e-demo@example.invalid",
+  "given_name": "E2E",
+  "family_name": "Demo",
+  "name": "E2E Demo",
+  "picture": null,
+  "groups": ["/projects/demo/owner"],
+  "locale": "en",
+  "cnp_admin": false
+}

@@ -23,7 +23,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Exceptions that just mean "OpenStack isn't reachable right now" — VPN down or
+# Exceptions that just mean "OpenStack isn't reachable right now", VPN down or
 # the Keystone endpoint offline. These are expected operational states, not code
 # errors, so we log them concisely (no stack trace) and report status unknown.
 OPENSTACK_UNREACHABLE = (
@@ -62,11 +62,23 @@ class VMInstance(BaseModel):
     health: str | None  # For AWS: "healthy", "unhealthy", "unused", etc.
 
 
+class ComponentHealth(BaseModel):
+    name: str
+    state: str  # healthy | degraded | down | asleep | not_connected | unknown
+    ready: int = 0
+    desired: int = 0
+    restarts_15m: int | None = None
+    argocd_sync: str | None = None
+    argocd_health: str | None = None
+    reason: str | None = None
+
+
 class AppHealthResponse(BaseModel):
     deployment_name: str
-    status: str  # "healthy", "degraded", "down", "unknown"
+    status: str  # overall state, the worst of the components on Kubernetes
     aws_frontend: dict[str, Any] | None
     openstack_backend: dict[str, Any] | None
+    components: list[ComponentHealth] = []
 
 
 # ── OpenStack Connection ───────────────────────────────────────────────────
