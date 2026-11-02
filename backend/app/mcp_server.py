@@ -31,7 +31,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.roles import ProjectRole
 from app.models.project import Project, TargetCloud
-from app.services import audit
+from app.services import audit, notifications
 from app.services.agents import internal_api, policy, ratelimit
 from app.services.agents import repo as repo_ops
 from app.services.agents import skills, store
@@ -332,6 +332,17 @@ async def _gate(
         tool,
         arguments,
         summary,
+    )
+    await to_thread.run_sync(
+        functools.partial(
+            notifications.notify_project,
+            project,
+            kind="approval_request",
+            title_key="approval_request",
+            params={"user": caller.username, "summary": summary},
+            link=f"/connect/confirm/{pending.id}",
+            minimum=ProjectRole.ADMIN,
+        )
     )
     return "stop", {
         **base,
