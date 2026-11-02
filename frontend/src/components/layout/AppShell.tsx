@@ -1,18 +1,17 @@
 "use client";
 
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
-import { AppSidebar } from "./AppSidebar";
+import { useState } from "react";
+import { AppSidebar, MobileSidebar } from "./AppSidebar";
+import { CommandPalette } from "./CommandPalette";
 
-/**
- * Wraps every page with the persistent, collapsible app sidebar.
- *
- * The sidebar is hidden on the auth routes and until the session is
- * authenticated (its lists need a valid token to load).
- */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { status } = useSession();
+  const t = useTranslations("shell.sidebar");
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const hideSidebar =
     pathname?.startsWith("/auth") ||
@@ -24,10 +23,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  const openPalette = () => setPaletteOpen(true);
+
   return (
-    <div className="flex min-h-screen">
-      <AppSidebar />
-      <div className="flex-1 min-w-0">{children}</div>
-    </div>
+    <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        {t("skipToContent")}
+      </a>
+      <div className="flex min-h-screen flex-col md:flex-row">
+        <AppSidebar onSearch={openPalette} />
+        <MobileSidebar onSearch={openPalette} />
+        <div
+          id="main-content"
+          tabIndex={-1}
+          className="min-w-0 flex-1 outline-none"
+        >
+          {children}
+        </div>
+      </div>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+    </>
   );
 }

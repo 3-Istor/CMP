@@ -1,6 +1,5 @@
 "use client";
 
-import { UserNav } from "@/components/layout/UserNav";
 import { cn } from "@/lib/utils";
 import { useFinopsMeta } from "@/lib/hooks";
 import {
@@ -59,7 +58,6 @@ export default function FinopsLayout({
               Suivi, analyse et optimisation des coûts d&apos;infrastructure.
             </p>
           </div>
-          <UserNav />
         </div>
 
         <nav className="mt-4 flex gap-1">

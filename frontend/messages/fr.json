@@ -14,23 +14,53 @@
       "docs": "Documentation",
       "projects": "Projets",
       "apps": "Applications",
-      "noProjects": "Aucun projet",
-      "noApps": "Aucune application",
-      "myAccount": "Mon compte",
-      "profileFallback": "Profil",
       "collapse": "Réduire le menu",
       "expand": "Déplier le menu",
-      "securityAlert": "Action de sécurité obligatoire"
-    },
-    "userNav": {
-      "myAccount": "Mon compte",
-      "logout": "Se déconnecter",
-      "language": "Langue",
-      "userFallback": "Utilisateur"
+      "securityAlert": "Action de sécurité obligatoire",
+      "search": "Rechercher, aller à",
+      "searchHint": "Ctrl K",
+      "groupWork": "Mon travail",
+      "groupPlatform": "Plateforme",
+      "navigation": "Navigation principale",
+      "navigationHint": "Pages de la plateforme, liens, thème et profil.",
+      "openMenu": "Ouvrir le menu",
+      "skipToContent": "Aller au contenu"
     },
     "home": {
-      "welcome": "Bienvenue, <name></name>",
-      "fallbackName": "Développeur"
+      "fallbackName": "Développeur",
+      "greeting": "Bonjour {name}"
+    },
+    "links": {
+      "label": "Liens et aide",
+      "status": "Statut de la plateforme",
+      "roadmap": "Roadmap",
+      "docs": "Documentation",
+      "adminGroup": "Réservé aux admins",
+      "adminOnly": "{count, plural, one {# lien réservé aux admins} other {# liens réservés aux admins}}"
+    },
+    "theme": {
+      "label": "Thème",
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système"
+    },
+    "profile": {
+      "myProfile": "Mon profil",
+      "accountSettings": "Paramètres du compte",
+      "language": "Langue",
+      "logout": "Se déconnecter",
+      "roleAdmin": "Admin plateforme",
+      "roleMember": "Membre",
+      "fallback": "Utilisateur"
+    },
+    "palette": {
+      "title": "Rechercher, aller à",
+      "placeholder": "Rechercher une page, un projet, une application...",
+      "empty": "Aucun résultat.",
+      "pages": "Pages",
+      "projects": "Projets",
+      "apps": "Applications",
+      "links": "Liens"
     }
   },
   "projects": {

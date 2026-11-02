@@ -1,6 +1,5 @@
 "use client";
 
-import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
 import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
@@ -318,11 +317,6 @@ export default function AppControlCenterPage() {
     if (loading || !current) {
         return (
             <div className="min-h-screen">
-                <header className="border-b px-6 py-4 flex items-center gap-3">
-                    <div className="ml-auto">
-                        <UserNav />
-                    </div>
-                </header>
                 <main className="px-6 py-8 max-w-5xl mx-auto space-y-6">
                     <Skeleton className="h-8 w-48" />
                     <Skeleton className="h-24 w-full" />
@@ -344,13 +338,6 @@ export default function AppControlCenterPage() {
 
     return (
         <div className="min-h-screen">
-            {/* ── Header ── */}
-            <header className="border-b px-6 py-4 flex items-center gap-3">
-                <div className="ml-auto">
-                    <UserNav />
-                </div>
-            </header>
-
             <main className="px-6 py-8 max-w-5xl mx-auto space-y-6">
 
                 {/* ── Breadcrumb ── */}

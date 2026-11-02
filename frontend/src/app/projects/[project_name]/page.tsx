@@ -2,7 +2,6 @@
 
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
-import { UserNav } from "@/components/layout/UserNav";
 import { AppCard } from "@/components/projects/AppCard";
 import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
 import { MembersPanel } from "@/components/projects/MembersPanel";
@@ -246,11 +245,6 @@ export default function ProjectPage() {
   if (isBeingDeleted) {
     return (
       <div className="min-h-screen">
-        <header className="border-b px-6 py-4 flex items-center gap-3">
-          <div className="ml-auto">
-            <UserNav />
-          </div>
-        </header>
         <main className="px-6 py-8 max-w-3xl mx-auto">
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center">
             <Loader2 className="h-8 w-8 animate-spin text-destructive mb-4" />
@@ -278,13 +272,6 @@ export default function ProjectPage() {
 
   return (
     <div className="min-h-screen">
-      {/* ── Header ── */}
-      <header className="border-b px-6 py-4 flex items-center gap-3">
-        <div className="ml-auto">
-          <UserNav />
-        </div>
-      </header>
-
       <main className="px-6 py-8 max-w-7xl mx-auto space-y-6">
         {/* ── Breadcrumb & title ── */}
         <div className="space-y-3">

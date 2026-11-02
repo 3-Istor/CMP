@@ -4,7 +4,6 @@ import { AssistantCard } from "@/components/agents/AssistantCard";
 import Link from "next/link";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
-import { UserNav } from "@/components/layout/UserNav";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/button";
@@ -45,39 +44,25 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [hasProjectInFlight, refreshProjects]);
 
-  const userName =
-    session?.user?.name ||
-    `${session?.user?.given_name ?? ""} ${session?.user?.family_name ?? ""}`.trim() ||
-    session?.user?.email ||
+  const firstName =
+    session?.user?.given_name ||
+    session?.user?.name?.split(" ")[0] ||
+    session?.user?.email?.split("@")[0] ||
     t("fallbackName");
 
   return (
     <div className="min-h-screen">
-      {/* ── Header ── */}
-      <header className="border-b px-6 py-4 flex items-center gap-3">
-        <div className="ml-auto flex items-center gap-3">
-          {session?.user && (
-            <span className="hidden sm:block text-sm text-muted-foreground">
-              {t.rich("welcome", {
-                name: () => (
-                  <span className="font-medium text-foreground">
-                    {userName}
-                  </span>
-                ),
-              })}
-            </span>
-          )}
-          <UserNav />
-        </div>
-      </header>
-
       <main className="px-6 py-8 space-y-10 max-w-7xl mx-auto">
+        <h1 className="text-2xl font-semibold">
+          {t("greeting", { name: firstName })}
+        </h1>
+
         <AssistantCard />
 
         <GlobalInfraHealth />
 
         {/* ── Projects Section ── */}
-        <section>
+        <section id="projects" className="scroll-mt-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-semibold">{tProjects("title")}</h2>
@@ -139,7 +124,7 @@ export default function Home() {
         <Separator />
 
         {/* ── All Recent Deployments ── */}
-        <section>
+        <section id="applications" className="scroll-mt-6">
           <h2 className="text-xl font-semibold mb-4">{tApps("allDeployments")}</h2>
           <Dashboard key={dashboardKey} />
         </section>

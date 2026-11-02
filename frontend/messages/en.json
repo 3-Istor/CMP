@@ -14,23 +14,53 @@
       "docs": "Docs",
       "projects": "Projects",
       "apps": "Apps",
-      "noProjects": "No projects",
-      "noApps": "No apps",
-      "myAccount": "My account",
-      "profileFallback": "Profile",
       "collapse": "Collapse sidebar",
       "expand": "Expand sidebar",
-      "securityAlert": "Mandatory security action"
-    },
-    "userNav": {
-      "myAccount": "My account",
-      "logout": "Log out",
-      "language": "Language",
-      "userFallback": "User"
+      "securityAlert": "Mandatory security action",
+      "search": "Search, go to",
+      "searchHint": "Ctrl K",
+      "groupWork": "My work",
+      "groupPlatform": "Platform",
+      "navigation": "Main navigation",
+      "navigationHint": "Platform pages, links, theme and profile.",
+      "openMenu": "Open the menu",
+      "skipToContent": "Skip to content"
     },
     "home": {
-      "welcome": "Welcome, <name></name>",
-      "fallbackName": "Developer"
+      "fallbackName": "Developer",
+      "greeting": "Hello {name}"
+    },
+    "links": {
+      "label": "Links and help",
+      "status": "Platform status",
+      "roadmap": "Roadmap",
+      "docs": "Documentation",
+      "adminGroup": "Admins only",
+      "adminOnly": "{count, plural, one {# link reserved for admins} other {# links reserved for admins}}"
+    },
+    "theme": {
+      "label": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "profile": {
+      "myProfile": "My profile",
+      "accountSettings": "Account settings",
+      "language": "Language",
+      "logout": "Sign out",
+      "roleAdmin": "Platform admin",
+      "roleMember": "Member",
+      "fallback": "User"
+    },
+    "palette": {
+      "title": "Search, go to",
+      "placeholder": "Search a page, project or application...",
+      "empty": "No results.",
+      "pages": "Pages",
+      "projects": "Projects",
+      "apps": "Applications",
+      "links": "Links"
     }
   },
   "projects": {
