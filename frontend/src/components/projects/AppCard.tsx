@@ -1,5 +1,7 @@
 "use client";
 
+import { TemplateIcon } from "@/components/catalog/TemplateIcon";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -83,7 +85,7 @@ export function AppCard({ app, projectName }: Props) {
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               {app.template_icon && (
-                <span className="text-2xl shrink-0">{app.template_icon}</span>
+                <TemplateIcon icon={app.template_icon} className="h-6 w-6 shrink-0" />
               )}
               <CardTitle className="text-base leading-tight truncate">
                 {app.name}

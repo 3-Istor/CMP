@@ -1,7 +1,8 @@
+import re
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models.deployment import DeploymentStatus, ProviderType
 
@@ -12,6 +13,12 @@ class DeploymentCreate(BaseModel):
     provider_type: ProviderType = ProviderType.LEGACY_HYBRID
     project_id: str | None = None
     app_config: dict[str, Any] = {}
+
+
+# Step messages written before the emoji cleanup (CMP#145) are still in the database.
+_EMOJI = re.compile(
+    "[\U0001F000-\U0001FAFF\u2300-\u23FF\u2600-\u27BF\u2B00-\u2BFF\uFE0F]+\\s?"
+)
 
 
 class DeploymentRead(BaseModel):
@@ -25,6 +32,11 @@ class DeploymentRead(BaseModel):
     template_category: str | None
     status: DeploymentStatus
     step_message: str
+
+    @field_validator("step_message")
+    @classmethod
+    def _drop_emojis(cls, value: str) -> str:
+        return _EMOJI.sub("", value).strip()
 
     # Multi-provider fields (Phase 3)
     provider_type: ProviderType

@@ -82,7 +82,7 @@ export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              width={56}
+              width={68}
               tickFormatter={axisTickFormatter(axisMax, " €", locale)}
             />
             <Tooltip content={<SavingsTooltip />} />
