@@ -2,6 +2,7 @@
 
 import { ComponentsCard } from "@/components/app-overview/ComponentsCard";
 import { DeploymentsCard } from "@/components/app-overview/DeploymentsCard";
+import { ScoreCard } from "@/components/app-overview/ScoreCard";
 import { EventsCard } from "@/components/app-overview/EventsCard";
 import { LogsCard } from "@/components/app-overview/LogsCard";
 import {
@@ -49,6 +50,13 @@ export default function AppOverviewPage() {
           allowed={can("finops.view")}
         />
       </div>
+
+      <ScoreCard
+        appId={appId}
+        projectName={projectName}
+        repoUrl={current.github_repo_url}
+        allowed={canViewLogs}
+      />
 
       <ComponentsCard appId={appId} links={links.data ?? []} />
 

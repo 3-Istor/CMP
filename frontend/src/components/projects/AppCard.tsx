@@ -4,9 +4,11 @@ import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { intlLocale } from "@/components/finops/format";
 
+import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { hasScorecard, useScorecards } from "@/lib/scorecard";
 import type { Deployment } from "@/types";
 import { CheckCircle2, Clock, GitBranch, Loader2, XCircle } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -67,6 +69,7 @@ export function AppCard({ app, projectName }: Props) {
   const locale = intlLocale(useLocale());
   const isActive = ACTIVE_STATUSES.has(app.status);
   const progress = STATUS_PROGRESS[app.status] ?? 0;
+  const card = useScorecards([app.id], hasScorecard(app))[app.id];
 
   return (
     <Link
@@ -96,6 +99,7 @@ export function AppCard({ app, projectName }: Props) {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              <ScoreBadge card={card} />
               <Badge
                 variant={STATUS_VARIANT[app.status]}
                 className="capitalize gap-1"

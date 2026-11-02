@@ -34,6 +34,7 @@ import {
   getProjectLinks,
   isNotConnected,
 } from "@/lib/api";
+import { hasScorecard, useScorecards } from "@/lib/scorecard";
 import type { CatalogTemplate, ProjectLink } from "@/types";
 import {
   FolderKanban,
@@ -47,7 +48,7 @@ import {
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 export default function ProjectPage() {
@@ -57,6 +58,7 @@ export default function ProjectPage() {
   const t = useTranslations("projects.page");
   const tRoles = useTranslations("projects");
   const tCommon = useTranslations("common");
+  const tScore = useTranslations("scorecard");
   const {
     projectName,
     role,
@@ -69,6 +71,21 @@ export default function ProjectPage() {
   } = useProjectContext();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [sortBy, setSortBy] = useState<"name" | "score">("name");
+  const scores = useScorecards(
+    apps.filter(hasScorecard).map((app) => app.id),
+    can("app.viewLogs"),
+  );
+  const sortedApps = useMemo(() => {
+    const byName = (a: (typeof apps)[number], b: (typeof apps)[number]) =>
+      a.name.localeCompare(b.name);
+    if (sortBy === "name") return [...apps].sort(byName);
+    return [...apps].sort(
+      (a, b) =>
+        (scores[b.id]?.score ?? -1) - (scores[a.id]?.score ?? -1) ||
+        byName(a, b),
+    );
+  }, [apps, scores, sortBy]);
 
   // What this user may do here. Every can() is false while the role loads,
   // so action buttons stay absent instead of flashing into view and then
@@ -334,11 +351,32 @@ export default function ProjectPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {apps.map((app) => (
-                <AppCard key={app.id} app={app} projectName={projectName} />
-              ))}
-            </div>
+            <>
+              <div className="flex items-center justify-end gap-2">
+                <label
+                  htmlFor="app-sort"
+                  className="text-sm text-muted-foreground"
+                >
+                  {tScore("sortBy")}
+                </label>
+                <select
+                  id="app-sort"
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(e.target.value as "name" | "score")
+                  }
+                  className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground"
+                >
+                  <option value="name">{tScore("sortName")}</option>
+                  <option value="score">{tScore("sortScore")}</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {sortedApps.map((app) => (
+                  <AppCard key={app.id} app={app} projectName={projectName} />
+                ))}
+              </div>
+            </>
           )}
 
           <GettingStarted />
