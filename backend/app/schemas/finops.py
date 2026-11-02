@@ -166,6 +166,7 @@ class OverviewResponse(BaseModel):
 class SourceMeta(BaseModel):
     source: str
     last_ingested_at: datetime | None = None
+    first_day: date | None = None
     latest_day: date | None = None
     final_through: date | None = None
     has_estimate: bool = False

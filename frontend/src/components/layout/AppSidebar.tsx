@@ -1,45 +1,48 @@
 "use client";
 
 import { Logo } from "@/components/brand/Logo";
-import { Avatar } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import {
-  useDeploymentsList,
-  useProjects,
-  useSecurityOverview,
-} from "@/lib/hooks";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useSecurityOverview } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import {
-  BellRing,
   BookOpen,
-  Bot,
-  Boxes,
   ChevronLeft,
-  Crown,
   ExternalLink,
-  Eye,
-  FolderKanban,
-  History,
-  Home,
+  Menu,
   PanelLeft,
-  Shield,
-  ShieldCheck,
-  User,
-  Users,
-  Wallet,
+  Search,
 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { LinksMenu } from "./LinksMenu";
+import { ProjectNav } from "./ProjectNav";
+import { ProjectSwitcher } from "./ProjectSwitcher";
+import { projectFromPath } from "./projectSections";
+import { recordRecentProject } from "./recentProjects";
+import { ThemeSwitch } from "./ThemeSwitch";
+import { UserMenu } from "./UserMenu";
+import {
+  DOCS_URL,
+  HOME_PAGE,
+  PLATFORM_PAGES,
+  WORK_PAGES,
+  useVisibleWork,
+  type PageEntry,
+} from "./shellData";
 
 const STORAGE_KEY = "cnp.sidebar.collapsed";
 
-/**
- * Collapsed state backed by localStorage via useSyncExternalStore so it stays
- * in sync across tabs and renders without a hydration mismatch (server always
- * reports "expanded").
- */
+// Backed by localStorage via useSyncExternalStore so it stays in sync across
+// tabs and renders without a hydration mismatch (server always reports
+// "expanded").
 function useCollapsed(): [boolean, () => void] {
   const collapsed = useSyncExternalStore(
     (cb) => {
@@ -52,277 +55,249 @@ function useCollapsed(): [boolean, () => void] {
 
   const toggle = () => {
     localStorage.setItem(STORAGE_KEY, collapsed ? "0" : "1");
-    // Notify listeners in the current tab (native "storage" only fires cross-tab)
+    // Native "storage" only fires cross-tab.
     window.dispatchEvent(new Event("storage"));
   };
 
   return [collapsed, toggle];
 }
 
-export function AppSidebar() {
-  const pathname = usePathname();
-  const { data: session } = useSession();
+interface BodyProps {
+  collapsed: boolean;
+  onSearch: () => void;
+  onToggle?: () => void;
+  onNavigate?: () => void;
+}
+
+export function AppSidebar({ onSearch }: { onSearch: () => void }) {
   const [collapsed, toggle] = useCollapsed();
-
-  // Poll so the list reflects projects created/deleted elsewhere (15s active).
-  const { projects, loading: loadingProjects } = useProjects(15000);
-  // The sidebar list rarely needs fresh data: 15s while active, 30s when idle.
-  const { deployments, loading: loadingApps } = useDeploymentsList(15000, 30000);
-  const security = useSecurityOverview();
-  const coreProjects = new Set(
-    security.filter((s) => s.core > 0).map((s) => s.project),
-  );
-
-  // Only deployments that belong to a project (and are not deleted) are
-  // linkable. The project check is redundant with the server-side scoping on
-  // `GET /deployments/`, and kept so a stale response cannot surface a link
-  // into a project the user cannot open.
-  const apps = deployments.filter(
-    (d) =>
-      d.project_id &&
-      d.status !== "deleted" &&
-      projects.some((p) => p.name === d.project_id),
-  );
-
-  const displayName =
-    session?.user?.name ||
-    `${session?.user?.given_name ?? ""} ${session?.user?.family_name ?? ""}`.trim() ||
-    session?.user?.email ||
-    "Profile";
 
   return (
     <aside
       className={cn(
-        "sticky top-0 h-screen shrink-0 border-r bg-card flex flex-col transition-[width] duration-200",
+        "sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r bg-card transition-[width] duration-200 md:flex",
         collapsed ? "w-16" : "w-64",
       )}
     >
-      {/* ── Header: home + collapse toggle ── */}
-      <div className="flex items-center gap-2 px-3 h-14 border-b shrink-0">
-        <Link
-          href="/"
-          className={cn(
-            "flex items-center gap-2 min-w-0 rounded-md hover:bg-accent transition-colors px-2 py-1.5",
-            collapsed ? "justify-center w-full" : "flex-1",
-          )}
-          title="Home"
-        >
-          <Logo className="h-7 w-7 shrink-0" />
-          {!collapsed && (
-            <span className="font-bold leading-none truncate">CNP</span>
-          )}
-        </Link>
-        {!collapsed && (
-          <button
-            onClick={toggle}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-            title="Collapse sidebar"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {collapsed && (
-        <button
-          onClick={toggle}
-          className="mx-auto mt-2 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          title="Expand sidebar"
-        >
-          <PanelLeft className="h-4 w-4" />
-        </button>
-      )}
-
-      {/* ── Quick links: Home, FinOps, Security, Activity, Alerts, Docs ── */}
-      <nav className="px-2 pt-2 space-y-0.5">
-        <NavLink
-          href="/"
-          active={pathname === "/"}
-          collapsed={collapsed}
-          icon={<Home className="h-4 w-4 shrink-0" />}
-          label="Home"
-        />
-        <NavLink
-          href="/finops"
-          active={pathname.startsWith("/finops")}
-          collapsed={collapsed}
-          icon={<Wallet className="h-4 w-4 shrink-0" />}
-          label="FinOps"
-        />
-        <NavLink
-          href="/security"
-          active={pathname.startsWith("/security")}
-          collapsed={collapsed}
-          icon={<Shield className="h-4 w-4 shrink-0" />}
-          label="Sécurité"
-          alert={coreProjects.size > 0}
-        />
-        <NavLink
-          href="/activity"
-          active={pathname.startsWith("/activity")}
-          collapsed={collapsed}
-          icon={<History className="h-4 w-4 shrink-0" />}
-          label="Activité"
-        />
-        <NavLink
-          href="/alerts"
-          active={pathname.startsWith("/alerts")}
-          collapsed={collapsed}
-          icon={<BellRing className="h-4 w-4 shrink-0" />}
-          label="Alertes"
-        />
-        <NavLink
-          href="/connect-ai"
-          active={pathname.startsWith("/connect-ai")}
-          collapsed={collapsed}
-          icon={<Bot className="h-4 w-4 shrink-0" />}
-          label="Assistants IA"
-        />
-        <ExternalNavLink
-          href="https://3-istor.github.io/cnp-docs/"
-          collapsed={collapsed}
-          icon={<BookOpen className="h-4 w-4 shrink-0" />}
-          label="Docs"
-        />
-      </nav>
-
-      {/* ── Scrollable lists ── */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4">
-        {/* Projects */}
-        <Section
-          title="Projects"
-          icon={<FolderKanban className="h-3.5 w-3.5" />}
-          collapsed={collapsed}
-        >
-          {loadingProjects ? (
-            <ListSkeleton collapsed={collapsed} />
-          ) : projects.length === 0 ? (
-            !collapsed && (
-              <p className="px-2 py-1 text-xs text-muted-foreground">
-                No projects
-              </p>
-            )
-          ) : (
-            projects.map((p) => {
-              const RoleIcon =
-                p.role === "owner"
-                  ? Crown
-                  : p.role === "admin"
-                    ? ShieldCheck
-                    : p.role === "guest"
-                      ? Eye
-                      : Users;
-              return (
-                <NavLink
-                  key={p.name}
-                  href={`/projects/${p.name}`}
-                  active={pathname === `/projects/${p.name}`}
-                  collapsed={collapsed}
-                  icon={<RoleIcon className="h-4 w-4 shrink-0" />}
-                  label={p.name}
-                  labelClassName="capitalize"
-                  alert={coreProjects.has(p.name)}
-                />
-              );
-            })
-          )}
-        </Section>
-
-        {/* Apps */}
-        <Section
-          title="Apps"
-          icon={<Boxes className="h-3.5 w-3.5" />}
-          collapsed={collapsed}
-        >
-          {loadingApps ? (
-            <ListSkeleton collapsed={collapsed} />
-          ) : apps.length === 0 ? (
-            !collapsed && (
-              <p className="px-2 py-1 text-xs text-muted-foreground">No apps</p>
-            )
-          ) : (
-            apps.map((app) => {
-              const href = `/projects/${app.project_id}/apps/${app.id}`;
-              return (
-                <NavLink
-                  key={app.id}
-                  href={href}
-                  active={pathname === href}
-                  collapsed={collapsed}
-                  icon={
-                    app.template_icon ? (
-                      <span className="text-base leading-none shrink-0 w-4 text-center">
-                        {app.template_icon}
-                      </span>
-                    ) : (
-                      <Boxes className="h-4 w-4 shrink-0" />
-                    )
-                  }
-                  label={app.name}
-                />
-              );
-            })
-          )}
-        </Section>
-      </div>
-
-      {/* ── Profile (bottom) ── */}
-      <div className="border-t p-2 shrink-0">
-        <Link
-          href="/account"
-          className={cn(
-            "flex items-center gap-2 rounded-md px-2 py-2 hover:bg-accent transition-colors",
-            pathname === "/account" && "bg-accent",
-            collapsed && "justify-center",
-          )}
-          title={displayName}
-        >
-          {session?.user ? (
-            <Avatar
-              src={session.user.image}
-              alt={displayName}
-              fallback={displayName}
-              className="h-7 w-7"
-            />
-          ) : (
-            <User className="h-5 w-5 shrink-0" />
-          )}
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">{displayName}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {session?.user?.email ?? "My Account"}
-              </p>
-            </div>
-          )}
-        </Link>
-      </div>
+      <SidebarBody collapsed={collapsed} onSearch={onSearch} onToggle={toggle} />
     </aside>
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+export function MobileSidebar({ onSearch }: { onSearch: () => void }) {
+  const t = useTranslations("shell.sidebar");
+  const [open, setOpen] = useState(false);
 
-function Section({
+  return (
+    <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b bg-background px-3 md:hidden">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={t("openMenu")}
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+      >
+        <Menu className="h-5 w-5" aria-hidden />
+      </Button>
+      <Logo className="h-6 w-6" />
+      <span className="font-bold leading-none">CNP</span>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="left">
+          <SheetTitle className="sr-only">{t("navigation")}</SheetTitle>
+          <SheetDescription className="sr-only">
+            {t("navigationHint")}
+          </SheetDescription>
+          <SidebarBody
+            collapsed={false}
+            onSearch={() => {
+              setOpen(false);
+              onSearch();
+            }}
+            onNavigate={() => setOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
+  const pathname = usePathname();
+  const t = useTranslations("shell.sidebar");
+  const { projects, apps, loading } = useVisibleWork();
+  const security = useSecurityOverview();
+  const hasCoreAlert = security.some((s) => s.core > 0);
+  const projectName = projectFromPath(pathname);
+
+  useEffect(() => {
+    if (projectName) recordRecentProject(projectName);
+  }, [projectName]);
+
+  const counts: Partial<Record<PageEntry["key"], number | undefined>> = {
+    projects: loading ? undefined : projects.length,
+    apps: loading ? undefined : apps.length,
+  };
+
+  const renderLink = (page: PageEntry) => (
+    <NavLink
+      key={page.key}
+      page={page}
+      active={page.isActive(pathname)}
+      collapsed={collapsed}
+      label={t(page.key)}
+      count={counts[page.key]}
+      alert={page.key === "security" && hasCoreAlert}
+      alertLabel={t("securityAlert")}
+      onNavigate={onNavigate}
+    />
+  );
+
+  return (
+    <>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
+        <Link
+          href="/"
+          onClick={onNavigate}
+          className={cn(
+            "flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
+            collapsed ? "w-full justify-center" : "flex-1",
+          )}
+          aria-label={t("home")}
+        >
+          <Logo className="h-7 w-7 shrink-0" />
+          {!collapsed && (
+            <span className="truncate font-bold leading-none">CNP</span>
+          )}
+        </Link>
+        {onToggle && !collapsed && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title={t("collapse")}
+            aria-label={t("collapse")}
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+          </button>
+        )}
+      </div>
+
+      {onToggle && collapsed && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="mx-auto mt-2 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          title={t("expand")}
+          aria-label={t("expand")}
+        >
+          <PanelLeft className="h-4 w-4" aria-hidden />
+        </button>
+      )}
+
+      <div className="px-2 pt-2">
+        <button
+          type="button"
+          onClick={onSearch}
+          aria-keyshortcuts="Control+K Meta+K"
+          aria-label={collapsed ? t("search") : undefined}
+          title={t("search")}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            collapsed && "justify-center",
+          )}
+        >
+          <Search className="h-4 w-4 shrink-0" aria-hidden />
+          {!collapsed && (
+            <>
+              <span className="flex-1 truncate text-left">{t("search")}</span>
+              <kbd className="rounded border bg-muted px-1.5 text-[11px] font-medium">
+                {t("searchHint")}
+              </kbd>
+            </>
+          )}
+        </button>
+      </div>
+
+      {projectName ? (
+        <>
+          <div className="px-2 pt-2">
+            <ProjectSwitcher
+              key={projectName}
+              projectName={projectName}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          </div>
+          <ProjectNav
+            key={projectName}
+            projectName={projectName}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        </>
+      ) : (
+        <nav
+          aria-label={t("navigation")}
+          className="flex-1 space-y-4 overflow-y-auto px-2 py-3"
+        >
+          <div className="space-y-0.5">{renderLink(HOME_PAGE)}</div>
+          <Group title={t("groupWork")} collapsed={collapsed}>
+            {WORK_PAGES.map(renderLink)}
+          </Group>
+          <Group title={t("groupPlatform")} collapsed={collapsed}>
+            {PLATFORM_PAGES.map(renderLink)}
+          </Group>
+        </nav>
+      )}
+
+      <div className="shrink-0 space-y-1 border-t p-2">
+        <LinksMenu collapsed={collapsed} />
+        <a
+          href={DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={t("docs")}
+          aria-label={collapsed ? t("docs") : undefined}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 transition-colors hover:bg-accent hover:text-foreground",
+            collapsed && "justify-center",
+          )}
+        >
+          <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
+          {!collapsed && (
+            <>
+              <span className="flex-1 truncate">{t("docs")}</span>
+              <ExternalLink
+                className="h-3 w-3 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+            </>
+          )}
+        </a>
+        <div className={cn("px-1 py-1", collapsed && "flex justify-center")}>
+          <ThemeSwitch vertical={collapsed} />
+        </div>
+        <UserMenu collapsed={collapsed} onNavigate={onNavigate} />
+      </div>
+    </>
+  );
+}
+
+function Group({
   title,
-  icon,
   collapsed,
   children,
 }: {
   title: string;
-  icon: React.ReactNode;
   collapsed: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div>
+    <div role="group" aria-label={title}>
       {collapsed ? (
-        <div className="flex justify-center py-1 text-muted-foreground">
-          {icon}
-        </div>
+        <div className="mx-2 mb-1 border-t" />
       ) : (
-        <div className="flex items-center gap-1.5 px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {icon}
+        <div className="px-2 pb-1 text-[11.5px] font-medium text-muted-foreground">
           {title}
         </div>
       )}
@@ -332,96 +307,60 @@ function Section({
 }
 
 function NavLink({
-  href,
+  page,
   active,
   collapsed,
-  icon,
   label,
-  labelClassName,
-  alert = false,
+  count,
+  alert,
+  alertLabel,
+  onNavigate,
 }: {
-  href: string;
+  page: PageEntry;
   active: boolean;
   collapsed: boolean;
-  icon: React.ReactNode;
   label: string;
-  labelClassName?: string;
-  /** Red dot: a mandatory security action is open. */
-  alert?: boolean;
+  count?: number;
+  alert: boolean;
+  alertLabel: string;
+  onNavigate?: () => void;
 }) {
+  const Icon = page.icon;
   return (
     <Link
-      href={href}
+      href={page.href}
       title={label}
+      aria-current={active ? "page" : undefined}
+      aria-label={collapsed ? label : undefined}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
         active
-          ? "bg-primary/10 text-primary font-medium"
+          ? "bg-primary/10 font-medium text-primary"
           : "text-foreground/80 hover:bg-accent hover:text-foreground",
         collapsed && "justify-center",
       )}
     >
       <span className="relative flex">
-        {icon}
+        <Icon className="h-4 w-4 shrink-0" aria-hidden />
         {alert && collapsed && (
           <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-600" />
         )}
       </span>
-      {!collapsed && (
-        <span className={cn("truncate", labelClassName)}>{label}</span>
+      {!collapsed && <span className="flex-1 truncate">{label}</span>}
+      {!collapsed && count !== undefined && (
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {count}
+        </span>
       )}
       {alert && !collapsed && (
         <span
-          className="ml-auto h-2 w-2 shrink-0 rounded-full bg-red-600"
-          title="Action de sécurité obligatoire"
+          role="img"
+          aria-label={alertLabel}
+          title={alertLabel}
+          className="h-2 w-2 shrink-0 rounded-full bg-red-600"
         />
       )}
     </Link>
-  );
-}
-
-function ExternalNavLink({
-  href,
-  collapsed,
-  icon,
-  label,
-}: {
-  href: string;
-  collapsed: boolean;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={label}
-      className={cn(
-        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-foreground/80 hover:bg-accent hover:text-foreground",
-        collapsed && "justify-center",
-      )}
-    >
-      {icon}
-      {!collapsed && (
-        <>
-          <span className="truncate flex-1">{label}</span>
-          <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
-        </>
-      )}
-    </a>
-  );
-}
-
-function ListSkeleton({ collapsed }: { collapsed: boolean }) {
-  return (
-    <div className="space-y-1">
-      {[1, 2, 3].map((i) => (
-        <Skeleton
-          key={i}
-          className={cn("h-7 rounded-md", collapsed ? "w-8 mx-auto" : "w-full")}
-        />
-      ))}
-    </div>
   );
 }

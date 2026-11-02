@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPlatformStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { PlatformStatus } from "@/types";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { SOURCE_META, timeLabel } from "./labels";
+import { sourceLabel, timeLabel } from "./labels";
 
 const STALE_MS = 10 * 60_000;
 const ARCHIVE_STALE_MS = 2 * 3_600_000;
@@ -26,6 +27,8 @@ function Health({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 
 /** What the platform admin checks first: firing alerts, archive, collector. */
 export function PlatformCard() {
+  const t = useTranslations("activity");
+  const locale = useLocale();
   const [status, setStatus] = useState<PlatformStatus | null>(null);
   const [now, setNow] = useState(0);
 
@@ -46,7 +49,7 @@ export function PlatformCard() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Alertes actives{" "}
+            {t("platform.alerts")}{" "}
             <span className="text-muted-foreground">
               ({status.alerts.length})
             </span>
@@ -55,7 +58,7 @@ export function PlatformCard() {
         <CardContent className="space-y-2">
           {status.alerts.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Aucune alerte en cours.
+              {t("platform.noAlerts")}
             </p>
           ) : (
             status.alerts.slice(0, 8).map((a) => (
@@ -78,7 +81,7 @@ export function PlatformCard() {
                     </span>
                   )}
                   <span className="block text-xs text-muted-foreground">
-                    depuis {timeLabel(a.since)}
+                    {t("platform.since", { time: timeLabel(t, locale, a.since) })}
                   </span>
                 </span>
               </div>
@@ -88,7 +91,7 @@ export function PlatformCard() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Chaîne d&apos;audit</CardTitle>
+          <CardTitle className="text-base">{t("platform.auditChain")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <Health
@@ -96,17 +99,19 @@ export function PlatformCard() {
               !!archive && now - new Date(archive).getTime() < ARCHIVE_STALE_MS
             }
           >
-            Archive immuable : dernière heure archivée{" "}
-            {archive ? timeLabel(archive) : "jamais"}
+            {t("platform.archive", {
+              time: archive ? timeLabel(t, locale, archive) : t("common.never"),
+            })}
           </Health>
           {Object.entries(status.collected_until).map(([source, until]) => (
             <Health
               key={source}
               ok={now - new Date(until).getTime() < STALE_MS}
             >
-              Collecte{" "}
-              {SOURCE_META[source as keyof typeof SOURCE_META]?.label ?? source}{" "}
-              : à jour jusqu&apos;à {timeLabel(until)}
+              {t("platform.collected", {
+                source: sourceLabel(t, source),
+                time: timeLabel(t, locale, until),
+              })}
             </Health>
           ))}
         </CardContent>

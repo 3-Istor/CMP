@@ -1,7 +1,8 @@
 "use client";
 
 import type { FinopsCloud } from "@/types";
-import { CLOUDS, CLOUD_META, formatEUR } from "./format";
+import { useLocale } from "next-intl";
+import { CLOUDS, CLOUD_META, formatEUR, intlLocale } from "./format";
 
 export function CloudSplit({
   byCloud,
@@ -10,6 +11,7 @@ export function CloudSplit({
   byCloud: Record<FinopsCloud, number>;
   currency: string;
 }) {
+  const locale = intlLocale(useLocale());
   const total = CLOUDS.reduce((s, c) => s + (byCloud[c] ?? 0), 0);
 
   return (
@@ -34,7 +36,7 @@ export function CloudSplit({
             />
             {CLOUD_META[c].label}
             <span className="tabular-nums text-muted-foreground">
-              {formatEUR(byCloud[c] ?? 0, currency)}
+              {formatEUR(byCloud[c] ?? 0, currency, locale)}
             </span>
           </span>
         ))}

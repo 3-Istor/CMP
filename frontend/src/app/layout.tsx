@@ -2,6 +2,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -13,22 +15,23 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "CNP - Cloud Native Platform",
-  description: "Self-service cloud native platform",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("shell.meta");
+  return { title: t("title"), description: t("description") };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   // Get API URL from environment variable at runtime
+  const locale = await getLocale();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
   return (
     // The theme class is set by the script below, before first paint.
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         {/* Inject runtime config inline */}
         <script
@@ -47,10 +50,12 @@ export default function RootLayout({
       <body
         className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
       >
-        <SessionProvider>
-          <AppShell>{children}</AppShell>
-          <Toaster richColors position="bottom-right" />
-        </SessionProvider>
+        <NextIntlClientProvider>
+          <SessionProvider>
+            <AppShell>{children}</AppShell>
+            <Toaster richColors position="bottom-right" />
+          </SessionProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

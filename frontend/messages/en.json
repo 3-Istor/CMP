@@ -1,0 +1,1522 @@
+{
+  "shell": {
+    "meta": {
+      "title": "CNP - Cloud Native Platform",
+      "description": "Self-service cloud native platform"
+    },
+    "sidebar": {
+      "home": "Home",
+      "finops": "FinOps",
+      "security": "Security",
+      "activity": "Activity",
+      "alerts": "Alerts",
+      "assistants": "AI assistants",
+      "docs": "Docs",
+      "projects": "Projects",
+      "apps": "Apps",
+      "collapse": "Collapse sidebar",
+      "expand": "Expand sidebar",
+      "securityAlert": "Mandatory security action",
+      "search": "Search, go to",
+      "searchHint": "Ctrl K",
+      "groupWork": "My work",
+      "groupPlatform": "Platform",
+      "navigation": "Main navigation",
+      "navigationHint": "Platform pages, links, theme and profile.",
+      "openMenu": "Open the menu",
+      "skipToContent": "Skip to content"
+    },
+    "home": {
+      "fallbackName": "Developer",
+      "greeting": "Hello {name}"
+    },
+    "links": {
+      "label": "Links and help",
+      "status": "Platform status",
+      "roadmap": "Roadmap",
+      "docs": "Documentation",
+      "adminGroup": "Admins only",
+      "adminOnly": "{count, plural, one {# link reserved for admins} other {# links reserved for admins}}"
+    },
+    "theme": {
+      "label": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "profile": {
+      "myProfile": "My profile",
+      "accountSettings": "Account settings",
+      "language": "Language",
+      "logout": "Sign out",
+      "roleAdmin": "Platform admin",
+      "roleMember": "Member",
+      "fallback": "User"
+    },
+    "palette": {
+      "title": "Search, go to",
+      "placeholder": "Search a page, project or application...",
+      "empty": "No results.",
+      "pages": "Pages",
+      "projects": "Projects",
+      "apps": "Applications",
+      "links": "Links"
+    }
+  },
+  "projects": {
+    "home": {
+      "title": "My projects",
+      "subtitle": "Each project is an isolated team boundary with its own Keycloak groups, Vault policies and ArgoCD AppProject.",
+      "new": "New project",
+      "emptyTitle": "No projects yet",
+      "emptyBody": "Create your first project to start deploying applications, or <assistant>ask your AI assistant</assistant> to do it.",
+      "create": "Create project"
+    }
+  },
+  "apps": {
+    "home": {
+      "allDeployments": "All my deployments"
+    },
+    "nav": {
+      "label": "Application sections",
+      "breadcrumb": "Breadcrumb",
+      "applications": "Applications",
+      "app": "Application",
+      "release": "Release",
+      "environments": "Environments",
+      "security": "Security",
+      "config": "Configuration",
+      "costs": "Costs",
+      "activity": "Activity",
+      "alerts": "Alerts"
+    }
+  },
+  "finops": {
+    "common": {
+      "project": "Project",
+      "allProjects": "All projects",
+      "allClouds": "All clouds",
+      "period": "Period",
+      "na": "n/a",
+      "loadFailed": "Failed to load",
+      "unknownError": "Unknown error",
+      "perMonth": "/ month",
+      "total": "Total",
+      "application": "Application",
+      "dailyTrend": "Daily trend",
+      "periods": {
+        "7d": "7 days",
+        "30d": "30 days",
+        "90d": "90 days",
+        "ytd": "Since 1 January"
+      },
+      "periodsIn": {
+        "30d": "over the last 30 days",
+        "90d": "over the last 90 days",
+        "ytd": "since 1 January"
+      }
+    },
+    "age": {
+      "never": "never",
+      "lessThanHour": "less than 1 h ago",
+      "hoursAgo": "{count} h ago",
+      "daysAgo": "{count} d ago"
+    },
+    "resources": {
+      "cpu": "CPU",
+      "ram": "RAM",
+      "storage": "Storage",
+      "network": "Network",
+      "ai": "AI",
+      "platform": "Platform fee"
+    },
+    "resourceHints": {
+      "platform": "Fixed share per application of the platform's shared services"
+    },
+    "dataFreshness": {
+      "real": "actual",
+      "simulated": "simulated",
+      "estimated": "estimated",
+      "estimateNote": "Part of the cost relies on a provisional price.",
+      "updated": "updated {age}",
+      "finalUntil": "final until {date}"
+    },
+    "layout": {
+      "subtitle": "Track, analyse and optimise infrastructure costs.",
+      "tabs": {
+        "overview": "Overview",
+        "recommendations": "Recommendations",
+        "savings": "Savings",
+        "greenops": "GreenOps",
+        "budgets": "Budgets & alerts",
+        "finance": "Finance"
+      }
+    },
+    "filters": {
+      "cloud": "Cloud",
+      "granularity": "Granularity",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "overview": {
+      "exportCsv": "Export CSV",
+      "exportDisabled": "Export is only available with actual costs.",
+      "exportFailed": "CSV export failed",
+      "resetFilter": "Reset filter",
+      "cloudSplit": "Split by cloud",
+      "costTrend": "Spend over time",
+      "costBreakdown": "Cost breakdown",
+      "appTracking": "Application tracking",
+      "whereToRun": "Where each application should run"
+    },
+    "kpi": {
+      "monthCost": "Cost this month",
+      "sinceDay": "since {day}",
+      "projection": "Month-end projection: {amount}",
+      "forecastEnd": "Month-end forecast:",
+      "forecastSpread": "± {amount}",
+      "forecastRange": "{low} – {high} ({confidence} %)",
+      "forecastShortHistory": "· short history",
+      "forecastInterval": "{confidence} % interval, {days, plural, one {# day} other {# days}} of history",
+      "overrunPast": "budget exceeded on {date}",
+      "overrunFuture": "overrun expected on {date}",
+      "budgetTitle": "Allocated vs spent budget",
+      "noBudget": "No budget set for this project.",
+      "setBudget": "Set a budget →",
+      "trackedApps": "Tracked applications",
+      "trackedAppsHint": "Cost spread across all active applications in scope.",
+      "potentialSavings": "Potential savings",
+      "seeRecommendations": "See recommendations →",
+      "realisedSavings": "Realised savings (YTD)",
+      "allocatedAvoided": "+ {amount} allocated avoided",
+      "seeDetails": "See details →"
+    },
+    "appCost": {
+      "empty": "No applications in this scope.",
+      "costPerDay": "Cost per day",
+      "costPerMonth": "Estimated cost per month",
+      "ofWhichPlatform": "Of which platform fee",
+      "trend": "Trend"
+    },
+    "cloudEstimate": {
+      "empty": "Not enough measurements yet to estimate applications.",
+      "measuredOn": "Measured on",
+      "averageCpuRam": "Average CPU / RAM",
+      "cpuRam": "{cores} core · {ram} GiB",
+      "provisional": "Price to be confirmed: provisional value",
+      "footnote": "Average CPU and memory over the last 30 days, at each target's price (on-prem TCO, catalogue price of EKS and GKE nodes). Excludes storage, network and platform fee. * provisional price."
+    },
+    "budgets": {
+      "selectProject": "Select…",
+      "ownerSuffix": " (Project Owner)",
+      "pickProject": "Select a project to manage its budget.",
+      "cardTitle": "Monthly budget · {project}",
+      "cardDescription": "Set the envelope and alert thresholds for the project.",
+      "alertsTitle": "Alert history",
+      "noAlerts": "No alerts recorded."
+    },
+    "budgetForm": {
+      "invalidAmount": "Invalid amount.",
+      "thresholdOrder": "The warning threshold must be lower than the critical threshold.",
+      "saved": "Budget saved.",
+      "saveFailed": "Save failed",
+      "ownerRequired": "Only the Project Owner can change the budget.",
+      "amountLabel": "Monthly envelope (EUR)",
+      "amountPlaceholder": "e.g. 500",
+      "warnLabel": "Warning threshold (%)",
+      "criticalLabel": "Critical threshold (%)",
+      "save": "Save budget",
+      "ownerOnly": "Only the <owner>Project Owner</owner> can set the budget of this project."
+    },
+    "budgetGauge": {
+      "consumed": "{percent}% consumed",
+      "remaining": "Remaining {amount}"
+    },
+    "recommendation": {
+      "effort": {
+        "low": "Low effort",
+        "medium": "Medium effort",
+        "high": "High effort"
+      },
+      "type": {
+        "replicas": "Replicas",
+        "rightsizing": "Rightsizing",
+        "inactivity": "Inactivity",
+        "storage": "Storage"
+      },
+      "currentConfig": "Current configuration",
+      "recommendedConfig": "Recommended",
+      "confidence": "Confidence {confidence}%",
+      "saving": "/ month",
+      "adminsOnlyToast": "Only project admins can act on a recommendation",
+      "adminsOnlyHint": "Only project admins can apply this recommendation.",
+      "cannotAutoApply": "This recommendation cannot be applied automatically.",
+      "apply": "Apply",
+      "notify": "Notify",
+      "ignore": "Ignore",
+      "actionFailed": "Action failed"
+    },
+    "recommendations": {
+      "sortLabel": "Sort by",
+      "sort": {
+        "saving": "Sort: potential saving",
+        "confidence": "Sort: confidence level",
+        "effort": "Sort: effort required"
+      },
+      "hideDone": "Hide done",
+      "showAll": "Show all",
+      "shownSavings": "Savings shown:",
+      "emptyTitle": "No pending recommendations",
+      "emptyText": "Your applications are correctly sized for this scope."
+    },
+    "savings": {
+      "seriesAvoided": "Allocated cost avoided",
+      "seriesRealized": "Realised savings",
+      "mechanism": {
+        "offhours": "Scale-down (offhours)",
+        "rightsizingApplied": "Right-sizing applied",
+        "idleCleanup": "Idle resource cleanup"
+      },
+      "columns": {
+        "mechanism": "Mechanism",
+        "avoided": "Allocated cost avoided",
+        "realized": "Realised savings",
+        "kwh": "kWh avoided",
+        "days": "Days"
+      },
+      "firstData": "First data on {date}",
+      "avoidedHint": "Capacity freed while workloads sleep. Only lowers the bill if nodes are removed.",
+      "realizedHint": "Electricity not consumed on-prem. €0 in the cloud without an autoscaler.",
+      "realizedDetail": "On-prem, sleeping pods free capacity (avoided) but the 3 nodes stay powered on: realised savings only cover the dynamic share of their electricity use. In the cloud, they grow when nodes are removed.",
+      "kwhHint": "That is {co2} kg CO₂e avoided.",
+      "empty": "No savings recorded for this period. Savings appear the day after offhours-guard scales workloads down.",
+      "timelineHint": "Two separate series, never added together.",
+      "detailTitle": "Details by project, application and mechanism"
+    },
+    "carbon": {
+      "energyTitle": "Energy consumed",
+      "energyHint": "On-prem servers, {period}.",
+      "emissionsTitle": "Emissions (direct RTE)",
+      "lcaHint": "LCA ADEME: {value} kg CO₂e",
+      "gridTitle": "Grid intensity",
+      "gridEmpty": "No RTE measurement yet.",
+      "gridHint": "Average for {date}, RTE éCO2mix.",
+      "avoidedTitle": "CO₂e avoided by scale-down",
+      "avoidedHint": "offhours-guard scale-down, same RTE intensity.",
+      "methodTitle": "Method.",
+      "method": "On-prem: measured hypervisor power (October average, until a continuous exporter is in place) × RTE éCO2mix intensity for the day. LCA: same energy × {factor} g/kWh ({source}). Cloud: estimate, coming soon.",
+      "trendHint": "Energy as bars, daily average intensity as a line.",
+      "rteExplainer": "Grid intensity is the amount of CO₂e emitted per kWh produced (gCO₂e/kWh), published by RTE éCO2mix every 15 minutes. It varies with the production mix: low at night and when it is windy, higher at evening peaks when gas is called on. It is used to compute measured emissions (energy × hourly intensity) and to pick low-carbon hours for batch jobs.",
+      "detailTitle": "Details by project and application",
+      "emptyText": "No energy measured for this period. Data appears after the ingester's first run.",
+      "energyColumn": "Energy",
+      "directColumn": "kg CO₂e (direct RTE)",
+      "lcaColumn": "kg CO₂e (LCA)",
+      "series": {
+        "energy": "Energy (kWh)",
+        "intensity": "RTE intensity (gCO₂e/kWh)"
+      }
+    },
+    "finance": {
+      "accessDenied": "This tab is reserved for finance and CNP admins.",
+      "closed": "Month {period} closed.",
+      "centersSaved": "Cost centres saved.",
+      "exportsTitle": "Monthly exports",
+      "exportsHint": "On-prem electricity incl. VAT, cloud invoices excl. VAT: the Base column of the export says which.",
+      "exportXlsx": "Export XLSX",
+      "exportParquet": "Export Parquet",
+      "exportCsv": "Export CSV",
+      "month": "Month",
+      "statementsTitle": "Statements by project",
+      "statementsEmpty": "No projects.",
+      "closingTitle": "Closing {period}",
+      "closingHint": "A closed month is no longer changed: a late revision becomes an adjustment line on the first open month.",
+      "alreadyClosed": "This month is already closed.",
+      "closeMonth": "Close this month",
+      "closeConfirm": "Close {period}? This action cannot be undone from the CMP.",
+      "forceHint": "{error} You can force the close.",
+      "forceClose": "Force close",
+      "confirmClose": "Confirm close",
+      "cancel": "Cancel",
+      "closedTitle": "Closed months",
+      "closedNone": "None yet.",
+      "closedBy": "by {user}",
+      "closedOn": ", on {date}",
+      "costCentresTitle": "Cost centres",
+      "costCentresHint": "An empty cost centre removes the link. Used in the Projects tab of the XLSX export.",
+      "colCostCentre": "Cost centre",
+      "colBudgetOwner": "Budget owner",
+      "costCentreLabel": "Cost centre of {project}",
+      "budgetOwnerLabel": "Budget owner of {project}",
+      "save": "Save"
+    },
+    "platform": {
+      "title": "Platform cost",
+      "description": "Shared services and idle capacity, spread across fixed fees per active application.",
+      "periods": {
+        "30d": "30 days",
+        "90d": "90 days",
+        "ytd": "Year to date"
+      },
+      "periodAria": "Platform cost period",
+      "total": "Platform cost",
+      "idleHint": "of which idle {idle}",
+      "covered": "Covered by fees",
+      "uncovered": "Not covered",
+      "uncoveredHint": "Fees in surplus",
+      "feePerApp": "Fee per app",
+      "feeHint": "{active} active apps for {slots} slots",
+      "cost": "Cost",
+      "idle": "Idle capacity",
+      "chartCovered": "Covered",
+      "chartUncovered": "Not covered"
+    },
+    "projectPanel": {
+      "openDashboard": "Open FinOps dashboard"
+    },
+    "timeline": {
+      "inProgress": "in progress",
+      "partialDay": "Today so far: {partial} at {hour} h, projected {projected}",
+      "forecast": "Forecast",
+      "forecastValue": "{value} ({low} – {high})",
+      "forecastRange": "Forecast range",
+      "forecastLegend": "Forecast ({confidence} %)",
+      "today": "Today (projected)",
+      "anomaly": "Anomaly",
+      "anomalyDetail": "Anomaly · {app}: {cost} (median {baseline})",
+      "cause": "Likely cause: {cause}"
+    },
+    "donut": {
+      "total": "Total"
+    }
+  },
+  "security": {
+    "common": {
+      "loading": "Loading…",
+      "never": "never",
+      "project": "project",
+      "details": "Details",
+      "save": "Save",
+      "cancel": "Cancel",
+      "noChange": "No change",
+      "backupStarted": "Backup started: {list}"
+    },
+    "tiers": {
+      "core": "Core",
+      "important": "Important",
+      "recommended": "Recommended",
+      "info": "Info"
+    },
+    "categories": {
+      "leaks": {
+        "label": "Leaks",
+        "question": "Does my code leak secrets?"
+      },
+      "dependencies": {
+        "label": "Dependencies",
+        "question": "Do my dependencies have vulnerabilities?"
+      },
+      "container": {
+        "label": "Container",
+        "question": "Is my container built properly?"
+      },
+      "access": {
+        "label": "Access",
+        "question": "Who can reach my app?"
+      },
+      "data": {
+        "label": "Data",
+        "question": "Is my data protected?"
+      },
+      "journal": {
+        "label": "Journal",
+        "question": "What happened?"
+      }
+    },
+    "tabs": {
+      "overview": "Overview",
+      "code": "Code and dependencies",
+      "access": "Access and exposure",
+      "data": "Data",
+      "journal": "Journal",
+      "ignored": "Ignored"
+    },
+    "scanSources": {
+      "trivy-operator": "Running images · Trivy Operator",
+      "ci": "Code · GitHub Actions",
+      "kyverno": "Containers · Kyverno",
+      "cnpg": "Backups · CNPG",
+      "exposure": "Exposure",
+      "cilium": "Network isolation"
+    },
+    "exceptionStatus": {
+      "not_affected": "Does not affect us",
+      "false_positive": "False positive",
+      "accepted_risk": "Accepted risk",
+      "revoked": "Revoked secret"
+    },
+    "justifications": {
+      "component_not_present": "The vulnerable package is not in the image",
+      "vulnerable_code_not_present": "The vulnerable code is not present",
+      "vulnerable_code_not_in_execute_path": "The vulnerable code is never called",
+      "vulnerable_code_cannot_be_controlled_by_adversary": "An attacker cannot reach this code",
+      "inline_mitigations_already_exist": "An existing mitigation already blocks the attack"
+    },
+    "failOn": {
+      "none": "Never blocks, only reports",
+      "critical": "Blocks on a secret or a fixable critical CVE"
+    },
+    "settingsSource": {
+      "platform": "platform default value",
+      "project": "project default",
+      "app": "set for this app"
+    },
+    "settingsAction": {
+      "enable": "Enable",
+      "restrict": "Restrict",
+      "configure": "Configure"
+    },
+    "banner": {
+      "count": "{count, plural, one {# mandatory security action} other {# mandatory security actions}}",
+      "inApp": "{title} in {app}",
+      "show": "View action →"
+    },
+    "alert": {
+      "count": "Warning: {count, plural, one {# mandatory security action} other {# mandatory security actions}}",
+      "view": "View →"
+    },
+    "dashboard": {
+      "score": "Security level",
+      "scans": "Scans",
+      "excepted": "{count, plural, one {# alert ignored, not in the score.} other {# alerts ignored, not in the score.}}",
+      "priority": "Priority actions",
+      "noAction": "No pending action.",
+      "moreActions": "And {count, plural, one {# more action} other {# more actions}}, in the tabs above.",
+      "nothingToReport": "Nothing to report.",
+      "openFullPage": "Open in Security →",
+      "newMajor": "New major flaws",
+      "newMajorDescription": "Per week, core and important",
+      "guarantees": "Platform guarantees",
+      "notApplicable": "not applicable",
+      "guaranteesNote": "Provided by the platform, nothing to do.",
+      "trend": "Score over 90 days",
+      "apps": "Project apps",
+      "noApp": "No app.",
+      "app": "App",
+      "grade": "Grade",
+      "appActions": "Actions",
+      "appMandatory": "Mandatory",
+      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project."
+    },
+    "score": {
+      "nothingToDo": "Nothing to do",
+      "actions": "{count, plural, one {# action to take} other {# actions to take}}",
+      "tierCount": "{count} {tier}",
+      "phase2": "phase 2",
+      "ok": "ok",
+      "arrivesPhase2": "Arrives in phase 2",
+      "pointsLost": "{points, plural, one {−# point} other {−# points}}",
+      "grade": "/100 · grade {grade}"
+    },
+    "trend": {
+      "weekOf": "Week of {date}",
+      "newMajor": "New major flaws",
+      "score": "Score",
+      "noHistory": "No history yet."
+    },
+    "finding": {
+      "pending": "Ignored by {author}, awaiting approval from a project admin.",
+      "viewRun": "View run",
+      "backupNow": "Back up now",
+      "seenBy": "Seen by {sources} since {date}"
+    },
+    "exception": {
+      "ignore": "Ignore",
+      "title": "Ignore this alert",
+      "reason": "Reason",
+      "why": "Why",
+      "explanation": "Explanation",
+      "explanationPlaceholder": "What you checked, in one or two sentences",
+      "expiresOn": "Expires on",
+      "expiryHint": "Defaults to, and at the latest on, {date}. The alert comes back on its own on that date.",
+      "approvalNeeded": "Another project admin must approve it. Until then, the alert still counts.",
+      "saved": "Exception saved, awaiting approval",
+      "ignored": "Alert ignored",
+      "hints": {
+        "not_affected": "The flaw exists in the package but cannot be exploited here. Review in one year.",
+        "false_positive": "The scanner is wrong. Review in one year.",
+        "accepted_risk": "The flaw affects us, we will fix it later. Expires within 90 days at most, and another project admin must approve.",
+        "revoked": "The secret was changed and the old one no longer works. Removing it from the history is not enough."
+      }
+    },
+    "exceptions": {
+      "empty": "No ignored alert.",
+      "awaitingApproval": "Awaiting approval",
+      "byOn": "By {author} on {date}",
+      "approvedBy": "approved by {approver}",
+      "expiresOn": "expires on {date}",
+      "approve": "Approve",
+      "reactivate": "Reactivate",
+      "approved": "Exception approved",
+      "reactivated": "Alert reactivated"
+    },
+    "scans": {
+      "requested": "scan requested, result in a few minutes",
+      "readError": "Read failed, automatic retry",
+      "lastRun": "last {when}",
+      "nextRun": "next {when}",
+      "rerun": "Run again",
+      "started": "Scan started",
+      "firstRun": "The collector's first run will happen in a few minutes."
+    },
+    "alerts": {
+      "title": "Discord alerts",
+      "description": "Each new core issue is sent once, to {target}.",
+      "none": "no channel",
+      "origin": {
+        "app": "this app's webhook",
+        "project": "the project's webhook",
+        "platform": "the platform's default channel"
+      },
+      "scope": {
+        "app": "this app",
+        "project": "this project"
+      },
+      "ownWebhook": "Webhook for {scope}:",
+      "replace": "Replace",
+      "useThis": "Use this webhook",
+      "remove": "Remove",
+      "sendTest": "Send a test",
+      "testSent": "Test message sent",
+      "saved": "Webhook saved",
+      "removed": "Webhook removed",
+      "storedInVault": "The webhook is stored in Vault and is never shown again.",
+      "fallbackToProject": "Without an app webhook, the project's one is used.",
+      "appCanOwn": "An app can have its own."
+    },
+    "backups": {
+      "title": "Backups",
+      "phase": {
+        "completed": "Succeeded",
+        "failed": "Failed",
+        "running": "Running",
+        "started": "Running",
+        "pending": "Pending"
+      },
+      "instances": "{ready}/{total} {total, plural, one {instance ready} other {instances ready}}",
+      "restoring": "Restoring: {phase}",
+      "preparing": "Preparing: {phase}",
+      "restoredAt": "restored from {source}, up to {date}",
+      "restoredBackup": "restored from {source}, backup {backup}",
+      "emptyState": "No backups yet. Enable them in the Configuration tab, « Exposure and data » panel.",
+      "refresh": "Refresh",
+      "database": "Database",
+      "when": "When",
+      "status": "Status",
+      "manual": "manual",
+      "restore": "Restore"
+    },
+    "restore": {
+      "title": "Restore database {database}",
+      "description": "A new database is created from the backup, then the app switches to it. The app is unavailable during the restore, usually a few minutes. The current database is deleted, but its backups remain: you can roll back the same way.",
+      "backupState": "State at the end of the backup",
+      "pointInTime": "State at a given time, after the backup",
+      "pointHint": "Useful to go back just before a mistake, for example a data deletion at 14:32.",
+      "confirm": "Confirm restore",
+      "preview": "Preview the change",
+      "committed": "Restore committed, Argo CD will deploy it in a few minutes"
+    },
+    "settings": {
+      "title": "Settings",
+      "ciBlocking": "CI blocking",
+      "enforced": "Enforced by the project admin",
+      "current": "Currently: {source}",
+      "saved": "Setting committed to deploy/security.yaml",
+      "confirmChange": "Confirm the change",
+      "commit": "Confirm and commit"
+    },
+    "policy": {
+      "title": "Project policy",
+      "ciDefault": "CI blocking, by default",
+      "lock": "Lock",
+      "lockHint": "Apps inherit the value and cannot change it.",
+      "saved": "Policy saved",
+      "appliedTo": "{count, plural, one {Policy saved, applied to # app} other {Policy saved, applied to # apps}}",
+      "notApplied": "Not applied to: {list}"
+    }
+  },
+  "activity": {
+    "common": {
+      "refresh": "Refresh",
+      "loading": "Loading…",
+      "never": "never"
+    },
+    "tab": {
+      "description": {
+        "audit": "Who did what in {scope, select, app {this app} other {this project}}: CMP, kubectl, Vault, Keycloak and deployments.",
+        "logs": "Pod logs for {scope, select, app {this app} other {this project}}, with search and live tail."
+      },
+      "views": {
+        "audit": "Audit",
+        "logs": "Logs"
+      }
+    },
+    "sources": {
+      "cmp": "CMP",
+      "kubernetes": "kubectl",
+      "vault": "Vault",
+      "keycloak": "Keycloak",
+      "deployment": "Deployments"
+    },
+    "periods": {
+      "15m": "15 minutes",
+      "1h": "1 hour",
+      "6h": "6 hours",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "14d": "14 days",
+      "30d": "30 days"
+    },
+    "groups": {
+      "project": "Project and members",
+      "apps": "Applications",
+      "security": "Security",
+      "databases": "Databases",
+      "finops": "FinOps",
+      "shells": "Shells in a pod",
+      "vault": "Vault secrets",
+      "logins": "Failed logins",
+      "deployments": "Deployments"
+    },
+    "roles": {
+      "admin": "admin",
+      "member": "member"
+    },
+    "exposure": {
+      "public": "public",
+      "projectUsers": "project users",
+      "projectMembers": "project members",
+      "projectAdmins": "project admins",
+      "custom": "custom"
+    },
+    "time": {
+      "today": "today {time}"
+    },
+    "events": {
+      "projectCreate": "created project {project}",
+      "projectDelete": "deleted project {project}",
+      "memberAdd": "added {user} to the project ({role})",
+      "memberRemove": "removed {user} from the project",
+      "appCreate": "created app {app}",
+      "appDelete": "deleted app {app}",
+      "configUpdate": "changed the config of {app}",
+      "exposureChange": "changed the exposure of {app} from {from} to {to}",
+      "backupsChange": "changed the backups of {app}",
+      "scanRequest": "started a security scan of {app}",
+      "exceptionRequest": "requested a security exception on {app}",
+      "exceptionApprove": "approved a security exception",
+      "exceptionRevoke": "revoked a security exception",
+      "settingsUpdate": "changed the security settings of {app}",
+      "policyUpdate": "changed the project's security policy",
+      "alertsUpdate": "changed the security alerts target",
+      "alertsTest": "tested the security alerts",
+      "databaseBackup": "started a backup of the database of {app}",
+      "databaseRestore": "restored the database of {app}",
+      "budgetUpdate": "changed the project budget",
+      "recommendationApply": "applied a FinOps recommendation",
+      "recommendationIgnore": "ignored a FinOps recommendation",
+      "recommendationNotify": "notified about a FinOps recommendation",
+      "alertDisabled": "disabled a catalog alert ({target})",
+      "alertUpdated": "updated a catalog alert ({target})",
+      "deploymentSync": "deployed {target}",
+      "login": "signed in ({target})",
+      "loginFailed": "failed to sign in",
+      "vaultRead": "read secret {target}",
+      "vaultList": "listed secrets {target}",
+      "vaultWrite": "wrote secret {target}",
+      "vaultDelete": "deleted secret {target}",
+      "k8sShell": "opened a shell in {name}",
+      "k8sAttach": "attached to {name}",
+      "k8sPortForward": "opened a port-forward to {name}",
+      "k8sReadSecret": "read secret {name}",
+      "k8sVerbs": {
+        "create": "created",
+        "update": "updated",
+        "delete": "deleted",
+        "get": "read",
+        "list": "listed"
+      },
+      "detail": "({detail})"
+    },
+    "audit": {
+      "kpi": {
+        "actions": "Actions · {days} d",
+        "people": "Active people",
+        "notable": "Notable events",
+        "loginFailures": "Failed logins",
+        "delta": "{pct} % vs previous period",
+        "new": "new"
+      },
+      "chart": {
+        "title": "Activity per day and per source",
+        "empty": "No activity in this period."
+      },
+      "unavailable": "Sources temporarily unavailable:",
+      "filters": {
+        "allSources": "All sources",
+        "allPeople": "All people",
+        "allActions": "All actions",
+        "allApps": "All apps",
+        "reads": "Reads",
+        "notableOnly": "Notable only"
+      },
+      "aria": {
+        "source": "Source",
+        "person": "Person",
+        "action": "Action",
+        "app": "App",
+        "period": "Period"
+      },
+      "notable": "Notable",
+      "outcome": {
+        "success": "succeeded",
+        "refused": "refused"
+      },
+      "empty": "No events match these filters.",
+      "loadMore": "Load more",
+      "detail": {
+        "title": "Event details",
+        "close": "Close",
+        "who": "Who",
+        "what": "What",
+        "source": "Source",
+        "when": "When",
+        "app": "App",
+        "target": "Target",
+        "from": "From",
+        "result": "Result",
+        "request": "Request",
+        "allFrom": "All activity from {actor}",
+        "showRaw": "Show raw data",
+        "hideRaw": "Hide raw data"
+      }
+    },
+    "logs": {
+      "aria": {
+        "namespace": "Namespace",
+        "pod": "Pod",
+        "container": "Container",
+        "level": "Level",
+        "period": "Period"
+      },
+      "allNamespaces": "All namespaces",
+      "allPods": "All pods",
+      "allContainers": "All containers",
+      "allLevels": "All levels",
+      "errors": "Errors",
+      "warnings": "Warnings",
+      "search": "Search…",
+      "searchButton": "Search",
+      "lineWrap": "Wrap lines",
+      "timestamp": "Timestamp",
+      "lineCount": "{count, plural, one {# line} other {# lines}}",
+      "download": "Download the displayed lines",
+      "openNewTab": "Open in a new tab",
+      "exitFullscreen": "Exit full screen (Esc)",
+      "fullscreen": "Full screen",
+      "live": "Live",
+      "follow": "Follow",
+      "showStream": "Show this stream",
+      "hideStream": "Hide this stream",
+      "showContext": "Show context",
+      "contextBanner": "Context: one minute before and after the selected line, same container.",
+      "backToResults": "Back to results",
+      "noLines": "No lines match these filters."
+    },
+    "volume": {
+      "title": "Log volume",
+      "total": "{size} over the period",
+      "description": "Lines per minute, per app.",
+      "aria": "Volume period",
+      "empty": "No logs in this period.",
+      "tooltip": "{value} lines/min",
+      "table": {
+        "app": "App",
+        "size": "Size",
+        "lines": "Lines",
+        "peak": "Peak / min"
+      },
+      "size": {
+        "gb": "{value} GB",
+        "mb": "{value} MB",
+        "kb": "{value} KB",
+        "b": "{value} B"
+      }
+    },
+    "network": {
+      "title": "Denied network flows · 24 h",
+      "description": "Blocked by a network policy, on this project's side.",
+      "table": {
+        "source": "Source",
+        "destination": "Destination",
+        "port": "Port",
+        "direction": "Direction",
+        "count": "Count",
+        "last": "Last seen"
+      },
+      "direction": {
+        "ingress": "ingress",
+        "egress": "egress"
+      },
+      "noPort": "n/a",
+      "empty": "No denied flow in the last 24 hours."
+    },
+    "platform": {
+      "alerts": "Active alerts",
+      "noAlerts": "No active alert.",
+      "since": "since {time}",
+      "auditChain": "Audit chain",
+      "archive": "Immutable archive: last archived hour {time}",
+      "collected": "Collection {source}: up to date until {time}"
+    },
+    "insights": {
+      "none": "None.",
+      "logins": {
+        "title": "Logins to the project realm",
+        "success": "Successful",
+        "failure": "Failed",
+        "empty": "No logins in this period.",
+        "failingAccounts": "Failing accounts",
+        "failingIps": "Failing IPs"
+      },
+      "heatmap": {
+        "title": "When human activity happens",
+        "empty": "No human action in this period.",
+        "cell": "{day} {hour}h: {count, plural, one {# action} other {# actions}}",
+        "hour": "{hour}h",
+        "note": "Paris time. Busy nights and weekends deserve a look."
+      }
+    }
+  },
+  "alerts": {
+    "state": {
+      "normal": "OK",
+      "pending": "Pending",
+      "firing": "Firing",
+      "error": "Error",
+      "nodata": "No data"
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning"
+    },
+    "notifies": {
+      "app": "the app's Discord channel",
+      "project": "the project's Discord channel",
+      "platform": "the platform's Discord channel (no project channel configured)"
+    },
+    "noChannel": "no channel: set one up in the Security tab",
+    "summary": "{count, plural, one {# alert active} other {# alerts active}} out of {total} {scope}",
+    "scope": {
+      "app": "for this app",
+      "project": "for the whole project"
+    },
+    "notifiesTo": "Notifications go to {target}. Evaluated by Grafana every minute.",
+    "adminsOnly": "Only project admins can change them.",
+    "viewInGrafana": "View in Grafana",
+    "newCustom": "Create a custom alert",
+    "toggled": {
+      "on": "“{title}” enabled",
+      "off": "“{title}” disabled"
+    },
+    "enable": "Enable {title}",
+    "apply": "Apply"
+  },
+  "account": {
+    "language": {
+      "title": "Language",
+      "description": "Interface language. Your choice is saved to your account and follows you across browsers."
+    },
+    "page": {
+      "back": "Back to dashboard",
+      "title": "Account settings",
+      "subtitle": "Manage your profile and preferences",
+      "loading": "Loading profile…",
+      "loadFailed": "Could not load your profile",
+      "loadFailedToast": "Failed to load user profile: {error}",
+      "uploadFailed": "Upload failed: {error}",
+      "selectFirst": "Select a file first",
+      "invalidType": "Invalid file type. Accepted: JPG, PNG, GIF, WEBP.",
+      "tooLarge": "File too large ({size} MB). Maximum size is {max} MB.",
+      "unknownError": "Unknown error"
+    },
+    "profile": {
+      "title": "Profile information",
+      "description": "Your account details from Keycloak.",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email address",
+      "userId": "User ID"
+    },
+    "picture": {
+      "title": "Profile picture",
+      "description": "Upload a new avatar image",
+      "preview": "Preview",
+      "dropTitle": "Drag and drop your image here",
+      "dropOr": "or click to browse",
+      "choose": "Choose file",
+      "ready": "Ready to upload",
+      "fileSize": "{name} ({size} KB)",
+      "uploading": "Uploading…",
+      "upload": "Upload",
+      "formats": "Supported formats: JPG, PNG, GIF, WEBP. Maximum size: {max} MB."
+    },
+    "github": {
+      "title": "GitHub integration",
+      "description": "Link your GitHub account to deploy Kubernetes applications",
+      "loadingStatus": "Loading status…",
+      "linked": "GitHub account linked",
+      "installationId": "Installation ID",
+      "linkedHelp": "You can now deploy Kubernetes applications with GitOps. The platform creates and manages repositories for you.",
+      "needApp": "To deploy Kubernetes applications, install the CNP GitHub App. It lets the platform create and manage repositories on your behalf.",
+      "linking": "Linking…",
+      "linkButton": "Link GitHub account",
+      "redirectNote": "You will be redirected to GitHub to authorise the CNP Portal app.",
+      "or": "Or",
+      "alreadyInstalled": "Already installed the app?",
+      "alreadyHelp": "If the CNP GitHub App is already installed on your organisation, enter the installation ID here.",
+      "saveId": "Save ID",
+      "idHelp": "You can find the installation ID in your GitHub App settings.",
+      "callbackSaved": "GitHub account linked successfully!",
+      "callbackFailed": "Failed to link the GitHub account. Try again or enter the ID manually.",
+      "statusFailed": "Failed to load the GitHub integration status",
+      "opened": "The GitHub App installation opened in a new tab. Come back here once it is installed.",
+      "idRequired": "Enter an installation ID",
+      "idSaved": "Installation ID saved",
+      "idSaveFailed": "Failed to save the ID. Check it and try again."
+    },
+    "theme": {
+      "title": "Appearance",
+      "description": "By default, the theme follows the browser. The choice is kept on this browser.",
+      "system": "Browser",
+      "light": "Light",
+      "dark": "Dark"
+    }
+  },
+  "common": {
+    "language": {
+      "label": "Interface language",
+      "saveFailed": "Language applied in this browser, but not saved to your account.",
+      "names": {
+        "fr": "Français",
+        "en": "English"
+      }
+    }
+  },
+  "projectNav": {
+    "navigation": "Project navigation",
+    "switchProject": "Switch project",
+    "searchProjects": "Search a project...",
+    "noProject": "No project found.",
+    "back": "Back to the platform",
+    "projects": "Projects",
+    "newProject": "New project",
+    "overview": "Overview",
+    "applications": "Applications",
+    "members": "Members",
+    "costs": "Costs",
+    "security": "Security",
+    "activity": "Activity",
+    "alerts": "Alerts",
+    "assistants": "AI assistants",
+    "seeAll": "See all",
+    "noApps": "No applications",
+    "expandApps": "Show applications",
+    "collapseApps": "Hide applications",
+    "notAllowedTitle": "Not available",
+    "notAllowedBody": "Your role does not give access to this section of the project.",
+    "cloud": {
+      "onprem": "On-premise",
+      "aws": "AWS",
+      "gcp": "GCP"
+    },
+    "status": {
+      "running": "Running",
+      "degraded": "Degraded",
+      "pending": "Pending",
+      "initializing": "Initializing",
+      "planning": "Planning",
+      "deploying": "Deploying",
+      "failed": "Failed",
+      "deleting": "Deleting",
+      "deleted": "Deleted"
+    }
+  },
+  "catalog": {
+    "iconAlt": "{name} icon",
+    "template": "Template:",
+    "deploy": "Deploy",
+    "modal": {
+      "title": "Deploy {name}",
+      "vmsSubtitle": "2 OpenStack VMs + 2 AWS instances via ASG",
+      "close": "Close",
+      "appName": "App name",
+      "namePlaceholder": "my-{id}",
+      "nameHint": "Letters, numbers, underscores or hyphens. Must be unique.",
+      "nameTooLong": "The name must be 45 characters or fewer.",
+      "nameChars": "Only letters, numbers, underscores (_) and hyphens (-) are allowed, with no spaces or other characters.",
+      "configuration": "Configuration",
+      "selectOption": "Select an option…",
+      "required": "Required",
+      "optional": "Optional",
+      "githubTitle": "GitHub account required",
+      "githubText": "To deploy Kubernetes applications, you first need to link your GitHub account.",
+      "githubLink": "Go to account settings",
+      "provisionedTitle": "What will be provisioned",
+      "repo": "Private GitHub repository with the template code",
+      "namespace": "Kubernetes namespace with RBAC",
+      "argocd": "ArgoCD application for GitOps",
+      "vault": "Vault secrets path",
+      "vmDb": "2× OpenStack VMs, stateful data layer",
+      "vmWeb": "2× AWS t3.micro, stateless web layer (ASG + ALB)",
+      "cancel": "Cancel",
+      "deploying": "Deploying…"
+    }
+  },
+  "dashboard": {
+    "deleteDenied": "Only project admins can delete an application",
+    "deletionStarted": "Deletion started",
+    "deleteFailed": "Deletion failed: {error}",
+    "emptyTitle": "No deployments yet",
+    "emptyText": "Deploy an app from the catalogue to get started.",
+    "health": {
+      "checking": "Checking…",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Down",
+      "unknown": "Unknown"
+    },
+    "progress": {
+      "queued": "Queued",
+      "deploying": "Deploying",
+      "deleting": "Deleting",
+      "deleted": "Deleted",
+      "failed": "Failed"
+    },
+    "states": {
+      "up": "Up",
+      "down": "Down",
+      "starting": "Starting",
+      "unknown": "Unknown"
+    },
+    "instanceHealth": {
+      "healthy": "healthy",
+      "unhealthy": "unhealthy"
+    },
+    "infra": {
+      "title": "Infrastructure health",
+      "errorTitle": "Infrastructure health: error",
+      "hypervisors": "OpenStack hypervisors",
+      "noHypervisors": "No hypervisors found"
+    },
+    "card": {
+      "quickActions": "Quick actions",
+      "openApp": "Open application",
+      "openRepo": "Open GitHub repository",
+      "viewArgocd": "View in ArgoCD",
+      "manageSecrets": "Manage secrets",
+      "namespace": "Namespace:",
+      "outputs": "Outputs:",
+      "healthDetails": "Health details",
+      "delete": "Delete",
+      "confirmTitle": "Delete deployment?",
+      "confirmSureTitle": "Are you absolutely sure?",
+      "confirmText": "This will destroy all cloud resources of “{name}” with Terraform. This cannot be undone.",
+      "confirmSureText": "All {count} resources of “{name}” will be permanently destroyed. Click confirm to continue.",
+      "confirmSureUnknownText": "All resources of “{name}” will be permanently destroyed. Click confirm to continue.",
+      "cancel": "Cancel",
+      "yesDelete": "Yes, delete",
+      "confirmDestroy": "Confirm and destroy everything"
+    },
+    "healthPanel": {
+      "title": "Health details: {name}",
+      "description": "Real-time health status from cloud APIs",
+      "fetchFailed": "Failed to fetch health data",
+      "overall": "Overall status",
+      "overallHealthy": "All components are operational",
+      "overallDegraded": "Some components are unhealthy",
+      "overallDown": "No healthy component",
+      "overallUnknown": "Unable to determine",
+      "awsLayer": "AWS frontend layer",
+      "asgName": "ASG name",
+      "desiredCapacity": "Desired capacity",
+      "health": "Health",
+      "counts": "{healthy} / {total} healthy",
+      "instances": "Instances ({count}):",
+      "noInstances": "No instances found",
+      "openstackLayer": "OpenStack layer",
+      "servers": "Servers ({count}):",
+      "noServers": "No servers found",
+      "noComponents": "No infrastructure components found",
+      "noComponentsHelp": "This deployment may not have been created yet or uses a different architecture"
+    }
+  },
+  "agents": {
+    "meta": {
+      "title": "Connect your AI assistant · CNP",
+      "description": "Use CNP from Claude, ChatGPT, Codex, OpenCode, Cursor or VS Code: create, change and release apps in plain language."
+    },
+    "never": "never",
+    "mascot": {
+      "idle": "Nimbus",
+      "working": "Nimbus is working",
+      "happy": "Nimbus is happy"
+    },
+    "scopes": {
+      "readWrite": "read and write",
+      "readOnly": "read only"
+    },
+    "chatDemo": {
+      "worksWith": "Works with",
+      "replay": "Replay",
+      "replayLabel": "Replay the demo",
+      "clientStatus": "{client} · CNP connected",
+      "note": "Example conversation. The tools are the real CNP ones.",
+      "userRequest": "I need a page with the October seminar agenda and the speakers. Can you put it online for the team?",
+      "noSandbox": "You don't have a sandbox yet. Can I create “alice-sandbox” for your experiments?",
+      "yesGo": "Yes, go ahead.",
+      "online": "It's online, behind the company login. Want me to add the venue map?",
+      "detail": {
+        "yourSpace": "your CNP space",
+        "sandbox": "sandbox",
+        "staticSite": "static site",
+        "files": "{count, plural, one {# file} other {# files}}",
+        "running": "running",
+        "version": "v0.1.0"
+      },
+      "companyLogin": "company login",
+      "duration": "4 min"
+    },
+    "liveStats": "apps created through AI assistants this month, by {assistants, plural, one {# connected assistant} other {# connected assistants}}. Live figure.",
+    "assistant": {
+      "asks": [
+        "Put a page online with the agenda of our next team event.",
+        "Give me a one-screen status of my projects this week.",
+        "Why is my app slow? Read its logs and tell me before changing anything."
+      ],
+      "since": {
+        "minutes": "{count} min ago",
+        "hours": "{count} h ago",
+        "days": "{count, plural, one {# day} other {# days}} ago"
+      },
+      "copyHint": "Copy, then paste it in your assistant",
+      "title": "Your AI assistant",
+      "connectedText": "{count, plural, one {# app created} other {# apps created}} through an assistant · last action {since}",
+      "emptyText": "Ask Claude, ChatGPT or Codex to create and release apps for you, with your rights.",
+      "connectAnother": "Connect another",
+      "connectOne": "Connect an assistant",
+      "waitingApproval": "{count} waiting for your approval",
+      "tryAsking": "Try asking:"
+    },
+    "clients": {
+      "claudeAi": {
+        "name": "Claude (web, desktop, mobile)",
+        "forWho": "Everyone. Nothing to install.",
+        "step1": "Open Customize, then Connectors (claude.ai/customize/connectors). If your organisation already added CNP, click Connect next to it and skip to the last step.",
+        "step2": "Otherwise click +, then “Add custom connector”, name it CNP and paste this URL:",
+        "step3": "Sign in with your company account and approve the access on the CNP page. Then just ask: “Put a page with … online”.",
+        "note": "On Team and Enterprise plans, an Owner adds it once for everyone in Organisation settings, Connectors (claude.ai/admin-settings/connectors); members then only click Connect."
+      },
+      "claudeCode": {
+        "name": "Claude Code",
+        "forWho": "Developers. Brings the CNP guides with it.",
+        "step1": "Install the CNP plugin: it configures the connection and adds the platform guides and commands.",
+        "step2": "Or only the connection:",
+        "step3": "Run /mcp and choose cnp to sign in."
+      },
+      "chatgpt": {
+        "name": "ChatGPT",
+        "forWho": "Where your plan allows custom connectors.",
+        "step1": "Settings, Apps & Connectors, then create a connector with this URL:",
+        "step2": "Sign in with your company account and approve the access."
+      },
+      "codex": {
+        "name": "Codex",
+        "forWho": "Developers, CLI and IDE.",
+        "step1": "Add the server:",
+        "step2": "Sign in:"
+      },
+      "opencode": {
+        "name": "OpenCode",
+        "forWho": "Developers.",
+        "step1": "In opencode.json:",
+        "step2": "Sign in:"
+      },
+      "cursor": {
+        "name": "Cursor / VS Code",
+        "forWho": "Developers.",
+        "step1": "Cursor, in ~/.cursor/mcp.json:",
+        "step2": "VS Code, in .vscode/mcp.json:",
+        "step3": "The editor opens the CNP sign-in page on first use."
+      }
+    },
+    "copyBlock": {
+      "copied": "Copied",
+      "copy": "Copy",
+      "assistant": "Assistant"
+    },
+    "consent": {
+      "expired": "This connection request has expired. Start the connection again from your assistant.",
+      "failed": "Something went wrong. Start the connection again from your assistant.",
+      "incomplete": "This link is incomplete. Start the connection again from your assistant.",
+      "title": "{client} wants to use CNP as {name}",
+      "body": "It will act with your rights, in the projects you can access. You can disconnect it at any time from your account.",
+      "seeTitle": "See your projects and apps",
+      "seeText": "Status, logs, releases, costs.",
+      "writeTitle": "Create and change apps",
+      "writeText": "Create apps, push code, release. Sensitive actions still ask you, depending on the project.",
+      "writeSwitch": "Allow creating and changing apps",
+      "redirect": "You will be sent back to {host}.",
+      "decline": "Decline",
+      "allow": "Allow",
+      "you": "you"
+    },
+    "install": {
+      "addToClaude": "Add to Claude",
+      "commandCopied": "Command copied",
+      "claudeCode": "Claude Code",
+      "addToCursor": "Add to Cursor",
+      "addToVsCode": "Add to VS Code",
+      "copiedHint": "The CNP address is copied. In the Claude tab that just opened:",
+      "connectRich": "If CNP is already listed (your organisation added it), click <strong>Connect</strong>.",
+      "addRich": "Otherwise click <plus>+</plus>, then <strong>Add custom connector</strong>, name it CNP and paste the address.",
+      "signIn": "Sign in with your company account and allow access.",
+      "copyAgain": "copy again",
+      "ownerPrefix": "Team or Enterprise owner:",
+      "addForEveryone": "add it for everyone"
+    },
+    "projectPanel": {
+      "levels": {
+        "sandbox": {
+          "label": "Sandbox",
+          "text": "Personal experiments. The assistant just does it."
+        },
+        "demo": {
+          "label": "Demo",
+          "text": "No real users: breaking it for 10 minutes is fine. No confirmation."
+        },
+        "standard": {
+          "label": "Standard",
+          "text": "Real internal users. Releases and settings ask you first."
+        },
+        "critical": {
+          "label": "Critical",
+          "text": "Business data or external users. Code goes through a pull request, releases need an approval in the CMP."
+        }
+      },
+      "actions": {
+        "read": "Read status, logs, costs",
+        "projectCreate": "Create a project",
+        "appCreate": "Create an app",
+        "codePush": "Push application code",
+        "codePushSensitive": "Change CI, Dockerfile, deploy settings",
+        "releaseCut": "Release a version",
+        "releasePromote": "Promote a canary",
+        "releaseRetry": "Retry a failed check",
+        "releaseSkip": "Skip a check",
+        "releaseAbort": "Abort a rollout",
+        "releaseSettings": "Change release settings",
+        "appDelete": "Delete an app"
+      },
+      "outcomes": {
+        "allow": "On its own",
+        "ask": "Asks you in the chat",
+        "pr": "Pull request",
+        "confirm": "Approval in the CMP",
+        "deny": "Only in the CMP"
+      },
+      "saved": "Saved",
+      "adminsOnly": "Only project admins can change this.",
+      "pendingTitle": "Waiting for an approval",
+      "stakeTitle": "What is at stake in this project",
+      "stakeText": "Sets how freely AI assistants act here. Suggested:",
+      "windowTitle": "Autonomous window",
+      "windowActive": "Assistants act as on a demo project until {time}.",
+      "windowIdle": "Let assistants work without asking for a few hours, for a working session.",
+      "closeNow": "Close now",
+      "hours": "{hours} h",
+      "rulesTitle": "What an assistant does here ({level})",
+      "rulesNote": "While an alert fires on an app, aborting or retrying its rollout is always allowed. Every action is in the Activity tab, with the assistant that did it."
+    },
+    "connected": {
+      "title": "Connected AI assistants",
+      "description": "Assistants that act on CNP with your rights. Disconnecting one cuts its access immediately.",
+      "connectOne": "Connect one",
+      "empty": "No assistant connected.",
+      "meta": "{scope} · connected {created} · last used {lastUsed}",
+      "revoked": "{name} disconnected",
+      "revokeFailed": "Could not disconnect the assistant. Try again.",
+      "disconnect": "Disconnect"
+    },
+    "confirmation": {
+      "done": {
+        "approved": "Approved. Go back to your assistant and tell it to continue.",
+        "denied": "Declined. The assistant will not do it.",
+        "expired": "This request expired. Ask your assistant again if still needed.",
+        "used": "Already done."
+      },
+      "notFound": "This request does not exist or is not in one of your projects.",
+      "decideFailed": "Could not record your decision.",
+      "critical": "Critical project · needs a person",
+      "project": "Project",
+      "askedBy": "Asked by",
+      "askedVia": "{user}, through an assistant",
+      "action": "Action",
+      "expires": "Expires",
+      "decline": "Decline",
+      "approve": "Approve"
+    },
+    "connectAi": {
+      "title": "Connect your AI assistant to CNP",
+      "lead": "Ask in plain language, the assistant creates the app, writes the code, releases it and follows the rollout, with your company login and your rights.",
+      "install": "Install",
+      "setUp": "Set up",
+      "asksTitle": "Things you can ask",
+      "who": {
+        "anyone": "Anyone",
+        "manager": "Manager",
+        "developer": "Developer"
+      },
+      "asks": {
+        "ask1": "“Put a page online with the agenda of the October seminar.”",
+        "ask2": "“Add the venue map to my seminar page and publish it.”",
+        "ask3": "“Give me a one-screen status of my team's apps this week.”",
+        "ask4": "“Why is the canary of billing-api stuck? Read the logs first.”",
+        "ask5": "“Release what is on main as a minor version and follow the rollout.”"
+      },
+      "guardrailsTitle": "What keeps it safe",
+      "guardrails": {
+        "rights": {
+          "title": "Your rights, nothing more",
+          "text": "The assistant acts as you: it sees and changes only what you can in the CMP."
+        },
+        "checks": {
+          "title": "Checks that match what is at stake",
+          "text": "On a sandbox or demo project it just does it. On a project with real users it asks you first. On a critical one, a person approves in the CMP."
+        },
+        "traced": {
+          "title": "Everything is traced",
+          "text": "Each action shows who asked and through which assistant. You can disconnect an assistant at any time from your account."
+        }
+      }
+    }
+  },
+  "welcome": {
+    "meta": {
+      "title": "CNP: Ship to hybrid cloud in a few clicks",
+      "description": "CNP is a self-service platform to deploy, secure and monitor your applications across OpenStack and AWS. No CLI, no Terraform, no IT ticket."
+    },
+    "tagline": "Cloud Native Platform",
+    "logIn": "Log in",
+    "hero": {
+      "badge": "Self-service deployments on OpenStack + AWS, now from your AI assistant",
+      "title": "Ship your apps to the cloud in <accent>a few clicks</accent>, or one sentence to your AI assistant",
+      "lead": "{platform} lets your team deploy, secure and monitor full application stacks across a hybrid cloud. No CLI, no Terraform knowledge, no IT ticket. From Git repo to a running, monitored app in under two minutes.",
+      "getStarted": "Get started: log in",
+      "connect": "Connect your AI assistant"
+    },
+    "stats": {
+      "repo": "from repo to running app",
+      "faster": "faster than manual setup",
+      "success": "deployment success rate",
+      "spend": "cloud spend with FinOps",
+      "illustrative": "Illustrative figures based on typical platform usage."
+    },
+    "services": {
+      "title": "Everything you need to ship",
+      "intro": "One platform that covers the whole journey, from your first deploy to running apps in production, with the cost and access controls to keep them healthy.",
+      "oneClick": {
+        "title": "One-click deployments",
+        "desc": "Push your project live in a single click. CNP provisions the infrastructure, wires the networking and rolls out your app. You just press Deploy."
+      },
+      "templates": {
+        "title": "Ready-made templates",
+        "desc": "Start from a curated template (FastAPI · Python, static HTML/CSS) or bring your own. Import any existing Git repository and we take it from there."
+      },
+      "secrets": {
+        "title": "Secret management",
+        "desc": "Store API keys, tokens and credentials in a vault-backed store. Secrets are encrypted, scoped to your project and injected at runtime, never in your code."
+      },
+      "rbac": {
+        "title": "RBAC team management",
+        "desc": "Invite teammates and control exactly who can view, deploy or administer each project with fine-grained role-based access control."
+      },
+      "visible": {
+        "title": "Apps visible in-platform",
+        "desc": "Every deployed app gets a live entry on CNP: open it, share it and reach your running service directly from the dashboard."
+      },
+      "health": {
+        "title": "Real-time health",
+        "desc": "Continuous health checks surface the live status of every application, so you catch issues the moment they appear instead of hours later."
+      },
+      "finops": {
+        "title": "Built-in FinOps",
+        "desc": "Track the cost of each deployment in real time, spot the expensive ones and keep your cloud bill under control, no spreadsheets required."
+      },
+      "identity": {
+        "title": "Identity-first accounts",
+        "desc": "Sign in through your Identity Provider (IDP). Single sign-on, centralised identity and zero extra passwords to manage."
+      }
+    },
+    "benefits": {
+      "kicker": "Why teams choose {platform}",
+      "title": "Less plumbing. More shipping.",
+      "text": "{platform} removes the friction between your code and the cloud, so your team spends its energy on the product, not on infrastructure.",
+      "start": "Start deploying",
+      "steps": {
+        "title": "See every deployment step live",
+        "desc": "Watch each stage of your deployment unfold in real time, provisioning, build, rollout, with full transparency instead of a black box."
+      },
+      "simple": {
+        "title": "As simple or as deep as you want",
+        "desc": "Sensible defaults get non-experts shipping in minutes, while every setting stays fully customisable for teams who want fine control."
+      },
+      "visibility": {
+        "title": "Real-time visibility",
+        "desc": "Live monitoring keeps you on top of your apps' health and behaviour at a glance, so you spend less time guessing and more time building."
+      },
+      "catalogue": {
+        "title": "A catalogue that does the heavy lifting",
+        "desc": "A growing catalogue of services and templates removes boilerplate and makes development and deployment dramatically easier."
+      },
+      "docs": {
+        "title": "Documentation, automatically",
+        "desc": "CNP generates documentation straight onto the repository of every deployed application. Your project stays documented without the busywork."
+      }
+    },
+    "numbers": "By the numbers",
+    "cta": {
+      "title": "Your next deployment is one click away",
+      "text": "Log in with your identity provider and deploy your first project on {platform} today.",
+      "button": "Log in to get started",
+      "cli": "No CLI required",
+      "terraform": "No Terraform",
+      "ticket": "No IT ticket"
+    },
+    "footer": {
+      "tagline": "Cloud Native Platform",
+      "excellence": "The excellence since 2026."
+    }
+  },
+  "links": {
+    "argocd_project": "Argo CD",
+    "argocd_component": "Argo CD",
+    "status": "Status",
+    "offhours": "Sleep schedule",
+    "vault": "Vault",
+    "grafana_org": "Grafana",
+    "github_repo": "GitHub repository",
+    "github_actions": "GitHub Actions"
+  }
+}

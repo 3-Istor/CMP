@@ -1,5 +1,5 @@
 """
-FinOps finance pack — exports, showback statements, month close, cost centers.
+FinOps finance pack, exports, showback statements, month close, cost centers.
 
 Reads follow the FinOps rule (admin and finance see everything, members see
 their projects); the exports and the month close are for finance and admin

@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import type { Deployment, DeploymentStatus } from "@/types";
+import { Check, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 const CREATION_STEPS: { status: DeploymentStatus; label: string }[] = [
@@ -144,7 +145,7 @@ export function DeploymentStepper({ deployment }: Props) {
                           : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {isDone && !isActive ? "✓" : isDeleting ? "🗑️" : i + 1}
+                  {isDone && !isActive ? <Check className="h-4 w-4" /> : isDeleting ? <Trash2 className="h-4 w-4" /> : i + 1}
                 </div>
                 <span
                   className={`text-sm whitespace-nowrap transition-all duration-300 ${

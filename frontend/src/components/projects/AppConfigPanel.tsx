@@ -23,7 +23,7 @@ interface Props {
     deploymentId: number;
     /**
      * Show the values but refuse edits. Members are meant to read the
-     * configuration, so the fields are disabled rather than hidden — an empty
+     * configuration, so the fields are disabled rather than hidden, an empty
      * panel would look like a loading failure.
      */
     readOnly?: boolean;

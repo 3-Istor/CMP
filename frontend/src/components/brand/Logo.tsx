@@ -3,7 +3,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 /**
- * 3ISTOR SIGL brand mark — served as a self-contained SVG asset
+ * 3ISTOR SIGL brand mark, served as a self-contained SVG asset
  * (public/logo.svg) so it stays crisp at any size and needs no inline markup.
  */
 export function Logo({ className }: { className?: string }) {

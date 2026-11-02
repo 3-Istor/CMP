@@ -58,7 +58,7 @@ def simulated_usage_pct(app_id: int, resource: str, day: date) -> float:
 def has_spike(app_id: int, resource: str, day: date) -> bool:
     """
     Deterministic 'anomalous consumption' marker: true on ~1 day in 20, stable
-    per (app, resource, day). Not derived from the usage signal — the engine
+    per (app, resource, day). Not derived from the usage signal, the engine
     then boosts that day's usage ×1.8 so the spike shows on the timeline.
     Used for spike alerts.
     """
@@ -68,7 +68,7 @@ def has_spike(app_id: int, resource: str, day: date) -> bool:
 def is_inactive(app_id: int, day: date, window_days: int = 7) -> bool:
     """
     True when simulated network traffic has been ~nil for ``window_days`` up to
-    and including ``day`` — used to flag prolonged inactivity.
+    and including ``day``, used to flag prolonged inactivity.
     """
     from datetime import timedelta
 

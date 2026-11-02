@@ -1,7 +1,7 @@
 "use client";
-
 import { Eye, Loader2, PenLine } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { Mascot } from "./Mascot";
 const WRITE = "cnp:write";
 
 export function ConsentPanel({ requestId }: { requestId: string }) {
+  const t = useTranslations("agents.consent");
   const { data: session } = useSession();
   const [request, setRequest] = useState<AgentAuthRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +32,8 @@ export function ConsentPanel({ requestId }: { requestId: string }) {
         setRequest(r);
         setAllowWrite(r.scopes.includes(WRITE));
       })
-      .catch(() =>
-        setError(
-          "This connection request expired. Start the connection again from your assistant.",
-        ),
-      );
+      .catch(() => setError(t("expired")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestId]);
 
   const decide = async (approve: boolean) => {
@@ -49,17 +47,14 @@ export function ConsentPanel({ requestId }: { requestId: string }) {
         : await denyAgentAuthRequest(requestId);
       window.location.assign(redirect_url);
     } catch {
-      setError("Something went wrong. Start the connection again from your assistant.");
+      setError(t("failed"));
       setBusy(false);
     }
   };
 
-  const name = session?.user?.name ?? session?.user?.email ?? "you";
+  const name = session?.user?.name ?? session?.user?.email ?? t("you");
   const problem =
-    error ??
-    (requestId
-      ? null
-      : "This link is incomplete. Start the connection again from your assistant.");
+    error ?? (requestId ? null : t("incomplete"));
 
   return (
     <div className="w-full max-w-md rounded-2xl border border-border bg-card p-7 shadow-xl shadow-primary/5">
@@ -73,51 +68,42 @@ export function ConsentPanel({ requestId }: { requestId: string }) {
       ) : (
         <>
           <h1 className="mt-5 text-center font-heading text-xl font-semibold text-balance">
-            {request.client_name} wants to use CNP as {name}
+            {t("title", { client: request.client_name, name })}
           </h1>
           <p className="mt-2 text-center text-sm text-muted-foreground">
-            It will act with your rights, in the projects you can access. You
-            can disconnect it at any time from your account.
+            {t("body")}
           </p>
-
           <ul className="mt-6 space-y-3 text-sm">
             <li className="flex items-start gap-3 rounded-lg border border-border p-3">
               <Eye className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <div>
-                <p className="font-medium">See your projects and apps</p>
-                <p className="text-muted-foreground">
-                  Status, logs, releases, costs.
-                </p>
+                <p className="font-medium">{t("seeTitle")}</p>
+                <p className="text-muted-foreground">{t("seeText")}</p>
               </div>
             </li>
             <li className="flex items-start gap-3 rounded-lg border border-border p-3">
               <PenLine className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <div className="flex-1">
-                <p className="font-medium">Create and change apps</p>
-                <p className="text-muted-foreground">
-                  Create apps, push code, release. Sensitive actions still ask
-                  you, depending on the project.
-                </p>
+                <p className="font-medium">{t("writeTitle")}</p>
+                <p className="text-muted-foreground">{t("writeText")}</p>
               </div>
               <Switch
                 checked={allowWrite}
                 onCheckedChange={setAllowWrite}
-                aria-label="Allow creating and changing apps"
+                aria-label={t("writeSwitch")}
               />
             </li>
           </ul>
-
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            You will be sent back to {request.redirect_host}.
+            {t("redirect", { host: request.redirect_host })}
           </p>
-
           <div className="mt-6 grid grid-cols-2 gap-3">
             <Button variant="outline" disabled={busy} onClick={() => decide(false)}>
-              Decline
+              {t("decline")}
             </Button>
             <Button disabled={busy} onClick={() => decide(true)}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Allow
+              {t("allow")}
             </Button>
           </div>
         </>

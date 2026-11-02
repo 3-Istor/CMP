@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, Camera, Loader2, Upload } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { GitHubLinkButton } from "@/components/account/GitHubLinkButton";
+import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { ThemeCard } from "@/components/account/ThemeCard";
 import { ConnectedAssistants } from "@/components/agents/ConnectedAssistants";
 import { Avatar } from "@/components/ui/avatar";
@@ -28,17 +30,23 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const MAX_SIZE_MB = 5;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
-function validateImageFile(file: File): string | null {
+type Translate = (key: string, values?: Record<string, string | number>) => string;
+
+function validateImageFile(file: File, t: Translate): string | null {
   if (!ALLOWED_TYPES.includes(file.type)) {
-    return `Invalid file type. Allowed: JPG, PNG, GIF, WEBP.`;
+    return t("page.invalidType");
   }
   if (file.size > MAX_SIZE_BYTES) {
-    return `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is ${MAX_SIZE_MB} MB.`;
+    return t("page.tooLarge", {
+      size: (file.size / 1024 / 1024).toFixed(1),
+      max: MAX_SIZE_MB,
+    });
   }
   return null;
 }
 
 export default function AccountPage() {
+  const t = useTranslations("account");
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -47,6 +55,7 @@ export default function AccountPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { update } = useSession();
+  const tLanguage = useTranslations("account.language");
 
   const fetchUser = async () => {
     try {
@@ -54,7 +63,9 @@ export default function AccountPage() {
       setUser(data);
     } catch (error) {
       toast.error(
-        `Failed to load user profile: ${error instanceof Error ? error.message : "Unknown error"}`,
+        t("page.loadFailedToast", {
+          error: error instanceof Error ? error.message : t("page.unknownError"),
+        }),
       );
     } finally {
       setLoading(false);
@@ -69,7 +80,7 @@ export default function AccountPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const error = validateImageFile(file);
+    const error = validateImageFile(file, t);
     if (error) {
       toast.error(error);
       e.target.value = "";
@@ -84,7 +95,7 @@ export default function AccountPage() {
 
   const handleUpload = async () => {
     if (!selectedFile) {
-      toast.error("Please select a file first");
+      toast.error(t("page.selectFirst"));
       return;
     }
 
@@ -102,14 +113,16 @@ export default function AccountPage() {
         prev ? { ...prev, picture: response.picture_url } : null,
       );
 
-      // Refresh NextAuth session to update avatar in UserNav
+      // Refresh NextAuth session to update avatar in the sidebar
       await update();
 
       // Also fetch fresh user data to ensure consistency
       await fetchUser();
     } catch (error) {
       toast.error(
-        `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        t("page.uploadFailed", {
+          error: error instanceof Error ? error.message : t("page.unknownError"),
+        }),
       );
     } finally {
       setUploading(false);
@@ -128,7 +141,7 @@ export default function AccountPage() {
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
 
-    const error = validateImageFile(file);
+    const error = validateImageFile(file, t);
     if (error) {
       toast.error(error);
       return;
@@ -147,7 +160,7 @@ export default function AccountPage() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             <span className="ml-3 text-muted-foreground">
-              Loading profile...
+              {t("page.loading")}
             </span>
           </div>
         </div>
@@ -160,7 +173,7 @@ export default function AccountPage() {
       <div className="min-h-screen bg-background">
         <div className="container mx-auto max-w-4xl p-6">
           <div className="flex items-center justify-center py-12">
-            <p className="text-destructive">Failed to load user profile</p>
+            <p className="text-destructive">{t("page.loadFailed")}</p>
           </div>
         </div>
       </div>
@@ -179,11 +192,11 @@ export default function AccountPage() {
             className="mb-2"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Dashboard
+            {t("page.back")}
           </Button>
-          <h1 className="text-3xl font-bold">Account Settings</h1>
+          <h1 className="text-3xl font-bold">{t("page.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your profile and preferences
+            {t("page.subtitle")}
           </p>
         </div>
       </header>
@@ -193,10 +206,8 @@ export default function AccountPage() {
           {/* Profile Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
-              <CardDescription>
-                Your account details from Keycloak
-              </CardDescription>
+              <CardTitle>{t("profile.title")}</CardTitle>
+              <CardDescription>{t("profile.description")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Avatar Section */}
@@ -235,7 +246,7 @@ export default function AccountPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">
-                    First Name
+                    {t("profile.firstName")}
                   </Label>
                   <p className="text-sm font-medium">
                     {user.given_name || "-"}
@@ -243,7 +254,7 @@ export default function AccountPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">
-                    Last Name
+                    {t("profile.lastName")}
                   </Label>
                   <p className="text-sm font-medium">
                     {user.family_name || "-"}
@@ -251,13 +262,13 @@ export default function AccountPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">
-                    Email Address
+                    {t("profile.email")}
                   </Label>
                   <p className="text-sm font-medium">{user.email}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">
-                    User ID
+                    {t("profile.userId")}
                   </Label>
                   <p className="text-sm font-mono text-muted-foreground break-all">
                     {user.sub || "-"}
@@ -270,8 +281,8 @@ export default function AccountPage() {
           {/* Avatar Upload Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Profile Picture</CardTitle>
-              <CardDescription>Upload a new avatar image</CardDescription>
+              <CardTitle>{t("picture.title")}</CardTitle>
+              <CardDescription>{t("picture.description")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Drag & Drop Zone */}
@@ -294,7 +305,7 @@ export default function AccountPage() {
                     <div className="relative h-32 w-32 rounded-full overflow-hidden ring-2 ring-border">
                       <Image
                         src={previewUrl}
-                        alt="Preview"
+                        alt={t("picture.preview")}
                         fill
                         className="object-cover"
                       />
@@ -309,10 +320,10 @@ export default function AccountPage() {
                       <Camera className="h-8 w-8 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium mb-1">
-                      Drag and drop your image here
+                      {t("picture.dropTitle")}
                     </p>
                     <p className="text-xs text-muted-foreground mb-4">
-                      or click to browse
+                      {t("picture.dropOr")}
                     </p>
                   </>
                 )}
@@ -325,7 +336,7 @@ export default function AccountPage() {
                   className="mt-2"
                 >
                   <Upload className="mr-2 h-4 w-4" />
-                  Choose File
+                  {t("picture.choose")}
                 </Button>
               </div>
 
@@ -337,10 +348,12 @@ export default function AccountPage() {
                       <Camera className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Ready to upload</p>
+                      <p className="text-sm font-medium">{t("picture.ready")}</p>
                       <p className="text-xs text-muted-foreground">
-                        {selectedFile.name} (
-                        {(selectedFile.size / 1024).toFixed(1)} KB)
+                        {t("picture.fileSize", {
+                          name: selectedFile.name,
+                          size: (selectedFile.size / 1024).toFixed(1),
+                        })}
                       </p>
                     </div>
                   </div>
@@ -348,12 +361,12 @@ export default function AccountPage() {
                     {uploading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Uploading...
+                        {t("picture.uploading")}
                       </>
                     ) : (
                       <>
                         <Upload className="mr-2 h-4 w-4" />
-                        Upload
+                        {t("picture.upload")}
                       </>
                     )}
                   </Button>
@@ -361,9 +374,18 @@ export default function AccountPage() {
               )}
 
               <p className="text-xs text-muted-foreground">
-                Supported formats: JPG, PNG, GIF, WEBP. Maximum size:{" "}
-                {MAX_SIZE_MB} MB.
+                {t("picture.formats", { max: MAX_SIZE_MB })}
               </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{tLanguage("title")}</CardTitle>
+              <CardDescription>{tLanguage("description")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LanguageSwitcher />
             </CardContent>
           </Card>
 

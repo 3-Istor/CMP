@@ -98,7 +98,7 @@ def build_record(
                 "offhoursGuard": True,
                 # An app's DNS record always points at the project's own
                 # Cloudflare tunnel (D-06, k3s-gitops-app/main.tf), and that
-                # tunnel forwards to the project's own gateway — there is no
+                # tunnel forwards to the project's own gateway, there is no
                 # code path where an app is reachable with either of these
                 # off. Both need to be on from project creation, not opted
                 # into later.
@@ -252,7 +252,7 @@ async def publish_record(
         if current != target_cloud.value:
             raise ImmutableCloudError(
                 f"Project '{project_name}' is already registered on '{current}'. "
-                f"target_cloud is immutable — moving it to '{target_cloud.value}' "
+                f"target_cloud is immutable, moving it to '{target_cloud.value}' "
                 "would orphan every resource already provisioned on "
                 f"'{current}'. Re-create the project instead."
             )
@@ -299,7 +299,7 @@ async def register_app(
 
     This is what puts the app in the connector's routing table and the
     blackbox probe target list (see k3s-gitops-app/outputs.tf's ``hostname``
-    output) — an app whose Terraform apply succeeded but was never
+    output), an app whose Terraform apply succeeded but was never
     registered here is unreachable: its Cloudflare tunnel and Gateway exist,
     but nothing tells them the app's hostname.
 
@@ -370,7 +370,7 @@ async def unregister_app(project_name: str, app_name: str) -> None:
     Remove an app's entry from a project's registry record.
 
     A project with no record, or a record with no matching app entry, is not
-    an error — the app may already be gone, or the project itself may have
+    an error, the app may already be gone, or the project itself may have
     been torn down first.
 
     Raises:
@@ -420,7 +420,7 @@ async def remove_record(project_name: str) -> None:
 
     Removing the record is what makes the generated Argo CD Applications and the
     AppProject disappear, so it is a step of teardown rather than a cleanup
-    afterwards. A project with no record is not an error — teardown is retried.
+    afterwards. A project with no record is not an error, teardown is retried.
 
     Raises:
         RegistryError: If the registry cannot be written.
@@ -452,7 +452,7 @@ async def remove_record(project_name: str) -> None:
 async def _installation_token() -> str:
     if not settings.GITHUB_INSTALLATION_ID:
         raise RegistryError(
-            "GITHUB_INSTALLATION_ID is not configured — the registry cannot be reached."
+            "GITHUB_INSTALLATION_ID is not configured, the registry cannot be reached."
         )
     try:
         return await get_installation_token(settings.GITHUB_INSTALLATION_ID)

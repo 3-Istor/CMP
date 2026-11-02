@@ -43,8 +43,8 @@ def _state_key(project_name: str, target_cloud: str) -> str:
     """
     Build the S3 state key for a project's bootstrap state.
 
-    Keys are laid out per cloud (D-09) so that a per-cloud inventory — which is
-    what the decommission runbook needs — is a prefix listing rather than a scan.
+    Keys are laid out per cloud (D-09) so that a per-cloud inventory, which is
+    what the decommission runbook needs, is a prefix listing rather than a scan.
     """
     return f"cmp/{target_cloud}/projects/{project_name}/bootstrap.tfstate"
 
@@ -53,7 +53,7 @@ def _local_state_path(project_name: str, target_cloud: str) -> Path:
     """
     Build the on-disk state path used when the S3 backend is disabled.
 
-    This lives under ``data/`` — the backend's persistent volume — and not in
+    This lives under ``data/``, the backend's persistent volume, and not in
     the run's temporary directory: a state file that disappears with the
     process leaves the teardown with nothing to destroy, which is how orphaned
     Vault policies and Keycloak groups accumulate.
@@ -131,12 +131,12 @@ def run_project_bootstrap(
 
     Args:
         project_name: Lowercase kebab-case project identifier.
-        target_cloud: Which cloud the project runs on — selects the state key
+        target_cloud: Which cloud the project runs on, selects the state key
             prefix and the per-provider module implementation.
 
     Returns:
         bool: Whether the module applied cleanly. Callers that depend on what
-        the module creates — the Keycloak groups, above all — must check this
+        the module creates, the Keycloak groups, above all, must check this
         rather than assume the resources exist.
     """
     logger.info(
@@ -155,7 +155,7 @@ def run_project_bootstrap(
         module_path = _get_module_path()
     except FileNotFoundError as exc:
         logger.error(
-            "Terraform module not found — project bootstrap aborted: %s",
+            "Terraform module not found, project bootstrap aborted: %s",
             exc,
         )
         set_project_status(
@@ -166,7 +166,7 @@ def run_project_bootstrap(
         return False
 
     # GitHub installation token for the "github" provider (writes to the
-    # cnp-projects repository) — minted once and reused for init + apply
+    # cnp-projects repository), minted once and reused for init + apply
     try:
         github_token = (
             asyncio.run(
@@ -190,7 +190,7 @@ def run_project_bootstrap(
         )
         return False
 
-    # S3 state key — isolated per project, grouped per cloud
+    # S3 state key, isolated per project, grouped per cloud
     state_key = _state_key(project_name, target_cloud)
 
     try:
@@ -267,14 +267,14 @@ def run_project_teardown(
 
     Runs ``terraform init`` + ``terraform destroy`` for the
     ``k3s-project-bootstrap`` module, reusing the project's per-project S3 state
-    key. This destroys everything the bootstrap created — Keycloak groups,
+    key. This destroys everything the bootstrap created, Keycloak groups,
     Vault policy, ArgoCD AppProject and any GitHub resources. The delete
     endpoint only removes the registry record and the ownership row before
     scheduling this.
 
     Args:
         project_name: Lowercase kebab-case project identifier.
-        target_cloud: Which cloud the project runs on — selects the state key.
+        target_cloud: Which cloud the project runs on, selects the state key.
     """
     logger.info(
         "Starting project teardown for '%s' on '%s'",
@@ -292,7 +292,7 @@ def run_project_teardown(
         module_path = _get_module_path()
     except FileNotFoundError as exc:
         logger.error(
-            "Terraform module not found — project teardown aborted "
+            "Terraform module not found, project teardown aborted "
             "(Vault/GitHub/ArgoCD resources may need manual cleanup): %s",
             exc,
         )
@@ -303,7 +303,7 @@ def run_project_teardown(
         )
         return
 
-    # GitHub installation token for the "github" provider — required so the
+    # GitHub installation token for the "github" provider, required so the
     # provider can authenticate while destroying GitHub resources.
     try:
         github_token = (
@@ -328,7 +328,7 @@ def run_project_teardown(
         )
         return
 
-    # Same S3 state key used by the bootstrap — destroy operates on that state.
+    # Same S3 state key used by the bootstrap, destroy operates on that state.
     state_key = _state_key(project_name, target_cloud)
 
     try:

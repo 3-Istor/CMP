@@ -2,6 +2,7 @@
 
 import { getSecuritySummary } from "@/lib/api";
 import { AlertTriangle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 /** Red strip on a project or app page while a mandatory action is open. */
@@ -14,6 +15,7 @@ export function SecurityAlert({
   app?: string | null;
   onOpen: () => void;
 }) {
+  const t = useTranslations("security");
   const [core, setCore] = useState(0);
 
   useEffect(() => {
@@ -31,11 +33,9 @@ export function SecurityAlert({
     >
       <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
       <span className="flex-1 font-medium">
-        {core === 1
-          ? "Attention : 1 action de sécurité obligatoire"
-          : `Attention : ${core} actions de sécurité obligatoires`}
+        {t("alert.count", { count: core })}
       </span>
-      <span className="text-red-700 dark:text-red-300">Voir →</span>
+      <span className="text-red-700 dark:text-red-300">{t("alert.view")}</span>
     </button>
   );
 }

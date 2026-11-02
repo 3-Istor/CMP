@@ -24,6 +24,7 @@ from app.routers import (
     finops,
     finops_finance,
     infra,
+    links,
     projects,
     releases,
     security,
@@ -99,7 +100,12 @@ def setup_logging():
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    # A dependency installs a bare stderr handler at import time; with a DEBUG
+    # root it dumped full OpenStack responses, user_data included.
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+    root_logger.setLevel(logging.INFO)
+    logging.getLogger("app").setLevel(logging.DEBUG)
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
@@ -118,10 +124,21 @@ def setup_logging():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("git").setLevel(logging.WARNING)
+    for noisy in (
+        "keystoneauth",
+        "openstack",
+        "novaclient",
+        "neutronclient",
+        "botocore",
+        "boto3",
+        "s3transfer",
+        "kubernetes",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Log startup message
     root_logger.info("=" * 80)
-    root_logger.info("🚀 Starting Cloud Management Platform (CMP)")
+    root_logger.info("Starting Cloud Management Platform (CMP)")
     root_logger.info("=" * 80)
     root_logger.info(f"Logs directory: {logs_dir.absolute()}")
     root_logger.info(f"Application log: {logs_dir / 'app.log'}")
@@ -196,7 +213,7 @@ def custom_openapi():
                 ]
 
     app.openapi_schema = openapi_schema
-    logger.info("✅ Custom OpenAPI schema with Keycloak OAuth2 configured")
+    logger.info("Custom OpenAPI schema with Keycloak OAuth2 configured")
     return app.openapi_schema
 
 
@@ -268,7 +285,7 @@ async def lifespan(app: FastAPI):
     # /.well-known metadata.
     app.mount("/", mcp_server.mcp.streamable_http_app())
 
-    logger.info("✅ Application startup complete")
+    logger.info("Application startup complete")
 
     async with mcp_server.mcp.session_manager.run():
         yield
@@ -309,7 +326,7 @@ async def lifespan(app: FastAPI):
     await close_http_client()
     logger.info("Grafana HTTP client closed")
 
-    logger.info("✅ Application shutdown complete")
+    logger.info("Application shutdown complete")
 
 
 app = FastAPI(
@@ -349,6 +366,8 @@ app.include_router(alerting.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
+app.include_router(links.projects, prefix="/api")
+app.include_router(links.deployments, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
 app.include_router(environments.router, prefix="/api")

@@ -45,6 +45,18 @@ export interface Deployment {
  */
 export type ProjectRole = "owner" | "admin" | "member" | "guest";
 
+export interface ProjectLink {
+  id: string;
+  label_key: string;
+  url: string;
+  external: boolean;
+  group: "view" | "code" | "admin";
+  min_role: ProjectRole;
+  requires: "grafana_member" | null;
+  component: string | null;
+  app: string | null;
+}
+
 /** The roles an admin can hand out. `owner` is not among them. */
 export type AssignableRole = Exclude<ProjectRole, "owner">;
 
@@ -120,7 +132,7 @@ export interface DeploymentConfig {
   file_path: string;
   /** Selectable components; empty when the app has a single values file. */
   components: string[];
-  /** File SHA — must be echoed back in PATCH requests */
+  /** File SHA, must be echoed back in PATCH requests */
   _sha: string;
   config: Record<string, unknown>;
 }
@@ -247,6 +259,8 @@ export interface UserProfile {
   picture: string | null;
   groups: string[];
   github_installation_id?: string | null; // Phase 3: GitHub App integration
+  locale?: "fr" | "en" | null;
+  cnp_admin?: boolean;
 }
 
 export interface GitHubStatus {
@@ -441,6 +455,7 @@ export interface FinopsSavings {
 export interface FinopsSourceMeta {
   source: string;
   last_ingested_at: string | null;
+  first_day?: string | null;
   latest_day: string | null;
   final_through: string | null;
   has_estimate: boolean;

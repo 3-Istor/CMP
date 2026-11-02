@@ -2,8 +2,10 @@
 
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types";
+import { useTranslations } from "next-intl";
+import { CLOUDS, CLOUD_META } from "./format";
 
-/** Styled native <select> — reliable and matches the input styling. */
+/** Styled native <select>, reliable and matching the input styling. */
 function NativeSelect({
   value,
   onChange,
@@ -46,65 +48,72 @@ export function FinopsFilters({
   state,
   onChange,
   projects,
+  showProject = true,
   showGranularity = true,
   showCloud = false,
 }: {
   state: FinopsFilterState;
   onChange: (next: FinopsFilterState) => void;
   projects: Project[];
+  showProject?: boolean;
   showGranularity?: boolean;
   showCloud?: boolean;
 }) {
+  const t = useTranslations("finops");
   const set = (patch: Partial<FinopsFilterState>) =>
     onChange({ ...state, ...patch });
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <NativeSelect
-        aria-label="Projet"
-        value={state.project}
-        onChange={(v) => set({ project: v })}
-      >
-        <option value="">Tous les projets</option>
-        {projects.map((p) => (
-          <option key={p.name} value={p.name}>
-            {p.name}
-          </option>
-        ))}
-      </NativeSelect>
+      {showProject && (
+        <NativeSelect
+          aria-label={t("common.project")}
+          value={state.project}
+          onChange={(v) => set({ project: v })}
+        >
+          <option value="">{t("common.allProjects")}</option>
+          {projects.map((p) => (
+            <option key={p.name} value={p.name}>
+              {p.name}
+            </option>
+          ))}
+        </NativeSelect>
+      )}
 
       <NativeSelect
-        aria-label="Période"
+        aria-label={t("common.period")}
         value={state.period}
         onChange={(v) => set({ period: v })}
       >
-        <option value="7d">7 jours</option>
-        <option value="30d">30 jours</option>
-        <option value="90d">90 jours</option>
+        <option value="7d">{t("common.periods.7d")}</option>
+        <option value="30d">{t("common.periods.30d")}</option>
+        <option value="90d">{t("common.periods.90d")}</option>
       </NativeSelect>
 
       {showCloud && (
         <NativeSelect
-          aria-label="Cloud"
+          aria-label={t("filters.cloud")}
           value={state.cloud}
           onChange={(v) => set({ cloud: v })}
         >
-          <option value="">Tous les clouds</option>
-          <option value="onprem">On-prem</option>
-          <option value="aws">AWS</option>
-          <option value="gcp">GCP</option>
+          <option value="">{t("common.allClouds")}</option>
+          {CLOUDS.map((cloud) => (
+            <option key={cloud} value={cloud}>
+              {CLOUD_META[cloud].label}
+            </option>
+          ))}
         </NativeSelect>
       )}
 
       {showGranularity && (
         <NativeSelect
-          aria-label="Granularité"
+          aria-label={t("filters.granularity")}
           value={state.granularity}
           onChange={(v) => set({ granularity: v })}
         >
-          <option value="daily">Quotidien</option>
-          <option value="weekly">Hebdomadaire</option>
-          <option value="monthly">Mensuel</option>
+          <option value="daily">{t("filters.daily")}</option>
+          <option value="weekly">{t("filters.weekly")}</option>
+          <option value="monthly">{t("filters.monthly")}</option>
         </NativeSelect>
       )}
     </div>
