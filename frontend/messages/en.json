@@ -76,6 +76,19 @@
   "apps": {
     "home": {
       "allDeployments": "All my deployments"
+    },
+    "nav": {
+      "label": "Application sections",
+      "breadcrumb": "Breadcrumb",
+      "applications": "Applications",
+      "app": "Application",
+      "release": "Release",
+      "environments": "Environments",
+      "security": "Security",
+      "config": "Configuration",
+      "costs": "Costs",
+      "activity": "Activity",
+      "alerts": "Alerts"
     }
   },
   "finops": {},
@@ -635,6 +648,45 @@
         "fr": "Français",
         "en": "English"
       }
+    }
+  },
+  "projectNav": {
+    "navigation": "Project navigation",
+    "switchProject": "Switch project",
+    "searchProjects": "Search a project...",
+    "noProject": "No project found.",
+    "back": "Back to the platform",
+    "projects": "Projects",
+    "newProject": "New project",
+    "overview": "Overview",
+    "applications": "Applications",
+    "members": "Members",
+    "costs": "Costs",
+    "security": "Security",
+    "activity": "Activity",
+    "alerts": "Alerts",
+    "assistants": "AI assistants",
+    "seeAll": "See all",
+    "noApps": "No applications",
+    "expandApps": "Show applications",
+    "collapseApps": "Hide applications",
+    "notAllowedTitle": "Not available",
+    "notAllowedBody": "Your role does not give access to this section of the project.",
+    "cloud": {
+      "onprem": "On-premise",
+      "aws": "AWS",
+      "gcp": "GCP"
+    },
+    "status": {
+      "running": "Running",
+      "degraded": "Degraded",
+      "pending": "Pending",
+      "initializing": "Initializing",
+      "planning": "Planning",
+      "deploying": "Deploying",
+      "failed": "Failed",
+      "deleting": "Deleting",
+      "deleted": "Deleted"
     }
   }
 }
