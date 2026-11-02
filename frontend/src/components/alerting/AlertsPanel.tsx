@@ -11,35 +11,16 @@ import { getAlertCatalog, isNotConnected, updateCatalogAlert } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AlertCatalog, CatalogAlert } from "@/types";
 import { AlertTriangle, BellRing, ExternalLink, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-const STATE: Record<string, { label: string; className: string }> = {
-  normal: {
-    label: "OK",
-    className:
-      "border-green-600/40 bg-green-600/10 text-green-700 dark:text-green-400",
-  },
-  pending: {
-    label: "En attente",
-    className:
-      "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  },
-  firing: {
-    label: "Déclenchée",
-    className: "border-red-600/40 bg-red-600/15 text-red-700 dark:text-red-400",
-  },
-  error: {
-    label: "Erreur",
-    className: "border-red-600/40 text-red-700 dark:text-red-400",
-  },
-  nodata: { label: "Pas de données", className: "text-muted-foreground" },
-};
-
-const NOTIFIES: Record<string, string> = {
-  app: "le canal Discord de l'app",
-  project: "le canal Discord du projet",
-  platform: "le canal Discord de la plateforme (aucun canal projet configuré)",
+const STATE_CLASS: Record<string, string> = {
+  normal: "border-green-600/40 bg-green-600/10 text-green-700 dark:text-green-400",
+  pending: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  firing: "border-red-600/40 bg-red-600/15 text-red-700 dark:text-red-400",
+  error: "border-red-600/40 text-red-700 dark:text-red-400",
+  nodata: "text-muted-foreground",
 };
 
 function message(e: unknown): string {
@@ -60,6 +41,7 @@ function AlertRow({
   canEdit: boolean;
   onSave: (enabled: boolean, params: Record<string, number>) => Promise<void>;
 }) {
+  const t = useTranslations("alerts");
   const [values, setValues] = useState<Record<string, number>>(
     Object.fromEntries(alert.params.map((p) => [p.key, p.value])),
   );
@@ -75,7 +57,10 @@ function AlertRow({
     }
   };
 
-  const state = alert.state ? STATE[alert.state] : null;
+  const state =
+    alert.state && alert.state in STATE_CLASS
+      ? { label: t(`state.${alert.state}`), className: STATE_CLASS[alert.state] }
+      : null;
   return (
     <div
       className={cn(
@@ -87,7 +72,7 @@ function AlertRow({
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{alert.title}</span>
           <Badge variant="outline" className="text-xs">
-            {alert.severity === "critical" ? "Critique" : "Avertissement"}
+            {t(`severity.${alert.severity === "critical" ? "critical" : "warning"}`)}
           </Badge>
           {state && (
             <Badge variant="outline" className={cn("text-xs", state.className)}>
@@ -127,7 +112,7 @@ function AlertRow({
                 onClick={() => save(true)}
                 disabled={saving}
               >
-                Appliquer
+                {t("apply")}
               </Button>
             )}
           </div>
@@ -141,7 +126,7 @@ function AlertRow({
           checked={alert.enabled}
           disabled={!canEdit || saving}
           onCheckedChange={(v) => save(v)}
-          aria-label={`Activer ${alert.title}`}
+          aria-label={t("enable", { title: alert.title })}
         />
       </div>
     </div>
@@ -156,6 +141,7 @@ export function AlertsPanel({
   project: string;
   app?: string;
 }) {
+  const t = useTranslations("alerts");
   const [catalog, setCatalog] = useState<AlertCatalog | null>(null);
   const [error, setError] = useState<unknown>(null);
 
@@ -203,21 +189,21 @@ export function AlertsPanel({
             <BellRing className="mt-0.5 h-5 w-5 text-muted-foreground" />
             <div className="text-sm">
               <p className="font-medium">
-                {enabledCount} alerte{enabledCount > 1 ? "s" : ""} active
-                {enabledCount > 1 ? "s" : ""} sur {catalog.items.length}{" "}
-                {app ? "pour cette app" : "pour tout le projet"}
+                {t("summary", {
+                  count: enabledCount,
+                  total: catalog.items.length,
+                  scope: t(app ? "scope.app" : "scope.project"),
+                })}
               </p>
               <p className="text-muted-foreground">
-                Notifications vers{" "}
-                {catalog.notifies
-                  ? NOTIFIES[catalog.notifies]
-                  : "aucun canal : configurez-en un dans l'onglet Sécurité"}
-                . Évaluées par Grafana toutes les minutes.
+                {t("notifiesTo", {
+                  target: catalog.notifies
+                    ? t(`notifies.${catalog.notifies}`)
+                    : t("noChannel"),
+                })}
               </p>
               {!catalog.can_edit && (
-                <p className="text-muted-foreground">
-                  Seuls les admins du projet les modifient.
-                </p>
+                <p className="text-muted-foreground">{t("adminsOnly")}</p>
               )}
             </div>
           </div>
@@ -229,7 +215,7 @@ export function AlertsPanel({
                 rel="noopener noreferrer"
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm hover:bg-muted"
               >
-                Voir dans Grafana <ExternalLink className="h-3.5 w-3.5" />
+                {t("viewInGrafana")} <ExternalLink className="h-3.5 w-3.5" />
               </a>
             )}
             {catalog.grafana_new_rule_url && (
@@ -239,7 +225,7 @@ export function AlertsPanel({
                 rel="noopener noreferrer"
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm hover:bg-muted"
               >
-                Créer une alerte personnalisée{" "}
+                {t("newCustom")}{" "}
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             )}
@@ -262,9 +248,7 @@ export function AlertsPanel({
                   params,
                 );
                 toast.success(
-                  enabled
-                    ? `« ${alert.title} » activée`
-                    : `« ${alert.title} » désactivée`,
+                  t(enabled ? "toggled.on" : "toggled.off", { title: alert.title }),
                 );
                 await load();
               } catch (e) {

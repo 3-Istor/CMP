@@ -79,9 +79,548 @@
     }
   },
   "finops": {},
-  "security": {},
-  "activity": {},
-  "alerts": {},
+  "security": {
+    "common": {
+      "loading": "Chargement…",
+      "never": "jamais",
+      "project": "projet",
+      "details": "Détails",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "noChange": "Aucun changement",
+      "backupStarted": "Sauvegarde lancée : {list}"
+    },
+    "tiers": {
+      "core": "Socle",
+      "important": "Important",
+      "recommended": "Recommandé",
+      "info": "Info"
+    },
+    "categories": {
+      "leaks": {
+        "label": "Fuites",
+        "question": "Mon code fuit-il ?"
+      },
+      "dependencies": {
+        "label": "Dépendances",
+        "question": "Mes dépendances ont-elles des failles ?"
+      },
+      "container": {
+        "label": "Conteneur",
+        "question": "Mon conteneur est-il bien construit ?"
+      },
+      "access": {
+        "label": "Accès",
+        "question": "Qui peut atteindre mon app ?"
+      },
+      "data": {
+        "label": "Données",
+        "question": "Mes données sont-elles protégées ?"
+      },
+      "journal": {
+        "label": "Journal",
+        "question": "Que s'est-il passé ?"
+      }
+    },
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "code": "Code et dépendances",
+      "access": "Accès et exposition",
+      "data": "Données",
+      "journal": "Journal",
+      "ignored": "Ignorées"
+    },
+    "scanSources": {
+      "trivy-operator": "Images en cours · Trivy Operator",
+      "ci": "Code · GitHub Actions",
+      "kyverno": "Conteneurs · Kyverno",
+      "cnpg": "Sauvegardes · CNPG",
+      "exposure": "Exposition",
+      "cilium": "Isolation réseau"
+    },
+    "exceptionStatus": {
+      "not_affected": "Ne nous concerne pas",
+      "false_positive": "Faux positif",
+      "accepted_risk": "Risque accepté",
+      "revoked": "Secret révoqué"
+    },
+    "justifications": {
+      "component_not_present": "Le paquet vulnérable n'est pas dans l'image",
+      "vulnerable_code_not_present": "Le code vulnérable n'est pas présent",
+      "vulnerable_code_not_in_execute_path": "Le code vulnérable n'est jamais appelé",
+      "vulnerable_code_cannot_be_controlled_by_adversary": "Un attaquant ne peut pas atteindre ce code",
+      "inline_mitigations_already_exist": "Une protection en place bloque déjà l'attaque"
+    },
+    "failOn": {
+      "none": "Ne bloque jamais, signale seulement",
+      "critical": "Bloque sur un secret ou une CVE critique corrigeable"
+    },
+    "settingsSource": {
+      "platform": "valeur par défaut de la plateforme",
+      "project": "défaut du projet",
+      "app": "réglé pour cette app"
+    },
+    "settingsAction": {
+      "enable": "Activer",
+      "restrict": "Restreindre",
+      "configure": "Régler"
+    },
+    "banner": {
+      "count": "{count, plural, one {# action de sécurité obligatoire} other {# actions de sécurité obligatoires}}",
+      "inApp": "{title} dans {app}",
+      "show": "Voir l'action →"
+    },
+    "alert": {
+      "count": "Attention : {count, plural, one {# action de sécurité obligatoire} other {# actions de sécurité obligatoires}}",
+      "view": "Voir →"
+    },
+    "dashboard": {
+      "score": "Niveau de sécurité",
+      "scans": "Scans",
+      "excepted": "{count, plural, one {# alerte ignorée, hors score.} other {# alertes ignorées, hors score.}}",
+      "priority": "Actions prioritaires",
+      "noAction": "Aucune action en attente.",
+      "moreActions": "Et {count, plural, one {# autre action} other {# autres actions}}, dans les onglets ci-dessus.",
+      "nothingToReport": "Rien à signaler.",
+      "openFullPage": "Ouvrir dans Sécurité →",
+      "newMajor": "Nouvelles failles majeures",
+      "newMajorDescription": "Par semaine, socle et important",
+      "guarantees": "Garanties plateforme",
+      "notApplicable": "non applicable",
+      "guaranteesNote": "Assurées par la plateforme, rien à faire.",
+      "trend": "Score sur 90 jours",
+      "apps": "Apps du projet",
+      "noApp": "Aucune app.",
+      "app": "App",
+      "grade": "Note",
+      "appActions": "Actions",
+      "appMandatory": "Obligatoires",
+      "journalSoon": "Le journal arrive avec la phase 2 : déploiements, lectures de secrets, connexions et flux refusés, filtrés sur le projet."
+    },
+    "score": {
+      "nothingToDo": "Rien à faire",
+      "actions": "{count, plural, one {# action à faire} other {# actions à faire}}",
+      "tierCount": "{count} {tier}",
+      "phase2": "phase 2",
+      "ok": "ok",
+      "arrivesPhase2": "Arrive avec la phase 2",
+      "pointsLost": "{points, plural, one {−# point} other {−# points}}",
+      "grade": "/100 · note {grade}"
+    },
+    "trend": {
+      "weekOf": "Semaine du {date}",
+      "newMajor": "Nouvelles failles majeures",
+      "score": "Score",
+      "noHistory": "Pas encore d'historique."
+    },
+    "finding": {
+      "pending": "Ignorée par {author}, en attente de validation par un admin du projet.",
+      "viewRun": "Voir le run",
+      "backupNow": "Sauvegarder maintenant",
+      "seenBy": "Vu par {sources} depuis le {date}"
+    },
+    "exception": {
+      "ignore": "Ignorer",
+      "title": "Ignorer cette alerte",
+      "reason": "Motif",
+      "why": "Pourquoi",
+      "explanation": "Explication",
+      "explanationPlaceholder": "Ce que vous avez vérifié, en une ou deux phrases",
+      "expiresOn": "Expire le",
+      "expiryHint": "Par défaut et au plus tard le {date}. L'alerte revient d'elle-même à cette date.",
+      "approvalNeeded": "Un autre admin du projet devra valider. D'ici là, l'alerte reste comptée.",
+      "saved": "Exception enregistrée, en attente de validation",
+      "ignored": "Alerte ignorée",
+      "hints": {
+        "not_affected": "La faille existe dans le paquet, mais ne peut pas être exploitée ici. Revue dans un an.",
+        "false_positive": "Le scanner se trompe. Revue dans un an.",
+        "accepted_risk": "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus, et un autre admin du projet doit valider.",
+        "revoked": "Le secret a été changé et l'ancien ne fonctionne plus. Le retirer de l'historique ne suffit pas."
+      }
+    },
+    "exceptions": {
+      "empty": "Aucune alerte ignorée.",
+      "awaitingApproval": "En attente de validation",
+      "byOn": "Par {author} le {date}",
+      "approvedBy": "validée par {approver}",
+      "expiresOn": "expire le {date}",
+      "approve": "Valider",
+      "reactivate": "Réactiver",
+      "approved": "Exception validée",
+      "reactivated": "Alerte réactivée"
+    },
+    "scans": {
+      "requested": "scan demandé, résultat dans quelques minutes",
+      "readError": "Lecture en échec, réessai automatique",
+      "lastRun": "dernier {when}",
+      "nextRun": "prochain {when}",
+      "rerun": "Relancer",
+      "started": "Scan lancé",
+      "firstRun": "Premier passage du collecteur dans quelques minutes."
+    },
+    "alerts": {
+      "title": "Alertes Discord",
+      "description": "Chaque nouveau problème du socle est envoyé une fois, vers {target}.",
+      "none": "aucun canal",
+      "origin": {
+        "app": "le webhook de cette app",
+        "project": "le webhook du projet",
+        "platform": "le canal par défaut de la plateforme"
+      },
+      "scope": {
+        "app": "cette app",
+        "project": "ce projet"
+      },
+      "ownWebhook": "Webhook de {scope} :",
+      "replace": "Remplacer",
+      "useThis": "Utiliser ce webhook",
+      "remove": "Retirer",
+      "sendTest": "Envoyer un test",
+      "testSent": "Message de test envoyé",
+      "saved": "Webhook enregistré",
+      "removed": "Webhook retiré",
+      "storedInVault": "Le webhook est stocké dans Vault et n'est plus jamais affiché.",
+      "fallbackToProject": "Sans webhook d'app, celui du projet est utilisé.",
+      "appCanOwn": "Une app peut avoir le sien."
+    },
+    "backups": {
+      "title": "Sauvegardes",
+      "phase": {
+        "completed": "Réussie",
+        "failed": "En échec",
+        "running": "En cours",
+        "started": "En cours",
+        "pending": "En attente"
+      },
+      "instances": "{ready}/{total} {total, plural, one {instance prête} other {instances prêtes}}",
+      "restoring": "Restauration en cours : {phase}",
+      "preparing": "En préparation : {phase}",
+      "restoredAt": "restaurée depuis {source}, jusqu'au {date}",
+      "restoredBackup": "restaurée depuis {source}, sauvegarde {backup}",
+      "emptyState": "Aucune sauvegarde. Activez-les dans l'onglet Configuration, panneau « Exposition et données ».",
+      "refresh": "Rafraîchir",
+      "database": "Base",
+      "when": "Quand",
+      "status": "État",
+      "manual": "manuelle",
+      "restore": "Restaurer"
+    },
+    "restore": {
+      "title": "Restaurer la base {database}",
+      "description": "Une nouvelle base est créée à partir de la sauvegarde, puis l'app bascule dessus. L'app est indisponible pendant la restauration, en général quelques minutes. La base actuelle est supprimée, mais ses sauvegardes restent : vous pouvez revenir en arrière de la même façon.",
+      "backupState": "État à la fin de la sauvegarde",
+      "pointInTime": "État à un instant précis, après la sauvegarde",
+      "pointHint": "Utile pour revenir juste avant une erreur, par exemple une suppression de données à 14 h 32.",
+      "confirm": "Confirmer la restauration",
+      "preview": "Voir le changement",
+      "committed": "Restauration commitée, Argo CD la déploie dans quelques minutes"
+    },
+    "settings": {
+      "title": "Réglages",
+      "ciBlocking": "Blocage de la CI",
+      "enforced": "Imposé par l'admin du projet",
+      "current": "Actuellement : {source}",
+      "saved": "Réglage commité dans deploy/security.yaml",
+      "confirmChange": "Confirmer la modification",
+      "commit": "Confirmer et commiter"
+    },
+    "policy": {
+      "title": "Politique du projet",
+      "ciDefault": "Blocage de la CI, par défaut",
+      "lock": "Verrouiller",
+      "lockHint": "Les apps héritent de la valeur sans pouvoir la changer.",
+      "saved": "Politique enregistrée",
+      "appliedTo": "{count, plural, one {Politique enregistrée, appliquée à # app} other {Politique enregistrée, appliquée à # apps}}",
+      "notApplied": "Non appliquée à : {list}"
+    }
+  },
+  "activity": {
+    "common": {
+      "refresh": "Rafraîchir",
+      "loading": "Chargement…",
+      "never": "jamais"
+    },
+    "tab": {
+      "description": {
+        "audit": "Qui a fait quoi dans {scope, select, app {cette app} other {ce projet}} : CMP, kubectl, Vault, Keycloak et déploiements.",
+        "logs": "Les logs des pods {scope, select, app {de l'app} other {du projet}}, avec recherche et suivi en direct."
+      },
+      "views": {
+        "audit": "Audit",
+        "logs": "Logs"
+      }
+    },
+    "sources": {
+      "cmp": "CMP",
+      "kubernetes": "kubectl",
+      "vault": "Vault",
+      "keycloak": "Keycloak",
+      "deployment": "Déploiements"
+    },
+    "periods": {
+      "15m": "15 minutes",
+      "1h": "1 heure",
+      "6h": "6 heures",
+      "24h": "24 heures",
+      "7d": "7 jours",
+      "14d": "14 jours",
+      "30d": "30 jours"
+    },
+    "groups": {
+      "project": "Projet et membres",
+      "apps": "Applications",
+      "security": "Sécurité",
+      "databases": "Bases de données",
+      "finops": "FinOps",
+      "shells": "Shells dans un pod",
+      "vault": "Secrets Vault",
+      "logins": "Échecs de connexion",
+      "deployments": "Déploiements"
+    },
+    "roles": {
+      "admin": "admin",
+      "member": "membre"
+    },
+    "exposure": {
+      "public": "public",
+      "projectUsers": "utilisateurs du projet",
+      "projectMembers": "membres du projet",
+      "projectAdmins": "admins du projet",
+      "custom": "personnalisée"
+    },
+    "time": {
+      "today": "aujourd'hui {time}"
+    },
+    "events": {
+      "projectCreate": "a créé le projet {project}",
+      "projectDelete": "a supprimé le projet {project}",
+      "memberAdd": "a ajouté {user} au projet ({role})",
+      "memberRemove": "a retiré {user} du projet",
+      "appCreate": "a créé l'app {app}",
+      "appDelete": "a supprimé l'app {app}",
+      "configUpdate": "a modifié la config de {app}",
+      "exposureChange": "a passé l'exposition de {app} de {from} à {to}",
+      "backupsChange": "a modifié les sauvegardes de {app}",
+      "scanRequest": "a lancé un scan de sécurité de {app}",
+      "exceptionRequest": "a demandé une exception de sécurité sur {app}",
+      "exceptionApprove": "a approuvé une exception de sécurité",
+      "exceptionRevoke": "a révoqué une exception de sécurité",
+      "settingsUpdate": "a modifié les réglages de sécurité de {app}",
+      "policyUpdate": "a modifié la politique de sécurité du projet",
+      "alertsUpdate": "a modifié la cible des alertes de sécurité",
+      "alertsTest": "a testé les alertes de sécurité",
+      "databaseBackup": "a lancé une sauvegarde de la base de {app}",
+      "databaseRestore": "a restauré la base de {app}",
+      "budgetUpdate": "a modifié le budget du projet",
+      "recommendationApply": "a appliqué une recommandation FinOps",
+      "recommendationIgnore": "a ignoré une recommandation FinOps",
+      "recommendationNotify": "a notifié une recommandation FinOps",
+      "alertDisabled": "a désactivé une alerte du catalogue ({target})",
+      "alertUpdated": "a réglé une alerte du catalogue ({target})",
+      "deploymentSync": "a déployé {target}",
+      "login": "s'est connecté ({target})",
+      "loginFailed": "a échoué à se connecter",
+      "vaultRead": "a lu le secret {target}",
+      "vaultList": "a listé les secrets {target}",
+      "vaultWrite": "a écrit le secret {target}",
+      "vaultDelete": "a supprimé le secret {target}",
+      "k8sShell": "a ouvert un shell dans {name}",
+      "k8sAttach": "s'est attaché à {name}",
+      "k8sPortForward": "a ouvert un port-forward vers {name}",
+      "k8sReadSecret": "a lu le secret {name}",
+      "k8sVerbs": {
+        "create": "a créé",
+        "update": "a modifié",
+        "delete": "a supprimé",
+        "get": "a lu",
+        "list": "a listé"
+      },
+      "detail": "({detail})"
+    },
+    "audit": {
+      "kpi": {
+        "actions": "Actions · {days} j",
+        "people": "Personnes actives",
+        "notable": "Événements notables",
+        "loginFailures": "Échecs de connexion",
+        "delta": "{pct} % vs période -1",
+        "new": "nouveau"
+      },
+      "chart": {
+        "title": "Activité par jour et par source",
+        "empty": "Aucune activité sur la période."
+      },
+      "unavailable": "Sources momentanément indisponibles :",
+      "filters": {
+        "allSources": "Toutes les sources",
+        "allPeople": "Toutes les personnes",
+        "allActions": "Toutes les actions",
+        "allApps": "Toutes les apps",
+        "reads": "Lectures",
+        "notableOnly": "Notables seulement"
+      },
+      "aria": {
+        "source": "Source",
+        "person": "Personne",
+        "action": "Action",
+        "app": "App",
+        "period": "Période"
+      },
+      "notable": "Notable",
+      "outcome": {
+        "success": "réussi",
+        "refused": "refusé"
+      },
+      "empty": "Aucun événement pour ces filtres.",
+      "loadMore": "Charger plus",
+      "detail": {
+        "title": "Détail de l'événement",
+        "close": "Fermer",
+        "who": "Qui",
+        "what": "Quoi",
+        "source": "Source",
+        "when": "Quand",
+        "app": "App",
+        "target": "Cible",
+        "from": "Depuis",
+        "result": "Résultat",
+        "request": "Requête",
+        "allFrom": "Toute l'activité de {actor}",
+        "showRaw": "Voir les données brutes",
+        "hideRaw": "Masquer les données brutes"
+      }
+    },
+    "logs": {
+      "aria": {
+        "namespace": "Namespace",
+        "pod": "Pod",
+        "container": "Conteneur",
+        "level": "Niveau",
+        "period": "Période"
+      },
+      "allNamespaces": "Tous les namespaces",
+      "allPods": "Tous les pods",
+      "allContainers": "Tous les conteneurs",
+      "allLevels": "Tous les niveaux",
+      "errors": "Erreurs",
+      "warnings": "Avertissements",
+      "search": "Rechercher…",
+      "searchButton": "Rechercher",
+      "lineWrap": "Retour à la ligne",
+      "timestamp": "Horodatage",
+      "lineCount": "{count, plural, one {# ligne} other {# lignes}}",
+      "download": "Télécharger les lignes affichées",
+      "openNewTab": "Ouvrir dans un nouvel onglet",
+      "exitFullscreen": "Quitter le plein écran (Échap)",
+      "fullscreen": "Plein écran",
+      "live": "En direct",
+      "follow": "Suivre",
+      "showStream": "Afficher ce flux",
+      "hideStream": "Masquer ce flux",
+      "showContext": "Voir le contexte",
+      "contextBanner": "Contexte : une minute avant et après la ligne choisie, même conteneur.",
+      "backToResults": "Retour aux résultats",
+      "noLines": "Aucune ligne pour ces filtres."
+    },
+    "volume": {
+      "title": "Volume de logs",
+      "total": "{size} sur la période",
+      "description": "Lignes par minute, par app.",
+      "aria": "Période du volume",
+      "empty": "Aucun log sur la période.",
+      "tooltip": "{value} lignes/min",
+      "table": {
+        "app": "App",
+        "size": "Taille",
+        "lines": "Lignes",
+        "peak": "Pic / min"
+      },
+      "size": {
+        "gb": "{value} Go",
+        "mb": "{value} Mo",
+        "kb": "{value} Ko",
+        "b": "{value} o"
+      }
+    },
+    "network": {
+      "title": "Flux réseau refusés · 24 h",
+      "description": "Bloqués par une politique réseau, côté de ce projet.",
+      "table": {
+        "source": "Source",
+        "destination": "Destination",
+        "port": "Port",
+        "direction": "Sens",
+        "count": "Occurrences",
+        "last": "Dernier passage"
+      },
+      "direction": {
+        "ingress": "entrant",
+        "egress": "sortant"
+      },
+      "noPort": "n/d",
+      "empty": "Aucun flux refusé sur les dernières 24 heures."
+    },
+    "platform": {
+      "alerts": "Alertes actives",
+      "noAlerts": "Aucune alerte en cours.",
+      "since": "depuis {time}",
+      "auditChain": "Chaîne d'audit",
+      "archive": "Archive immuable : dernière heure archivée {time}",
+      "collected": "Collecte {source} : à jour jusqu'à {time}"
+    },
+    "insights": {
+      "none": "Aucun.",
+      "logins": {
+        "title": "Connexions au realm du projet",
+        "success": "Réussies",
+        "failure": "Échouées",
+        "empty": "Aucune connexion sur la période.",
+        "failingAccounts": "Comptes en échec",
+        "failingIps": "IP en échec"
+      },
+      "heatmap": {
+        "title": "Quand l'activité humaine a lieu",
+        "empty": "Aucune action humaine sur la période.",
+        "cell": "{day} {hour}h : {count, plural, one {# action} other {# actions}}",
+        "hour": "{hour}h",
+        "note": "Heure de Paris. Les nuits et les week-ends chargés méritent un regard."
+      }
+    }
+  },
+  "alerts": {
+    "state": {
+      "normal": "OK",
+      "pending": "En attente",
+      "firing": "Déclenchée",
+      "error": "Erreur",
+      "nodata": "Pas de données"
+    },
+    "severity": {
+      "critical": "Critique",
+      "warning": "Avertissement"
+    },
+    "notifies": {
+      "app": "le canal Discord de l'app",
+      "project": "le canal Discord du projet",
+      "platform": "le canal Discord de la plateforme (aucun canal projet configuré)"
+    },
+    "noChannel": "aucun canal : configurez-en un dans l'onglet Sécurité",
+    "summary": "{count, plural, one {# alerte active} other {# alertes actives}} sur {total} {scope}",
+    "scope": {
+      "app": "pour cette app",
+      "project": "pour tout le projet"
+    },
+    "notifiesTo": "Notifications vers {target}. Évaluées par Grafana toutes les minutes.",
+    "adminsOnly": "Seuls les admins du projet les modifient.",
+    "viewInGrafana": "Voir dans Grafana",
+    "newCustom": "Créer une alerte personnalisée",
+    "toggled": {
+      "on": "« {title} » activée",
+      "off": "« {title} » désactivée"
+    },
+    "enable": "Activer {title}",
+    "apply": "Appliquer"
+  },
   "account": {
     "language": {
       "title": "Langue",

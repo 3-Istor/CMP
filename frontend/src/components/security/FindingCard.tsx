@@ -12,15 +12,16 @@ import {
   ShieldOff,
 } from "lucide-react";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { errorMessage, TIER_META } from "./labels";
 
 const BACKUP_NOW_RULES = new Set(["backup-stale", "backup-missing"]);
-const SETTINGS_RULES: Record<string, string> = {
-  "backup-disabled": "Activer",
-  "exposure-public": "Restreindre",
-  "exposure-custom": "Régler",
+const SETTINGS_RULE_ACTIONS: Record<string, string> = {
+  "backup-disabled": "enable",
+  "exposure-public": "restrict",
+  "exposure-custom": "configure",
 };
 
 export function FindingCard({
@@ -36,11 +37,13 @@ export function FindingCard({
   canAdmin: boolean;
   onIgnore?: (finding: SecurityFinding) => void;
 }) {
+  const t = useTranslations("security");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const tier = TIER_META[finding.tier];
   const deploymentId = apps.find((a) => a.app === finding.app)?.deployment_id;
-  const settingsLabel = SETTINGS_RULES[finding.rule];
+  const settingsAction = SETTINGS_RULE_ACTIONS[finding.rule];
   const pending = finding.exception?.pending_approval;
 
   async function backupNow() {
@@ -48,7 +51,7 @@ export function FindingCard({
     setBusy(true);
     try {
       const { backups } = await requestSecurityBackup(project, finding.app);
-      toast.success(`Sauvegarde lancée : ${backups.join(", ")}`);
+      toast.success(t("common.backupStarted", { list: backups.join(", ") }));
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -60,20 +63,19 @@ export function FindingCard({
     <div className="rounded-lg border bg-card">
       <div className="flex flex-wrap items-start gap-3 p-3">
         <Badge variant="outline" className={`shrink-0 ${tier.badge}`}>
-          {tier.label}
+          {t(`tiers.${finding.tier}`)}
         </Badge>
         <div className="min-w-0 flex-1 space-y-1">
           <p className="font-medium leading-tight">{finding.title}</p>
           <p className="text-xs text-muted-foreground">
-            {[finding.app ?? "projet", finding.location]
+            {[finding.app ?? t("common.project"), finding.location]
               .filter(Boolean)
               .join(" · ")}
           </p>
           {finding.fix && <p className="text-sm">{finding.fix}</p>}
           {pending && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              Ignorée par {finding.exception?.author}, en attente de validation
-              par un admin du projet.
+              {t("finding.pending", { author: finding.exception?.author ?? "" })}
             </p>
           )}
         </div>
@@ -85,22 +87,24 @@ export function FindingCard({
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
-              {finding.sources.includes("ci") ? "Voir le run" : "Détails"}
+              {finding.sources.includes("ci")
+                ? t("finding.viewRun")
+                : t("common.details")}
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
           {BACKUP_NOW_RULES.has(finding.rule) && canAdmin && (
             <Button size="sm" variant="outline" onClick={backupNow} disabled={busy}>
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Sauvegarder maintenant
+              {t("finding.backupNow")}
             </Button>
           )}
-          {settingsLabel && deploymentId && (
+          {settingsAction && deploymentId && (
             <Link
               href={`/projects/${encodeURIComponent(project)}/apps/${deploymentId}#security-data`}
               className="inline-flex h-7 items-center rounded-md border px-2.5 text-[0.8rem] font-medium hover:bg-accent"
             >
-              {settingsLabel}
+              {t(`settingsAction.${settingsAction}`)}
             </Link>
           )}
           {onIgnore && !finding.exception && (
@@ -111,7 +115,7 @@ export function FindingCard({
               onClick={() => onIgnore(finding)}
             >
               <ShieldOff className="h-3.5 w-3.5" />
-              Ignorer
+              {t("exception.ignore")}
             </Button>
           )}
         </div>
@@ -129,7 +133,7 @@ export function FindingCard({
             ) : (
               <ChevronRight className="h-3.5 w-3.5" />
             )}
-            Détails
+            {t("common.details")}
           </button>
           {open && (
             <div className="space-y-2 pb-2 pt-1 text-xs">
@@ -140,8 +144,10 @@ export function FindingCard({
                 </pre>
               )}
               <p className="text-muted-foreground">
-                Vu par {finding.sources.join(", ")} depuis le{" "}
-                {new Date(`${finding.first_seen}Z`).toLocaleDateString("fr-FR")}
+                {t("finding.seenBy", {
+                  sources: finding.sources.join(", "),
+                  date: new Date(`${finding.first_seen}Z`).toLocaleDateString(locale),
+                })}
               </p>
             </div>
           )}
