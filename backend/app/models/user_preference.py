@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import JSON, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -20,6 +20,8 @@ class UserPreference(Base):
     )
 
     locale: Mapped[str | None] = mapped_column(String(5), nullable=True)
+
+    favorites: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()  # pylint: disable=not-callable

@@ -9,11 +9,15 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useFavorites } from "@/lib/favorites";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
-import { Boxes, ExternalLink, FolderKanban } from "lucide-react";
+import type { Deployment, Project } from "@/types";
+import { Boxes, ExternalLink, FolderKanban, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { readRecentApps } from "./recentApps";
+import { readRecentProjects } from "./recentProjects";
 import {
   ADMIN_LINKS,
   ALL_PAGES,
@@ -48,13 +52,80 @@ export function CommandPalette({
   );
 }
 
+const MAX_RECENT_SHOWN = 5;
+
 function PaletteBody({ close }: { close: () => void }) {
   const t = useTranslations("shell.palette");
   const tNav = useTranslations("shell.sidebar");
   const tLinks = useTranslations("shell.links");
   const router = useRouter();
   const isAdmin = usePlatformAdmin();
-  const { projects, apps } = useVisibleWork(0);
+  const { projects: allProjects, apps: allApps } = useVisibleWork(0);
+  const tFav = useTranslations("favorites");
+  const favorites = useFavorites();
+
+  const { favProjects, favApps, recentProjects, recentApps, projects, apps } =
+    useMemo(() => {
+      const byRecency = <T,>(items: T[], recent: unknown[], key: (i: T) => unknown) =>
+        recent.flatMap((r) => items.filter((i) => key(i) === r));
+      const projectKey = (p: Project) => p.name;
+      const appKey = (a: Deployment) => a.id;
+
+      const favProjects = allProjects.filter((p) =>
+        favorites.projects.includes(p.name),
+      );
+      const favApps = allApps.filter((a) => favorites.apps.includes(a.id));
+      const restProjects = allProjects.filter((p) => !favProjects.includes(p));
+      const restApps = allApps.filter((a) => !favApps.includes(a));
+      const recentProjects = byRecency(
+        restProjects,
+        readRecentProjects(),
+        projectKey,
+      ).slice(0, MAX_RECENT_SHOWN);
+      const recentApps = byRecency(restApps, readRecentApps(), appKey).slice(
+        0,
+        MAX_RECENT_SHOWN,
+      );
+      return {
+        favProjects,
+        favApps,
+        recentProjects,
+        recentApps,
+        projects: restProjects.filter((p) => !recentProjects.includes(p)),
+        apps: restApps.filter((a) => !recentApps.includes(a)),
+      };
+    }, [allProjects, allApps, favorites.projects, favorites.apps]);
+
+  const projectItem = (project: Project, favorite = false) => (
+    <CommandItem
+      key={project.name}
+      value={`project ${project.name}`}
+      onSelect={() => go(`/projects/${project.name}`)}
+    >
+      {favorite ? <Star aria-hidden /> : <FolderKanban aria-hidden />}
+      <span className="capitalize">{project.name}</span>
+    </CommandItem>
+  );
+
+  const appItem = (app: Deployment) => (
+    <CommandItem
+      key={app.id}
+      value={`app ${app.name} ${app.project_id} ${app.id}`}
+      onSelect={() => go(`/projects/${app.project_id}/apps/${app.id}`)}
+    >
+      {app.template_icon ? (
+        <span className="w-4 text-center text-base leading-none">
+          {app.template_icon}
+        </span>
+      ) : (
+        <Boxes aria-hidden />
+      )}
+      <span className="truncate">{app.name}</span>
+      <span className="ml-auto truncate text-xs text-muted-foreground">
+        {app.project_id}
+      </span>
+    </CommandItem>
+  );
 
   const go = (href: string) => {
     close();
@@ -74,6 +145,20 @@ function PaletteBody({ close }: { close: () => void }) {
       <CommandList>
         <CommandEmpty>{t("empty")}</CommandEmpty>
 
+        {favProjects.length + favApps.length > 0 && (
+          <CommandGroup heading={tFav("title")}>
+            {favProjects.map((project) => projectItem(project, true))}
+            {favApps.map(appItem)}
+          </CommandGroup>
+        )}
+
+        {recentProjects.length + recentApps.length > 0 && (
+          <CommandGroup heading={tFav("recents")}>
+            {recentProjects.map((project) => projectItem(project))}
+            {recentApps.map(appItem)}
+          </CommandGroup>
+        )}
+
         <CommandGroup heading={t("pages")}>
           {ALL_PAGES.map(({ key, href, icon: Icon }) => (
             <CommandItem
@@ -89,41 +174,12 @@ function PaletteBody({ close }: { close: () => void }) {
 
         {projects.length > 0 && (
           <CommandGroup heading={t("projects")}>
-            {projects.map((project) => (
-              <CommandItem
-                key={project.name}
-                value={`project ${project.name}`}
-                onSelect={() => go(`/projects/${project.name}`)}
-              >
-                <FolderKanban aria-hidden />
-                <span className="capitalize">{project.name}</span>
-              </CommandItem>
-            ))}
+            {projects.map((project) => projectItem(project))}
           </CommandGroup>
         )}
 
         {apps.length > 0 && (
-          <CommandGroup heading={t("apps")}>
-            {apps.map((app) => (
-              <CommandItem
-                key={app.id}
-                value={`app ${app.name} ${app.project_id} ${app.id}`}
-                onSelect={() => go(`/projects/${app.project_id}/apps/${app.id}`)}
-              >
-                {app.template_icon ? (
-                  <span className="w-4 text-center text-base leading-none">
-                    {app.template_icon}
-                  </span>
-                ) : (
-                  <Boxes aria-hidden />
-                )}
-                <span className="truncate">{app.name}</span>
-                <span className="ml-auto truncate text-xs text-muted-foreground">
-                  {app.project_id}
-                </span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          <CommandGroup heading={t("apps")}>{apps.map(appItem)}</CommandGroup>
         )}
 
         <CommandGroup heading={t("links")}>

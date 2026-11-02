@@ -1,5 +1,6 @@
 "use client";
 
+import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { intlLocale } from "@/components/finops/format";
 
@@ -94,13 +95,16 @@ export function AppCard({ app, projectName }: Props) {
                 </span>
               )}
             </div>
-            <Badge
-              variant={STATUS_VARIANT[app.status]}
-              className="shrink-0 capitalize gap-1"
-            >
-              <StatusIcon status={app.status} />
-              {t(`status.${app.status}`)}
-            </Badge>
+            <div className="flex shrink-0 items-center gap-1">
+              <Badge
+                variant={STATUS_VARIANT[app.status]}
+                className="capitalize gap-1"
+              >
+                <StatusIcon status={app.status} />
+                {t(`status.${app.status}`)}
+              </Badge>
+              <FavoriteToggle kind="app" id={app.id} />
+            </div>
           </div>
         </CardHeader>
 

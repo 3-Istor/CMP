@@ -3,6 +3,7 @@
 import { AssistantCard } from "@/components/agents/AssistantCard";
 import Link from "next/link";
 import { Dashboard } from "@/components/dashboard/Dashboard";
+import { FavoritesSection } from "@/components/favorites/FavoritesSection";
 import { GlobalInfraHealth } from "@/components/dashboard/GlobalInfraHealth";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectCard } from "@/components/projects/ProjectCard";
@@ -60,6 +61,8 @@ export default function Home() {
         <AssistantCard />
 
         <GlobalInfraHealth />
+
+        <FavoritesSection onRetried={refreshProjects} />
 
         {/* ── Projects Section ── */}
         <section id="projects" className="scroll-mt-6">

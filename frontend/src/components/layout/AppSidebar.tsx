@@ -26,6 +26,7 @@ import { LinksMenu } from "./LinksMenu";
 import { ProjectNav } from "./ProjectNav";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { projectFromPath } from "./projectSections";
+import { recordRecentApp } from "./recentApps";
 import { recordRecentProject } from "./recentProjects";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { UserMenu } from "./UserMenu";
@@ -132,6 +133,12 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
   useEffect(() => {
     if (projectName) recordRecentProject(projectName);
   }, [projectName]);
+
+  const pathParts = (pathname ?? "").split("/");
+  const appId = pathParts[3] === "apps" ? Number(pathParts[4]) : NaN;
+  useEffect(() => {
+    if (Number.isInteger(appId)) recordRecentApp(appId);
+  }, [appId]);
 
   const counts: Partial<Record<PageEntry["key"], number | undefined>> = {
     projects: loading ? undefined : projects.length,

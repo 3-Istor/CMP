@@ -10,10 +10,11 @@ import {
   CommandList,
   Command,
 } from "@/components/ui/command";
+import { useFavorites } from "@/lib/favorites";
 import { useProjects } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ChevronsUpDown, FolderKanban, Plus } from "lucide-react";
+import { ArrowLeft, ChevronsUpDown, FolderKanban, Plus, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -34,6 +35,8 @@ export function ProjectSwitcher({
   onNavigate?: () => void;
 }) {
   const t = useTranslations("projectNav");
+  const tFav = useTranslations("favorites");
+  const favorites = useFavorites();
   const router = useRouter();
   const pathname = usePathname();
   const { projects, refresh } = useProjects();
@@ -43,17 +46,21 @@ export function ProjectSwitcher({
   const current = projects.find((p) => p.name === projectName);
   const cloudLabel = current ? t(`cloud.${current.target_cloud}`) : "";
 
-  const ordered = useMemo(() => {
-    if (!open) return [];
+  const { favoriteProjects, otherProjects } = useMemo(() => {
+    if (!open) return { favoriteProjects: [], otherProjects: [] };
     const recent = readRecentProjects();
     const rank = (name: string) => {
       const i = recent.indexOf(name);
       return i === -1 ? Number.MAX_SAFE_INTEGER : i;
     };
-    return projects
+    const sorted = projects
       .filter((p) => p.status !== "decommissioning")
       .sort((a, b) => rank(a.name) - rank(b.name));
-  }, [open, projects]);
+    return {
+      favoriteProjects: sorted.filter((p) => favorites.projects.includes(p.name)),
+      otherProjects: sorted.filter((p) => !favorites.projects.includes(p.name)),
+    };
+  }, [open, projects, favorites.projects]);
 
   const go = (href: string) => {
     setOpen(false);
@@ -70,6 +77,20 @@ export function ProjectSwitcher({
       section && (!section.capability || can(role, section.capability));
     return projectHref(name, allowed ? segment : "");
   };
+
+  const projectItem = (p: (typeof projects)[number], favorite: boolean) => (
+    <CommandItem
+      key={p.name}
+      value={`project ${p.name}`}
+      onSelect={() => go(targetFor(p.name, p.role))}
+    >
+      {favorite ? <Star aria-hidden /> : <FolderKanban aria-hidden />}
+      <span className="flex-1 truncate capitalize">{p.name}</span>
+      <span className="text-xs text-muted-foreground">
+        {t(`cloud.${p.target_cloud}`)}
+      </span>
+    </CommandItem>
+  );
 
   return (
     <>
@@ -115,21 +136,14 @@ export function ProjectSwitcher({
                 {t("back")}
               </CommandItem>
             </CommandGroup>
-            {ordered.length > 0 && (
+            {favoriteProjects.length > 0 && (
+              <CommandGroup heading={tFav("title")}>
+                {favoriteProjects.map((p) => projectItem(p, true))}
+              </CommandGroup>
+            )}
+            {otherProjects.length > 0 && (
               <CommandGroup heading={t("projects")}>
-                {ordered.map((p) => (
-                  <CommandItem
-                    key={p.name}
-                    value={`project ${p.name}`}
-                    onSelect={() => go(targetFor(p.name, p.role))}
-                  >
-                    <FolderKanban aria-hidden />
-                    <span className="flex-1 truncate capitalize">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {t(`cloud.${p.target_cloud}`)}
-                    </span>
-                  </CommandItem>
-                ))}
+                {otherProjects.map((p) => projectItem(p, false))}
               </CommandGroup>
             )}
             <CommandGroup>

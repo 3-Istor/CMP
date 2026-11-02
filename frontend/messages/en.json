@@ -2520,5 +2520,13 @@
       "title": "Cluster {cloud} not connected",
       "body": "Project data returns when the cluster is powered back on."
     }
+  },
+  "favorites": {
+    "title": "Favorites",
+    "recents": "Recent",
+    "add": "Add to favorites",
+    "remove": "Remove from favorites",
+    "limitReached": "You can have at most {max} favorite projects and {max} favorite apps.",
+    "saveFailed": "Could not save your favorites."
   }
 }
