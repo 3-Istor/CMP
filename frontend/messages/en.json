@@ -1663,5 +1663,433 @@
       "description": "{count, plural, one {# application remains} other {# applications remain}} in this project. Delete them first, then come back.",
       "open": "Open {name}"
     }
+  },
+  "environments": {
+    "lane": {
+      "unreachable": "Cluster unreachable",
+      "asleep": "Asleep outside working hours",
+      "converged": "One version only, pods ready",
+      "notConverged": "Rollout in progress or pods not ready",
+      "wake": "Wake up"
+    },
+    "wakeStarted": "Staging is waking up",
+    "stepKind": {
+      "run": "Verification",
+      "soak": "Time on staging",
+      "approve": "Approval",
+      "promote": "Promotion to prod"
+    },
+    "promotionStatus": {
+      "running": "Running",
+      "waiting_approval": "Waiting",
+      "done": "In prod",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "promotion": {
+      "titleVersion": "Promoting {version} to prod",
+      "titleRelease": "Promoting the release to prod",
+      "emergency": "Emergency",
+      "accept": "Accept",
+      "approve": "Approve",
+      "cancel": "Cancel promotion",
+      "requestedBy": "Requested by {actor} on {date}",
+      "requestedByReason": "Requested by {actor} on {date} · {reason}"
+    },
+    "runStatus": {
+      "running": "Running",
+      "passed": "OK",
+      "failed": "Failed",
+      "inconclusive": "Inconclusive",
+      "cancelled": "Cancelled",
+      "error": "Error"
+    },
+    "runs": {
+      "title": "Verification suites on staging",
+      "empty": "No suite run on staging yet.",
+      "launched": "Suite {suite} started on staging",
+      "columns": {
+        "suite": "Suite",
+        "version": "Version",
+        "result": "Result",
+        "detail": "Detail",
+        "startedAt": "Started"
+      },
+      "logs": "logs",
+      "cancel": "Cancel"
+    },
+    "history": {
+      "title": "Promotion history",
+      "columns": {
+        "version": "Version",
+        "status": "Status",
+        "by": "By",
+        "when": "When",
+        "commit": "Commit"
+      },
+      "rollbackTag": "(rollback)",
+      "rollback": "Roll back to this version",
+      "rolledBackStarted": "Rollback to {version} started"
+    },
+    "emergency": {
+      "reasonLabel": "Reason for the emergency (recorded and notified)",
+      "reasonPlaceholder": "Fix for the failing payment in prod",
+      "cancel": "Cancel emergency",
+      "toggle": "Emergency…"
+    },
+    "promote": {
+      "emergency": "Promote to prod in an emergency",
+      "now": "Promote to prod",
+      "request": "Request promotion to prod",
+      "alreadyInProd": "Prod already runs the staging version.",
+      "stagingNotReady": "Staging must run a single version, with pods ready.",
+      "explainer": "Promotion sends the exact image running on staging, then the prod release strategy (canary or rolling) takes over in the Release tab."
+    },
+    "policy": {
+      "saved": "Promotion policy saved",
+      "title": "Promotion steps",
+      "intro": "A promotion always goes through the platform smoke test on staging, then through the suites chosen here, in this order. A result only applies to the tested version and stays valid for 7 days.",
+      "platformAlways": "platform, always",
+      "suiteName": "Name",
+      "externalSuite": "GitHub workflow",
+      "metricsSuite": "Envoy metrics",
+      "removeSuite": "Remove {name}",
+      "workflowFile": "Workflow file",
+      "timeoutMinutes": "Max duration (min)",
+      "windowMinutes": "Window (min)",
+      "minRequests": "Min. requests",
+      "errorsMax": "Max errors (%)",
+      "p95Max": "Max p95 (ms)",
+      "ifNotEnoughTraffic": "If there is not enough traffic",
+      "noRealTraffic": "Staging has no real traffic: run a load test, acceptance tests or demo traffic just before.",
+      "addExternal": "GitHub workflow",
+      "addMetrics": "Metrics",
+      "soak": "Time awake on staging (min, 0 = none)",
+      "approval": "Admin approval",
+      "auto": "Automatic promotion",
+      "adminNote": "Without the admin role, starting a promotion means requesting it: approval by another admin is added. Automatic promotion starts as soon as a new version runs on staging, and stops at the approval step if there is one.",
+      "save": "Save"
+    },
+    "inconclusive": {
+      "ask": "Ask an admin",
+      "fail": "Block",
+      "pass": "Let through (recorded)"
+    },
+    "offhours": {
+      "label": "Put staging to sleep outside working hours",
+      "hint": "Offhours-guard puts the staging pods to sleep, never the prod ones. The database stays on. A release candidate or a test wakes staging for as long as it runs.",
+      "sleepCron": "Sleep schedule (cron)",
+      "wakeCron": "Wake schedule (cron)",
+      "timezone": "Time zone"
+    },
+    "staging": {
+      "title": "Staging environment",
+      "intro": "With staging, a <code>vX.Y.Z-rc.N</code> tag deploys the version to staging only. Prod only changes through a promotion from this tab, which sends exactly the tested image. Staging roughly doubles the app's memory during the day: keep it for apps that need it.",
+      "adminOnly": "Only a project admin can enable staging.",
+      "enable": "Enable staging",
+      "enableStarted": "Staging creation started",
+      "titleWithState": "Staging · {state}",
+      "saveSchedule": "Save schedule",
+      "scheduleSaved": "Staging schedule saved",
+      "confirmDelete": "Confirm: delete staging and its database",
+      "disable": "Disable staging",
+      "deleteStarted": "Staging deletion started"
+    },
+    "stagingState": {
+      "provisioning": "Being created",
+      "ready": "Active",
+      "failed": "Failed",
+      "removing": "Being removed"
+    }
+  },
+  "release": {
+    "name": {
+      "numbered": "Release #{revision}",
+      "plain": "Release"
+    },
+    "duration": {
+      "seconds": "{count} s",
+      "minutes": "{count} min",
+      "minutesSeconds": "{minutes} min {seconds} s",
+      "hoursMinutes": "{hours}h {minutes}"
+    },
+    "metric": {
+      "percent": "{value}%",
+      "milliseconds": "{value} ms",
+      "withUnit": "{value} {unit}"
+    },
+    "disabled": {
+      "title": "Release not enabled",
+      "rolling": "This application is updated with a rolling update: each new version replaces the pods directly. To ship it progressively, with a share of the traffic first, automatic error analysis and manual approval, switch the strategy to Canary in the settings below, or in the <code>release</code> section of the repository's values file.",
+      "synced": "Once the change is synced by Argo CD, the next version goes through the steps of the preset."
+    },
+    "banner": {
+      "canaryRejected": "Canary rejected automatically · {release}",
+      "aborted": "{release} aborted",
+      "degraded": "{release} degraded",
+      "metricReachedThreshold": "{name} reached {value} against a threshold of {threshold}.",
+      "metricReached": "{name} reached {value}.",
+      "stableServes": "The stable {stable} serves 100% of the traffic. To fix it, push a new commit: the next version will start again as a canary.",
+      "forced": "{release} promoted by force",
+      "forcedBody": "{stable} serves 100% of the traffic. Some steps were skipped, the reason is recorded in the history.",
+      "promoted": "{release} promoted",
+      "stableIs": "{stable} is the stable version."
+    },
+    "split": {
+      "title": "Traffic split",
+      "ariaLabel": "Stable {stable}%, canary {canary}%",
+      "percent": "{value}%",
+      "stableTag": "Stable {tag}",
+      "canaryTag": "Canary {tag}"
+    },
+    "pods": {
+      "ready": "pods ready"
+    },
+    "revisions": {
+      "title": "Revisions",
+      "empty": "No active ReplicaSet."
+    },
+    "role": {
+      "stable": "stable",
+      "canary": "canary"
+    },
+    "activity": {
+      "title": "Activity",
+      "empty": "No activity recorded for this release.",
+      "started": "Release #{revision} started",
+      "reason": "reason: “{reason}”"
+    },
+    "action": {
+      "continued": "continued the release",
+      "promotedAll": "promoted everything",
+      "skippedStep": "skipped a step",
+      "aborted": "aborted the release"
+    },
+    "outcome": {
+      "running": "Running",
+      "promoted": "Promoted",
+      "aborted_auto": "Auto-rejected",
+      "aborted_manual": "Aborted",
+      "superseded": "Superseded"
+    },
+    "errors": {
+      "readState": "Could not read the release state: {error}"
+    },
+    "history": {
+      "title": "Release history",
+      "empty": "No release recorded for this application.",
+      "columns": {
+        "revision": "Revision",
+        "version": "Version",
+        "outcome": "Result",
+        "progress": "Progress",
+        "startedAt": "Started",
+        "duration": "Duration"
+      },
+      "forced": "Forced",
+      "reason": "Reason: {reason}"
+    },
+    "phase": {
+      "Progressing": "Progressing",
+      "Paused": "Paused",
+      "Healthy": "Healthy",
+      "Degraded": "Degraded",
+      "Aborted": "Aborted"
+    },
+    "badges": {
+      "forced": "Forced"
+    },
+    "live": {
+      "stream": "Live",
+      "polling": "Refreshed every 3 s",
+      "connecting": "Connecting…"
+    },
+    "fields": {
+      "version": "Version",
+      "toward": "to",
+      "step": "Step",
+      "eta": "Estimated end",
+      "startedSr": "Started",
+      "startedOn": "Started on {date}"
+    },
+    "eta": {
+      "approx": "≈ {duration}",
+      "afterApproval": "after approval"
+    },
+    "actions": {
+      "promoteAll": "Promote all",
+      "abort": "Abort"
+    },
+    "confirm": {
+      "promoteAllTitle": "Promote everything now?",
+      "abortTitle": "Abort the release?",
+      "promoteAllBody": "The remaining steps, analyses included, will be skipped. The release will be marked “forced”.",
+      "abortBody": "Traffic goes back to 100% on the stable version. The rejected version stays in Git until the next commit.",
+      "reason": "Reason",
+      "reasonOptional": "Reason (optional)",
+      "submit": "Confirm",
+      "cancel": "Cancel"
+    },
+    "toast": {
+      "promotedAll": "Release promoted to 100%",
+      "aborted": "Release aborted, the stable version serves 100% of the traffic",
+      "nextStep": "Next step started",
+      "stepSkipped": "Step skipped, release marked “forced”"
+    },
+    "steps": {
+      "title": "Steps",
+      "preset": "preset {preset}",
+      "empty": "No progressive step for this strategy."
+    },
+    "metrics": {
+      "compliant": "(within threshold)",
+      "outOfRange": "(out of range)",
+      "threshold": "threshold {value}"
+    },
+    "stepMessage": {
+      "inconclusive": "Not enough traffic on the new version to conclude: the number of canary requests stayed below the minimum. The release is waiting for your decision: skip the step, promote everything or abort."
+    },
+    "time": {
+      "approx": "≈ {duration}",
+      "runningOf": "{elapsed} / ≈ {expected}"
+    },
+    "stepKind": {
+      "analysis": "analysis",
+      "setWeight": "weight",
+      "pause": "pause",
+      "scale": "pods"
+    },
+    "stepStatus": {
+      "done": "done",
+      "active": "paused, action required",
+      "running": "running",
+      "pending": "pending",
+      "failed": "failed",
+      "skipped": "skipped"
+    },
+    "scale": {
+      "preparing": "Preparing canary pods"
+    },
+    "stepper": {
+      "running": "Running…",
+      "continue": "Continue"
+    },
+    "skip": {
+      "button": "Skip step",
+      "warning": "The analysis will be stopped and the release marked “forced”.",
+      "reason": "Reason",
+      "cancel": "Cancel"
+    },
+    "progress": {
+      "reached": "Step {reached} of {total}",
+      "unknown": "Unknown progress"
+    },
+    "settings": {
+      "loadFailed": "Could not read the release settings: {error}",
+      "title": "Release settings",
+      "savedIn": "Saved in Git, in the <code>release</code> section of {files}. Editing the file by hand has the same effect.",
+      "noSection": "No <code>release</code> section in Git: these are the platform defaults.",
+      "strategy": "Strategy",
+      "fullstackCanary": "Fullstack application: the canary applies to the frontend, which is exposed. The backend stays on rolling update, as it has no route of its own: the frontend relays <code>/api</code> to it.",
+      "canaryUnavailable": "Canary unavailable for now: {reason}",
+      "migrationsWithCommand": "Migrations will be enabled in the same commit, with <code>{command}</code>.",
+      "preset": "Preset",
+      "smokeThen": "Smoke test → {steps}",
+      "stickiness": "Session affinity",
+      "smokePath": "Smoke test path",
+      "errorRate": "Max error rate (%)",
+      "minRequests": "Minimum requests",
+      "inconclusiveNote": "Below the minimum number of requests in the analysis window, the result is “inconclusive” and the release pauses.",
+      "allowForce": "Allow “Promote all”",
+      "allowForceHint": "Go straight to 100% with a reason, recorded in the history.",
+      "upToDate": "Settings already up to date in Git.",
+      "committed": "Settings committed. Argo CD applies them at the next sync; the next version will follow this strategy.",
+      "keptRolling": "The {component} stays on rolling update: it is not exposed directly, the frontend relays /api to it. The canary applies to the frontend.",
+      "inProgress": "A release is in progress: promote it or cancel it before changing its settings.",
+      "adminOnly": "Only project admins can change these settings.",
+      "save": "Save to Git"
+    },
+    "presets": {
+      "safe": {
+        "label": "Safe",
+        "steps": "10% → analysis 2 min → 25% → manual approval → 50% → analysis 2 min → 100%"
+      },
+      "fast": {
+        "label": "Fast",
+        "steps": "25% → analysis 1 min → 100%"
+      },
+      "demo": {
+        "label": "Demo",
+        "steps": "10% → analysis 30 s → 50% → pause 10 s → 100%"
+      },
+      "manual": {
+        "label": "Manual",
+        "steps": "10% → manual approval → 50% → manual approval → 100%"
+      }
+    },
+    "strategies": {
+      "rolling": {
+        "label": "Rolling update",
+        "hint": "Each new version replaces the pods directly, without steps."
+      },
+      "canary": {
+        "label": "Canary",
+        "hint": "The new version first receives a share of the traffic, analysed before going further."
+      }
+    },
+    "stickiness": {
+      "cookie": "Cookie: each user stays on the version that served them",
+      "none": "None: each request is drawn at random"
+    },
+    "blockers": {
+      "db_without_migrations": {
+        "title": "Enable migrations to switch to Canary",
+        "short": "the app has a database without migrations.",
+        "why": "During a canary, the old and new versions run side by side on the same database. The platform must therefore migrate the schema only once, before the new version starts: this is the migration Job of the CNP standard."
+      },
+      "no_route": {
+        "title": "Expose the app to switch to Canary",
+        "short": "the app is not exposed.",
+        "why": "The canary splits the traffic between the two versions through the app's HTTP route. Without exposure, there is no traffic to split.",
+        "fix": "Enable exposure in the Configuration tab, Exposure section, then come back here."
+      },
+      "no_service": {
+        "title": "Canary needs the app's Service",
+        "short": "the app's Service is disabled.",
+        "why": "The canary routes the traffic to two Services, stable and canary, built from the app's Service.",
+        "fix": "Re-enable service.enabled in the app's configuration."
+      }
+    },
+    "migrations": {
+      "commandLabel": "Image migration command",
+      "commandHint": "<code>/app/migrate</code> for the FastAPI + React template. It must be idempotent: run again with nothing to do, it exits with 0.",
+      "databaseHint": "Doesn't the app use its database? Disable it instead in the Configuration tab, Database section. Warning: this deletes the database.",
+      "enable": "Enable migrations and switch to Canary"
+    },
+    "dialog": {
+      "cancel": "Cancel",
+      "close": "Close"
+    },
+    "traffic": {
+      "title": "Demo traffic",
+      "intro": "The CMP plays visitors: a technical user signs in through the app's SSO, then each request arrives as a new visitor. Envoy splits them according to the canary weights, and the analysis counts them as real traffic.",
+      "ariaCounts": "{stable} stable responses, {canary} canary, {error} in error",
+      "idle": "No demo traffic running",
+      "labels": {
+        "stable": "Stable",
+        "canary": "Canary",
+        "error": "Errors"
+      },
+      "total": "{count} in total",
+      "split": "Over the last 10 seconds, Envoy sent {stable}% of requests to stable and {canary}% to canary, for configured weights of {weightStable}% / {weightCanary}%.",
+      "running": "{rps} req/s · {remaining} left",
+      "startedBy": "started by {user}",
+      "stop": "Stop",
+      "rate": "{count} req/s",
+      "minutes": "{count} min",
+      "start": "Generate traffic",
+      "remainingMinutes": "{minutes} min {seconds} s",
+      "remainingSeconds": "{seconds} s"
+    }
   }
 }

@@ -15,15 +15,12 @@ import { Switch } from "@/components/ui/switch";
 import { updatePromotionPolicy } from "@/lib/api";
 import type { OnInconclusive, PromotionPolicy, SuiteSpec } from "@/types";
 import { ListChecks, Plus, Save, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "../release/format";
 
-const INCONCLUSIVE: Record<OnInconclusive, string> = {
-  ask: "Demander à un admin",
-  fail: "Bloquer",
-  pass: "Laisser passer (tracé)",
-};
+const INCONCLUSIVE_OPTIONS: OnInconclusive[] = ["ask", "fail", "pass"];
 
 function newSuite(kind: SuiteSpec["kind"], index: number): SuiteSpec {
   return kind === "external"
@@ -80,6 +77,7 @@ export function PromotionPolicyCard({
   canAdminister: boolean;
   onSaved: () => void;
 }) {
+  const t = useTranslations("environments");
   const [draft, setDraft] = useState<PromotionPolicy>(policy);
   const [saving, setSaving] = useState(false);
   const locked = !canAdminister || saving;
@@ -91,7 +89,7 @@ export function PromotionPolicyCard({
     setSaving(true);
     try {
       await updatePromotionPolicy(deploymentId, draft);
-      toast.success("Politique de promotion enregistrée");
+      toast.success(t("policy.saved"));
       onSaved();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -105,19 +103,15 @@ export function PromotionPolicyCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <ListChecks className="h-4 w-4 text-muted-foreground" />
-          Étapes de promotion
+          {t("policy.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5 text-sm">
-        <p className="text-muted-foreground">
-          Une promotion passe toujours par le smoke de la plateforme sur staging, puis par les
-          suites choisies ici, dans cet ordre. Un résultat ne vaut que pour la version testée et
-          reste valable 7 jours.
-        </p>
+        <p className="text-muted-foreground">{t("policy.intro")}</p>
 
         <ol className="space-y-3">
           <li className="rounded-md border px-3 py-2 text-muted-foreground">
-            1. <span className="font-medium text-foreground">smoke</span> · plateforme, toujours
+            1. <span className="font-medium text-foreground">smoke</span> · {t("policy.platformAlways")}
           </li>
           {draft.suites.map((suite, index) => (
             <li key={index} className="space-y-3 rounded-md border px-3 py-3">
@@ -125,7 +119,7 @@ export function PromotionPolicyCard({
                 <span className="pb-2 text-muted-foreground">{index + 2}.</span>
                 <div className="min-w-0 flex-1 space-y-1">
                   <Label htmlFor={`suite-name-${index}`} className="text-xs">
-                    Nom
+                    {t("policy.suiteName")}
                   </Label>
                   <Input
                     id={`suite-name-${index}`}
@@ -135,13 +129,13 @@ export function PromotionPolicyCard({
                   />
                 </div>
                 <span className="pb-2 text-xs text-muted-foreground">
-                  {suite.kind === "external" ? "Workflow GitHub" : "Métriques Envoy"}
+                  {suite.kind === "external" ? t("policy.externalSuite") : t("policy.metricsSuite")}
                 </span>
                 {canAdminister && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label={`Retirer ${suite.name}`}
+                    aria-label={t("policy.removeSuite", { name: suite.name })}
                     onClick={() =>
                       setDraft((d) => ({ ...d, suites: d.suites.filter((_, i) => i !== index) }))
                     }
@@ -155,7 +149,7 @@ export function PromotionPolicyCard({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor={`suite-workflow-${index}`} className="text-xs">
-                      Fichier du workflow
+                      {t("policy.workflowFile")}
                     </Label>
                     <Input
                       id={`suite-workflow-${index}`}
@@ -167,7 +161,7 @@ export function PromotionPolicyCard({
                   </div>
                   <NumberField
                     id={`suite-timeout-${index}`}
-                    label="Délai max (min)"
+                    label={t("policy.timeoutMinutes")}
                     value={suite.timeoutMinutes}
                     onChange={(v) => setSuite(index, { timeoutMinutes: v ?? 30 })}
                     disabled={locked}
@@ -177,54 +171,53 @@ export function PromotionPolicyCard({
                 <div className="grid gap-3 sm:grid-cols-4">
                   <NumberField
                     id={`suite-window-${index}`}
-                    label="Fenêtre (min)"
+                    label={t("policy.windowMinutes")}
                     value={suite.windowMinutes}
                     onChange={(v) => setSuite(index, { windowMinutes: v ?? 15 })}
                     disabled={locked}
                   />
                   <NumberField
                     id={`suite-min-${index}`}
-                    label="Requêtes min."
+                    label={t("policy.minRequests")}
                     value={suite.minRequests}
                     onChange={(v) => setSuite(index, { minRequests: v ?? 50 })}
                     disabled={locked}
                   />
                   <NumberField
                     id={`suite-errors-${index}`}
-                    label="Erreurs max (%)"
+                    label={t("policy.errorsMax")}
                     value={suite.errorRateMax}
                     onChange={(v) => setSuite(index, { errorRateMax: v ?? 1 })}
                     disabled={locked}
                   />
                   <NumberField
                     id={`suite-p95-${index}`}
-                    label="p95 max (ms)"
+                    label={t("policy.p95Max")}
                     value={suite.p95Ms}
                     onChange={(v) => setSuite(index, { p95Ms: v })}
                     disabled={locked}
                   />
                   <div className="space-y-1 sm:col-span-2">
-                    <Label className="text-xs">Si pas assez de trafic</Label>
+                    <Label className="text-xs">{t("policy.ifNotEnoughTraffic")}</Label>
                     <Select
                       value={suite.onInconclusive ?? "ask"}
                       onValueChange={(v) => setSuite(index, { onInconclusive: v as OnInconclusive })}
                       disabled={locked}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue>{(v) => INCONCLUSIVE[v as OnInconclusive]}</SelectValue>
+                        <SelectValue>{(v) => t(`inconclusive.${v as OnInconclusive}`)}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(INCONCLUSIVE).map(([value, label]) => (
+                        {INCONCLUSIVE_OPTIONS.map((value) => (
                           <SelectItem key={value} value={value}>
-                            {label}
+                            {t(`inconclusive.${value}`)}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <p className="text-xs text-muted-foreground sm:col-span-2">
-                    Staging n&apos;a pas de trafic réel : lancez une suite de charge, la recette ou
-                    le trafic de démo juste avant.
+                    {t("policy.noRealTraffic")}
                   </p>
                 </div>
               )}
@@ -242,7 +235,7 @@ export function PromotionPolicyCard({
               }
               disabled={locked || draft.suites.length >= 10}
             >
-              <Plus className="mr-1 h-4 w-4" /> Workflow GitHub
+              <Plus className="mr-1 h-4 w-4" /> {t("policy.addExternal")}
             </Button>
             <Button
               variant="outline"
@@ -252,7 +245,7 @@ export function PromotionPolicyCard({
               }
               disabled={locked || draft.suites.length >= 10}
             >
-              <Plus className="mr-1 h-4 w-4" /> Métriques
+              <Plus className="mr-1 h-4 w-4" /> {t("policy.addMetrics")}
             </Button>
           </div>
         )}
@@ -260,13 +253,13 @@ export function PromotionPolicyCard({
         <div className="grid gap-4 sm:grid-cols-3">
           <NumberField
             id="policy-soak"
-            label="Temps en staging éveillé (min, 0 = aucun)"
+            label={t("policy.soak")}
             value={draft.soakMinutes}
             onChange={(v) => setDraft((d) => ({ ...d, soakMinutes: v ?? 0 }))}
             disabled={locked}
           />
           <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="policy-approval">Approbation d&apos;un admin</Label>
+            <Label htmlFor="policy-approval">{t("policy.approval")}</Label>
             <Switch
               id="policy-approval"
               checked={draft.requireApproval}
@@ -275,7 +268,7 @@ export function PromotionPolicyCard({
             />
           </div>
           <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="policy-auto">Promotion automatique</Label>
+            <Label htmlFor="policy-auto">{t("policy.auto")}</Label>
             <Switch
               id="policy-auto"
               checked={draft.autoPromote}
@@ -284,16 +277,12 @@ export function PromotionPolicyCard({
             />
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Sans le rôle admin, lancer une promotion revient à la demander : une approbation par un
-          autre admin est ajoutée. La promotion automatique démarre dès qu&apos;une nouvelle version
-          tourne en staging et s&apos;arrête à l&apos;approbation s&apos;il y en a une.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("policy.adminNote")}</p>
 
         {canAdminister && (
           <Button onClick={save} disabled={saving}>
             <Save className="mr-2 h-4 w-4" />
-            Enregistrer
+            {t("policy.save")}
           </Button>
         )}
       </CardContent>

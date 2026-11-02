@@ -1,3 +1,4 @@
+import type { IntlLocale, Translate } from "@/components/finops/format";
 import type {
   ReleaseMetric,
   ReleaseOutcome,
@@ -16,20 +17,20 @@ export const TONE = {
 export const TEXT_OK = "text-green-700 dark:text-green-400";
 export const TEXT_BAD = "text-red-700 dark:text-red-400";
 
-export const PHASE: Record<ReleasePhase, { label: string; tone: keyof typeof TONE }> = {
-  Progressing: { label: "En cours", tone: "info" },
-  Paused: { label: "En pause", tone: "warn" },
-  Healthy: { label: "Stable", tone: "ok" },
-  Degraded: { label: "Dégradée", tone: "bad" },
-  Aborted: { label: "Abortée", tone: "bad" },
+export const PHASE_TONE: Record<ReleasePhase, keyof typeof TONE> = {
+  Progressing: "info",
+  Paused: "warn",
+  Healthy: "ok",
+  Degraded: "bad",
+  Aborted: "bad",
 };
 
-export const OUTCOME: Record<ReleaseOutcome, { label: string; tone: keyof typeof TONE }> = {
-  running: { label: "En cours", tone: "info" },
-  promoted: { label: "Promue", tone: "ok" },
-  aborted_auto: { label: "Rejetée auto", tone: "bad" },
-  aborted_manual: { label: "Abortée", tone: "bad" },
-  superseded: { label: "Remplacée", tone: "muted" },
+export const OUTCOME_TONE: Record<ReleaseOutcome, keyof typeof TONE> = {
+  running: "info",
+  promoted: "ok",
+  aborted_auto: "bad",
+  aborted_manual: "bad",
+  superseded: "muted",
 };
 
 export const STRATEGY: Record<string, string> = {
@@ -38,30 +39,28 @@ export const STRATEGY: Record<string, string> = {
   bluegreen: "Blue/green",
 };
 
-export const STEP_KIND: Record<ReleaseStepKind, string> = {
-  analysis: "analyse",
-  setWeight: "poids",
-  pause: "pause",
-  scale: "pods",
-};
-
 export function isVisibleStep(step: { kind: ReleaseStepKind }): boolean {
   return step.kind !== "scale";
 }
 
-const ACTION: Record<string, string> = {
-  promote: "a continué la release",
-  next: "a continué la release",
-  promote_next: "a continué la release",
-  full: "a tout promu",
-  promote_full: "a tout promu",
-  promoteFull: "a tout promu",
-  skip: "a passé une étape",
-  abort: "a aborté la release",
+const ACTION_KEY: Record<string, string> = {
+  promote: "continued",
+  next: "continued",
+  promote_next: "continued",
+  full: "promotedAll",
+  promote_full: "promotedAll",
+  promoteFull: "promotedAll",
+  skip: "skippedStep",
+  abort: "aborted",
 };
 
-export function actionLabel(action: string): string {
-  return ACTION[action] ?? action;
+export function actionLabel(action: string, t: Translate): string {
+  const key = ACTION_KEY[action];
+  return key ? t(`action.${key}`) : action;
+}
+
+export function outcomeLabel(outcome: string, t: Translate): string {
+  return outcome in OUTCOME_TONE ? t(`outcome.${outcome}`) : outcome;
 }
 
 /** `ghcr.io/org/web:1.4.0` -> `1.4.0`, `...@sha256:abcdef…` -> `sha256:abcdef1`. */
@@ -74,42 +73,57 @@ export function imageTag(image: string | null | undefined): string {
   return colon > lastSlash ? image.slice(colon + 1) : image.slice(lastSlash + 1);
 }
 
-export function formatDuration(seconds: number | null | undefined): string {
+export function formatDuration(
+  seconds: number | null | undefined,
+  t: Translate,
+): string {
   if (seconds == null || seconds < 0) return "";
-  if (seconds < 60) return `${Math.round(seconds)} s`;
+  if (seconds < 60) return t("duration.seconds", { count: Math.round(seconds) });
   const minutes = Math.floor(seconds / 60);
   const rest = Math.round(seconds % 60);
-  if (minutes < 60) return rest ? `${minutes} min ${rest}` : `${minutes} min`;
+  if (minutes < 60) {
+    return rest
+      ? t("duration.minutesSeconds", { minutes, seconds: rest })
+      : t("duration.minutes", { count: minutes });
+  }
   const hours = Math.floor(minutes / 60);
-  return `${hours} h ${minutes % 60}`;
+  return t("duration.hoursMinutes", { hours, minutes: minutes % 60 });
 }
 
-export function durationBetween(start: string, end: string | null): string {
+export function durationBetween(
+  start: string,
+  end: string | null,
+  t: Translate,
+): string {
   if (!end) return "";
-  return formatDuration((Date.parse(end) - Date.parse(start)) / 1000);
+  return formatDuration((Date.parse(end) - Date.parse(start)) / 1000, t);
 }
 
-const NUMBER = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
-
-export function formatMetricValue(value: number | null, unit: string | null): string {
+export function formatMetricValue(
+  value: number | null,
+  unit: string | null,
+  t: Translate,
+  locale: IntlLocale,
+): string {
   if (value == null) return "-";
+  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   switch (unit) {
     case "ratio":
-      return `${NUMBER.format(value * 100)} %`;
+      return t("metric.percent", { value: number.format(value * 100) });
     case "percent":
     case "%":
-      return `${NUMBER.format(value)} %`;
+      return t("metric.percent", { value: number.format(value) });
     case "ms":
-      return `${NUMBER.format(Math.round(value))} ms`;
+      return t("metric.milliseconds", { value: number.format(Math.round(value)) });
     case "s":
     case "seconds":
-      return formatDuration(value);
+      return formatDuration(value, t);
     case null:
     case "":
     case "count":
-      return NUMBER.format(value);
+      return number.format(value);
     default:
-      return `${NUMBER.format(value)} ${unit}`;
+      return t("metric.withUnit", { value: number.format(value), unit });
   }
 }
 
@@ -119,20 +133,20 @@ export function metricTone(metric: ReleaseMetric): "ok" | "bad" | "pending" {
   return "pending";
 }
 
-const DATE_TIME = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const TIME = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-export function formatDateTime(iso: string): string {
-  return DATE_TIME.format(new Date(iso));
+export function formatDateTime(iso: string, locale: IntlLocale): string {
+  return new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
-export function formatTime(iso: string): string {
-  return TIME.format(new Date(iso));
+export function formatTime(iso: string, locale: IntlLocale): string {
+  return new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
 export function errorMessage(e: unknown): string {
