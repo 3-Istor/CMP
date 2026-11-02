@@ -267,8 +267,12 @@ async def _disable(
 
 
 def final_of(tag: str) -> str:
-    """1.2.0 for 1.2.0-rc.1 or 1.2.0-rc.1@sha256:..., the tag itself for a final."""
-    return layout.version_of(tag).split("-", 1)[0]
+    """
+    1.2.0 for 1.2.0-rc.1 or 1.2.0-rc.1@sha256:..., the tag itself for a final
+    or for the sha-<commit> build an app starts on before its first release.
+    """
+    version = layout.version_of(tag)
+    return version if version.startswith("sha-") else version.split("-", 1)[0]
 
 
 async def final_versions(deployment: Deployment) -> dict[str, dict[str, str]]:

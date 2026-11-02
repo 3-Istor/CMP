@@ -744,6 +744,33 @@ class TestTurningStagingOff:
             "app": {"repository": "ghcr.io/3-istor/web", "tag": "1.2.0"}
         }
 
+    def test_prod_keeps_the_initial_build_when_never_released(self, db):
+        async def prod_values(token, repo, path, ref):
+            return {
+                "image": {
+                    "repository": "ghcr.io/3-istor/web",
+                    "tag": "sha-9034399",
+                }
+            }
+
+        with mock.patch.object(
+            activation.gitops, "token_for", return_value=_async("t")
+        ), mock.patch.object(
+            activation.gitops, "read_values", side_effect=prod_values
+        ), mock.patch.object(
+            activation.registry,
+            "resolve",
+            return_value="ghcr.io/3-istor/web@sha256:x",
+        ) as resolved:
+            images = asyncio.run(
+                activation.final_versions(db.get(Deployment, 7))
+            )
+
+        resolved.assert_called_once_with("ghcr.io/3-istor/web", "sha-9034399")
+        assert images == {
+            "app": {"repository": "ghcr.io/3-istor/web", "tag": "sha-9034399"}
+        }
+
     def test_refuses_when_the_final_version_was_never_pushed(self, db):
         async def prod_values(token, repo, path, ref):
             return {
