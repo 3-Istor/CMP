@@ -62,11 +62,27 @@ class VMInstance(BaseModel):
     health: str | None  # For AWS: "healthy", "unhealthy", "unused", etc.
 
 
+class ArgoState(BaseModel):
+    sync: str | None
+    health: str | None
+
+
+class ComponentHealth(BaseModel):
+    name: str
+    status: str  # healthy | degraded | down | asleep | not_connected | unknown
+    ready_replicas: int | None
+    desired_replicas: int | None
+    restarts_15m: int | None  # None when VictoriaMetrics cannot be read
+    argocd: ArgoState | None
+
+
 class AppHealthResponse(BaseModel):
     deployment_name: str
-    status: str  # "healthy", "degraded", "down", "unknown"
-    aws_frontend: dict[str, Any] | None
-    openstack_backend: dict[str, Any] | None
+    # healthy | degraded | down | unknown; Kubernetes apps add asleep | not_connected
+    status: str
+    aws_frontend: dict[str, Any] | None = None
+    openstack_backend: dict[str, Any] | None = None
+    components: list[ComponentHealth] = []  # Kubernetes apps only
 
 
 # ── OpenStack Connection ───────────────────────────────────────────────────

@@ -8,11 +8,12 @@ Provides real-time health monitoring endpoints for:
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
-from app.models.deployment import Deployment
-from app.services import monitoring_service
-from app.services.clusters.state import cluster_states
+from app.models.deployment import Deployment, ProviderType
+from app.services import kube_health, monitoring_service
+from app.services.clusters.state import cluster_states, project_cloud
 from app.services.keycloak_service import get_current_user
 from app.services.monitoring_service import (
     AppHealthResponse,
@@ -56,7 +57,9 @@ async def get_deployment_health(
     """
     Get real-time health status for a specific deployment.
 
-    Checks:
+    Kubernetes apps: per component, on the project's cluster (kube_health).
+
+    VM apps check:
     - AWS Frontend: Auto Scaling Group instances + ALB target health
     - OpenStack Backend: Database VMs
 
@@ -72,6 +75,12 @@ async def get_deployment_health(
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         raise HTTPException(status_code=404, detail="Deployment not found")
+    if deployment.provider_type == ProviderType.KUBERNETES:
+        return await run_in_threadpool(
+            kube_health.app_health,
+            deployment,
+            project_cloud(db, deployment.project_id),
+        )
 
     try:
         return await monitoring_service.get_app_health(deployment.name)
