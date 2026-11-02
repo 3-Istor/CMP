@@ -71,6 +71,120 @@
       "emptyTitle": "No projects yet",
       "emptyBody": "Create your first project to start deploying applications, or <assistant>ask your AI assistant</assistant> to do it.",
       "create": "Create project"
+    },
+    "roles": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member",
+      "guest": "Guest"
+    },
+    "roleBlurbs": {
+      "owner": "Owner",
+      "admin": "Full access",
+      "member": "Read only",
+      "guest": "View only"
+    },
+    "page": {
+      "kubernetes": "Kubernetes project",
+      "kubernetesRole": "Kubernetes project · {role}",
+      "appCount": "{count, plural, one {# app} other {# apps}}",
+      "live": "Live updates",
+      "description": "Applications deployed in this project.",
+      "templatesTitle": "Select a Kubernetes template",
+      "templatesLoading": "Loading templates…",
+      "noTemplates": "No Kubernetes templates available.",
+      "appsLoadFailed": "Failed to load applications",
+      "noApps": "No applications yet",
+      "deployFirst": "Deploy your first app to this project.",
+      "noAppsReadOnly": "Nothing has been deployed here yet."
+    },
+    "logs": {
+      "title": "Logs"
+    },
+    "card": {
+      "kubernetes": "Kubernetes project · {blurb}",
+      "creating": "Creating",
+      "deleting": "Deleting",
+      "failed": "Failed",
+      "retry": "Retry",
+      "retryFailed": "Retry failed: {message}",
+      "creatingTitle": "This project is still being created",
+      "deletingTitle": "This project is being deleted",
+      "createFailedTitle": "This project could not be created",
+      "deleteFailedTitle": "This project could not be deleted"
+    },
+    "create": {
+      "title": "Create a new project",
+      "description": "A project groups your Kubernetes applications under a shared Keycloak team, Vault policy and ArgoCD AppProject. Bootstrap runs in the background and takes about 30 seconds.",
+      "name": "Project name",
+      "namePlaceholder": "my-team",
+      "nameHint": "Lowercase, with hyphens. For example <code>platform-team</code>",
+      "cloud": "Target cloud",
+      "comingSoon": "Coming soon",
+      "clouds": {
+        "onprem": {
+          "label": "On-premise",
+          "advantage1": "No data egress cost",
+          "advantage2": "Full infrastructure control",
+          "advantage3": "Already live, zero setup wait"
+        },
+        "aws": {
+          "label": "AWS",
+          "advantage1": "Widest catalog of managed services",
+          "advantage2": "Mature IAM and compliance tooling",
+          "advantage3": "Broad global region coverage"
+        },
+        "gcp": {
+          "label": "GCP",
+          "advantage1": "Native Kubernetes heritage",
+          "advantage2": "Typically the most competitive compute pricing",
+          "advantage3": "Strong data and AI tooling"
+        }
+      },
+      "cloudNote": "AWS and GCP need a cluster registered by the infra team before they can be selected. <strong>This cannot be changed later.</strong> Moving a project means re-creating it.",
+      "errors": {
+        "tooShort": "The name must be at least 2 characters.",
+        "tooLong": "The name must be at most 40 characters.",
+        "invalid": "Use lowercase letters, numbers and hyphens only. The name must start and end with a letter or a number."
+      },
+      "preview": {
+        "title": "What will be created",
+        "keycloak": "Keycloak groups: <code>project-{name}-admins/members</code>",
+        "vault": "Vault policy scoped to the namespace",
+        "argocd": "ArgoCD AppProject on <code>{cloud}</code>",
+        "registry": "Registry record: <code>registry/projects/{name}.yaml</code>"
+      },
+      "submit": "Create project",
+      "submitting": "Creating…",
+      "toasts": {
+        "created": "Project “{name}” is being bootstrapped on {cloud}. Keycloak groups and the ArgoCD AppProject will be ready shortly.",
+        "failed": "Failed to create project: {message}"
+      }
+    },
+    "members": {
+      "onlyAdmins": "Only project admins can add or remove members.",
+      "addTitle": "Add member",
+      "addHelp": "Search users from Keycloak. They will be added to <code>project-{project}-{group}</code>",
+      "guestNote": ": read-only access to projects and apps",
+      "guestsUnavailable": "This project was bootstrapped before guest support existed, so the Guest role is unavailable. Re-run the project-bootstrap Terraform module for <code>{project}</code> to enable it.",
+      "searchPlaceholder": "Search by username or email…",
+      "addButton": "Add member",
+      "added": "Added {user} as {role}",
+      "removed": "Removed {user} from the project",
+      "addFailed": "Failed to add member: {message}",
+      "removeFailed": "Failed to remove member: {message}",
+      "current": "Current members",
+      "loadFailed": "Failed to load members",
+      "empty": "No members yet",
+      "emptyHint": "Add your first team member above.",
+      "ownerLocked": "The project owner cannot be removed",
+      "remove": "Remove {username}"
+    },
+    "context": {
+      "accessDenied": "Access denied: you are not a member of this project",
+      "beingDeleted": "“{name}” is being deleted",
+      "beingDeletedBody": "Its resources are being torn down in the background. This page stays unavailable until that finishes.",
+      "backToProjects": "Back to projects"
     }
   },
   "apps": {
@@ -91,6 +205,97 @@
       "alerts": "Alerts",
       "logs": "Logs",
       "deployments": "Deployments"
+    },
+    "status": {
+      "pending": "Queued",
+      "initializing": "Initializing",
+      "planning": "Planning",
+      "deploying": "Deploying",
+      "running": "Running",
+      "degraded": "Degraded",
+      "failed": "Failed",
+      "deleting": "Deleting",
+      "deleted": "Deleted"
+    },
+    "card": {
+      "createdVia": "Created through {source}",
+      "ai": "AI"
+    },
+    "namespace": "ns: {namespace}",
+    "frame": {
+      "aiCreated": "Created by an AI assistant on behalf of a user",
+      "via": "via {source}",
+      "legacy": "Legacy",
+      "deployedOn": "Deployed on {date}"
+    },
+    "context": {
+      "loadFailed": "Failed to load the application",
+      "deleted": "“{name}” has been deleted",
+      "destroying": "Destroying resources…"
+    },
+    "costs": {
+      "projectLevel": "Costs are tracked at the project level."
+    },
+    "config": {
+      "title": "Infrastructure configuration",
+      "reload": "Reload configuration from GitHub",
+      "readOnly": "Read-only view of <code>{file}</code>.",
+      "editable": "Changes are committed to <code>{file}</code> on <code>main</code>. ArgoCD syncs automatically.",
+      "repo": "Repo: <code>{repo}</code>",
+      "switchBlocked": "Save or reload before switching",
+      "loadFailed": "Failed to load configuration",
+      "noKeys": "No configuration keys found in <code>{file}</code>",
+      "adminsOnly": "Only project admins can change this configuration.",
+      "saving": "Saving…",
+      "save": "Save changes",
+      "saved": "Configuration saved. ArgoCD will sync the new values in a few moments.",
+      "conflict": "Conflict: the file changed since you last loaded it. Reloading…",
+      "saveFailed": "Failed to save: {message}",
+      "notRunning": "Configuration will be available once the application is <strong>running</strong>.",
+      "searchPlaceholder": "Search for an option…",
+      "searchCount": "{count, plural, one {# result} other {# results}}"
+    },
+    "data": {
+      "title": "Exposure and data",
+      "reload": "Reload from GitHub",
+      "description": "These settings are written to the <code>deploy/values*.yaml</code> files in the application repository. They can also be changed in the code.",
+      "loadFailed": "Unable to load",
+      "empty": "No exposure or database settings for this application.",
+      "adminsOnly": "Only project admins can change these settings.",
+      "exposure": "Exposure",
+      "customExposure": "Custom (defined in the code). Choosing a profile below replaces it.",
+      "exposureOptions": {
+        "public": {
+          "label": "Public",
+          "hint": "Reachable without signing in."
+        },
+        "project_users": {
+          "label": "Any signed-in account",
+          "hint": "Any account in the project realm, including any 3istor platform user through the broker."
+        },
+        "project_members": {
+          "label": "Project members",
+          "hint": "Project members and admins."
+        },
+        "project_admins": {
+          "label": "Project admins",
+          "hint": "Project admins only."
+        }
+      },
+      "database": "Database backups",
+      "backupEnabled": "Enable backups",
+      "backupKeep": "Keep backups after deletion",
+      "backupKeepOff": "Off: deleting the application or the project also permanently deletes all its backups.",
+      "retention": "Retention",
+      "retentionHint": "A number followed by d (days), w (weeks) or m (months), for example 7d, 4w or 3m.",
+      "saving": "Saving…",
+      "save": "Save",
+      "previewFailed": "Unable to prepare the change: {message}",
+      "confirmTitle": "Confirm the change",
+      "confirmDescription": "A commit will be pushed to {repo}, then Argo CD will apply it.",
+      "confirm": "Confirm and commit",
+      "saved": "Settings saved. ArgoCD will apply them in a few moments.",
+      "saveFailed": "Failed to save: {message}"
     }
   },
   "finops": {
@@ -646,6 +851,17 @@
       "saved": "Policy saved",
       "appliedTo": "{count, plural, one {Policy saved, applied to # app} other {Policy saved, applied to # apps}}",
       "notApplied": "Not applied to: {list}"
+    },
+    "layout": {
+      "title": "Security",
+      "subtitle": "What to fix in your applications, and how."
+    },
+    "page": {
+      "app": "Application",
+      "wholeProject": "Whole project",
+      "developer": "Developer",
+      "platform": "Platform",
+      "core": "{count} required"
     }
   },
   "activity": {
@@ -899,6 +1115,12 @@
         "hour": "{hour}h",
         "note": "Paris time. Busy nights and weekends deserve a look."
       }
+    },
+    "page": {
+      "title": "Activity",
+      "description": "Who did what, and the logs, project by project.",
+      "descriptionAll": "Who did what, and the logs, project by project or across the whole platform.",
+      "platformOption": "Platform (all projects)"
     }
   },
   "alerts": {
@@ -933,7 +1155,11 @@
       "off": "“{title}” disabled"
     },
     "enable": "Enable {title}",
-    "apply": "Apply"
+    "apply": "Apply",
+    "page": {
+      "title": "Alerts",
+      "description": "Ready-made alerts for each project."
+    }
   },
   "account": {
     "language": {
@@ -1014,7 +1240,12 @@
         "fr": "Français",
         "en": "English"
       }
-    }
+    },
+    "cancel": "Cancel",
+    "close": "Close",
+    "retry": "Retry",
+    "project": "Project",
+    "noProjects": "No project."
   },
   "projectNav": {
     "navigation": "Project navigation",
@@ -2092,6 +2323,11 @@
       "start": "Generate traffic",
       "remainingMinutes": "{minutes} min {seconds} s",
       "remainingSeconds": "{seconds} s"
+    },
+    "strategyNames": {
+      "rolling": "Rolling",
+      "canary": "Canary",
+      "bluegreen": "Blue/green"
     }
   },
   "appPage": {
@@ -2255,6 +2491,16 @@
       "rose": "Rose",
       "sky": "Sky",
       "slate": "Slate"
+    }
+  },
+  "signin": {
+    "redirecting": "Redirecting to Keycloak…",
+    "wait": "Please wait while we redirect you to the sign-in page."
+  },
+  "clusters": {
+    "notConnected": {
+      "title": "Cluster {cloud} not connected",
+      "body": "Project data returns when the cluster is powered back on."
     }
   }
 }

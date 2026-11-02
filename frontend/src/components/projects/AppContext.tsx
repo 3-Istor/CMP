@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getDeployment } from "@/lib/api";
 import { useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -49,6 +50,7 @@ export function AppProvider({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const t = useTranslations("apps.context");
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -61,11 +63,11 @@ export function AppProvider({
       const d = await getDeployment(appId);
       setDeployment(d);
     } catch {
-      toast.error("Failed to load application");
+      toast.error(t("loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, t]);
 
   useEffect(() => {
     fetchDeployment();
@@ -78,21 +80,21 @@ export function AppProvider({
   // the final "deleted" status only arrives through polling.
   useEffect(() => {
     if (current?.status !== "deleted") return;
-    toast.info(`"${current.name}" has been deleted`);
+    toast.info(t("deleted", { name: current.name }));
     const timer = setTimeout(
       () => router.push(`/projects/${projectName}`),
       2500,
     );
     return () => clearTimeout(timer);
-  }, [current?.status, current?.name, projectName, router]);
+  }, [current?.status, current?.name, projectName, router, t]);
 
   const markDeleting = useCallback(() => {
     setDeployment((prev) =>
       prev
-        ? { ...prev, status: "deleting", step_message: "Destroying resources…" }
+        ? { ...prev, status: "deleting", step_message: t("destroying") }
         : prev,
     );
-  }, []);
+  }, [t]);
 
   const value = useMemo(
     () =>

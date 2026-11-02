@@ -21,7 +21,6 @@ import { clearProjectsCache, useProjectMembers } from "@/lib/hooks";
 import {
   ASSIGNABLE_ROLES,
   GROUP_SUFFIX,
-  ROLE_LABEL,
 } from "@/lib/permissions";
 import type { AssignableRole, KeycloakUserResult, ProjectMember } from "@/types";
 import {
@@ -33,6 +32,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -47,6 +47,10 @@ interface Props {
 }
 
 export function MembersPanel({ projectName, canManage = false }: Props) {
+  const t = useTranslations("projects.members");
+  const tr = useTranslations("projects");
+  const tc = useTranslations("common");
+  const tCode = (chunks: React.ReactNode) => <span className="font-mono">{chunks}</span>;
   const { members, guestsSupported, loading, error, refresh } =
     useProjectMembers(projectName);
 
@@ -119,7 +123,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
     setAdding(true);
     try {
       await addProjectMember(projectName, username, role);
-      toast.success(`Added ${username} as ${ROLE_LABEL[role]}`);
+      toast.success(t("added", { user: username, role: tr(`roles.${role}`) }));
       setQuery("");
       setSelected(null);
       setRole("member");
@@ -135,7 +139,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
       if (isMissingGroup) {
         toast.error(msg, { duration: 12_000 });
       } else {
-        toast.error(`Failed to add member: ${msg}`);
+        toast.error(t("addFailed", { message: msg }));
       }
     } finally {
       setAdding(false);
@@ -147,12 +151,12 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
     setRemoving(memberUsername);
     try {
       await removeProjectMember(projectName, memberUsername);
-      toast.success(`Removed ${memberUsername} from project`);
+      toast.success(t("removed", { user: memberUsername }));
       clearProjectsCache();
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to remove member: ${msg}`);
+      toast.error(t("removeFailed", { message: msg }));
     } finally {
       setRemoving(null);
     }
@@ -163,25 +167,19 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
       {/* Add Member, admins only */}
       {!canManage ? (
         <p className="text-xs text-muted-foreground">
-          Only project admins can add or remove members.
+          {t("onlyAdmins")}
         </p>
       ) : (
       <div>
-        <h3 className="text-sm font-medium mb-1">Add Member</h3>
+        <h3 className="text-sm font-medium mb-1">{t("addTitle")}</h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Search users from Keycloak. They will be added to{" "}
-          <span className="font-mono">
-            project-{projectName}-{GROUP_SUFFIX[role]}
-          </span>
-          {role === "guest" && ": read-only access to projects and apps"}
+          {t.rich("addHelp", { project: projectName, group: GROUP_SUFFIX[role], code: tCode })}
+          {role === "guest" && t("guestNote")}
         </p>
 
         {!guestsSupported && (
           <p className="text-xs text-muted-foreground mb-3">
-            This project was bootstrapped before guest support existed, so the
-            Guest role is unavailable. Re-run the project-bootstrap Terraform
-            module for{" "}
-            <span className="font-mono">{projectName}</span> to enable it.
+            {t.rich("guestsUnavailable", { project: projectName, code: tCode })}
           </p>
         )}
 
@@ -190,7 +188,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
           <div ref={searchRef} className="relative flex-1">
             <div className="relative">
               <Input
-                placeholder="Search by username or email…"
+                placeholder={t("searchPlaceholder")}
                 value={query}
                 onChange={(e) => handleQueryChange(e.target.value)}
                 onFocus={() => results.length > 0 && setShowDropdown(true)}
@@ -249,7 +247,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
             >
               <SelectTrigger>
                 <SelectValue>
-                  {(v) => ROLE_LABEL[v as AssignableRole] ?? "Member"}
+                  {(v) => tr(`roles.${(v as AssignableRole) ?? "member"}`)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -257,7 +255,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
                   (r) => r !== "guest" || guestsSupported,
                 ).map((r) => (
                   <SelectItem key={r} value={r}>
-                    {ROLE_LABEL[r]}
+                    {tr(`roles.${r}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -268,7 +266,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
           <Button
             type="submit"
             disabled={adding || !query.trim()}
-            title="Add member"
+            title={t("addButton")}
           >
             {adding ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -283,7 +281,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
       {/* ── Member list ── */}
       <div>
         <h3 className="text-sm font-medium mb-3">
-          Current Members{" "}
+          {t("current")}{" "}
           {!loading && members.length > 0 && (
             <span className="text-muted-foreground font-normal">
               ({members.length})
@@ -299,7 +297,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
           </div>
         ) : error ? (
           <div className="rounded-lg border border-destructive bg-destructive/5 p-4 text-sm text-destructive">
-            <p className="font-medium">Failed to load members</p>
+            <p className="font-medium">{t("loadFailed")}</p>
             <p className="text-xs mt-1 opacity-80">{error}</p>
             <Button
               variant="outline"
@@ -307,15 +305,15 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
               className="mt-2"
               onClick={refresh}
             >
-              Retry
+              {tc("retry")}
             </Button>
           </div>
         ) : members.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-muted-foreground">
             <Users className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm font-medium">No members yet</p>
+            <p className="text-sm font-medium">{t("empty")}</p>
             {canManage && (
-              <p className="text-xs mt-1">Add your first team member above.</p>
+              <p className="text-xs mt-1">{t("emptyHint")}</p>
             )}
           </div>
         ) : (
@@ -358,6 +356,8 @@ function MemberRow({
   removing,
   onRemove,
 }: MemberRowProps) {
+  const t = useTranslations("projects.members");
+  const tr = useTranslations("projects");
   const isOwner = member.role === "owner";
   const RoleIcon = ROLE_ICON[member.role] ?? Users;
 
@@ -389,7 +389,7 @@ function MemberRow({
               className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
             >
               <RoleIcon className="mr-1 h-3 w-3" />
-              {member.role}
+              {tr(`roles.${member.role}`)}
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground truncate">
@@ -400,9 +400,9 @@ function MemberRow({
       {isOwner ? (
         <span
           className="text-xs text-muted-foreground shrink-0 px-2"
-          title="The project owner cannot be removed"
+          title={t("ownerLocked")}
         >
-          Owner
+          {tr("roles.owner")}
         </span>
       ) : !canManage ? null : (
         <Button
@@ -411,7 +411,7 @@ function MemberRow({
           onClick={onRemove}
           disabled={removing}
           className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-          title={`Remove ${member.username}`}
+          title={t("remove", { username: member.username })}
         >
           {removing ? (
             <Loader2 className="h-4 w-4 animate-spin" />

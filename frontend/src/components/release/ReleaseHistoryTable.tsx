@@ -12,7 +12,6 @@ import {
   imageTag,
   OUTCOME_TONE,
   outcomeLabel,
-  STRATEGY,
   TONE,
 } from "./format";
 
@@ -84,7 +83,7 @@ export function ReleaseHistoryTable({ events }: { events: ReleaseEvent[] }) {
                     {imageTag(e.image)}
                   </span>
                   <span className="ml-2 text-xs text-muted-foreground">
-                    {STRATEGY[e.strategy] ?? e.strategy}
+                    {t.has(`strategyNames.${e.strategy}`) ? t(`strategyNames.${e.strategy}`) : e.strategy}
                   </span>
                 </td>
                 <td className="py-2 pr-4">

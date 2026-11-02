@@ -28,6 +28,7 @@ import {
 } from "@/lib/api";
 import type { ExposurePreset, SecurityData } from "@/types";
 import { Loader2, RefreshCw, Save, ShieldCheck } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -37,34 +38,20 @@ interface Props {
 
 const RETENTION_PATTERN = /^[1-9][0-9]*[dwm]$/;
 
-const EXPOSURE_OPTIONS: {
-    value: ExposurePreset;
-    label: string;
-    hint: string;
-}[] = [
-    {
-        value: "public",
-        label: "Public",
-        hint: "Accessible sans connexion.",
-    },
-    {
-        value: "project_users",
-        label: "Tout compte connecté",
-        hint: "Tout compte du realm du projet, y compris n'importe quel utilisateur de la plateforme 3istor via le broker.",
-    },
-    {
-        value: "project_members",
-        label: "Membres du projet",
-        hint: "Membres et admins du projet.",
-    },
-    {
-        value: "project_admins",
-        label: "Admins du projet",
-        hint: "Admins du projet uniquement.",
-    },
+const EXPOSURE_OPTIONS: ExposurePreset[] = [
+    "public",
+    "project_users",
+    "project_members",
+    "project_admins",
 ];
 
+const renderCode = (chunks: React.ReactNode) => (
+    <span className="font-mono">{chunks}</span>
+);
+
 export function SecurityDataPanel({ deploymentId }: Props) {
+    const t = useTranslations("apps.data");
+    const tc = useTranslations("common");
     const [remote, setRemote] = useState<SecurityData | null>(null);
     const [exposure, setExposure] = useState<ExposurePreset | null>(null);
     const [backupEnabled, setBackupEnabled] = useState(false);
@@ -140,7 +127,7 @@ export function SecurityDataPanel({ deploymentId }: Props) {
             setPreview(await previewSecurityData(deploymentId, update));
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            toast.error(`Impossible de préparer la modification : ${msg}`);
+            toast.error(t("previewFailed", { message: msg }));
         } finally {
             setSaving(false);
         }
@@ -151,14 +138,11 @@ export function SecurityDataPanel({ deploymentId }: Props) {
         try {
             await updateSecurityData(deploymentId, update);
             setPreview(null);
-            toast.success(
-                "Paramètres enregistrés. ArgoCD les appliquera dans quelques instants.",
-                { duration: 7000 },
-            );
+            toast.success(t("saved"), { duration: 7000 });
             await fetchData();
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            toast.error(`Échec de l'enregistrement : ${msg}`);
+            toast.error(t("saveFailed", { message: msg }));
         } finally {
             setSaving(false);
         }
@@ -175,7 +159,7 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                     <div className="flex items-center gap-2">
                         <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                         <CardTitle className="text-base">
-                            Exposition et données
+                            {t("title")}
                         </CardTitle>
                     </div>
                     <Button
@@ -183,7 +167,7 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                         size="icon"
                         onClick={fetchData}
                         disabled={loading || saving}
-                        title="Recharger depuis GitHub"
+                        title={t("reload")}
                     >
                         <RefreshCw
                             className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
@@ -191,10 +175,7 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                     </Button>
                 </div>
                 <CardDescription className="text-xs">
-                    Ces réglages sont écrits dans les fichiers{" "}
-                    <span className="font-mono">deploy/values*.yaml</span> du
-                    dépôt de l&apos;application. Ils peuvent aussi être modifiés
-                    dans le code.
+                    {t.rich("description", { code: renderCode })}
                 </CardDescription>
             </CardHeader>
 
@@ -207,25 +188,23 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                     </div>
                 ) : error ? (
                     <div className="rounded-lg border border-destructive bg-destructive/5 p-4 text-sm text-destructive space-y-2">
-                        <p className="font-medium">Chargement impossible</p>
+                        <p className="font-medium">{t("loadFailed")}</p>
                         <p className="text-xs opacity-80">{error}</p>
                         <Button variant="outline" size="sm" onClick={fetchData}>
                             <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                            Réessayer
+                            {tc("retry")}
                         </Button>
                     </div>
                 ) : hasNothingToShow ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                        Aucun réglage d&apos;exposition ou de base de données
-                        pour cette application.
+                        {t("empty")}
                     </p>
                 ) : (
                     <div className="space-y-6">
                         {!canEdit && (
                             <Alert>
                                 <AlertDescription>
-                                    Seuls les admins du projet peuvent modifier
-                                    ces réglages.
+                                    {t("adminsOnly")}
                                 </AlertDescription>
                             </Alert>
                         )}
@@ -233,34 +212,32 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                         {remote?.exposure !== null && (
                             <fieldset className="space-y-3" disabled={!canEdit || saving}>
                                 <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    Exposition
+                                    {t("exposure")}
                                 </legend>
                                 {remote?.exposure === "custom" && (
                                     <p className="text-xs text-muted-foreground">
-                                        Personnalisé (défini dans le code).
-                                        Choisir un profil ci-dessous le
-                                        remplacera.
+                                        {t("customExposure")}
                                     </p>
                                 )}
                                 {EXPOSURE_OPTIONS.map((option) => (
                                     <label
-                                        key={option.value}
+                                        key={option}
                                         className="flex items-start gap-3 cursor-pointer text-sm"
                                     >
                                         <input
                                             type="radio"
                                             name={`exposure-${deploymentId}`}
-                                            value={option.value}
-                                            checked={exposure === option.value}
-                                            onChange={() => setExposure(option.value)}
+                                            value={option}
+                                            checked={exposure === option}
+                                            onChange={() => setExposure(option)}
                                             className="mt-1"
                                         />
                                         <span>
                                             <span className="font-medium">
-                                                {option.label}
+                                                {t(`exposureOptions.${option}.label`)}
                                             </span>
                                             <span className="block text-xs text-muted-foreground">
-                                                {option.hint}
+                                                {t(`exposureOptions.${option}.hint`)}
                                             </span>
                                         </span>
                                     </label>
@@ -271,12 +248,12 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                         {remote?.database && (
                             <fieldset className="space-y-4" disabled={!canEdit || saving}>
                                 <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    Sauvegardes de la base de données
+                                    {t("database")}
                                 </legend>
 
                                 <div className="flex items-center justify-between gap-4">
                                     <Label htmlFor="backup-enabled" className="text-sm">
-                                        Activer les sauvegardes
+                                        {t("backupEnabled")}
                                     </Label>
                                     <Switch
                                         id="backup-enabled"
@@ -291,8 +268,7 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                                             htmlFor="backup-keep"
                                             className="text-sm"
                                         >
-                                            Conserver les sauvegardes après
-                                            suppression
+                                            {t("backupKeep")}
                                         </Label>
                                         <Switch
                                             id="backup-keep"
@@ -302,17 +278,14 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                                     </div>
                                     {!keepAfterDelete && (
                                         <p className="text-xs text-destructive">
-                                            Désactivé : supprimer
-                                            l&apos;application ou le projet
-                                            supprime aussi toutes ses
-                                            sauvegardes, définitivement.
+                                            {t("backupKeepOff")}
                                         </p>
                                     )}
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label htmlFor="backup-retention" className="text-sm">
-                                        Rétention
+                                        {t("retention")}
                                     </Label>
                                     <Input
                                         id="backup-retention"
@@ -324,8 +297,7 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                                     <p
                                         className={`text-xs ${retentionValid ? "text-muted-foreground" : "text-destructive"}`}
                                     >
-                                        Nombre suivi de d (jours), w (semaines)
-                                        ou m (mois), par exemple 7d, 4w ou 3m.
+                                        {t("retentionHint")}
                                     </p>
                                 </div>
                             </fieldset>
@@ -341,12 +313,12 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                                     {saving ? (
                                         <>
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Enregistrement…
+                                            {t("saving")}
                                         </>
                                     ) : (
                                         <>
                                             <Save className="mr-2 h-4 w-4" />
-                                            Enregistrer
+                                            {t("save")}
                                         </>
                                     )}
                                 </Button>
@@ -360,10 +332,9 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                 <Dialog open onOpenChange={(open) => !open && setPreview(null)}>
                     <DialogContent className="sm:max-w-2xl">
                         <DialogHeader>
-                            <DialogTitle>Confirmer la modification</DialogTitle>
+                            <DialogTitle>{t("confirmTitle")}</DialogTitle>
                             <DialogDescription>
-                                Un commit sera poussé sur {preview.repo}, puis
-                                Argo CD l&apos;appliquera.
+                                {t("confirmDescription", { repo: preview.repo })}
                             </DialogDescription>
                         </DialogHeader>
                         <div className="max-h-[60vh] space-y-4 overflow-y-auto">
@@ -395,11 +366,11 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                                 onClick={() => setPreview(null)}
                                 disabled={saving}
                             >
-                                Annuler
+                                {tc("cancel")}
                             </Button>
                             <Button onClick={handleSave} disabled={saving}>
                                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Confirmer et commiter
+                                {t("confirm")}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

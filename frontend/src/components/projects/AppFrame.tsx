@@ -32,6 +32,7 @@ import {
   wakeDeployment,
 } from "@/lib/api";
 import { useAppHealth } from "@/lib/hooks";
+import { intlLocale } from "@/components/finops/format";
 import { cn, appUrlOf } from "@/lib/utils";
 import type { ProjectLink } from "@/types";
 import {
@@ -56,7 +57,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -107,6 +108,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
 
   const tf = useTranslations("appPage");
+  const tFrame = useTranslations("apps.frame");
+  const tApps = useTranslations("apps");
+  const locale = intlLocale(useLocale());
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const linksReady = isKubernetes && canViewLogs;
   useEffect(() => {
@@ -308,19 +312,19 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   <Badge
                     variant="outline"
                     className="border-primary/40 text-primary"
-                    title="Created by an AI assistant on behalf of a user"
+                    title={tFrame("aiCreated")}
                   >
-                    via {current.created_via}
+                    {tFrame("via", { source: current.created_via })}
                   </Badge>
                 )}
                 <Badge variant="outline" className="capitalize text-xs">
                   {current.provider_type === "kubernetes"
                     ? "Kubernetes"
-                    : "Legacy"}
+                    : tFrame("legacy")}
                 </Badge>
                 {current.k8s_namespace && (
                   <Badge variant="outline" className="font-mono text-xs">
-                    ns: {current.k8s_namespace}
+                    {tApps("namespace", { namespace: current.k8s_namespace })}
                   </Badge>
                 )}
               </div>
@@ -338,11 +342,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 </a>
               )}
               <p className="text-xs text-muted-foreground mt-1.5">
-                {current.template_name || current.template_id} · Deployed{" "}
-                {new Date(current.created_at).toLocaleDateString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
+                {current.template_name || current.template_id} ·{" "}
+                {tFrame("deployedOn", {
+                  date: new Date(current.created_at).toLocaleDateString(locale, {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  }),
                 })}
               </p>
             </div>
