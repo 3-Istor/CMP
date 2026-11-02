@@ -1,7 +1,5 @@
 "use client";
 
-import { UserNav } from "@/components/layout/UserNav";
-
 export default function SecurityLayout({
   children,
 }: {
@@ -17,7 +15,6 @@ export default function SecurityLayout({
               Ce qu&apos;il faut corriger dans tes apps, et comment.
             </p>
           </div>
-          <UserNav />
         </div>
       </header>
 

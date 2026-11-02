@@ -17,6 +17,7 @@ class UserProfile(BaseModel):
     groups: list[str] = []
     github_installation_id: str | None = None
     locale: Locale | None = None
+    cnp_admin: bool = False
 
 
 class PictureUploadResponse(BaseModel):

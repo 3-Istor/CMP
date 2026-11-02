@@ -118,6 +118,27 @@ class TestProfileLocale:
         assert profile.locale == "en"
 
 
+class TestProfileAdminFlag:
+    @pytest.mark.parametrize(
+        ("roles", "expected"), [(["cnp-admin"], True), ([], False)]
+    )
+    def test_profile_reports_the_platform_admin_role(
+        self, db, roles, expected
+    ):
+        claims = {
+            **_claims(),
+            "email": "a@example.com",
+            "realm_access": {"roles": roles},
+        }
+
+        with mock.patch.object(
+            account_router, "_get_admin_token", side_effect=RuntimeError
+        ):
+            profile = account_router.get_user_profile(claims, db)
+
+        assert profile.cnp_admin is expected
+
+
 class TestMigration:
     def _load(self):
         spec = importlib.util.spec_from_file_location("mig", MIGRATION)

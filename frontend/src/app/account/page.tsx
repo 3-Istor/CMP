@@ -105,7 +105,7 @@ export default function AccountPage() {
         prev ? { ...prev, picture: response.picture_url } : null,
       );
 
-      // Refresh NextAuth session to update avatar in UserNav
+      // Refresh NextAuth session to update avatar in the sidebar
       await update();
 
       // Also fetch fresh user data to ensure consistency

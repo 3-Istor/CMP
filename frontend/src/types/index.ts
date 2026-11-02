@@ -260,6 +260,7 @@ export interface UserProfile {
   groups: string[];
   github_installation_id?: string | null; // Phase 3: GitHub App integration
   locale?: "fr" | "en" | null;
+  cnp_admin?: boolean;
 }
 
 export interface GitHubStatus {
