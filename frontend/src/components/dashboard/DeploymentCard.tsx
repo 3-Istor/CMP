@@ -106,6 +106,12 @@ export function DeploymentCard({
       if (health.status === "down") {
         return { key: "down", variant: "destructive" as const };
       }
+      if (health.status === "asleep") {
+        return { key: "asleep", variant: "outline" as const };
+      }
+      if (health.status === "not_connected") {
+        return { key: "not_connected", variant: "outline" as const };
+      }
       return { key: "unknown", variant: "outline" as const };
     }
 

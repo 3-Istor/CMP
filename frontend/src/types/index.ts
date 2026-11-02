@@ -239,13 +239,31 @@ export interface OpenStackBackendHealth {
   total_count: number;
 }
 
-export type AppHealthStatus = "healthy" | "degraded" | "down" | "unknown";
+export type AppHealthStatus =
+  | "healthy"
+  | "degraded"
+  | "down"
+  | "asleep"
+  | "not_connected"
+  | "unknown";
+
+export interface ComponentHealth {
+  name: string;
+  state: AppHealthStatus;
+  ready: number;
+  desired: number;
+  restarts_15m: number | null;
+  argocd_sync: string | null;
+  argocd_health: string | null;
+  reason: string | null;
+}
 
 export interface AppHealthResponse {
   deployment_name: string;
   status: AppHealthStatus;
   aws_frontend: AWSFrontendHealth | null;
   openstack_backend: OpenStackBackendHealth | null;
+  components: ComponentHealth[];
 }
 
 // ── Account & Profile ─────────────────────────────────────────────────────────
