@@ -63,16 +63,54 @@ export const STATUS_COLOR = {
   critical: "#EF4444",
 } as const;
 
+function roundToTwoSignificantDigits(value: number): number {
+  return Number(value.toPrecision(2));
+}
+
 export function formatEUR(value: number, currency = "EUR"): string {
-  return new Intl.NumberFormat("fr-FR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value ?? 0);
+  const amount = value ?? 0;
+  const magnitude = Math.abs(amount);
+  const money = (v: number, min: number, max: number) =>
+    new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: min,
+      maximumFractionDigits: max,
+    }).format(v);
+
+  if (magnitude === 0) return money(0, 0, 0);
+  if (magnitude < 0.01) {
+    return amount > 0 ? `< ${money(0.01, 2, 2)}` : `> ${money(-0.01, 2, 2)}`;
+  }
+  if (magnitude < 1) return money(roundToTwoSignificantDigits(amount), 0, 3);
+  return money(amount, 2, 2);
+}
+
+export function formatNumber(value: number, digits = 1): string {
+  const amount = value ?? 0;
+  const magnitude = Math.abs(amount);
+  const plain = (v: number, max: number) =>
+    new Intl.NumberFormat("fr-FR", { maximumFractionDigits: max }).format(v);
+
+  if (magnitude === 0) return "0";
+  if (magnitude < 0.01) return amount > 0 ? "< 0,01" : "> -0,01";
+  if (magnitude < 1) return plain(roundToTwoSignificantDigits(amount), 3);
+  return plain(amount, digits);
+}
+
+/** Décimales de l'axe choisies selon l'échelle : centimes sous 1, une décimale sous 10, entiers au-delà. */
+export function axisTickFormatter(maxValue: number, suffix = "") {
+  const decimals =
+    maxValue < 0.1 ? 3 : maxValue < 1 ? 2 : maxValue < 10 ? 1 : 0;
+  const formatter = new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return (value: number) => `${formatter.format(value)}${suffix}`;
 }
 
 export function formatPct(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "n/d";
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
@@ -86,4 +124,23 @@ export function budgetStatusColor(
   if (consumedPct >= critical) return STATUS_COLOR.critical;
   if (consumedPct >= warn) return STATUS_COLOR.warning;
   return STATUS_COLOR.ok;
+}
+
+const PARIS_TIME_ZONE = "Europe/Paris";
+
+export function parisClock(now: Date): { date: string; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PARIS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    hour: Number(get("hour")) + Number(get("minute")) / 60,
+  };
 }

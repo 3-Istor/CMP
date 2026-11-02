@@ -9,7 +9,7 @@ import {
   notifyRecommendation,
 } from "@/lib/api";
 import type { Recommendation } from "@/types";
-import { ArrowRight, Bell, Check, Loader2, X } from "lucide-react";
+import { ArrowRight, BarChart3, Bell, Check, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatEUR } from "./format";
@@ -142,13 +142,14 @@ export function RecommendationCard({
 
         {/* Justification + effort */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            📊 {rec.justification}
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <BarChart3 className="h-3.5 w-3.5" />
+            {rec.justification}
           </p>
           <Badge variant="outline">{EFFORT_LABEL[rec.effort]}</Badge>
         </div>
 
-        {/* Actions — admins only. Everyone else still sees the finding and
+        {/* Actions: admins only. Everyone else still sees the finding and
             the estimated saving above. */}
         {!done && !canAct && (
           <p className="text-xs text-muted-foreground">

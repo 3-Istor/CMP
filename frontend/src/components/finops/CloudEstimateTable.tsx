@@ -53,7 +53,7 @@ export function CloudEstimateTable({
                   <td className="px-3 py-2">
                     <div className="font-medium">{row.app_name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {row.project_id ?? "—"}
+                      {row.project_id ?? "n/d"}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-xs">
@@ -80,7 +80,7 @@ export function CloudEstimateTable({
                         }
                       >
                         {value === undefined
-                          ? "—"
+                          ? "n/d"
                           : `${formatEUR(value, "EUR")}${
                               row.estimated[cloud] ? " *" : ""
                             }`}

@@ -25,6 +25,7 @@ import {
   STATUS_COLOR,
   formatEUR,
   formatPct,
+  parisClock,
   visibleResources,
 } from "./format";
 
@@ -53,10 +54,7 @@ function ForecastLine({
           {formatEUR(forecast.projected_eur, currency)}
         </span>
         {spread > 0 && (
-          <span className="tabular-nums">
-            {" "}
-            ± {formatEUR(spread, currency)}
-          </span>
+          <span className="tabular-nums"> ± {formatEUR(spread, currency)}</span>
         )}
       </p>
       <p
@@ -89,6 +87,20 @@ function ForecastLine({
   );
 }
 
+function dataStartInMonth(meta: FinopsMeta | null): string | null {
+  const days = (meta?.sources ?? [])
+    .map((s) => s.first_day)
+    .filter((d): d is string => !!d)
+    .sort();
+  const first = days[0];
+  if (!first || first.slice(0, 7) !== parisClock(new Date()).date.slice(0, 7)) {
+    return null;
+  }
+  if (first.endsWith("-01")) return null;
+  const [, month, day] = first.split("-");
+  return `${day}/${month}`;
+}
+
 export function KpiCards({
   summary,
   budget,
@@ -106,6 +118,7 @@ export function KpiCards({
 }) {
   const trend = summary.trend_pct;
   const trendUp = (trend ?? 0) >= 0;
+  const since = dataStartInMonth(meta);
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -135,6 +148,9 @@ export function KpiCards({
               </span>
             )}
           </div>
+          {since && (
+            <p className="text-xs text-muted-foreground">depuis le {since}</p>
+          )}
           {forecast ? (
             <ForecastLine forecast={forecast} currency={summary.currency} />
           ) : (

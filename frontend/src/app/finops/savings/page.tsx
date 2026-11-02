@@ -1,7 +1,7 @@
 "use client";
 
 import { DataFreshness } from "@/components/finops/DataFreshness";
-import { formatEUR } from "@/components/finops/format";
+import { formatEUR, formatNumber } from "@/components/finops/format";
 import {
   SAVINGS_COLORS,
   SavingsTimeline,
@@ -32,12 +32,6 @@ const CATEGORY_LABEL: Record<FinopsSavingsCategory, string> = {
 const SELECT_CLASS =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(
-    value,
-  );
-}
-
 function SavingsTable({ rows }: { rows: FinopsSavings["rows"] }) {
   return (
     <div className="overflow-x-auto">
@@ -64,7 +58,7 @@ function SavingsTable({ rows }: { rows: FinopsSavings["rows"] }) {
                   {r.project}
                 </Badge>
               </td>
-              <td className="px-3 py-2 font-medium">{r.app || "—"}</td>
+              <td className="px-3 py-2 font-medium">{r.app || "n/d"}</td>
               <td className="px-3 py-2">
                 {CATEGORY_LABEL[r.category] ?? r.category}
               </td>
@@ -189,6 +183,13 @@ function SavingsInner() {
                 <p className="text-xs text-muted-foreground">
                   Électricité non consommée on-prem. 0 € dans le cloud sans
                   autoscaler.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  On-prem, les pods en veille libèrent de la capacité (évité)
+                  mais les 3 nœuds restent allumés : l&apos;économie encaissée
+                  ne couvre que la part dynamique de leur consommation
+                  électrique. Dans le cloud, elle augmente quand des nœuds sont
+                  supprimés.
                 </p>
               </CardContent>
             </Card>

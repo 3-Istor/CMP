@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types";
 
-/** Styled native <select> — reliable and matches the input styling. */
+/** Styled native <select>, reliable and matching the input styling. */
 function NativeSelect({
   value,
   onChange,
@@ -46,12 +46,14 @@ export function FinopsFilters({
   state,
   onChange,
   projects,
+  showProject = true,
   showGranularity = true,
   showCloud = false,
 }: {
   state: FinopsFilterState;
   onChange: (next: FinopsFilterState) => void;
   projects: Project[];
+  showProject?: boolean;
   showGranularity?: boolean;
   showCloud?: boolean;
 }) {
@@ -60,18 +62,20 @@ export function FinopsFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <NativeSelect
-        aria-label="Projet"
-        value={state.project}
-        onChange={(v) => set({ project: v })}
-      >
-        <option value="">Tous les projets</option>
-        {projects.map((p) => (
-          <option key={p.name} value={p.name}>
-            {p.name}
-          </option>
-        ))}
-      </NativeSelect>
+      {showProject && (
+        <NativeSelect
+          aria-label="Projet"
+          value={state.project}
+          onChange={(v) => set({ project: v })}
+        >
+          <option value="">Tous les projets</option>
+          {projects.map((p) => (
+            <option key={p.name} value={p.name}>
+              {p.name}
+            </option>
+          ))}
+        </NativeSelect>
+      )}
 
       <NativeSelect
         aria-label="Période"

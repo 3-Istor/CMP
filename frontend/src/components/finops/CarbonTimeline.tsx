@@ -1,6 +1,7 @@
 "use client";
 
 import type { FinopsCarbon } from "@/types";
+import { axisTickFormatter } from "./format";
 import {
   Bar,
   CartesianGrid,
@@ -52,6 +53,7 @@ function CarbonTooltip({
 
 /** Énergie en barres (axe gauche), intensité du réseau en ligne (axe droit). */
 export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
+  const energyMax = Math.max(0, ...data.map((d) => d.energy_kwh ?? 0));
   return (
     <div className="space-y-3">
       <div className="h-72 w-full">
@@ -77,8 +79,8 @@ export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              width={48}
-              tickFormatter={(v: number) => `${v.toFixed(0)}`}
+              width={56}
+              tickFormatter={axisTickFormatter(energyMax)}
             />
             <YAxis
               yAxisId="intensity"
