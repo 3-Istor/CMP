@@ -1508,5 +1508,15 @@
       "tagline": "Plateforme cloud native",
       "excellence": "L'excellence depuis 2026."
     }
+  },
+  "links": {
+    "argocd_project": "Argo CD",
+    "argocd_component": "Argo CD",
+    "status": "Statut",
+    "offhours": "Mise en veille",
+    "vault": "Vault",
+    "grafana_org": "Grafana",
+    "github_repo": "Dépôt GitHub",
+    "github_actions": "GitHub Actions"
   }
 }

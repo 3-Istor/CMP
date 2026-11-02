@@ -1,5 +1,7 @@
 "use client";
 
+import { TemplateIcon } from "@/components/catalog/TemplateIcon";
+
 import { DeploymentHealthPanel } from "@/components/dashboard/DeploymentHealthPanel";
 import { Github } from "@/components/icons/Github";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
@@ -157,9 +159,10 @@ export function DeploymentCard({
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base flex items-center gap-2">
               {currentDeployment.template_icon && (
-                <span className="text-lg">
-                  {currentDeployment.template_icon}
-                </span>
+                <TemplateIcon
+                  icon={currentDeployment.template_icon}
+                  className="h-5 w-5"
+                />
               )}
               {currentDeployment.name}
             </CardTitle>

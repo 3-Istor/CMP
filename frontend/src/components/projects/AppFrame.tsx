@@ -1,5 +1,7 @@
 "use client";
 
+import { TemplateIcon } from "@/components/catalog/TemplateIcon";
+
 import { useAppContext } from "@/components/projects/AppContext";
 import {
   NotAllowed,
@@ -224,7 +226,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             {current.template_icon && (
-              <span className="text-4xl">{current.template_icon}</span>
+              <TemplateIcon icon={current.template_icon} className="h-9 w-9" />
             )}
             <div>
               <div className="flex items-center gap-2.5">

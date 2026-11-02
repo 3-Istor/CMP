@@ -88,7 +88,7 @@ export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              width={56}
+              width={68}
               tickFormatter={axisTickFormatter(energyMax, "", locale)}
             />
             <YAxis

@@ -1,4 +1,7 @@
+"use client";
+
 import type { ComponentType } from "react";
+import { useTranslations } from "next-intl";
 import { buttonVariants } from "@/components/ui/button";
 import type { ProjectLink } from "@/types";
 import {
@@ -12,17 +15,6 @@ import {
 } from "lucide-react";
 import { Github } from "@/components/icons/Github";
 
-const LABELS: Record<string, string> = {
-  "links.argocd_project": "ArgoCD",
-  "links.argocd_component": "ArgoCD",
-  "links.status": "Status",
-  "links.offhours": "Offhours",
-  "links.vault": "Vault",
-  "links.grafana_org": "Grafana",
-  "links.github_repo": "Dépôt GitHub",
-  "links.github_actions": "GitHub Actions",
-};
-
 const ICONS: Record<string, ComponentType<{ className?: string }>> = {
   argocd_project: FileCode,
   argocd_component: FileCode,
@@ -34,8 +26,12 @@ const ICONS: Record<string, ComponentType<{ className?: string }>> = {
   github_actions: Play,
 };
 
-export function linkLabel(link: ProjectLink): string {
-  const base = LABELS[link.label_key] ?? link.label_key;
+export function linkLabel(
+  link: ProjectLink,
+  t: ReturnType<typeof useTranslations>,
+): string {
+  const key = link.label_key.replace(/^links\./, "");
+  const base = t.has(key) ? t(key) : link.label_key;
   if (link.id === "argocd_component" && link.component) {
     return `${base} · ${link.component}`;
   }
@@ -52,6 +48,7 @@ export function LinkButtons({
   links: ProjectLink[];
   className?: string;
 }) {
+  const t = useTranslations("links");
   return (
     <>
       {links.map((link) => {
@@ -66,7 +63,7 @@ export function LinkButtons({
             className={buttonVariants({ variant: "outline", size: "sm", className })}
           >
             <Icon className="mr-2 h-4 w-4" />
-            {linkLabel(link)}
+            {linkLabel(link, t)}
             {link.external && <ExternalLink className="ml-auto h-3 w-3" />}
           </a>
         );
