@@ -1,0 +1,32 @@
+{
+  "summary": {
+    "month_to_date_eur": 412.5,
+    "projected_month_eur": 980,
+    "previous_month_eur": 905,
+    "trend_pct": 8.2,
+    "breakdown": { "cpu": 180, "ram": 120, "storage": 60, "network": 30, "ai": 0, "platform": 22.5 },
+    "potential_savings_eur": 75,
+    "app_count": 1,
+    "currency": "EUR"
+  },
+  "budget": null,
+  "apps": [
+    {
+      "app_id": 1,
+      "name": "demo-app",
+      "project_id": "demo",
+      "cost_per_day_eur": 13.75,
+      "cost_month_estimate_eur": 412.5,
+      "month_to_date_eur": 412.5,
+      "trend_pct": 8.2,
+      "platform_eur": 22.5
+    }
+  ],
+  "timeline": [
+    { "date": "2026-10-01", "cpu": 6, "ram": 4, "storage": 2, "network": 1, "ai": 0, "platform": 0.75, "total": 13.75 },
+    { "date": "2026-10-02", "cpu": 6, "ram": 4, "storage": 2, "network": 1, "ai": 0, "platform": 0.75, "total": 13.75 }
+  ],
+  "by_cloud": { "onprem": 412.5, "aws": 0, "gcp": 0 },
+  "savings_ytd": { "avoided_eur": 1200, "realized_eur": 640 },
+  "forecast": null
+}

@@ -1,0 +1,13 @@
+{
+  "user": {
+    "id": "e2e-demo-user",
+    "name": "E2E Demo",
+    "email": "e2e-demo@example.invalid",
+    "image": null,
+    "given_name": "E2E",
+    "family_name": "Demo",
+    "roles": ["/projects/demo/owner"]
+  },
+  "accessToken": "e2e-fake-token",
+  "expires": "2099-01-01T00:00:00.000Z"
+}
