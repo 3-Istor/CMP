@@ -64,12 +64,13 @@ class ProjectCreate(BaseModel):
             "Used as a Keycloak group prefix, Vault policy name, and ArgoCD AppProject name."
         ),
     )
-    target_cloud: TargetCloud = Field(
+    target_cloud: TargetCloud | Literal["public"] = Field(
         default=TargetCloud.ONPREM,
         description=(
             "Which cloud the project's workloads run on. Immutable after creation: "
             "changing it is a re-create, not a move. Defaults to on-prem so existing "
-            "clients keep working unchanged."
+            "clients keep working unchanged. 'public' lets the platform pick an up "
+            "public cloud."
         ),
     )
 
