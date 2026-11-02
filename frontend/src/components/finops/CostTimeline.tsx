@@ -55,8 +55,13 @@ function findPartialDay(
   const today = data.find((p) => p.date === clock.date);
   if (!today) return null;
   const forecastToday = forecast?.daily.find((d) => d.date === clock.date);
-  const projected =
-    forecastToday?.eur ?? (today.total * 24) / Math.max(clock.hour, 1);
+  const previousDay = data.findLast((p) => p.date < clock.date);
+  // Ingestion runs hourly: before 3 h the partial total is too thin to extrapolate.
+  const extrapolated =
+    clock.hour >= 3 || !previousDay
+      ? (today.total * 24) / Math.max(clock.hour, 1)
+      : previousDay.total;
+  const projected = forecastToday?.eur ?? extrapolated;
   return {
     date: clock.date,
     partial: today.total,
