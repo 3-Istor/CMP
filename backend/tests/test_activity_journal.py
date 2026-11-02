@@ -234,12 +234,120 @@ def test_activity_of_a_project_is_refused_to_outsiders(build):
     assert response.status_code == 403
 
 
-def test_export_is_refused_to_members(build):
-    client, _ = build(STATIC_FILES, "member")
+def test_activity_of_a_project_is_refused_to_guests(build):
+    client, _ = build(STATIC_FILES, "guest")
+
+    response = client.get("/api/activity?project=demo")
+
+    assert response.status_code == 403
+
+
+def test_export_is_refused_to_guests(build):
+    client, _ = build(STATIC_FILES, "guest")
 
     response = client.get("/api/activity/export?project=demo")
 
     assert response.status_code == 403
+
+
+def seed(session_factory, rows):
+    with session_factory() as db:
+        for project, app, actor, action in rows:
+            db.add(
+                AuditEvent(
+                    actor=actor,
+                    action=action,
+                    project=project,
+                    app=app,
+                    target=app,
+                    outcome="success",
+                    status_code=200,
+                )
+            )
+        db.commit()
+
+
+ROWS = [
+    ("demo", "web", "alice", "app.sleep"),
+    ("demo", "api", "bob", "app.config.update"),
+    ("other", "secret-app", "carol", "app.delete"),
+]
+
+
+def test_a_project_never_sees_the_rows_of_another_project(
+    build, session_factory
+):
+    client, _ = build(STATIC_FILES, "member")
+    seed(session_factory, ROWS)
+
+    events = client.get("/api/activity?project=demo&source=cmp").json()[
+        "events"
+    ]
+
+    assert {e["project"] for e in events} == {"demo"}
+
+
+def test_export_never_contains_the_rows_of_another_project(
+    build, session_factory
+):
+    client, _ = build(STATIC_FILES, "member")
+    seed(session_factory, ROWS)
+
+    response = client.get("/api/activity/export?project=demo&source=cmp")
+
+    assert "secret-app" not in response.text
+    assert "carol" not in response.text
+
+
+def test_export_is_allowed_to_members_as_csv(build, session_factory):
+    client, _ = build(STATIC_FILES, "member")
+    seed(session_factory, ROWS)
+
+    response = client.get("/api/activity/export?project=demo&source=cmp")
+
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "app.sleep" in response.text
+
+
+def test_app_filter_keeps_only_that_app(build, session_factory):
+    client, _ = build(STATIC_FILES, "member")
+    seed(session_factory, ROWS)
+
+    events = client.get(
+        "/api/activity?project=demo&source=cmp&app=web"
+    ).json()["events"]
+
+    assert [e["app"] for e in events] == ["web"]
+
+
+def test_filters_apply_before_the_page_limit(build, session_factory):
+    client, _ = build(STATIC_FILES, "member")
+    seed(
+        session_factory,
+        [("demo", "web", "alice", "app.sleep")]
+        + [("demo", "api", "bob", "app.restart")] * 5,
+    )
+
+    events = client.get(
+        "/api/activity?project=demo&source=cmp&actor=alice&limit=2"
+    ).json()["events"]
+
+    assert [e["actor"] for e in events] == ["alice"]
+
+
+def test_platform_admin_sees_every_project(build, session_factory):
+    client, _ = build(STATIC_FILES, None)
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": "root",
+        "preferred_username": "root",
+        "realm_access": {"roles": ["cnp-admin"]},
+    }
+    seed(session_factory, ROWS)
+
+    with mock.patch.object(activity_router, "is_cnp_admin", lambda t: True):
+        events = client.get("/api/activity?source=cmp").json()["events"]
+
+    assert {e["project"] for e in events} == {"demo", "other"}
 
 
 def test_export_neutralises_spreadsheet_formulas():

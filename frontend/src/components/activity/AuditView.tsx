@@ -179,11 +179,13 @@ function EventRow({
         </span>
         <span className="block text-xs text-muted-foreground">
           {sourceLabel(t, event.source)} · {timeLabel(t, locale, event.time)}
-          {event.outcome === "failure" && (
+          {event.outcome === "failure" ? (
             <span className="text-red-600 dark:text-red-400">
               {" "}
               · {t("audit.outcome.refused")}
             </span>
+          ) : (
+            <span> · {t("audit.outcome.success")}</span>
           )}
         </span>
       </span>

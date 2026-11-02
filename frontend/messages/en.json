@@ -965,7 +965,25 @@
         "get": "read",
         "list": "listed"
       },
-      "detail": "({detail})"
+      "detail": "({detail})",
+      "appSleep": "put {app} to sleep",
+      "appWake": "woke {app}",
+      "appRestart": "restarted {app}",
+      "iconUpdate": "changed the icon of {app}",
+      "iconReset": "reset the icon of {app}",
+      "releasePromote": "promoted the release of {app}",
+      "releaseSkip": "skipped the release of {app}",
+      "releaseAbort": "aborted the release of {app}",
+      "releaseRetry": "retried the release of {app}",
+      "releaseSettings": "changed the release settings of {app}",
+      "trafficStart": "started a traffic test on {app}",
+      "trafficStop": "stopped the traffic test on {app}",
+      "agentsUpdate": "changed the AI assistant settings of the project",
+      "agentConnect": "connected an AI assistant",
+      "agentDisconnect": "disconnected an AI assistant",
+      "monthClose": "closed a FinOps month",
+      "costCenters": "changed the cost centers",
+      "catalogSync": "synchronised the catalog"
     },
     "audit": {
       "kpi": {

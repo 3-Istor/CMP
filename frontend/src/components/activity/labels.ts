@@ -50,6 +50,30 @@ const K8S_VERB_KEYS: Record<string, string> = {
   list: "list",
 };
 
+const APP_ACTION_KEYS: Record<string, string> = {
+  "app.sleep": "appSleep",
+  "app.wake": "appWake",
+  "app.restart": "appRestart",
+  "app.icon.update": "iconUpdate",
+  "app.icon.reset": "iconReset",
+  "release.promote": "releasePromote",
+  "release.skip": "releaseSkip",
+  "release.abort": "releaseAbort",
+  "release.retry": "releaseRetry",
+  "release.settings.update": "releaseSettings",
+  "release.traffic.start": "trafficStart",
+  "release.traffic.stop": "trafficStop",
+};
+
+const PLAIN_ACTION_KEYS: Record<string, string> = {
+  "project.agents.update": "agentsUpdate",
+  "agent.connect": "agentConnect",
+  "agent.disconnect": "agentDisconnect",
+  "finops.month.close": "monthClose",
+  "finops.cost_centers.update": "costCenters",
+  "catalog.sync": "catalogSync",
+};
+
 function str(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
 }
@@ -98,6 +122,10 @@ function kubernetesWhat(t: Translate, e: ActivityEvent): string {
 export function describe(e: ActivityEvent, t: Translate): string {
   const d = e.details;
   const app = e.app ?? e.target;
+  const appKey = APP_ACTION_KEYS[e.action];
+  if (appKey) return t(`events.${appKey}`, { app });
+  const plainKey = PLAIN_ACTION_KEYS[e.action];
+  if (plainKey) return t(`events.${plainKey}`);
   switch (e.action) {
     case "project.create":
       return t("events.projectCreate", { project: e.project ?? "" });
