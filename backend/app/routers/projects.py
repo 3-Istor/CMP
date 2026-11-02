@@ -38,6 +38,11 @@ from app.schemas.project import (
 )
 from app.services import notifications
 from app.services.authz import RequireAdmin, RequireGuest, RequireMember
+from app.services.clusters.state import (
+    PUBLIC_CLOUDS,
+    fresh_state,
+    pick_public_cloud,
+)
 from app.services.grafana_service import (
     add_user_to_project_org,
     remove_user_from_project_org,
@@ -347,6 +352,19 @@ async def create_project(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not check the project registry: {exc}",
         ) from exc
+
+    if payload.target_cloud == "public":
+        states = {
+            c: await run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS
+        }
+        last = (
+            db.query(Project.target_cloud)
+            .filter(Project.target_cloud.in_(PUBLIC_CLOUDS))
+            .order_by(Project.id.desc())
+            .limit(1)
+            .scalar()
+        )
+        payload.target_cloud = pick_public_cloud(states, last)
 
     logger.info(
         "Creating project '%s' for user_id='%s'",
