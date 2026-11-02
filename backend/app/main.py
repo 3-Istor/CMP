@@ -99,7 +99,12 @@ def setup_logging():
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    # A dependency installs a bare stderr handler at import time; with a DEBUG
+    # root it dumped full OpenStack responses, user_data included.
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+    root_logger.setLevel(logging.INFO)
+    logging.getLogger("app").setLevel(logging.DEBUG)
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
@@ -118,6 +123,17 @@ def setup_logging():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("git").setLevel(logging.WARNING)
+    for noisy in (
+        "keystoneauth",
+        "openstack",
+        "novaclient",
+        "neutronclient",
+        "botocore",
+        "boto3",
+        "s3transfer",
+        "kubernetes",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Log startup message
     root_logger.info("=" * 80)
