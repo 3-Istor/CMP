@@ -9,26 +9,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useTranslations } from "next-intl";
 
-const OPTIONS: { value: Theme; label: string }[] = [
-  { value: "system", label: "Navigateur" },
-  { value: "light", label: "Clair" },
-  { value: "dark", label: "Sombre" },
-];
+const OPTIONS: Theme[] = ["system", "light", "dark"];
 
 export function ThemeCard() {
+  const t = useTranslations("account");
   const [theme, choose] = useTheme();
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Apparence</CardTitle>
-        <CardDescription>
-          Par défaut, le thème suit celui du navigateur. Choix gardé sur ce navigateur.
-        </CardDescription>
+        <CardTitle>{t("theme.title")}</CardTitle>
+        <CardDescription>{t("theme.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex gap-2">
-        {OPTIONS.map(({ value, label }) => (
+        {OPTIONS.map((value) => (
           <Button
             key={value}
             size="sm"
@@ -36,7 +32,7 @@ export function ThemeCard() {
             aria-pressed={theme === value}
             onClick={() => choose(value)}
           >
-            {label}
+            {t(`theme.${value}`)}
           </Button>
         ))}
       </CardContent>

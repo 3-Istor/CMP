@@ -6,6 +6,7 @@ import type {
   CostSeriesPoint,
   FinopsResource,
 } from "@/types";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import {
   Area,
@@ -23,6 +24,7 @@ import {
   RESOURCE_META,
   axisTickFormatter,
   formatEUR,
+  intlLocale,
   parisClock,
   visibleResources,
 } from "./format";
@@ -87,6 +89,9 @@ function CostTooltip({
   label?: string;
   granularity: string;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
+  const money = (value: number) => formatEUR(value, "EUR", locale);
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0]?.payload;
   const monthInProgress =
@@ -103,14 +108,17 @@ function CostTooltip({
         {label}
         {monthInProgress && (
           <span className="ml-1.5 font-normal text-muted-foreground">
-            en cours
+            {t("timeline.inProgress")}
           </span>
         )}
       </p>
       {row?.partialDay && (
         <p className="tabular-nums">
-          En cours : {formatEUR(row.partialDay.partial)} à {row.partialDay.hour}
-          h, projeté {formatEUR(row.partialDay.projected)}
+          {t("timeline.partialDay", {
+            partial: money(row.partialDay.partial),
+            hour: row.partialDay.hour,
+            projected: money(row.partialDay.projected),
+          })}
         </p>
       )}
       {costs.map((p) => (
@@ -120,21 +128,24 @@ function CostTooltip({
             style={{ backgroundColor: p.color }}
           />
           {p.name}
-          <span className="ml-auto tabular-nums">{formatEUR(p.value)}</span>
+          <span className="ml-auto tabular-nums">{money(p.value)}</span>
         </p>
       ))}
       {costs.length > 0 && (
         <p className="mt-1 flex justify-between border-t pt-1 font-medium">
-          <span>Total</span>
-          <span className="tabular-nums">{formatEUR(total)}</span>
+          <span>{t("common.total")}</span>
+          <span className="tabular-nums">{money(total)}</span>
         </p>
       )}
       {row?.band && row.total === undefined && !row.partialDay && (
         <p className="flex justify-between gap-3">
-          <span>Prévision</span>
+          <span>{t("timeline.forecast")}</span>
           <span className="tabular-nums">
-            {formatEUR(row.forecast ?? 0)} ({formatEUR(row.band[0])} –{" "}
-            {formatEUR(row.band[1])})
+            {t("timeline.forecastValue", {
+              value: money(row.forecast ?? 0),
+              low: money(row.band[0]),
+              high: money(row.band[1]),
+            })}
           </span>
         </p>
       )}
@@ -145,10 +156,15 @@ function CostTooltip({
           style={{ color: ANOMALY_COLOR }}
         >
           <p className="font-medium">
-            Anomalie · {a.app_name} : {formatEUR(a.cost_eur)} (médiane{" "}
-            {formatEUR(a.baseline_eur)})
+            {t("timeline.anomalyDetail", {
+              app: a.app_name,
+              cost: money(a.cost_eur),
+              baseline: money(a.baseline_eur),
+            })}
           </p>
-          <p className="text-muted-foreground">Cause probable : {a.cause}</p>
+          <p className="text-muted-foreground">
+            {t("timeline.cause", { cause: a.cause })}
+          </p>
         </div>
       ))}
     </div>
@@ -219,6 +235,8 @@ export function CostTimeline({
   anomalies?: CostAnomaly[];
   granularity?: string;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   // Légende interactive : ressources masquées au clic.
   const [hidden, setHidden] = useState<Set<FinopsResource>>(new Set());
 
@@ -310,15 +328,17 @@ export function CostTimeline({
               tickLine={false}
               axisLine={false}
               width={56}
-              tickFormatter={axisTickFormatter(axisMax, " €")}
+              tickFormatter={axisTickFormatter(axisMax, " €", locale)}
             />
-            <Tooltip content={<CostTooltip granularity={granularity} />} />
+            <Tooltip
+              content={<CostTooltip granularity={granularity} />}
+            />
             {RESOURCES.map((r) => (
               <Area
                 key={r}
                 type="monotone"
                 dataKey={r}
-                name={RESOURCE_META[r].label}
+                name={t(`resources.${r}`)}
                 stackId="cost"
                 stroke={RESOURCE_META[r].color}
                 fill={`url(#grad-${r})`}
@@ -332,7 +352,7 @@ export function CostTimeline({
               <Area
                 type="monotone"
                 dataKey="band"
-                name="Intervalle de prévision"
+                name={t("timeline.forecastRange")}
                 stroke="none"
                 fill={FORECAST_COLOR}
                 fillOpacity={0.15}
@@ -344,7 +364,7 @@ export function CostTimeline({
               <Line
                 type="monotone"
                 dataKey="forecast"
-                name="Prévision"
+                name={t("timeline.forecast")}
                 stroke={FORECAST_COLOR}
                 strokeWidth={2}
                 strokeDasharray="5 4"
@@ -356,7 +376,7 @@ export function CostTimeline({
               <Line
                 type="linear"
                 dataKey="projection"
-                name="Jour en cours (projeté)"
+                name={t("timeline.today")}
                 stroke={FORECAST_COLOR}
                 strokeWidth={2}
                 strokeDasharray="5 4"
@@ -400,7 +420,7 @@ export function CostTimeline({
           return (
             <button
               key={r}
-              title={RESOURCE_META[r].hint}
+              title={r === "platform" ? t("resourceHints.platform") : undefined}
               onClick={() => toggle(r)}
               className="flex items-center gap-1.5 text-xs transition-opacity"
               style={{ opacity: off ? 0.4 : 1 }}
@@ -410,7 +430,7 @@ export function CostTimeline({
                 style={{ backgroundColor: RESOURCE_META[r].color }}
               />
               <span className={off ? "line-through" : ""}>
-                {RESOURCE_META[r].label}
+                {t(`resources.${r}`)}
               </span>
             </button>
           );
@@ -421,7 +441,9 @@ export function CostTimeline({
               className="w-4 border-t-2 border-dashed"
               style={{ borderColor: FORECAST_COLOR }}
             />
-            Prévision ({Math.round(forecast!.confidence * 100)} %)
+            {t("timeline.forecastLegend", {
+              confidence: Math.round(forecast!.confidence * 100),
+            })}
           </span>
         )}
         {partialDay && (
@@ -430,7 +452,7 @@ export function CostTimeline({
               className="h-2.5 w-2.5 rounded-full border-2 bg-background"
               style={{ borderColor: FORECAST_COLOR }}
             />
-            Jour en cours (projeté)
+            {t("timeline.today")}
           </span>
         )}
         {markers.length > 0 && (
@@ -439,7 +461,7 @@ export function CostTimeline({
               className="h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: ANOMALY_COLOR }}
             />
-            Anomalie
+            {t("timeline.anomaly")}
           </span>
         )}
       </div>

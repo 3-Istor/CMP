@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, GitBranch, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -19,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { getGitHubStatus, saveGitHubInstallationId } from "@/lib/api";
 
 export function GitHubLinkButton() {
+  const t = useTranslations("account.github");
   const [isLinked, setIsLinked] = useState(false);
   const [installationId, setInstallationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,15 +50,13 @@ export function GitHubLinkButton() {
           window.location.pathname,
         );
 
-        toast.success("GitHub account linked successfully!");
+        toast.success(t("callbackSaved"));
 
         // Refresh status
         await fetchGitHubStatus();
       } catch (error) {
         console.error("Failed to save installation ID from callback:", error);
-        toast.error(
-          "Failed to link GitHub account. Please try again or enter the ID manually.",
-        );
+        toast.error(t("callbackFailed"));
       } finally {
         setSaving(false);
       }
@@ -74,7 +74,7 @@ export function GitHubLinkButton() {
       setInstallationId(data.github_installation_id);
     } catch (error) {
       console.error("Failed to fetch GitHub status:", error);
-      toast.error("Failed to load GitHub integration status");
+      toast.error(t("statusFailed"));
     } finally {
       setLoading(false);
     }
@@ -95,16 +95,14 @@ export function GitHubLinkButton() {
     );
 
     // Show a message to the user
-    toast.info(
-      "GitHub app installation opened in a new tab. Return here after installation to complete the setup.",
-    );
+    toast.info(t("opened"));
   };
 
   const handleManualSave = async () => {
     const trimmedId = manualId.trim();
 
     if (!trimmedId) {
-      toast.error("Please enter an installation ID");
+      toast.error(t("idRequired"));
       return;
     }
 
@@ -112,16 +110,14 @@ export function GitHubLinkButton() {
       setSaving(true);
       await saveGitHubInstallationId(trimmedId);
 
-      toast.success("GitHub installation ID saved successfully!");
+      toast.success(t("idSaved"));
       setManualId("");
 
       // Refresh status
       await fetchGitHubStatus();
     } catch (error) {
       console.error("Failed to save installation ID:", error);
-      toast.error(
-        "Failed to save installation ID. Please check the ID and try again.",
-      );
+      toast.error(t("idSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -133,16 +129,14 @@ export function GitHubLinkButton() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <GitBranch className="h-5 w-5" />
-            GitHub Integration
+            {t("title")}
           </CardTitle>
-          <CardDescription>
-            Link your GitHub account to deploy Kubernetes applications
-          </CardDescription>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Loading status...</span>
+            <span className="text-sm">{t("loadingStatus")}</span>
           </div>
         </CardContent>
       </Card>
@@ -154,54 +148,43 @@ export function GitHubLinkButton() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <GitBranch className="h-5 w-5" />
-          GitHub Integration
+          {t("title")}
         </CardTitle>
-        <CardDescription>
-          Link your GitHub account to deploy Kubernetes applications
-        </CardDescription>
+        <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent>
         {isLinked ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-green-600 dark:text-green-500">
               <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium">GitHub account linked</span>
+              <span className="font-medium">{t("linked")}</span>
             </div>
             <div className="rounded-lg bg-muted p-3">
               <p className="text-xs text-muted-foreground mb-1">
-                Installation ID
+                {t("installationId")}
               </p>
               <p className="text-sm font-mono">{installationId}</p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              You can now deploy Kubernetes applications with GitOps. The
-              platform will automatically create and manage repositories on your
-              behalf.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("linkedHelp")}</p>
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              To deploy Kubernetes applications, you need to install the CNP
-              GitHub App. This allows the platform to create and manage
-              repositories on your behalf.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("needApp")}</p>
             <Button onClick={handleLink} className="w-full" disabled={saving}>
               {saving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Linking...
+                  {t("linking")}
                 </>
               ) : (
                 <>
                   <GitBranch className="mr-2 h-4 w-4" />
-                  Link GitHub Account
+                  {t("linkButton")}
                 </>
               )}
             </Button>
             <p className="text-xs text-muted-foreground">
-              You&apos;ll be redirected to GitHub to authorize the CNP Portal
-              app.
+              {t("redirectNote")}
             </p>
 
             <div className="relative">
@@ -210,18 +193,17 @@ export function GitHubLinkButton() {
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="bg-background px-2 text-muted-foreground">
-                  Or
+                  {t("or")}
                 </span>
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="manual-installation-id" className="text-sm">
-                Already installed the app?
+                {t("alreadyInstalled")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                If the CNP GitHub App is already installed on your organization,
-                enter the Installation ID here.
+                {t("alreadyHelp")}
               </p>
               <div className="flex gap-2">
                 <Input
@@ -241,13 +223,11 @@ export function GitHubLinkButton() {
                   {saving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    "Save ID"
+                    t("saveId")
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                You can find your Installation ID in your GitHub App settings.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("idHelp")}</p>
             </div>
           </div>
         )}

@@ -1,7 +1,8 @@
 "use client";
 
 import type { FinopsCarbon } from "@/types";
-import { axisTickFormatter } from "./format";
+import { useLocale, useTranslations } from "next-intl";
+import { axisTickFormatter, intlLocale } from "./format";
 import {
   Bar,
   CartesianGrid,
@@ -16,8 +17,8 @@ import {
 export const CARBON_COLORS = { energy: "#3B82F6", intensity: "#10B981" };
 
 const SERIES = [
-  { name: "Énergie (kWh)", color: CARBON_COLORS.energy },
-  { name: "Intensité RTE (gCO₂e/kWh)", color: CARBON_COLORS.intensity },
+  { key: "energy", color: CARBON_COLORS.energy },
+  { key: "intensity", color: CARBON_COLORS.intensity },
 ] as const;
 
 function CarbonTooltip({
@@ -29,6 +30,8 @@ function CarbonTooltip({
   payload?: Array<{ name: string; value: number | null; color: string }>;
   label?: string;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
@@ -42,8 +45,8 @@ function CarbonTooltip({
           {p.name}
           <span className="ml-auto pl-4 tabular-nums">
             {p.value === null || p.value === undefined
-              ? "n.d."
-              : p.value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}
+              ? t("common.na")
+              : p.value.toLocaleString(locale, { maximumFractionDigits: 2 })}
           </span>
         </p>
       ))}
@@ -53,7 +56,13 @@ function CarbonTooltip({
 
 /** Énergie en barres (axe gauche), intensité du réseau en ligne (axe droit). */
 export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const energyMax = Math.max(0, ...data.map((d) => d.energy_kwh ?? 0));
+  const series = SERIES.map((s) => ({
+    ...s,
+    name: t(`carbon.series.${s.key}`),
+  }));
   return (
     <div className="space-y-3">
       <div className="h-72 w-full">
@@ -80,7 +89,7 @@ export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
               tickLine={false}
               axisLine={false}
               width={56}
-              tickFormatter={axisTickFormatter(energyMax)}
+              tickFormatter={axisTickFormatter(energyMax, "", locale)}
             />
             <YAxis
               yAxisId="intensity"
@@ -94,8 +103,8 @@ export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
             <Bar
               yAxisId="kwh"
               dataKey="energy_kwh"
-              name={SERIES[0].name}
-              fill={SERIES[0].color}
+              name={series[0].name}
+              fill={series[0].color}
               radius={[3, 3, 0, 0]}
               isAnimationActive
               animationDuration={300}
@@ -104,8 +113,8 @@ export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
               yAxisId="intensity"
               type="monotone"
               dataKey="g_per_kwh"
-              name={SERIES[1].name}
-              stroke={SERIES[1].color}
+              name={series[1].name}
+              stroke={series[1].color}
               strokeWidth={2}
               dot={false}
               connectNulls
@@ -116,8 +125,8 @@ export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
         </ResponsiveContainer>
       </div>
       <div className="flex flex-wrap justify-center gap-3">
-        {SERIES.map((s) => (
-          <span key={s.name} className="flex items-center gap-1.5 text-xs">
+        {series.map((s) => (
+          <span key={s.key} className="flex items-center gap-1.5 text-xs">
             <span
               className="h-2.5 w-2.5 rounded-sm"
               style={{ backgroundColor: s.color }}

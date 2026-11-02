@@ -17,6 +17,7 @@ import {
   type FinopsFileKind,
 } from "@/lib/api";
 import { useFinopsFinance, useFinopsMeta } from "@/lib/hooks";
+import { intlLocale } from "@/components/finops/format";
 import type { FinopsCostCenter } from "@/types";
 import {
   AlertCircle,
@@ -26,6 +27,7 @@ import {
   Lock,
   Save,
 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -36,8 +38,8 @@ function previousMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function errorText(err: unknown): string {
-  const raw = err instanceof Error ? err.message : "Erreur inconnue";
+function errorText(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : fallback;
   try {
     const detail = JSON.parse(raw)?.detail;
     if (typeof detail === "string") return detail;
@@ -48,6 +50,8 @@ function errorText(err: unknown): string {
 }
 
 export default function FinopsFinancePage() {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const role = useFinopsMeta()?.role;
   const { closes, centers, error, refresh } = useFinopsFinance();
   const [period, setPeriod] = useState(previousMonth);
@@ -60,13 +64,14 @@ export default function FinopsFinancePage() {
 
   const closedPeriods = new Set(closes.map((c) => c.billing_period));
   const alreadyClosed = closedPeriods.has(period);
+  const unknownError = t("common.unknownError");
 
   const run = async (key: string, action: () => Promise<void>) => {
     setBusy(key);
     try {
       await action();
     } catch (err) {
-      toast.error(errorText(err));
+      toast.error(errorText(err, unknownError));
     } finally {
       setBusy(null);
     }
@@ -86,12 +91,12 @@ export default function FinopsFinancePage() {
         await closeFinopsMonth(period, force);
       } catch (err) {
         if (!force && (err as { status?: number }).status === 409) {
-          setNeedsForce(errorText(err));
+          setNeedsForce(errorText(err, unknownError));
           return;
         }
         throw err;
       }
-      toast.success(`Mois ${period} clôturé.`);
+      toast.success(t("finance.closed", { period }));
       setConfirming(false);
       setNeedsForce(null);
       await refresh();
@@ -100,7 +105,7 @@ export default function FinopsFinancePage() {
   const saveCenters = () =>
     run("centers", async () => {
       await putFinopsCostCenters(draft);
-      toast.success("Centres de coûts enregistrés.");
+      toast.success(t("finance.centersSaved"));
       await refresh();
     });
 
@@ -117,7 +122,7 @@ export default function FinopsFinancePage() {
     return (
       <div className="flex items-center gap-2 rounded-lg border px-4 py-3 text-sm text-muted-foreground">
         <Lock className="h-4 w-4" />
-        Cet onglet est réservé à la finance et aux admins CNP.
+        {t("finance.accessDenied")}
       </div>
     );
   }
@@ -135,17 +140,16 @@ export default function FinopsFinancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Exports du mois</CardTitle>
+          <CardTitle>{t("finance.exportsTitle")}</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Électricité on-prem en TTC, factures cloud en HT: la colonne Base de
-            l&apos;export le précise.
+            {t("finance.exportsHint")}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <Input
               type="month"
-              aria-label="Mois"
+              aria-label={t("finance.month")}
               value={period}
               max={previousMonth()}
               onChange={(e) => {
@@ -160,21 +164,21 @@ export default function FinopsFinancePage() {
               disabled={!period || busy !== null}
               onClick={() => download("xlsx")}
             >
-              <Download className="h-4 w-4" /> Export XLSX
+              <Download className="h-4 w-4" /> {t("finance.exportXlsx")}
             </Button>
             <Button
               variant="outline"
               disabled={!period || busy !== null}
               onClick={() => download("parquet")}
             >
-              <Download className="h-4 w-4" /> Export Parquet
+              <Download className="h-4 w-4" /> {t("finance.exportParquet")}
             </Button>
             <Button
               variant="outline"
               disabled={!period || busy !== null}
               onClick={downloadCsv}
             >
-              <Download className="h-4 w-4" /> Export CSV
+              <Download className="h-4 w-4" /> {t("finance.exportCsv")}
             </Button>
           </div>
         </CardContent>
@@ -182,11 +186,13 @@ export default function FinopsFinancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Relevés par projet</CardTitle>
+          <CardTitle>{t("finance.statementsTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           {centers.length === 0 && (
-            <span className="text-sm text-muted-foreground">Aucun projet.</span>
+            <span className="text-sm text-muted-foreground">
+              {t("finance.statementsEmpty")}
+            </span>
           )}
           {centers.map((c) => (
             <Button
@@ -204,16 +210,17 @@ export default function FinopsFinancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Clôture de {period || "..."}</CardTitle>
+          <CardTitle>
+            {t("finance.closingTitle", { period: period || "..." })}
+          </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Un mois clôturé n&apos;est plus modifié: une révision tardive devient
-            une ligne d&apos;ajustement sur le premier mois ouvert.
+            {t("finance.closingHint")}
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
           {alreadyClosed ? (
             <p className="text-sm text-muted-foreground">
-              Ce mois est déjà clôturé.
+              {t("finance.alreadyClosed")}
             </p>
           ) : !confirming ? (
             <Button
@@ -221,17 +228,14 @@ export default function FinopsFinancePage() {
               disabled={!period || busy !== null}
               onClick={() => setConfirming(true)}
             >
-              <Lock className="h-4 w-4" /> Clôturer ce mois
+              <Lock className="h-4 w-4" /> {t("finance.closeMonth")}
             </Button>
           ) : (
             <div className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm">
-              <p>
-                Clôturer {period} ? Cette action ne peut pas être annulée depuis
-                le CMP.
-              </p>
+              <p>{t("finance.closeConfirm", { period })}</p>
               {needsForce && (
                 <p className="text-destructive">
-                  {needsForce} Vous pouvez forcer la clôture.
+                  {t("finance.forceHint", { error: needsForce })}
                 </p>
               )}
               <div className="flex gap-2">
@@ -240,7 +244,9 @@ export default function FinopsFinancePage() {
                   onClick={() => close(needsForce !== null)}
                 >
                   {busy === "close" && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {needsForce ? "Forcer la clôture" : "Confirmer la clôture"}
+                  {needsForce
+                    ? t("finance.forceClose")
+                    : t("finance.confirmClose")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -249,7 +255,7 @@ export default function FinopsFinancePage() {
                     setNeedsForce(null);
                   }}
                 >
-                  Annuler
+                  {t("finance.cancel")}
                 </Button>
               </div>
             </div>
@@ -257,10 +263,12 @@ export default function FinopsFinancePage() {
 
           <div>
             <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Mois clôturés
+              {t("finance.closedTitle")}
             </h3>
             {closes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucun pour l&apos;instant.</p>
+              <p className="text-sm text-muted-foreground">
+                {t("finance.closedNone")}
+              </p>
             ) : (
               <ul className="space-y-1 text-sm">
                 {closes.map((c) => (
@@ -268,9 +276,11 @@ export default function FinopsFinancePage() {
                     <span className="font-medium">{c.billing_period}</span>
                     <span className="text-muted-foreground">
                       {" "}
-                      par {c.closed_by}
+                      {t("finance.closedBy", { user: c.closed_by })}
                       {c.closed_at
-                        ? `, le ${new Date(c.closed_at).toLocaleDateString("fr-FR")}`
+                        ? t("finance.closedOn", {
+                            date: new Date(c.closed_at).toLocaleDateString(locale),
+                          })
                         : ""}
                     </span>
                   </li>
@@ -283,10 +293,9 @@ export default function FinopsFinancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Centres de coûts</CardTitle>
+          <CardTitle>{t("finance.costCentresTitle")}</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Un centre de coûts vide retire le rattachement. Repris dans l&apos;onglet
-            Projets de l&apos;export XLSX.
+            {t("finance.costCentresHint")}
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -294,9 +303,13 @@ export default function FinopsFinancePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Projet</th>
-                  <th className="px-3 py-2 font-medium">Centre de coûts</th>
-                  <th className="px-3 py-2 font-medium">Responsable budget</th>
+                  <th className="px-3 py-2 font-medium">{t("common.project")}</th>
+                  <th className="px-3 py-2 font-medium">
+                    {t("finance.colCostCentre")}
+                  </th>
+                  <th className="px-3 py-2 font-medium">
+                    {t("finance.colBudgetOwner")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -305,7 +318,9 @@ export default function FinopsFinancePage() {
                     <td className="px-3 py-2 font-medium">{r.project_name}</td>
                     <td className="px-3 py-2">
                       <Input
-                        aria-label={`Centre de coûts de ${r.project_name}`}
+                        aria-label={t("finance.costCentreLabel", {
+                          project: r.project_name,
+                        })}
                         value={r.cost_center ?? ""}
                         maxLength={64}
                         onChange={(e) =>
@@ -315,7 +330,9 @@ export default function FinopsFinancePage() {
                     </td>
                     <td className="px-3 py-2">
                       <Input
-                        aria-label={`Responsable budget de ${r.project_name}`}
+                        aria-label={t("finance.budgetOwnerLabel", {
+                          project: r.project_name,
+                        })}
                         value={r.budget_owner ?? ""}
                         onChange={(e) =>
                           edit(r.project_name, "budget_owner", e.target.value)
@@ -333,7 +350,7 @@ export default function FinopsFinancePage() {
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Enregistrer
+            {t("finance.save")}
           </Button>
         </CardContent>
       </Card>

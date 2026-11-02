@@ -12,39 +12,40 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const TABS = [
-  { href: "/finops", label: "Overview", icon: TrendingUp, exact: true },
-  {
-    href: "/finops/recommendations",
-    label: "Recommandations",
-    icon: Lightbulb,
-    exact: false,
-  },
-  { href: "/finops/savings", label: "Économies", icon: Leaf, exact: false },
-  { href: "/finops/greenops", label: "GreenOps", icon: Sprout, exact: false },
-  {
-    href: "/finops/budgets",
-    label: "Budgets & Alertes",
-    icon: Wallet,
-    exact: false,
-  },
-];
-
-const FINANCE_TAB = {
-  href: "/finops/finance",
-  label: "Finance",
-  icon: Landmark,
-  exact: false,
-};
+import { useTranslations } from "next-intl";
 
 export default function FinopsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const t = useTranslations("finops");
   const pathname = usePathname();
   const role = useFinopsMeta()?.role;
+
+  const TABS = [
+    { href: "/finops", label: t("layout.tabs.overview"), icon: TrendingUp, exact: true },
+    {
+      href: "/finops/recommendations",
+      label: t("layout.tabs.recommendations"),
+      icon: Lightbulb,
+      exact: false,
+    },
+    { href: "/finops/savings", label: t("layout.tabs.savings"), icon: Leaf, exact: false },
+    { href: "/finops/greenops", label: t("layout.tabs.greenops"), icon: Sprout, exact: false },
+    {
+      href: "/finops/budgets",
+      label: t("layout.tabs.budgets"),
+      icon: Wallet,
+      exact: false,
+    },
+  ];
+  const FINANCE_TAB = {
+    href: "/finops/finance",
+    label: t("layout.tabs.finance"),
+    icon: Landmark,
+    exact: false,
+  };
   const tabs =
     role === "admin" || role === "finance" ? [...TABS, FINANCE_TAB] : TABS;
 
@@ -55,7 +56,7 @@ export default function FinopsLayout({
           <div>
             <h1 className="text-lg font-semibold">FinOps</h1>
             <p className="text-xs text-muted-foreground">
-              Suivi, analyse et optimisation des coûts d&apos;infrastructure.
+              {t("layout.subtitle")}
             </p>
           </div>
         </div>

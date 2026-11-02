@@ -11,6 +11,7 @@ import {
     Server,
     XCircle,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const CLUSTER_BADGE = {
   up: { variant: "default", className: "" },
@@ -23,6 +24,7 @@ const CLUSTER_BADGE = {
 } as const;
 
 export function GlobalInfraHealth() {
+  const t = useTranslations("dashboard");
   const { health, loading, error } = useGlobalHealth(15000);
 
   if (loading) {
@@ -31,7 +33,7 @@ export function GlobalInfraHealth() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Server className="h-4 w-4" />
-            Infrastructure Health
+            {t("infra.title")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -51,7 +53,7 @@ export function GlobalInfraHealth() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-4 w-4" />
-            Infrastructure Health - Error
+            {t("infra.errorTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -68,7 +70,7 @@ export function GlobalInfraHealth() {
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Server className="h-4 w-4" />
-          Infrastructure Health
+          {t("infra.title")}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -77,12 +79,12 @@ export function GlobalInfraHealth() {
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Server className="h-4 w-4 text-muted-foreground" />
-              OpenStack Hypervisors
+              {t("infra.hypervisors")}
             </div>
             <div className="space-y-1.5">
               {health.openstack_hypervisors.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No hypervisors found
+                  {t("infra.noHypervisors")}
                 </p>
               ) : (
                 health.openstack_hypervisors.map((hv) => (
@@ -108,7 +110,7 @@ export function GlobalInfraHealth() {
                         variant={hv.state === "up" ? "default" : "destructive"}
                         className="text-[10px] h-4 px-1.5"
                       >
-                        {hv.state}
+                        {t(`states.${hv.state}`)}
                       </Badge>
                     </div>
                   </div>
@@ -134,7 +136,7 @@ export function GlobalInfraHealth() {
                     variant={CLUSTER_BADGE[c.state].variant}
                     className={`text-[10px] h-4 px-1.5 ${CLUSTER_BADGE[c.state].className}`}
                   >
-                    {c.state}
+                    {t(`states.${c.state}`)}
                   </Badge>
                 </div>
               </div>
