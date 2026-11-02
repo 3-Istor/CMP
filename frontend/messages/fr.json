@@ -2624,5 +2624,50 @@
       "more": "Et {count} autres différences",
       "confirm": "Promouvoir"
     }
+  },
+  "scorecard": {
+    "title": "Score",
+    "badgeLabel": "Score {grade}, {score} sur {max}",
+    "sortBy": "Trier par :",
+    "sortName": "Nom",
+    "sortScore": "Score",
+    "criteria": {
+      "security": "Sécurité",
+      "cost": "Coût",
+      "reliability": "Fiabilité",
+      "documentation": "Documentation",
+      "owner": "Responsable"
+    },
+    "reasons": {
+      "source_unavailable": "Ces données sont indisponibles pour le moment.",
+      "no_scan": "Aucun scan de sécurité n'a encore tourné.",
+      "critical_findings": "Des failles critiques sont ouvertes.",
+      "high_findings": "Des failles élevées sont ouvertes.",
+      "no_budget": "Le projet n'a pas de budget.",
+      "over_budget_pace": "Les dépenses dépassent le rythme du budget du mois.",
+      "open_recommendations": "Des recommandations de coût sont ouvertes.",
+      "asleep": "L'application est endormie.",
+      "degraded": "L'application est dégradée.",
+      "down": "L'application est à l'arrêt.",
+      "unknown": "L'état de l'application est inconnu.",
+      "not_connected": "Le cluster n'est pas connecté.",
+      "restarts": "Plus de 5 redémarrages en 15 minutes.",
+      "no_readme": "Pas de README.md à la racine du dépôt.",
+      "readme_short": "Le README fait 20 lignes ou moins.",
+      "project_owner": "Seul le responsable du projet est connu, l'application n'a pas de responsable propre.",
+      "no_owner": "Aucun responsable trouvé."
+    },
+    "actions": {
+      "run_scan": "Lancer un scan",
+      "fix_critical": "Corriger les failles critiques",
+      "fix_high": "Corriger les failles élevées",
+      "set_budget": "Définir un budget",
+      "reduce_cost": "Voir les coûts de l'application",
+      "apply_recommendations": "Examiner les recommandations",
+      "fix_health": "Consulter les logs",
+      "fix_restarts": "Consulter les logs",
+      "add_readme": "Ajouter un README",
+      "expand_readme": "Étoffer le README"
+    }
   }
 }

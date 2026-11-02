@@ -9,6 +9,7 @@ import {
   NotAllowed,
   useProjectContext,
 } from "@/components/projects/ProjectContext";
+import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
 import { badgeVariant, StateLabel } from "@/components/projects/DeploymentHealth";
@@ -33,6 +34,7 @@ import {
   wakeDeployment,
 } from "@/lib/api";
 import { useAppHealth } from "@/lib/hooks";
+import { hasScorecard, useScorecards } from "@/lib/scorecard";
 import { intlLocale } from "@/components/finops/format";
 import { cn, appUrlOf } from "@/lib/utils";
 import type { ProjectLink } from "@/types";
@@ -128,6 +130,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     loading: healthLoading,
   } = useAppHealth(healthReady ? appId : null, 15_000);
   const gone = current.status === "deleted";
+  const scoreCard = useScorecards(
+    [current.id],
+    canViewLogs && hasScorecard(current),
+  )[current.id];
   const powerReadable =
     canOperate &&
     isKubernetes &&
@@ -291,6 +297,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-2xl font-bold">{current.name}</h1>
+                <ScoreBadge card={scoreCard} />
                 <FavoriteToggle kind="app" id={current.id} />
                 {healthReady && (
                   <HealthPill

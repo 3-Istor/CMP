@@ -169,6 +169,21 @@ export interface SecurityData {
   } | null;
 }
 
+export interface ScorecardCriterion {
+  key: "security" | "cost" | "reliability" | "documentation" | "owner";
+  points: number;
+  max: number;
+  reasons: string[];
+  actions: string[];
+}
+
+export interface Scorecard {
+  score: number;
+  max: number;
+  grade: "A" | "B" | "C" | "D" | "E";
+  criteria: ScorecardCriterion[];
+}
+
 export interface SecretPresence {
   expected: { name: string; set: boolean }[];
   extra: string[];

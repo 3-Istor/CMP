@@ -2624,5 +2624,50 @@
       "more": "And {count} more differences",
       "confirm": "Promote"
     }
+  },
+  "scorecard": {
+    "title": "Score",
+    "badgeLabel": "Score {grade}, {score} out of {max}",
+    "sortBy": "Sort by:",
+    "sortName": "Name",
+    "sortScore": "Score",
+    "criteria": {
+      "security": "Security",
+      "cost": "Cost",
+      "reliability": "Reliability",
+      "documentation": "Documentation",
+      "owner": "Owner"
+    },
+    "reasons": {
+      "source_unavailable": "This data is unavailable right now.",
+      "no_scan": "No security scan has run yet.",
+      "critical_findings": "Open critical findings.",
+      "high_findings": "Open high findings.",
+      "no_budget": "The project has no budget.",
+      "over_budget_pace": "Spending is above the budget pace of the month.",
+      "open_recommendations": "Open cost recommendations.",
+      "asleep": "The app is asleep.",
+      "degraded": "The app is degraded.",
+      "down": "The app is down.",
+      "unknown": "The app state is unknown.",
+      "not_connected": "The cluster is not connected.",
+      "restarts": "More than 5 restarts in 15 minutes.",
+      "no_readme": "No README.md at the repository root.",
+      "readme_short": "The README has 20 lines or fewer.",
+      "project_owner": "Only the project owner is known, the app has no owner of its own.",
+      "no_owner": "No owner found."
+    },
+    "actions": {
+      "run_scan": "Run a scan",
+      "fix_critical": "Fix critical findings",
+      "fix_high": "Fix high findings",
+      "set_budget": "Set a budget",
+      "reduce_cost": "See the app costs",
+      "apply_recommendations": "Review recommendations",
+      "fix_health": "Check the logs",
+      "fix_restarts": "Check the logs",
+      "add_readme": "Add a README",
+      "expand_readme": "Expand the README"
+    }
   }
 }
