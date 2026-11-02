@@ -1,0 +1,13 @@
+[
+  {
+    "id": "grafana-dashboard",
+    "label_key": "links.grafana",
+    "url": "https://grafana.example.invalid/d/demo",
+    "external": true,
+    "group": "view",
+    "min_role": "member",
+    "requires": null,
+    "component": null,
+    "app": null
+  }
+]
