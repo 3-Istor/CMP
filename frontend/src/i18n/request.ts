@@ -32,12 +32,13 @@ async function profileLocale(): Promise<Locale | null> {
   }
 }
 
+// The switcher writes the cookie and the profile together, so the profile is only read on a device without the cookie.
 async function resolveLocale(): Promise<Locale> {
-  const fromProfile = await profileLocale();
-  if (fromProfile) return fromProfile;
-
   const fromCookie = (await cookies()).get(LOCALE_COOKIE)?.value;
   if (isLocale(fromCookie)) return fromCookie;
+
+  const fromProfile = await profileLocale();
+  if (fromProfile) return fromProfile;
 
   const fromHeader = localeFromAcceptLanguage(
     (await headers()).get("accept-language"),
