@@ -3,6 +3,7 @@
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { AppCard } from "@/components/projects/AppCard";
+import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
@@ -339,6 +340,8 @@ export default function ProjectPage() {
               ))}
             </div>
           )}
+
+          <GettingStarted />
         </div>
       </main>
 

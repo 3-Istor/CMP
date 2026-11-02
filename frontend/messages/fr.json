@@ -2528,5 +2528,25 @@
     "remove": "Retirer des favoris",
     "limitReached": "Vous pouvez avoir au maximum {max} projets favoris et {max} apps favorites.",
     "saveFailed": "Impossible d’enregistrer vos favoris."
+  },
+  "gettingStarted": {
+    "title": "Pour démarrer",
+    "description": "Quelques étapes pour mettre ce projet en service.",
+    "progress": "{done} sur {total}",
+    "dismiss": "Masquer cette carte",
+    "unknown": "Statut indisponible",
+    "state": {
+      "done": "Fait",
+      "pending": "À faire",
+      "unknown": "Statut indisponible",
+      "loading": "Vérification en cours"
+    },
+    "steps": {
+      "repo": "Relier un dépôt GitHub",
+      "deployed": "Déployer une première application",
+      "release": "Publier une première version",
+      "member": "Ajouter un membre au projet",
+      "budget": "Définir un budget FinOps"
+    }
   }
 }
