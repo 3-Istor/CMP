@@ -79,7 +79,7 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
 
       // The backend replays the whole log file from the start on every
       // connection. Track the line index within THIS connection so identical
-      // re-sent lines never change state — only genuinely new (or changed)
+      // re-sent lines never change state, only genuinely new (or changed)
       // lines update the view, avoiding pointless re-renders and scroll jumps.
       let lineIndex = 0;
       const onLine = (data: string) => {
@@ -87,7 +87,7 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
         const idx = lineIndex++;
         setLogs((prev) => {
           if (idx < prev.length) {
-            // Already displayed — keep the same array reference if unchanged
+            // Already displayed, keep the same array reference if unchanged
             if (prev[idx] === data) return prev;
             const next = prev.slice();
             next[idx] = data;
@@ -276,13 +276,13 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
               {filteredLogs.map((line, idx) => {
                 // Highlight different levels of logs
                 let textColor = "text-slate-300";
-                if (line.includes("[ERROR]") || line.includes("❌") || line.includes("failed")) {
+                if (line.includes("[ERROR]") || line.includes("failed")) {
                   textColor = "text-rose-400 font-semibold";
-                } else if (line.includes("[WARNING]") || line.includes("⚠️")) {
+                } else if (line.includes("[WARNING]")) {
                   textColor = "text-amber-400";
                 } else if (line.includes("---") || line.startsWith("---")) {
                   textColor = "text-emerald-400/80 font-medium";
-                } else if (line.includes("✅") || line.includes("completed successfully")) {
+                } else if (line.includes("completed successfully")) {
                   textColor = "text-emerald-400 font-semibold";
                 } else if (line.startsWith("Running:") || line.includes("[TF]")) {
                   textColor = "text-slate-400";

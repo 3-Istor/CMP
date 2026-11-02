@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
 import { isProjectInFlight } from "@/types";
-import { FolderPlus } from "lucide-react";
+import { FolderOpen, FolderPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -91,7 +91,7 @@ export default function Home() {
             </div>
           ) : projects.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-muted-foreground">
-              <span className="text-4xl mb-3">🗂️</span>
+              <FolderOpen className="h-9 w-9 mb-3 text-muted-foreground" />
               <p className="font-medium">No projects yet</p>
               <p className="text-sm mt-1">
                 Create your first project to start deploying applications,

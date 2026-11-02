@@ -54,6 +54,9 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
+      - name: Check typography
+        run: bash scripts/check-typography.sh
+
       - name: Run linting
         working-directory: ./frontend
         run: npm run lint

@@ -23,7 +23,7 @@ import {
 import { useAppHealth, useDeploymentPolling } from "@/lib/hooks";
 import { appUrlOf } from "@/lib/utils";
 import type { Deployment } from "@/types";
-import { Activity, ExternalLink, FileCode, Globe, Shield } from "lucide-react";
+import { Activity, AlertTriangle, ExternalLink, FileCode, Globe, Shield } from "lucide-react";
 import { useState } from "react";
 
 const ACTIVE_STATUSES = new Set([
@@ -333,7 +333,12 @@ export function DeploymentCard({
             <DialogTitle>
               {confirmStep === 1
                 ? "Delete deployment?"
-                : "⚠️ Are you absolutely sure?"}
+                : (
+                  <span className="inline-flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    Are you absolutely sure?
+                  </span>
+                )}
             </DialogTitle>
             <DialogDescription>
               {confirmStep === 1

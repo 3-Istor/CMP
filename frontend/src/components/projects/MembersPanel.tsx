@@ -160,7 +160,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* ── Add Member — admins only ── */}
+      {/* Add Member, admins only */}
       {!canManage ? (
         <p className="text-xs text-muted-foreground">
           Only project admins can add or remove members.
@@ -173,7 +173,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
           <span className="font-mono">
             project-{projectName}-{GROUP_SUFFIX[role]}
           </span>
-          {role === "guest" && " — read-only access to projects and apps"}
+          {role === "guest" && ": read-only access to projects and apps"}
         </p>
 
         {!guestsSupported && (

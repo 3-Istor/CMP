@@ -264,7 +264,7 @@ export default function AppControlCenterPage() {
     }, [fetchDeployment]);
 
     // The deployment row is kept (status=deleted), not removed, once
-    // teardown finishes — polling correctly stops, but nothing else takes the
+    // teardown finishes, polling correctly stops, but nothing else takes the
     // user off a page for an app that no longer exists. Bounce back to the
     // project after a beat. Watches `current`: after a delete started here,
     // the final "deleted" status only arrives through polling.
@@ -294,9 +294,9 @@ export default function AppControlCenterPage() {
             await deleteDeployment(appId);
             toast.success(`Deletion of "${current.name}" started`);
             setDeleteOpen(false);
-            // Update local state to reflect deleting status — no page reload
+            // Update local state to reflect deleting status, no page reload
             setDeployment((prev) =>
-                prev ? { ...prev, status: "deleting", step_message: "🗑️ Destroying resources…" } : prev,
+                prev ? { ...prev, status: "deleting", step_message: "Destroying resources…" } : prev,
             );
         } catch (err) {
             toast.error(`Delete failed: ${err}`);
@@ -497,7 +497,7 @@ export default function AppControlCenterPage() {
                     )}
                 </TabsList>
 
-                {/* Quick links — ArgoCD, Vault and the live app follow the
+                {/* Quick links, ArgoCD, Vault and the live app follow the
                     config/secrets permissions; the repo link is for everyone. */}
                 {(() => {
                     const linkClass = buttonVariants({ variant: "outline", size: "sm" });
@@ -510,8 +510,8 @@ export default function AppControlCenterPage() {
                     const links = [
                         isKubernetes && canViewLogs && appUrl && { href: appUrl, icon: Globe, label: "Open Application" },
                         current.github_repo_url && { href: current.github_repo_url, icon: Github, label: "GitHub Repository" },
-                        showK8sLinks && hasBackend && { href: `${base}-backend?resource=`, icon: FileCode, label: "ArgoCD — Backend" },
-                        showK8sLinks && hasFrontend && { href: `${base}-frontend?resource=`, icon: FileCode, label: "ArgoCD — Frontend" },
+                        showK8sLinks && hasBackend && { href: `${base}-backend?resource=`, icon: FileCode, label: "ArgoCD · Backend" },
+                        showK8sLinks && hasFrontend && { href: `${base}-frontend?resource=`, icon: FileCode, label: "ArgoCD · Frontend" },
                         // Vault is admin-only: only admins hold the project's
                         // Vault policy, so for anyone else this link is a 403.
                         showK8sLinks && can("app.viewSecretsLink") && {
@@ -544,7 +544,7 @@ export default function AppControlCenterPage() {
                 })()}
 
                 <TabsContent value="app" className="mt-6 space-y-6">
-                    {/* Deployment progress — collapsed by default once running */}
+                    {/* Deployment progress, collapsed by default once running */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between">
                             <CardTitle className="text-base">Deployment Status</CardTitle>
@@ -569,7 +569,7 @@ export default function AppControlCenterPage() {
                         )}
                     </Card>
 
-                    {/* Live deployment log streaming — members and up.
+                    {/* Live deployment log streaming, members and up.
                         A guest sees the status badge and the stepper, not
                         the build output. */}
                     {canViewLogs && (
@@ -627,7 +627,7 @@ export default function AppControlCenterPage() {
                     )}
                 </TabsContent>
 
-                {/* Day-2 config — members see the values read-only, admins
+                {/* Day-2 config, members see the values read-only, admins
                     can change them, guests get no tab at all. */}
                 {isKubernetes && canViewConfig && (
                     <TabsContent value="config" className="mt-6">

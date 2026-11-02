@@ -51,6 +51,7 @@ import {
   LayoutGrid,
   Loader2,
   Plus,
+  Rocket,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -76,7 +77,7 @@ export default function ProjectPage() {
 
   // If this project is already being torn down (e.g. reached via a stale
   // tab or the back button after a delete elsewhere), don't render the
-  // normal admin UI — the Keycloak groups backing project access can
+  // normal admin UI, the Keycloak groups backing project access can
   // disappear mid-render.
   const { projects } = useProjects();
   const isBeingDeleted = projects.some(
@@ -193,7 +194,7 @@ export default function ProjectPage() {
       await createDeployment({
         name,
         template_id: selectedTemplate.id,
-        // 🔑 CRITICAL: Set project_id at top level for database storage
+        // CRITICAL: Set project_id at top level for database storage
         project_id: projectName,
         // Inject project context AND GitHub installation ID
         app_config: {
@@ -364,7 +365,7 @@ export default function ProjectPage() {
               <ExternalLink className="ml-auto h-3 w-3" />
             </a>
 
-            {/* Vault — admin only: a deep link that 403s inside Vault is
+            {/* Vault, admin only: a deep link that 403s inside Vault is
                 worse than no link at all. */}
             {can("app.viewSecretsLink") && (
               <a
@@ -391,7 +392,7 @@ export default function ProjectPage() {
               <ExternalLink className="ml-auto h-3 w-3" />
             </a>
 
-            {/* Grafana — opens on the project's own org */}
+            {/* Grafana, opens on the project's own org */}
             {grafanaUrl && (
               <a
                 href={grafanaUrl}
@@ -415,7 +416,7 @@ export default function ProjectPage() {
               <LayoutGrid className="h-4 w-4" />
               Applications
             </TabsTrigger>
-            {/* Guests don't get the roster — who else works here is not
+            {/* Guests don't get the roster, who else works here is not
                 theirs to see, and the API would 403 the fetch anyway. */}
             {canViewMembers && (
               <TabsTrigger value="members" className="gap-2">
@@ -571,7 +572,7 @@ export default function ProjectPage() {
               </div>
             ) : apps.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-muted-foreground">
-                <span className="text-4xl mb-3">🚀</span>
+                <Rocket className="h-9 w-9 mb-3 text-muted-foreground" />
                 <p className="font-medium">No applications yet</p>
                 <p className="text-sm mt-1">
                   {canDeploy

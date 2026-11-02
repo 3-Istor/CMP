@@ -28,7 +28,7 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // The public landing page is for visitors who aren't signed in yet — send
+  // The public landing page is for visitors who aren't signed in yet, send
   // authenticated users straight to the app instead.
   if (isWelcomePage) {
     if (isLoggedIn) {

@@ -120,7 +120,7 @@ def setup_logging():
 
     # Log startup message
     root_logger.info("=" * 80)
-    root_logger.info("🚀 Starting Cloud Management Platform (CMP)")
+    root_logger.info("Starting Cloud Management Platform (CMP)")
     root_logger.info("=" * 80)
     root_logger.info(f"Logs directory: {logs_dir.absolute()}")
     root_logger.info(f"Application log: {logs_dir / 'app.log'}")
@@ -195,7 +195,7 @@ def custom_openapi():
                 ]
 
     app.openapi_schema = openapi_schema
-    logger.info("✅ Custom OpenAPI schema with Keycloak OAuth2 configured")
+    logger.info("Custom OpenAPI schema with Keycloak OAuth2 configured")
     return app.openapi_schema
 
 
@@ -265,7 +265,7 @@ async def lifespan(app: FastAPI):
     # /.well-known metadata.
     app.mount("/", mcp_server.mcp.streamable_http_app())
 
-    logger.info("✅ Application startup complete")
+    logger.info("Application startup complete")
 
     async with mcp_server.mcp.session_manager.run():
         yield
@@ -304,7 +304,7 @@ async def lifespan(app: FastAPI):
     await close_http_client()
     logger.info("Grafana HTTP client closed")
 
-    logger.info("✅ Application shutdown complete")
+    logger.info("Application shutdown complete")
 
 
 app = FastAPI(

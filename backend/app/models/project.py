@@ -34,7 +34,7 @@ class Project(Base):
     """
     A project, and where it runs.
 
-    The owner is a single immutable user — the person who created the project —
+    The owner is a single immutable user, the person who created the project,
     who can never be removed from the project, on top of always being a project
     admin. The rest of the project RBAC lives in Keycloak groups
     (``project-<name>-admins`` / ``-members`` / ``-guests``).
@@ -42,7 +42,7 @@ class Project(Base):
     ``target_cloud`` is a *mirror*: the source of truth for placement is the
     project's record in ``cnp-projects/registry/projects/<name>.yaml`` (D-01).
     This column exists so the portal can list and render projects without
-    reading Git on every request. On divergence, the Git record wins — the
+    reading Git on every request. On divergence, the Git record wins, the
     reconciler in WS-9 checks both directions.
 
     ``target_cloud`` is immutable after creation in v1. Changing it does not

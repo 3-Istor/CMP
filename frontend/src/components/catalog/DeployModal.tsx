@@ -27,7 +27,7 @@ function validateAppName(name: string): string | null {
   if (!name) return null; // empty handled by the required/disabled state
   if (name.length > 45) return "Name must be 45 characters or less.";
   if (!/^[a-zA-Z0-9_-]+$/.test(name))
-    return "Only letters, numbers, underscores (_) and hyphens (-) are allowed — no spaces or other characters.";
+    return "Only letters, numbers, underscores (_) and hyphens (-) are allowed, no spaces or other characters.";
   return null;
 }
 

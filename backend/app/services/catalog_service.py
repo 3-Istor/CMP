@@ -44,7 +44,7 @@ def get_all_templates() -> list[CatalogTemplate]:
                 id=manifest.get("id"),
                 name=manifest.get("name"),
                 description=manifest.get("description"),
-                icon=manifest.get("icon", "📦"),
+                icon=manifest.get("icon", ""),
                 category=manifest.get("category", "Other"),
                 fields=fields,
                 image_path=image_path,

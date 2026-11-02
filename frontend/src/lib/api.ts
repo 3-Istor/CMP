@@ -24,7 +24,7 @@ const BASE = getApiUrl();
  * A non-2xx response from the backend.
  *
  * Extends Error, so existing `err instanceof Error` / `err.message` handling
- * keeps working — but carries the status, so callers can tell a 403 (role
+ * keeps working, but carries the status, so callers can tell a 403 (role
  * changed under them) from a 409 (the project's guests group does not exist
  * yet) without matching on the message text.
  */
@@ -70,7 +70,7 @@ export async function getAccessToken(): Promise<string | null> {
     return _tokenCache.token;
   }
   // De-duplicate the session fetch: on first paint many hooks call this at
-  // once — collapse them into a single getSession() round-trip.
+  // once, collapse them into a single getSession() round-trip.
   if (_tokenInflight) return _tokenInflight;
 
   _tokenInflight = (async () => {
@@ -123,7 +123,7 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   // 204 No Content (e.g. DELETE endpoints) and empty bodies have no JSON to
-  // parse — return undefined instead of throwing on res.json().
+  // parse, return undefined instead of throwing on res.json().
   if (res.status === 204) {
     return undefined as T;
   }
@@ -146,7 +146,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   const promise = doRequest<T>(path, options);
   _inflight.set(path, promise);
-  // Clean up on settle. Use then(handler, handler) — NOT .finally() — so this
+  // Clean up on settle. Use then(handler, handler), NOT .finally(), so this
   // bookkeeping branch handles rejection itself instead of leaving a floating
   // rejected promise (which surfaces as an unhandledRejection). The original
   // `promise` is returned to the caller, which handles its own errors.

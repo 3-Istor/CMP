@@ -2,7 +2,7 @@
  * What each project role is allowed to do.
  *
  * One table, so the answer is the same on every screen. Import `can` rather
- * than comparing roles inline — a scattered `role === "admin"` is how the
+ * than comparing roles inline, a scattered `role === "admin"` is how the
  * Members tab and the app page end up disagreeing.
  *
  * Mirrors `backend/app/core/roles.py` and the endpoint matrix in
@@ -70,7 +70,7 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
 /**
  * Return true if *role* holds *capability*.
  *
- * A null or undefined role — not loaded yet, or no access to this project —
+ * A null or undefined role, not loaded yet, or no access to this project,
  * holds nothing. Callers should render controls as absent while the role is
  * still loading rather than assume the permissive case.
  */
@@ -101,7 +101,7 @@ export const ROLE_BLURB: Record<ProjectRole, string> = {
 /**
  * The Keycloak group backing each role, shown on the project card footer.
  *
- * `owner` has no group — it is the `projects.owner_username` column — so it
+ * `owner` has no group, it is the `projects.owner_username` column, so it
  * reads as the admins group, which the owner always effectively holds.
  */
 export const GROUP_SUFFIX: Record<ProjectRole, string> = {

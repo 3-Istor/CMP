@@ -67,7 +67,7 @@ export function NetworkPanel({ project }: { project: string }) {
                     <td className="px-3 py-1.5">{f.source}</td>
                     <td className="px-3 py-1.5">{f.destination}</td>
                     <td className="px-3 py-1.5">
-                      {f.port ?? "—"} {f.protocol}
+                      {f.port ?? "n/d"} {f.protocol}
                     </td>
                     <td className="px-3 py-1.5">
                       {f.direction === "ingress" ? "entrant" : "sortant"}
