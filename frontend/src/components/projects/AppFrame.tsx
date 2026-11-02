@@ -9,6 +9,7 @@ import {
 } from "@/components/projects/ProjectContext";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
+import { badgeVariant, StateLabel } from "@/components/projects/DeploymentHealth";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -29,28 +30,28 @@ import {
   sleepDeployment,
   wakeDeployment,
 } from "@/lib/api";
+import { useAppHealth } from "@/lib/hooks";
 import { cn, appUrlOf } from "@/lib/utils";
-import type { Deployment, ProjectLink } from "@/types";
+import type { ProjectLink } from "@/types";
 import {
   BellRing,
-  CheckCircle2,
   ExternalLink,
   FileCode,
   Globe,
   History,
   Layers,
-  Loader2,
   MoreHorizontal,
   Moon,
+  PackageCheck,
   RefreshCw,
   Rocket,
+  ScrollText,
   RotateCw,
   Settings,
   Shield,
   Sun,
   Trash2,
   Wallet,
-  XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -59,33 +60,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-const STATUS_VARIANT: Record<
-  Deployment["status"],
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  running: "default",
-  degraded: "secondary",
-  pending: "outline",
-  initializing: "outline",
-  planning: "outline",
-  deploying: "outline",
-  failed: "destructive",
-  deleting: "secondary",
-  deleted: "secondary",
-};
-
-const STATUS_COLOR: Record<Deployment["status"], string> = {
-  running: "bg-green-500",
-  degraded: "bg-orange-500",
-  failed: "bg-red-500",
-  pending: "bg-amber-400",
-  initializing: "bg-amber-400",
-  planning: "bg-amber-400",
-  deploying: "bg-amber-400",
-  deleting: "bg-amber-400",
-  deleted: "bg-muted-foreground",
-};
-
 const IN_PROGRESS_STATUSES = [
   "pending",
   "initializing",
@@ -93,16 +67,6 @@ const IN_PROGRESS_STATUSES = [
   "deploying",
   "deleting",
 ];
-
-function StatusDot({ status }: { status: Deployment["status"] }) {
-  if (status === "running")
-    return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-  if (status === "failed")
-    return <XCircle className="h-5 w-5 text-destructive" />;
-  if (IN_PROGRESS_STATUSES.includes(status))
-    return <Loader2 className="h-5 w-5 animate-spin text-primary" />;
-  return null;
-}
 
 interface TabEntry {
   key: string;
@@ -137,6 +101,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const isRunning = current.status === "running";
   const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
 
+  const tf = useTranslations("appPage");
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const linksReady = isKubernetes && canViewLogs;
   useEffect(() => {
@@ -147,6 +112,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [appId, linksReady, current.github_repo_url]);
 
   const inProgress = IN_PROGRESS_STATUSES.includes(current.status);
+  const healthReady = isKubernetes && canViewLogs && !inProgress;
+  const {
+    health,
+    loading: healthLoading,
+  } = useAppHealth(healthReady ? appId : null, 15_000);
   const gone = current.status === "deleted";
   const powerReadable =
     canOperate &&
@@ -225,6 +195,18 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const tabs: TabEntry[] = [
     { key: "app", segment: "", icon: FileCode, visible: true },
     {
+      key: "logs",
+      segment: "logs",
+      icon: ScrollText,
+      visible: isKubernetes && canViewLogs,
+    },
+    {
+      key: "deployments",
+      segment: "deployments",
+      icon: PackageCheck,
+      visible: canViewLogs,
+    },
+    {
       key: "release",
       segment: "release",
       icon: Rocket,
@@ -237,12 +219,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       visible: isKubernetes && canViewRelease,
     },
     {
-      key: "security",
-      segment: "security",
-      icon: Shield,
-      visible: isKubernetes && canViewObservability,
-    },
-    {
       key: "config",
       segment: "config",
       icon: Settings,
@@ -253,6 +229,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       segment: "costs",
       icon: Wallet,
       visible: canViewFinops,
+    },
+    {
+      key: "security",
+      segment: "security",
+      icon: Shield,
+      visible: isKubernetes && canViewObservability,
     },
     {
       key: "activity",
@@ -295,23 +277,25 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             )}
             <div>
               <div className="flex items-center gap-2.5">
-                <span
-                  title={current.status}
-                  className={`h-4 w-4 rounded-full shrink-0 ${STATUS_COLOR[current.status]} ${IN_PROGRESS_STATUSES.includes(current.status) ? "animate-pulse" : ""}`}
-                />
-                <span className="text-sm font-semibold capitalize text-muted-foreground">
-                  {current.status}
-                </span>
                 <h1 className="text-2xl font-bold">{current.name}</h1>
-                <StatusDot status={current.status} />
+                {healthReady && (
+                  <HealthPill
+                    loading={healthLoading}
+                    status={health?.status ?? null}
+                  />
+                )}
+                {(inProgress || current.status === "failed") && (
+                  <span
+                    className={cn(
+                      "text-xs text-muted-foreground",
+                      current.status === "failed" && "text-destructive",
+                    )}
+                  >
+                    {tf(`deploymentStatus.${current.status}`)}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge
-                  variant={STATUS_VARIANT[current.status]}
-                  className="capitalize"
-                >
-                  {current.status}
-                </Badge>
                 {current.created_via && (
                   <Badge
                     variant="outline"
@@ -525,6 +509,22 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         onConfirm={handleDelete}
       />
     </div>
+  );
+}
+
+function HealthPill({
+  loading,
+  status,
+}: {
+  loading: boolean;
+  status: string | null;
+}) {
+  if (loading) return <Skeleton className="h-6 w-20 rounded-full" />;
+  const state = status ?? "unknown";
+  return (
+    <Badge variant={badgeVariant(state)} className="gap-1" role="status">
+      <StateLabel state={state} />
+    </Badge>
   );
 }
 

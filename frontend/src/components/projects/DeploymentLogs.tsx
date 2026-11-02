@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAccessToken, getApiUrl } from "@/lib/api";
@@ -22,6 +23,7 @@ interface DeploymentLogsProps {
 }
 
 export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLogsProps) {
+  const t = useTranslations("appPage.console");
   const [logs, setLogs] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -179,7 +181,7 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
 
   // Clear log screen locally
   const clearLogs = () => {
-    setLogs(["--- Screen cleared ---"]);
+    setLogs([t("cleared")]);
   };
 
   // Filter logs based on search query
@@ -188,15 +190,15 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
   );
 
   return (
-    <Card className={`border-slate-800 bg-slate-950 text-slate-100 shadow-2xl transition-all duration-300 ${
+    <Card className={`transition-all duration-300 ${
       isMaximized ? "fixed inset-4 z-50 flex flex-col h-[calc(100vh-2rem)]" : ""
     }`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 border-b border-slate-800/60 bg-slate-900/40">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-200">
-          <Terminal className="h-4 w-4 text-emerald-500 animate-pulse" />
-          Deployment Console Logs
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 border-b">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+          <Terminal className="h-4 w-4 text-green-600 dark:text-green-400" />
+          {t("title")}
           {isConnected ? (
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="flex h-2 w-2 rounded-full bg-green-600" />
           ) : (
             <span className="flex h-2 w-2 rounded-full bg-amber-500" />
           )}
@@ -207,8 +209,9 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
             size="icon"
             onClick={downloadLogs}
             disabled={logs.length === 0}
-            className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-            title="Download Logs"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+            title={t("download")}
+            aria-label={t("download")}
           >
             <Download className="h-4 w-4" />
           </Button>
@@ -216,8 +219,9 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
             variant="ghost"
             size="icon"
             onClick={clearLogs}
-            className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-            title="Clear Console"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+            title={t("clear")}
+            aria-label={t("clear")}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -225,8 +229,9 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
             variant="ghost"
             size="icon"
             onClick={() => setIsMaximized(!isMaximized)}
-            className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-            title={isMaximized ? "Minimize" : "Maximize"}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+            title={isMaximized ? t("minimize") : t("maximize")}
+            aria-label={isMaximized ? t("minimize") : t("maximize")}
           >
             {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
@@ -235,7 +240,9 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
               variant="ghost"
               size="icon"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              aria-expanded={isExpanded}
+              aria-label={isExpanded ? t("collapse") : t("expand")}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
             >
               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
@@ -246,20 +253,21 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
       {isExpanded && (
         <div className="flex flex-col flex-1 min-h-0">
           {/* Search bar */}
-          <div className="flex items-center gap-2 p-2 border-b border-slate-900 bg-slate-900/20">
+          <div className="flex items-center gap-2 p-2 border-b">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Filter logs..."
+                placeholder={t("filter")}
+                aria-label={t("filter")}
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                className="pl-8 h-8 text-xs bg-slate-900/60 border-slate-800 text-slate-300 placeholder:text-slate-600 focus-visible:ring-emerald-500/50"
+                className="pl-8 h-8 text-xs "
               />
             </div>
             {filter && (
-              <span className="text-[10px] text-slate-500 mr-2">
-                Found {filteredLogs.length} matches
+              <span className="text-[10px] text-muted-foreground mr-2">
+                {t("matches", { count: filteredLogs.length })}
               </span>
             )}
           </div>
@@ -268,24 +276,24 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
           <CardContent 
             ref={containerRef}
             onScroll={handleScroll}
-            className={`p-4 font-mono text-xs overflow-y-auto bg-black/40 flex-1 min-h-0 ${
+            className={`p-4 font-mono text-xs overflow-y-auto bg-muted/30 flex-1 min-h-0 ${
               isMaximized ? "h-full" : "h-72 max-h-96"
             }`}
           >
             <div className="space-y-1">
               {filteredLogs.map((line, idx) => {
                 // Highlight different levels of logs
-                let textColor = "text-slate-300";
+                let textColor = "text-foreground";
                 if (line.includes("[ERROR]") || line.includes("failed")) {
-                  textColor = "text-rose-400 font-semibold";
+                  textColor = "text-red-700 dark:text-red-400 font-semibold";
                 } else if (line.includes("[WARNING]")) {
-                  textColor = "text-amber-400";
+                  textColor = "text-amber-700 dark:text-amber-400";
                 } else if (line.includes("---") || line.startsWith("---")) {
-                  textColor = "text-emerald-400/80 font-medium";
+                  textColor = "text-green-700 dark:text-green-400 font-medium";
                 } else if (line.includes("completed successfully")) {
-                  textColor = "text-emerald-400 font-semibold";
+                  textColor = "text-green-700 dark:text-green-400 font-semibold";
                 } else if (line.startsWith("Running:") || line.includes("[TF]")) {
-                  textColor = "text-slate-400";
+                  textColor = "text-muted-foreground";
                 }
 
                 return (
@@ -295,8 +303,8 @@ export function DeploymentLogs({ deploymentId, deploymentStatus }: DeploymentLog
                 );
               })}
               {filteredLogs.length === 0 && (
-                <div className="text-slate-600 text-center py-8">
-                  {filter ? "No logs match the filter criteria." : "Console is empty. Waiting for deployment activities..."}
+                <div className="text-muted-foreground text-center py-8">
+                  {filter ? t("noMatch") : t("empty")}
                 </div>
               )}
               <div ref={terminalEndRef} />

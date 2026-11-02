@@ -293,6 +293,30 @@ export const getAppHealth = (deploymentId: number) =>
     `/infra/deployments/${deploymentId}/health`,
   );
 
+export const getAppMetrics = (deploymentId: number, window = "24h") =>
+  request<import("@/types").AppMetrics>(
+    `/deployments/${deploymentId}/metrics?window=${window}`,
+  );
+
+export const getAppLogs = (
+  deploymentId: number,
+  opts: {
+    limit?: number;
+    since?: string;
+    level?: string;
+    component?: string;
+    q?: string;
+  } = {},
+) =>
+  request<import("@/types").AppLogLine[]>(
+    `/deployments/${deploymentId}/logs${finopsQuery(opts)}`,
+  );
+
+export const getAppEvents = (deploymentId: number, limit = 10) =>
+  request<import("@/types").AppEvent[]>(
+    `/deployments/${deploymentId}/events?limit=${limit}`,
+  );
+
 // Account & Profile
 export const getCurrentUser = () =>
   request<import("@/types").UserProfile>("/account/me");

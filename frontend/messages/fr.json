@@ -81,14 +81,16 @@
       "label": "Sections de l'application",
       "breadcrumb": "Fil d'Ariane",
       "applications": "Applications",
-      "app": "Application",
+      "app": "Vue d'ensemble",
       "release": "Release",
       "environments": "Environnements",
       "security": "Sécurité",
       "config": "Configuration",
       "costs": "Coûts",
       "activity": "Activité",
-      "alerts": "Alertes"
+      "alerts": "Alertes",
+      "logs": "Logs",
+      "deployments": "Déploiements"
     }
   },
   "finops": {
@@ -2090,6 +2092,119 @@
       "start": "Générer du trafic",
       "remainingMinutes": "{minutes} min {seconds} s",
       "remainingSeconds": "{seconds} s"
+    }
+  },
+  "appPage": {
+    "common": {
+      "restricted": "Réservé aux membres",
+      "retry": "Réessayer",
+      "loadFailed": "Impossible de charger ces données.",
+      "stale": "Données non actualisées depuis {time}",
+      "openGrafana": "Ouvrir dans Grafana, lien externe",
+      "openArgo": "Ouvrir {name} dans Argo CD, lien externe"
+    },
+    "metrics": {
+      "requests": "Requêtes/s",
+      "errors": "Erreurs 5xx (%)",
+      "cpu": "CPU (millicores)",
+      "cost": "Coût du mois",
+      "noTraffic": "Pas de données de trafic",
+      "noData": "Pas de données",
+      "noCost": "Pas de coût pour cette application",
+      "perSecond": "req/s",
+      "last24h": "Sur 24 h",
+      "cpuRequest": "Sur 24 h, demande {value} m",
+      "costNote": "Cumul du mois, estimation {estimate}"
+    },
+    "components": {
+      "title": "Composants"
+    },
+    "logs": {
+      "recent": "Logs récents",
+      "open": "Ouvrir les logs",
+      "emptyRecent": "Aucune ligne de log sur la dernière heure",
+      "region": "Logs de l'application",
+      "level": "Niveau",
+      "allLevels": "Tous les niveaux",
+      "component": "Composant",
+      "allComponents": "Tous les composants",
+      "window": "Période",
+      "windows": {
+        "15m": "15 minutes",
+        "1h": "1 heure",
+        "24h": "24 heures"
+      },
+      "search": "Recherche",
+      "searchPlaceholder": "Filtrer le texte",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "live": "En direct, actualisation toutes les 3 s",
+      "paused": "En pause",
+      "lineCount": "{count, plural, =0 {aucune ligne} one {# ligne} other {# lignes}}",
+      "emptyFiltered": "Aucune ligne ne correspond à ces filtres.",
+      "restricted": "Réservé aux membres",
+      "loadFailed": "Impossible de charger les logs.",
+      "retry": "Réessayer",
+      "stale": "Logs non actualisés, la dernière lecture a échoué.",
+      "levels": {
+        "error": "ERREUR",
+        "warn": "AVERT.",
+        "info": "INFO",
+        "debug": "DEBUG"
+      }
+    },
+    "deployments": {
+      "recent": "Derniers déploiements",
+      "open": "Ouvrir les déploiements",
+      "history": "Historique des déploiements",
+      "empty": "Aucun déploiement enregistré",
+      "version": "Version",
+      "outcome": "Résultat",
+      "who": "Par",
+      "when": "Quand",
+      "duration": "Durée",
+      "automatic": "Automatique",
+      "forced": "Forcée",
+      "outcomes": {
+        "running": "En cours",
+        "promoted": "Promue",
+        "aborted_auto": "Rejetée automatiquement",
+        "aborted_manual": "Abortée",
+        "superseded": "Remplacée"
+      }
+    },
+    "events": {
+      "title": "Événements Kubernetes",
+      "empty": "Aucun événement récent",
+      "warning": "Avertissement",
+      "normal": "Normal",
+      "count": "{count} fois"
+    },
+    "console": {
+      "title": "Console de déploiement",
+      "download": "Télécharger les logs",
+      "clear": "Vider la console",
+      "minimize": "Réduire",
+      "maximize": "Agrandir",
+      "expand": "Déplier la console",
+      "collapse": "Replier la console",
+      "filter": "Filtrer les logs",
+      "matches": "{count, plural, one {# résultat} other {# résultats}}",
+      "noMatch": "Aucune ligne ne correspond au filtre.",
+      "empty": "La console est vide. En attente d'une activité de déploiement.",
+      "cleared": "--- Console vidée ---"
+    },
+    "deploymentStatus": {
+      "pending": "En attente",
+      "initializing": "Initialisation",
+      "planning": "Planification",
+      "deploying": "Déploiement en cours",
+      "deleting": "Suppression en cours",
+      "failed": "Échec du déploiement"
+    },
+    "legacy": {
+      "outputs": "Sorties Terraform",
+      "noOutputs": "Aucune sortie pour le moment."
     }
   }
 }

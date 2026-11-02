@@ -81,14 +81,16 @@
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
       "applications": "Applications",
-      "app": "Application",
+      "app": "Overview",
       "release": "Release",
       "environments": "Environments",
       "security": "Security",
       "config": "Configuration",
       "costs": "Costs",
       "activity": "Activity",
-      "alerts": "Alerts"
+      "alerts": "Alerts",
+      "logs": "Logs",
+      "deployments": "Deployments"
     }
   },
   "finops": {
@@ -2090,6 +2092,119 @@
       "start": "Generate traffic",
       "remainingMinutes": "{minutes} min {seconds} s",
       "remainingSeconds": "{seconds} s"
+    }
+  },
+  "appPage": {
+    "common": {
+      "restricted": "Members only",
+      "retry": "Retry",
+      "loadFailed": "Could not load this data.",
+      "stale": "Data not refreshed since {time}",
+      "openGrafana": "Open in Grafana, external link",
+      "openArgo": "Open {name} in Argo CD, external link"
+    },
+    "metrics": {
+      "requests": "Requests/s",
+      "errors": "5xx errors (%)",
+      "cpu": "CPU (millicores)",
+      "cost": "Cost this month",
+      "noTraffic": "No traffic data",
+      "noData": "No data",
+      "noCost": "No cost for this application",
+      "perSecond": "req/s",
+      "last24h": "Last 24 h",
+      "cpuRequest": "Last 24 h, request {value} m",
+      "costNote": "Month to date, estimate {estimate}"
+    },
+    "components": {
+      "title": "Components"
+    },
+    "logs": {
+      "recent": "Recent logs",
+      "open": "Open logs",
+      "emptyRecent": "No log lines in the last hour",
+      "region": "Application logs",
+      "level": "Level",
+      "allLevels": "All levels",
+      "component": "Component",
+      "allComponents": "All components",
+      "window": "Time window",
+      "windows": {
+        "15m": "15 minutes",
+        "1h": "1 hour",
+        "24h": "24 hours"
+      },
+      "search": "Search",
+      "searchPlaceholder": "Filter text",
+      "pause": "Pause",
+      "resume": "Resume",
+      "live": "Live, refreshing every 3 s",
+      "paused": "Paused",
+      "lineCount": "{count, plural, =0 {no lines} one {# line} other {# lines}}",
+      "emptyFiltered": "No line matches these filters.",
+      "restricted": "Members only",
+      "loadFailed": "Could not load the logs.",
+      "retry": "Retry",
+      "stale": "Logs not refreshed, the last read failed.",
+      "levels": {
+        "error": "ERROR",
+        "warn": "WARN",
+        "info": "INFO",
+        "debug": "DEBUG"
+      }
+    },
+    "deployments": {
+      "recent": "Recent deployments",
+      "open": "Open deployments",
+      "history": "Deployment history",
+      "empty": "No deployment recorded",
+      "version": "Version",
+      "outcome": "Outcome",
+      "who": "By",
+      "when": "When",
+      "duration": "Duration",
+      "automatic": "Automatic",
+      "forced": "Forced",
+      "outcomes": {
+        "running": "In progress",
+        "promoted": "Promoted",
+        "aborted_auto": "Automatically rejected",
+        "aborted_manual": "Aborted",
+        "superseded": "Superseded"
+      }
+    },
+    "events": {
+      "title": "Kubernetes events",
+      "empty": "No recent events",
+      "warning": "Warning",
+      "normal": "Normal",
+      "count": "{count} times"
+    },
+    "console": {
+      "title": "Deployment console",
+      "download": "Download logs",
+      "clear": "Clear console",
+      "minimize": "Minimize",
+      "maximize": "Maximize",
+      "expand": "Expand console",
+      "collapse": "Collapse console",
+      "filter": "Filter logs",
+      "matches": "{count, plural, one {# match} other {# matches}}",
+      "noMatch": "No line matches the filter.",
+      "empty": "The console is empty. Waiting for deployment activity.",
+      "cleared": "--- Console cleared ---"
+    },
+    "deploymentStatus": {
+      "pending": "Pending",
+      "initializing": "Initializing",
+      "planning": "Planning",
+      "deploying": "Deploying",
+      "deleting": "Deleting",
+      "failed": "Deployment failed"
+    },
+    "legacy": {
+      "outputs": "Terraform outputs",
+      "noOutputs": "No outputs yet."
     }
   }
 }
