@@ -1,4 +1,5 @@
 "use client";
+import { TemplateIcon } from "./TemplateIcon";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export function CatalogGrid({ templates, onDeploy, canDeploy = true }: Props) {
                   unoptimized
                 />
               ) : (
-                <span className="text-3xl">{t.icon}</span>
+                <TemplateIcon icon={t.icon} />
               )}
               <Badge variant="outline" className="text-xs">
                 {t.category}
