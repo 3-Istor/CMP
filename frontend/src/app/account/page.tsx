@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, Camera, Loader2, Upload } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { GitHubLinkButton } from "@/components/account/GitHubLinkButton";
+import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { ThemeCard } from "@/components/account/ThemeCard";
 import { ConnectedAssistants } from "@/components/agents/ConnectedAssistants";
 import { Avatar } from "@/components/ui/avatar";
@@ -47,6 +49,7 @@ export default function AccountPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { update } = useSession();
+  const tLanguage = useTranslations("account.language");
 
   const fetchUser = async () => {
     try {
@@ -364,6 +367,16 @@ export default function AccountPage() {
                 Supported formats: JPG, PNG, GIF, WEBP. Maximum size:{" "}
                 {MAX_SIZE_MB} MB.
               </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{tLanguage("title")}</CardTitle>
+              <CardDescription>{tLanguage("description")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LanguageSwitcher />
             </CardContent>
           </Card>
 

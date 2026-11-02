@@ -13,11 +13,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
 import { isProjectInFlight } from "@/types";
 import { FolderOpen, FolderPlus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 
 export default function Home() {
   const { data: session } = useSession();
+  const t = useTranslations("shell.home");
+  const tProjects = useTranslations("projects.home");
+  const tApps = useTranslations("apps.home");
   const [dashboardKey] = useState(0);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const {
@@ -45,7 +49,7 @@ export default function Home() {
     session?.user?.name ||
     `${session?.user?.given_name ?? ""} ${session?.user?.family_name ?? ""}`.trim() ||
     session?.user?.email ||
-    "Developer";
+    t("fallbackName");
 
   return (
     <div className="min-h-screen">
@@ -54,8 +58,13 @@ export default function Home() {
         <div className="ml-auto flex items-center gap-3">
           {session?.user && (
             <span className="hidden sm:block text-sm text-muted-foreground">
-              Welcome,{" "}
-              <span className="font-medium text-foreground">{userName}</span>
+              {t.rich("welcome", {
+                name: () => (
+                  <span className="font-medium text-foreground">
+                    {userName}
+                  </span>
+                ),
+              })}
             </span>
           )}
           <UserNav />
@@ -71,15 +80,14 @@ export default function Home() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-semibold">My Projects</h2>
+              <h2 className="text-xl font-semibold">{tProjects("title")}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Each project is an isolated team boundary with its own Keycloak
-                groups, Vault policies, and ArgoCD AppProject.
+                {tProjects("subtitle")}
               </p>
             </div>
             <Button size="sm" onClick={() => setCreateProjectOpen(true)}>
               <FolderPlus className="mr-2 h-4 w-4" />
-              New Project
+              {tProjects("new")}
             </Button>
           </div>
 
@@ -92,14 +100,18 @@ export default function Home() {
           ) : projects.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-muted-foreground">
               <FolderOpen className="h-9 w-9 mb-3 text-muted-foreground" />
-              <p className="font-medium">No projects yet</p>
+              <p className="font-medium">{tProjects("emptyTitle")}</p>
               <p className="text-sm mt-1">
-                Create your first project to start deploying applications,
-                or{" "}
-                <Link href="/connect-ai" className="text-primary hover:underline">
-                  ask your AI assistant
-                </Link>{" "}
-                to do it.
+                {tProjects.rich("emptyBody", {
+                  assistant: (chunks) => (
+                    <Link
+                      href="/connect-ai"
+                      className="text-primary hover:underline"
+                    >
+                      {chunks}
+                    </Link>
+                  ),
+                })}
               </p>
               <Button
                 variant="outline"
@@ -108,7 +120,7 @@ export default function Home() {
                 onClick={() => setCreateProjectOpen(true)}
               >
                 <FolderPlus className="mr-2 h-4 w-4" />
-                Create Project
+                {tProjects("create")}
               </Button>
             </div>
           ) : (
@@ -128,7 +140,7 @@ export default function Home() {
 
         {/* ── All Recent Deployments ── */}
         <section>
-          <h2 className="text-xl font-semibold mb-4">All My Deployments</h2>
+          <h2 className="text-xl font-semibold mb-4">{tApps("allDeployments")}</h2>
           <Dashboard key={dashboardKey} />
         </section>
       </main>

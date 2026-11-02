@@ -10,10 +10,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user_github import UserGitHubInstallation
+from app.models.user_preference import UserPreference
 from app.schemas.account import (
     GitHubInstallationRequest,
     GitHubInstallationResponse,
     PictureUploadResponse,
+    UserPreferences,
     UserProfile,
 )
 from app.services.keycloak_service import _get_admin_token, get_current_user
@@ -21,6 +23,61 @@ from app.services.keycloak_service import _get_admin_token, get_current_user
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/account", tags=["Account"])
+
+
+def _preference_key(token_payload: dict) -> str:
+    return token_payload.get("preferred_username") or token_payload.get(
+        "sub", ""
+    )
+
+
+def _stored_locale(db: Session, user_key: str) -> str | None:
+    if not user_key:
+        return None
+    record = (
+        db.query(UserPreference)
+        .filter(UserPreference.user_sub == user_key)
+        .first()
+    )
+    return record.locale if record else None
+
+
+@router.get("/preferences", response_model=UserPreferences)
+def get_preferences(
+    token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> UserPreferences:
+    """Return the stored UI preferences of the current user."""
+    return UserPreferences(
+        locale=_stored_locale(db, _preference_key(token_payload))
+    )
+
+
+@router.put("/preferences", response_model=UserPreferences)
+def update_preferences(
+    preferences: UserPreferences,
+    token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> UserPreferences:
+    """Store the UI preferences of the current user ("fr", "en" or null)."""
+    user_key = _preference_key(token_payload)
+    if not user_key:
+        raise HTTPException(
+            status_code=400, detail="User identifier not found in token"
+        )
+
+    record = (
+        db.query(UserPreference)
+        .filter(UserPreference.user_sub == user_key)
+        .first()
+    )
+    if record:
+        record.locale = preferences.locale
+    else:
+        db.add(UserPreference(user_sub=user_key, locale=preferences.locale))
+    db.commit()
+
+    return UserPreferences(locale=preferences.locale)
 
 
 @router.get("/me", response_model=UserProfile)
@@ -118,6 +175,7 @@ def get_user_profile(
         picture=picture,
         groups=groups,
         github_installation_id=github_installation_id,
+        locale=_stored_locale(db, _preference_key(token_payload)),
     )
 
 

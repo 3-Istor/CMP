@@ -285,6 +285,14 @@ export const getAppHealth = (deploymentId: number) =>
 export const getCurrentUser = () =>
   request<import("@/types").UserProfile>("/account/me");
 
+export const updatePreferences = (preferences: {
+  locale: import("@/i18n/config").Locale | null;
+}) =>
+  request<{ locale: import("@/i18n/config").Locale | null }>(
+    "/account/preferences",
+    { method: "PUT", body: JSON.stringify(preferences) },
+  );
+
 export const getGitHubStatus = async (): Promise<
   import("@/types").GitHubStatus
 > => {

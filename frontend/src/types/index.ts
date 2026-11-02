@@ -247,6 +247,7 @@ export interface UserProfile {
   picture: string | null;
   groups: string[];
   github_installation_id?: string | null; // Phase 3: GitHub App integration
+  locale?: "fr" | "en" | null;
 }
 
 export interface GitHubStatus {

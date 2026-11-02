@@ -1,4 +1,8 @@
+from typing import Literal
+
 from pydantic import BaseModel
+
+Locale = Literal["fr", "en"]
 
 
 class UserProfile(BaseModel):
@@ -12,6 +16,7 @@ class UserProfile(BaseModel):
     picture: str | None = None
     groups: list[str] = []
     github_installation_id: str | None = None
+    locale: Locale | None = None
 
 
 class PictureUploadResponse(BaseModel):
@@ -32,3 +37,9 @@ class GitHubInstallationResponse(BaseModel):
 
     message: str
     installation_id: str
+
+
+class UserPreferences(BaseModel):
+    """UI preferences stored for the current user."""
+
+    locale: Locale | None = None

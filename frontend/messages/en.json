@@ -1,0 +1,71 @@
+{
+  "shell": {
+    "meta": {
+      "title": "CNP - Cloud Native Platform",
+      "description": "Self-service cloud native platform"
+    },
+    "sidebar": {
+      "home": "Home",
+      "finops": "FinOps",
+      "security": "Security",
+      "activity": "Activity",
+      "alerts": "Alerts",
+      "assistants": "AI assistants",
+      "docs": "Docs",
+      "projects": "Projects",
+      "apps": "Apps",
+      "noProjects": "No projects",
+      "noApps": "No apps",
+      "myAccount": "My account",
+      "profileFallback": "Profile",
+      "collapse": "Collapse sidebar",
+      "expand": "Expand sidebar",
+      "securityAlert": "Mandatory security action"
+    },
+    "userNav": {
+      "myAccount": "My account",
+      "logout": "Log out",
+      "language": "Language",
+      "userFallback": "User"
+    },
+    "home": {
+      "welcome": "Welcome, <name></name>",
+      "fallbackName": "Developer"
+    }
+  },
+  "projects": {
+    "home": {
+      "title": "My projects",
+      "subtitle": "Each project is an isolated team boundary with its own Keycloak groups, Vault policies and ArgoCD AppProject.",
+      "new": "New project",
+      "emptyTitle": "No projects yet",
+      "emptyBody": "Create your first project to start deploying applications, or <assistant>ask your AI assistant</assistant> to do it.",
+      "create": "Create project"
+    }
+  },
+  "apps": {
+    "home": {
+      "allDeployments": "All my deployments"
+    }
+  },
+  "finops": {},
+  "security": {},
+  "activity": {},
+  "alerts": {},
+  "account": {
+    "language": {
+      "title": "Language",
+      "description": "Interface language. Your choice is saved to your account and follows you across browsers."
+    }
+  },
+  "common": {
+    "language": {
+      "label": "Interface language",
+      "saveFailed": "Language applied in this browser, but not saved to your account.",
+      "names": {
+        "fr": "Français",
+        "en": "English"
+      }
+    }
+  }
+}
