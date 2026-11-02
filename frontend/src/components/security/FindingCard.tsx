@@ -101,7 +101,7 @@ export function FindingCard({
           )}
           {settingsAction && deploymentId && (
             <Link
-              href={`/projects/${encodeURIComponent(project)}/apps/${deploymentId}#security-data`}
+              href={`/projects/${encodeURIComponent(project)}/apps/${deploymentId}/config#security-data`}
               className="inline-flex h-7 items-center rounded-md border px-2.5 text-[0.8rem] font-medium hover:bg-accent"
             >
               {t(`settingsAction.${settingsAction}`)}

@@ -21,8 +21,12 @@ import {
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { LinksMenu } from "./LinksMenu";
+import { ProjectNav } from "./ProjectNav";
+import { ProjectSwitcher } from "./ProjectSwitcher";
+import { projectFromPath } from "./projectSections";
+import { recordRecentProject } from "./recentProjects";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { UserMenu } from "./UserMenu";
 import {
@@ -123,6 +127,11 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
   const { projects, apps, loading } = useVisibleWork();
   const security = useSecurityOverview();
   const hasCoreAlert = security.some((s) => s.core > 0);
+  const projectName = projectFromPath(pathname);
+
+  useEffect(() => {
+    if (projectName) recordRecentProject(projectName);
+  }, [projectName]);
 
   const counts: Partial<Record<PageEntry["key"], number | undefined>> = {
     projects: loading ? undefined : projects.length,
@@ -209,18 +218,37 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
         </button>
       </div>
 
-      <nav
-        aria-label={t("navigation")}
-        className="flex-1 space-y-4 overflow-y-auto px-2 py-3"
-      >
-        <div className="space-y-0.5">{renderLink(HOME_PAGE)}</div>
-        <Group title={t("groupWork")} collapsed={collapsed}>
-          {WORK_PAGES.map(renderLink)}
-        </Group>
-        <Group title={t("groupPlatform")} collapsed={collapsed}>
-          {PLATFORM_PAGES.map(renderLink)}
-        </Group>
-      </nav>
+      {projectName ? (
+        <>
+          <div className="px-2 pt-2">
+            <ProjectSwitcher
+              key={projectName}
+              projectName={projectName}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          </div>
+          <ProjectNav
+            key={projectName}
+            projectName={projectName}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        </>
+      ) : (
+        <nav
+          aria-label={t("navigation")}
+          className="flex-1 space-y-4 overflow-y-auto px-2 py-3"
+        >
+          <div className="space-y-0.5">{renderLink(HOME_PAGE)}</div>
+          <Group title={t("groupWork")} collapsed={collapsed}>
+            {WORK_PAGES.map(renderLink)}
+          </Group>
+          <Group title={t("groupPlatform")} collapsed={collapsed}>
+            {PLATFORM_PAGES.map(renderLink)}
+          </Group>
+        </nav>
+      )}
 
       <div className="shrink-0 space-y-1 border-t p-2">
         <LinksMenu collapsed={collapsed} />

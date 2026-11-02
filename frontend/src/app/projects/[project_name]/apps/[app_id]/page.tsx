@@ -1,736 +1,116 @@
 "use client";
 
-import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
-import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
-import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
-import { SecurityAlert } from "@/components/security/SecurityAlert";
-import { SecurityDashboard } from "@/components/security/SecurityDashboard";
-import { ActivityTab } from "@/components/activity/ActivityTab";
-import { AlertsPanel } from "@/components/alerting/AlertsPanel";
+import { useAppContext } from "@/components/projects/AppContext";
+import { useProjectContext } from "@/components/projects/ProjectContext";
 import { DeploymentHealth } from "@/components/projects/DeploymentHealth";
 import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
-import { EnvironmentsTab } from "@/components/environments/EnvironmentsTab";
-import { ReleaseTab } from "@/components/release/ReleaseTab";
-import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { deleteDeployment, getDeployment, getDeploymentLinks } from "@/lib/api";
-import { LinkButtons } from "@/lib/links";
-import { useCan, useDeploymentPolling } from "@/lib/hooks";
-import { appUrlOf } from "@/lib/utils";
-import type { Deployment, ProjectLink } from "@/types";
-import {
-    ArrowLeft,
-    CheckCircle2,
-    ChevronDown,
-    ChevronUp,
-    ExternalLink,
-    FileCode,
-    Globe,
-    Loader2,
-    RefreshCw,
-    Search,
-    Settings,
-    Shield,
-    Trash2,
-    Wallet,
-    XCircle,
-    BellRing,
-    History,
-    Layers,
-    Rocket,
-} from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
 
-// ── Status helpers ────────────────────────────────────────────────────────────
+export default function AppOverviewPage() {
+  const { appId, deployment: current } = useAppContext();
+  const { can } = useProjectContext();
+  // null = follow the status (collapsed once running) until the user toggles.
+  const [statusOpen, setStatusOpen] = useState<boolean | null>(null);
 
-const STATUS_VARIANT: Record<
-    Deployment["status"],
-    "default" | "secondary" | "destructive" | "outline"
-> = {
-    running: "default",
-    degraded: "secondary",
-    pending: "outline",
-    initializing: "outline",
-    planning: "outline",
-    deploying: "outline",
-    failed: "destructive",
-    deleting: "secondary",
-    deleted: "secondary",
-};
+  const canViewLogs = can("app.viewLogs");
+  const canViewConfig = can("app.viewConfig");
+  const isKubernetes = current.provider_type === "kubernetes";
+  const isRunning = current.status === "running";
+  const shouldFetchHealth =
+    current.status === "running" || current.status === "degraded";
 
-// Color indicator for the app status (green / orange / red, amber while in progress)
-const STATUS_COLOR: Record<Deployment["status"], string> = {
-    running: "bg-green-500",
-    degraded: "bg-orange-500",
-    failed: "bg-red-500",
-    pending: "bg-amber-400",
-    initializing: "bg-amber-400",
-    planning: "bg-amber-400",
-    deploying: "bg-amber-400",
-    deleting: "bg-amber-400",
-    deleted: "bg-muted-foreground",
-};
+  return (
+    <>
+      {/* Deployment progress, collapsed by default once running */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Deployment Status</CardTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setStatusOpen(!(statusOpen ?? !isRunning))}
+            className="h-8 w-8"
+            title={statusOpen ?? !isRunning ? "Collapse" : "Expand"}
+          >
+            {statusOpen ?? !isRunning ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </Button>
+        </CardHeader>
+        {(statusOpen ?? !isRunning) && (
+          <CardContent>
+            <DeploymentStepper deployment={current} />
+          </CardContent>
+        )}
+      </Card>
 
-const IN_PROGRESS_STATUSES = [
-    "pending",
-    "initializing",
-    "planning",
-    "deploying",
-    "deleting",
-];
+      {/* Live deployment log streaming, members and up.
+          A guest sees the status badge and the stepper, not
+          the build output. */}
+      {canViewLogs && (
+        <DeploymentLogs
+          deploymentId={appId}
+          deploymentStatus={current.status}
+        />
+      )}
 
-function StatusDot({ status }: { status: Deployment["status"] }) {
-    if (status === "running")
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-    if (status === "failed")
-        return <XCircle className="h-5 w-5 text-destructive" />;
-    if (
-        ["pending", "initializing", "planning", "deploying", "deleting"].includes(
-            status,
-        )
-    )
-        return <Loader2 className="h-5 w-5 animate-spin text-primary" />;
-    return null;
-}
+      {/* Health summary (inline, collapsible like the logs) */}
+      {shouldFetchHealth && canViewLogs && (
+        <DeploymentHealth deploymentId={appId} />
+      )}
 
-/**
- * A search box over its children: every match of the typed text is
- * highlighted (CSS Custom Highlight API, styled in globals.css) and the first
- * one scrolled into view; Enter jumps to the next. Matches field labels and
- * text, not values typed inside inputs.
- */
-function SearchHighlight({ children }: { children: React.ReactNode }) {
-    const [query, setQuery] = useState("");
-    const [count, setCount] = useState(0);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const rangesRef = useRef<Range[]>([]);
-    const indexRef = useRef(0);
-
-    const scrollTo = (i: number) => {
-        const range = rangesRef.current[i];
-        range?.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
-    };
-
-    useEffect(() => {
-        const root = containerRef.current;
-        if (!root || typeof CSS === "undefined" || !CSS.highlights) return;
-        const needle = query.trim().toLowerCase();
-
-        const apply = () => {
-            const ranges: Range[] = [];
-            if (needle) {
-                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-                for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-                    const text = node.textContent?.toLowerCase() ?? "";
-                    for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + needle.length)) {
-                        const range = new Range();
-                        range.setStart(node, i);
-                        range.setEnd(node, i + needle.length);
-                        ranges.push(range);
+      {/* Legacy deployments: show Terraform outputs */}
+      {!isKubernetes && canViewConfig && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Terraform Outputs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {current.terraform_outputs ? (
+              <div className="space-y-1.5 text-xs font-mono">
+                {Object.entries(
+                  (() => {
+                    try {
+                      return JSON.parse(current.terraform_outputs) as Record<
+                        string,
+                        unknown
+                      >;
+                    } catch {
+                      return {};
                     }
-                }
-            }
-            rangesRef.current = ranges;
-            setCount(ranges.length);
-            CSS.highlights.set("config-search", new Highlight(...ranges));
-        };
-
-        apply();
-        indexRef.current = 0;
-        scrollTo(0);
-        // Panels load and switch components after mount: re-match on changes.
-        const observer = new MutationObserver(apply);
-        observer.observe(root, { childList: true, subtree: true, characterData: true });
-        return () => {
-            observer.disconnect();
-            CSS.highlights.delete("config-search");
-        };
-    }, [query]);
-
-    return (
-        <div className="space-y-4">
-            <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key !== "Enter" || count === 0) return;
-                        indexRef.current = (indexRef.current + 1) % count;
-                        scrollTo(indexRef.current);
-                    }}
-                    placeholder="Rechercher une option…"
-                    aria-label="Rechercher une option"
-                    className="pl-8 pr-24"
-                />
-                {query.trim() && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        {count} résultat{count > 1 ? "s" : ""}
+                  })(),
+                ).map(([key, value]) => (
+                  <div key={key} className="flex gap-2 flex-wrap">
+                    <span className="text-muted-foreground shrink-0">
+                      {key}:
                     </span>
-                )}
-            </div>
-            <div ref={containerRef} className="space-y-6">
-                {children}
-            </div>
-        </div>
-    );
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────
-
-export default function AppControlCenterPage() {
-    const params = useParams();
-    const router = useRouter();
-    const projectName = params.project_name as string;
-    const appId = Number(params.app_id);
-
-    const [deployment, setDeployment] = useState<Deployment | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteConfirmName, setDeleteConfirmName] = useState("");
-    const [deleting, setDeleting] = useState(false);
-    const [tab, setTab] = useState("app");
-    // null = follow the status (collapsed once running) until the user toggles.
-    const [statusOpen, setStatusOpen] = useState<boolean | null>(null);
-
-    // Security findings link to "#security-data", which now lives in the
-    // Configuration tab.
-    useEffect(() => {
-        if (window.location.hash === "#security-data") setTab("config");
-    }, []);
-
-    // The app's project comes from the route, so the role is available here
-    // without an extra request.
-    const { can } = useCan(projectName);
-    const canDelete = can("app.delete");
-    const canViewLogs = can("app.viewLogs");
-    const canViewConfig = can("app.viewConfig");
-    const canEditConfig = can("app.editConfig");
-    const canViewFinops = can("finops.view");
-    // Security, activity and alerts carry findings and logs: members and up.
-    const canViewObservability = can("app.viewObservability");
-    const canViewRelease = can("release.view");
-
-    // Poll only while in transient state
-    const ACTIVE_STATUSES = new Set([
-        "pending",
-        "initializing",
-        "planning",
-        "deploying",
-        "deleting",
-    ]);
-    const isActive = deployment ? ACTIVE_STATUSES.has(deployment.status) : false;
-    const polled = useDeploymentPolling(isActive ? appId : null);
-
-    const current = polled ?? deployment;
-
-    const fetchDeployment = useCallback(async () => {
-        try {
-            const d = await getDeployment(appId);
-            setDeployment(d);
-        } catch {
-            toast.error("Failed to load application");
-        } finally {
-            setLoading(false);
-        }
-    }, [appId]);
-
-    useEffect(() => {
-        fetchDeployment();
-    }, [fetchDeployment]);
-
-    const [links, setLinks] = useState<ProjectLink[]>([]);
-    const linksReady = current?.provider_type === "kubernetes" && canViewLogs;
-    useEffect(() => {
-        if (!linksReady) return;
-        getDeploymentLinks(appId)
-            .then(setLinks)
-            .catch(() => setLinks([]));
-    }, [appId, linksReady, current?.github_repo_url]);
-
-    // The deployment row is kept (status=deleted), not removed, once
-    // teardown finishes, polling correctly stops, but nothing else takes the
-    // user off a page for an app that no longer exists. Bounce back to the
-    // project after a beat. Watches `current`: after a delete started here,
-    // the final "deleted" status only arrives through polling.
-    useEffect(() => {
-        if (current?.status !== "deleted") return;
-        toast.info(`"${current.name}" has been deleted`);
-        const timer = setTimeout(
-            () => router.push(`/projects/${projectName}`),
-            2500,
-        );
-        return () => clearTimeout(timer);
-    }, [current?.status, current?.name, projectName, router]);
-
-    // Show the inline health panel only for running/degraded apps
-    const shouldFetchHealth =
-        current?.status === "running" || current?.status === "degraded";
-
-    const handleDelete = async () => {
-        if (!canDelete) {
-            toast.error("Only project admins can delete an application");
-            setDeleteOpen(false);
-            return;
-        }
-        if (!current || deleteConfirmName !== current.name) return;
-        setDeleting(true);
-        try {
-            await deleteDeployment(appId);
-            toast.success(`Deletion of "${current.name}" started`);
-            setDeleteOpen(false);
-            // Update local state to reflect deleting status, no page reload
-            setDeployment((prev) =>
-                prev ? { ...prev, status: "deleting", step_message: "Destroying resources…" } : prev,
-            );
-        } catch (err) {
-            toast.error(`Delete failed: ${err}`);
-        } finally {
-            setDeleting(false);
-        }
-    };
-
-    // ── Loading skeleton ──────────────────────────────────────────────────────
-    if (loading || !current) {
-        return (
-            <div className="min-h-screen">
-                <main className="px-6 py-8 max-w-5xl mx-auto space-y-6">
-                    <Skeleton className="h-8 w-48" />
-                    <Skeleton className="h-24 w-full" />
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-2 space-y-4">
-                            <Skeleton className="h-48" />
-                            <Skeleton className="h-64" />
-                        </div>
-                        <Skeleton className="h-80" />
-                    </div>
-                </main>
-            </div>
-        );
-    }
-
-    const isKubernetes = current.provider_type === "kubernetes";
-    const isRunning = current.status === "running";
-    const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
-
-    return (
-        <div className="min-h-screen">
-            <main className="px-6 py-8 max-w-5xl mx-auto space-y-6">
-
-                {/* ── Breadcrumb ── */}
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push(`/projects/${projectName}`)}
-                    className="-ml-2"
-                >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    {projectName}
-                </Button>
-
-                {/* ── App header ── */}
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div className="flex items-center gap-3">
-                        {current.template_icon && (
-                            <span className="text-4xl">{current.template_icon}</span>
-                        )}
-                        <div>
-                            <div className="flex items-center gap-2.5">
-                                <span
-                                    title={current.status}
-                                    className={`h-4 w-4 rounded-full shrink-0 ${STATUS_COLOR[current.status]} ${IN_PROGRESS_STATUSES.includes(current.status) ? "animate-pulse" : ""}`}
-                                />
-                                <span className="text-sm font-semibold capitalize text-muted-foreground">
-                                    {current.status}
-                                </span>
-                                <h2 className="text-2xl font-bold">{current.name}</h2>
-                                <StatusDot status={current.status} />
-                            </div>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Badge
-                                    variant={STATUS_VARIANT[current.status]}
-                                    className="capitalize"
-                                >
-                                    {current.status}
-                                </Badge>
-                                {current.created_via && (
-                                    <Badge
-                                        variant="outline"
-                                        className="border-primary/40 text-primary"
-                                        title="Created by an AI assistant on behalf of a user"
-                                    >
-                                        via {current.created_via}
-                                    </Badge>
-                                )}
-                                <Badge variant="outline" className="capitalize text-xs">
-                                    {current.provider_type === "kubernetes" ? "Kubernetes" : "Legacy"}
-                                </Badge>
-                                {current.k8s_namespace && (
-                                    <Badge variant="outline" className="font-mono text-xs">
-                                        ns: {current.k8s_namespace}
-                                    </Badge>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1.5">
-                                {current.template_name || current.template_id} ·{" "}
-                                Deployed{" "}
-                                {new Date(current.created_at).toLocaleDateString(undefined, {
-                                    day: "numeric",
-                                    month: "short",
-                                    year: "numeric",
-                                })}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Header quick actions */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={fetchDeployment}
-                        >
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                            Refresh
-                        </Button>
-                        {canDelete && (
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => {
-                                    setDeleteConfirmName("");
-                                    setDeleteOpen(true);
-                                }}
-                                disabled={["deleting", "deleted"].includes(current.status)}
-                            >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete App
-                            </Button>
-                        )}
-                    </div>
-                </div>
-
-                {isKubernetes && canViewObservability && (
-                    <SecurityAlert
-                        project={projectName}
-                        app={current.name}
-                        onOpen={() => setTab("security")}
-                    />
-                )}
-
-                <Separator />
-
-                <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-                <TabsList>
-                    <TabsTrigger value="app" className="gap-2">
-                        <FileCode className="h-4 w-4" />
-                        Application
-                    </TabsTrigger>
-                    {isKubernetes && canViewRelease && (
-                        <TabsTrigger value="release" className="gap-2">
-                            <Rocket className="h-4 w-4" />
-                            Release
-                        </TabsTrigger>
+                    {typeof value === "string" && value.startsWith("http") ? (
+                      <a
+                        href={value}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline break-all"
+                      >
+                        {value}
+                      </a>
+                    ) : (
+                      <span className="break-all">{String(value)}</span>
                     )}
-                    {isKubernetes && canViewRelease && (
-                        <TabsTrigger value="environments" className="gap-2">
-                            <Layers className="h-4 w-4" />
-                            Environnements
-                        </TabsTrigger>
-                    )}
-                    {isKubernetes && canViewObservability && (
-                        <TabsTrigger value="security" className="gap-2">
-                            <Shield className="h-4 w-4" />
-                            Security
-                        </TabsTrigger>
-                    )}
-                    {isKubernetes && canViewConfig && (
-                        <TabsTrigger value="config" className="gap-2">
-                            <Settings className="h-4 w-4" />
-                            Configuration
-                        </TabsTrigger>
-                    )}
-                    {canViewFinops && (
-                        <TabsTrigger value="finops" className="gap-2">
-                            <Wallet className="h-4 w-4" />
-                            FinOps
-                        </TabsTrigger>
-                    )}
-                    {isKubernetes && canViewObservability && (
-                        <TabsTrigger value="activity" className="gap-2">
-                            <History className="h-4 w-4" />
-                            Activity
-                        </TabsTrigger>
-                    )}
-                    {isKubernetes && canViewObservability && (
-                        <TabsTrigger value="alerts" className="gap-2">
-                            <BellRing className="h-4 w-4" />
-                            Alerts
-                        </TabsTrigger>
-                    )}
-                </TabsList>
-
-                {((isKubernetes && canViewLogs && appUrl) || links.length > 0) && (
-                    <div className="mt-4 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-medium text-muted-foreground mr-1">
-                            Quick links
-                        </span>
-                        {isKubernetes && canViewLogs && appUrl && (
-                            <a
-                                href={appUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={buttonVariants({ variant: "outline", size: "sm" })}
-                            >
-                                <Globe className="mr-2 h-4 w-4" />
-                                Open Application
-                                <ExternalLink className="ml-2 h-3 w-3" />
-                            </a>
-                        )}
-                        <LinkButtons links={links} />
-                    </div>
-                )}
-
-                <TabsContent value="app" className="mt-6 space-y-6">
-                    {/* Deployment progress, collapsed by default once running */}
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle className="text-base">Deployment Status</CardTitle>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setStatusOpen(!(statusOpen ?? !isRunning))}
-                                className="h-8 w-8"
-                                title={(statusOpen ?? !isRunning) ? "Collapse" : "Expand"}
-                            >
-                                {(statusOpen ?? !isRunning) ? (
-                                    <ChevronUp className="h-4 w-4" />
-                                ) : (
-                                    <ChevronDown className="h-4 w-4" />
-                                )}
-                            </Button>
-                        </CardHeader>
-                        {(statusOpen ?? !isRunning) && (
-                            <CardContent>
-                                <DeploymentStepper deployment={current} />
-                            </CardContent>
-                        )}
-                    </Card>
-
-                    {/* Live deployment log streaming, members and up.
-                        A guest sees the status badge and the stepper, not
-                        the build output. */}
-                    {canViewLogs && (
-                        <DeploymentLogs deploymentId={appId} deploymentStatus={current.status} />
-                    )}
-
-                    {/* Health summary (inline, collapsible like the logs) */}
-                    {shouldFetchHealth && canViewLogs && (
-                        <DeploymentHealth deploymentId={appId} />
-                    )}
-
-                    {/* Legacy deployments: show Terraform outputs */}
-                    {!isKubernetes && canViewConfig && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Terraform Outputs</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {current.terraform_outputs ? (
-                                    <div className="space-y-1.5 text-xs font-mono">
-                                        {Object.entries(
-                                            (() => {
-                                                try {
-                                                    return JSON.parse(current.terraform_outputs) as Record<string, unknown>;
-                                                } catch {
-                                                    return {};
-                                                }
-                                            })(),
-                                        ).map(([key, value]) => (
-                                            <div key={key} className="flex gap-2 flex-wrap">
-                                                <span className="text-muted-foreground shrink-0">{key}:</span>
-                                                {typeof value === "string" &&
-                                                    value.startsWith("http") ? (
-                                                    <a
-                                                        href={value}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="text-primary underline break-all"
-                                                    >
-                                                        {value}
-                                                    </a>
-                                                ) : (
-                                                    <span className="break-all">{String(value)}</span>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">
-                                        No outputs yet.
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    )}
-                </TabsContent>
-
-                {/* Day-2 config, members see the values read-only, admins
-                    can change them, guests get no tab at all. */}
-                {isKubernetes && canViewConfig && (
-                    <TabsContent value="config" className="mt-6">
-                        {isRunning ? (
-                            <SearchHighlight>
-                                <div id="security-data" className="scroll-mt-24">
-                                    <SecurityDataPanel deploymentId={appId} />
-                                </div>
-                                <AppConfigPanel
-                                    deploymentId={appId}
-                                    readOnly={!canEditConfig}
-                                />
-                            </SearchHighlight>
-                        ) : (
-                            <Card>
-                                <CardContent className="pt-6">
-                                    <p className="text-sm text-muted-foreground text-center">
-                                        Configuration will be available once the application is{" "}
-                                        <span className="font-medium text-foreground">running</span>.
-                                    </p>
-                                </CardContent>
-                            </Card>
-                        )}
-                    </TabsContent>
-                )}
-
-                {isKubernetes && canViewRelease && (
-                    <TabsContent value="release" className="mt-6">
-                        <ReleaseTab deploymentId={appId} projectName={projectName} />
-                    </TabsContent>
-                )}
-
-                {isKubernetes && canViewRelease && (
-                    <TabsContent value="environments" className="mt-6">
-                        <EnvironmentsTab deploymentId={appId} />
-                    </TabsContent>
-                )}
-
-                {isKubernetes && canViewObservability && (
-                    <TabsContent value="security" className="mt-6">
-                        <SecurityDashboard
-                            project={projectName}
-                            app={current.name}
-                            fullPageLink
-                        />
-                    </TabsContent>
-                )}
-
-                {isKubernetes && canViewObservability && (
-                    <TabsContent value="activity" className="mt-6">
-                        <ActivityTab project={projectName} app={current.name} />
-                    </TabsContent>
-                )}
-
-                {isKubernetes && canViewObservability && (
-                    <TabsContent value="alerts" className="mt-6">
-                        <AlertsPanel project={projectName} app={current.name} />
-                    </TabsContent>
-                )}
-
-                {canViewFinops && (
-                    <TabsContent value="finops" className="mt-6 space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                            Les coûts sont suivis au niveau du projet.
-                        </p>
-                        <ProjectFinopsPanel project={projectName} />
-                    </TabsContent>
-                )}
-                </Tabs>
-            </main>
-
-            {/* ── Delete confirmation dialog ── */}
-            <Dialog
-                open={deleteOpen}
-                onOpenChange={(v) => !deleting && !v && setDeleteOpen(false)}
-            >
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="text-destructive flex items-center gap-2">
-                            <Trash2 className="h-5 w-5" />
-                            Delete Application
-                        </DialogTitle>
-                        <DialogDescription>
-                            This will destroy all cloud resources for{" "}
-                            <span className="font-semibold">&quot;{current.name}&quot;</span> via
-                            Terraform. This action cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-3 py-2">
-                        <Label htmlFor="confirm-name" className="text-sm">
-                            Type{" "}
-                            <span className="font-mono font-semibold">{current.name}</span>{" "}
-                            to confirm:
-                        </Label>
-                        <Input
-                            id="confirm-name"
-                            value={deleteConfirmName}
-                            onChange={(e) => setDeleteConfirmName(e.target.value)}
-                            placeholder={current.name}
-                            disabled={deleting}
-                        />
-                    </div>
-
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => setDeleteOpen(false)}
-                            disabled={deleting}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleDelete}
-                            disabled={deleting || deleteConfirmName !== current.name}
-                        >
-                            {deleting ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Deleting…
-                                </>
-                            ) : (
-                                <>
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete permanently
-                                </>
-                            )}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
-    );
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No outputs yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
 }

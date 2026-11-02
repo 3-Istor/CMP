@@ -76,6 +76,19 @@
   "apps": {
     "home": {
       "allDeployments": "Tous mes déploiements"
+    },
+    "nav": {
+      "label": "Sections de l'application",
+      "breadcrumb": "Fil d'Ariane",
+      "applications": "Applications",
+      "app": "Application",
+      "release": "Release",
+      "environments": "Environnements",
+      "security": "Sécurité",
+      "config": "Configuration",
+      "costs": "Coûts",
+      "activity": "Activité",
+      "alerts": "Alertes"
     }
   },
   "finops": {},
@@ -635,6 +648,45 @@
         "fr": "Français",
         "en": "English"
       }
+    }
+  },
+  "projectNav": {
+    "navigation": "Navigation du projet",
+    "switchProject": "Changer de projet",
+    "searchProjects": "Rechercher un projet...",
+    "noProject": "Aucun projet trouvé.",
+    "back": "Retour à la plateforme",
+    "projects": "Projets",
+    "newProject": "Nouveau projet",
+    "overview": "Vue d'ensemble",
+    "applications": "Applications",
+    "members": "Membres",
+    "costs": "Coûts",
+    "security": "Sécurité",
+    "activity": "Activité",
+    "alerts": "Alertes",
+    "assistants": "Assistants IA",
+    "seeAll": "Voir tout",
+    "noApps": "Aucune application",
+    "expandApps": "Afficher les applications",
+    "collapseApps": "Masquer les applications",
+    "notAllowedTitle": "Indisponible",
+    "notAllowedBody": "Votre rôle ne donne pas accès à cette section du projet.",
+    "cloud": {
+      "onprem": "Sur site",
+      "aws": "AWS",
+      "gcp": "GCP"
+    },
+    "status": {
+      "running": "En cours",
+      "degraded": "Dégradée",
+      "pending": "En attente",
+      "initializing": "Initialisation",
+      "planning": "Planification",
+      "deploying": "Déploiement",
+      "failed": "Échec",
+      "deleting": "Suppression",
+      "deleted": "Supprimée"
     }
   }
 }

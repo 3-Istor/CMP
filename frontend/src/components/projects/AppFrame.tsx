@@ -1,0 +1,438 @@
+"use client";
+
+import { useAppContext } from "@/components/projects/AppContext";
+import {
+  NotAllowed,
+  useProjectContext,
+} from "@/components/projects/ProjectContext";
+import { SecurityAlert } from "@/components/security/SecurityAlert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { deleteDeployment, getDeploymentLinks } from "@/lib/api";
+import { LinkButtons } from "@/lib/links";
+import { cn, appUrlOf } from "@/lib/utils";
+import type { Deployment, ProjectLink } from "@/types";
+import {
+  BellRing,
+  CheckCircle2,
+  ExternalLink,
+  FileCode,
+  Globe,
+  History,
+  Layers,
+  Loader2,
+  RefreshCw,
+  Rocket,
+  Settings,
+  Shield,
+  Trash2,
+  Wallet,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
+const STATUS_VARIANT: Record<
+  Deployment["status"],
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  running: "default",
+  degraded: "secondary",
+  pending: "outline",
+  initializing: "outline",
+  planning: "outline",
+  deploying: "outline",
+  failed: "destructive",
+  deleting: "secondary",
+  deleted: "secondary",
+};
+
+const STATUS_COLOR: Record<Deployment["status"], string> = {
+  running: "bg-green-500",
+  degraded: "bg-orange-500",
+  failed: "bg-red-500",
+  pending: "bg-amber-400",
+  initializing: "bg-amber-400",
+  planning: "bg-amber-400",
+  deploying: "bg-amber-400",
+  deleting: "bg-amber-400",
+  deleted: "bg-muted-foreground",
+};
+
+const IN_PROGRESS_STATUSES = [
+  "pending",
+  "initializing",
+  "planning",
+  "deploying",
+  "deleting",
+];
+
+function StatusDot({ status }: { status: Deployment["status"] }) {
+  if (status === "running")
+    return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+  if (status === "failed")
+    return <XCircle className="h-5 w-5 text-destructive" />;
+  if (IN_PROGRESS_STATUSES.includes(status))
+    return <Loader2 className="h-5 w-5 animate-spin text-primary" />;
+  return null;
+}
+
+interface TabEntry {
+  key: string;
+  segment: string;
+  icon: LucideIcon;
+  visible: boolean;
+}
+
+export function AppFrame({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("apps.nav");
+  const router = useRouter();
+  const pathname = usePathname();
+  const { appId, projectName, deployment: current, refresh, markDeleting } =
+    useAppContext();
+  const { can } = useProjectContext();
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const canDelete = can("app.delete");
+  const canViewLogs = can("app.viewLogs");
+  const canViewConfig = can("app.viewConfig");
+  const canViewFinops = can("finops.view");
+  const canViewObservability = can("app.viewObservability");
+  const canViewRelease = can("release.view");
+
+  const isKubernetes = current.provider_type === "kubernetes";
+  const isRunning = current.status === "running";
+  const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
+
+  const [links, setLinks] = useState<ProjectLink[]>([]);
+  const linksReady = isKubernetes && canViewLogs;
+  useEffect(() => {
+    if (!linksReady) return;
+    getDeploymentLinks(appId)
+      .then(setLinks)
+      .catch(() => setLinks([]));
+  }, [appId, linksReady, current.github_repo_url]);
+
+  const handleDelete = async () => {
+    if (!canDelete) {
+      toast.error("Only project admins can delete an application");
+      setDeleteOpen(false);
+      return;
+    }
+    if (deleteConfirmName !== current.name) return;
+    setDeleting(true);
+    try {
+      await deleteDeployment(appId);
+      toast.success(`Deletion of "${current.name}" started`);
+      setDeleteOpen(false);
+      markDeleting();
+    } catch (err) {
+      toast.error(`Delete failed: ${err}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
+  const activeSegment = pathname.split("/")[5] ?? "";
+
+  const tabs: TabEntry[] = [
+    { key: "app", segment: "", icon: FileCode, visible: true },
+    {
+      key: "release",
+      segment: "release",
+      icon: Rocket,
+      visible: isKubernetes && canViewRelease,
+    },
+    {
+      key: "environments",
+      segment: "environments",
+      icon: Layers,
+      visible: isKubernetes && canViewRelease,
+    },
+    {
+      key: "security",
+      segment: "security",
+      icon: Shield,
+      visible: isKubernetes && canViewObservability,
+    },
+    {
+      key: "config",
+      segment: "config",
+      icon: Settings,
+      visible: isKubernetes && canViewConfig,
+    },
+    {
+      key: "costs",
+      segment: "costs",
+      icon: Wallet,
+      visible: canViewFinops,
+    },
+    {
+      key: "activity",
+      segment: "activity",
+      icon: History,
+      visible: isKubernetes && canViewObservability,
+    },
+    {
+      key: "alerts",
+      segment: "alerts",
+      icon: BellRing,
+      visible: isKubernetes && canViewObservability,
+    },
+  ];
+
+  return (
+    <div className="min-h-screen">
+      <main className="px-6 py-8 max-w-5xl mx-auto space-y-6">
+        <nav aria-label={t("breadcrumb")} className="text-sm">
+          <ol className="flex items-center gap-1.5 text-muted-foreground">
+            <li>
+              <Link
+                href={`/projects/${encodeURIComponent(projectName)}`}
+                className="hover:text-foreground hover:underline"
+              >
+                {t("applications")}
+              </Link>
+            </li>
+            <li aria-hidden>/</li>
+            <li aria-current="page" className="font-medium text-foreground">
+              {current.name}
+            </li>
+          </ol>
+        </nav>
+
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            {current.template_icon && (
+              <span className="text-4xl">{current.template_icon}</span>
+            )}
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span
+                  title={current.status}
+                  className={`h-4 w-4 rounded-full shrink-0 ${STATUS_COLOR[current.status]} ${IN_PROGRESS_STATUSES.includes(current.status) ? "animate-pulse" : ""}`}
+                />
+                <span className="text-sm font-semibold capitalize text-muted-foreground">
+                  {current.status}
+                </span>
+                <h1 className="text-2xl font-bold">{current.name}</h1>
+                <StatusDot status={current.status} />
+              </div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <Badge
+                  variant={STATUS_VARIANT[current.status]}
+                  className="capitalize"
+                >
+                  {current.status}
+                </Badge>
+                {current.created_via && (
+                  <Badge
+                    variant="outline"
+                    className="border-primary/40 text-primary"
+                    title="Created by an AI assistant on behalf of a user"
+                  >
+                    via {current.created_via}
+                  </Badge>
+                )}
+                <Badge variant="outline" className="capitalize text-xs">
+                  {current.provider_type === "kubernetes"
+                    ? "Kubernetes"
+                    : "Legacy"}
+                </Badge>
+                {current.k8s_namespace && (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    ns: {current.k8s_namespace}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                {current.template_name || current.template_id} · Deployed{" "}
+                {new Date(current.created_at).toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={refresh}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setDeleteConfirmName("");
+                  setDeleteOpen(true);
+                }}
+                disabled={["deleting", "deleted"].includes(current.status)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete App
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {isKubernetes && canViewObservability && (
+          <SecurityAlert
+            project={projectName}
+            app={current.name}
+            onOpen={() => router.push(`${base}/security`)}
+          />
+        )}
+
+        <Separator />
+
+        <nav
+          aria-label={t("label")}
+          className="flex flex-wrap items-center gap-1 rounded-lg bg-muted p-[3px]"
+        >
+          {tabs
+            .filter((tab) => tab.visible)
+            .map((tab) => {
+              const active = activeSegment === tab.segment;
+              const Icon = tab.icon;
+              return (
+                <Link
+                  key={tab.key}
+                  href={tab.segment ? `${base}/${tab.segment}` : base}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                  {t(tab.key)}
+                </Link>
+              );
+            })}
+        </nav>
+
+        {((isKubernetes && canViewLogs && appUrl) || links.length > 0) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-muted-foreground mr-1">
+              Quick links
+            </span>
+            {isKubernetes && canViewLogs && appUrl && (
+              <a
+                href={appUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                <Globe className="mr-2 h-4 w-4" />
+                Open Application
+                <ExternalLink className="ml-2 h-3 w-3" />
+              </a>
+            )}
+            <LinkButtons links={links} />
+          </div>
+        )}
+
+        <div className="space-y-6">{children}</div>
+      </main>
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(v) => !deleting && !v && setDeleteOpen(false)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Delete Application
+            </DialogTitle>
+            <DialogDescription>
+              This will destroy all cloud resources for{" "}
+              <span className="font-semibold">&quot;{current.name}&quot;</span>{" "}
+              via Terraform. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <Label htmlFor="confirm-name" className="text-sm">
+              Type{" "}
+              <span className="font-mono font-semibold">{current.name}</span> to
+              confirm:
+            </Label>
+            <Input
+              id="confirm-name"
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              placeholder={current.name}
+              disabled={deleting}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting || deleteConfirmName !== current.name}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete permanently
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export function AppSection({
+  allowed,
+  children,
+}: {
+  allowed: boolean;
+  children: React.ReactNode;
+}) {
+  const { roleLoading } = useProjectContext();
+  if (allowed) return <>{children}</>;
+  if (roleLoading) return <Skeleton className="h-48 w-full rounded-xl" />;
+  return <NotAllowed />;
+}
