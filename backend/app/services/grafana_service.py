@@ -16,12 +16,15 @@ All operations are async and use connection pooling via httpx.AsyncClient.
 Errors are logged but do not crash the caller (graceful degradation).
 """
 
+import asyncio
 import logging
 from typing import Literal
 
 import httpx
 
 from app.core.config import settings
+from app.core.database import SessionLocal
+from app.models.project import Project, ProjectStatus
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +303,44 @@ async def add_user_to_project_org(
         return False
 
 
+async def sync_project_org(project_name: str, owner_username: str) -> None:
+    """Add the owner and every Keycloak member to the project's org.
+
+    Only adds or re-applies roles, never removes anyone. Never raises.
+    """
+    from app.services.keycloak_service import list_project_members
+
+    try:
+        members = await asyncio.to_thread(list_project_members, project_name)
+    except Exception as exc:
+        logger.warning(
+            f"Grafana sync of project '{project_name}' skipped: {exc}"
+        )
+        return
+
+    roles = {m["username"]: m["role"] for m in members}
+    roles.setdefault(owner_username, "owner")
+    for username, role in roles.items():
+        await add_user_to_project_org(project_name, username, role)
+
+
+async def sync_all_project_orgs() -> None:
+    """Startup catch-up for memberships an earlier add could not write."""
+    try:
+        with SessionLocal() as db:
+            projects = (
+                db.query(Project.project_name, Project.owner_username)
+                .filter(Project.status == ProjectStatus.ACTIVE)
+                .all()
+            )
+    except Exception as exc:
+        logger.warning(f"Grafana startup sync skipped: {exc}")
+        return
+
+    for project_name, owner_username in projects:
+        await sync_project_org(project_name, owner_username)
+
+
 async def remove_user_from_project_org(
     project_name: str, username: str
 ) -> bool:
@@ -325,7 +366,22 @@ async def remove_user_from_project_org(
         logger.warning(f"Grafana org '{org_name}' not found, removal skipped")
         return False
 
-    # Step 2: Get user ID
+    # Step 2: Get user ID. Grafana's login for OIDC users is their email.
+    from app.services.keycloak_service import (
+        _find_user_by_username,
+        _get_admin_token,
+    )
+
+    try:
+        keycloak_user = _find_user_by_username(username, _get_admin_token())
+    except Exception as exc:
+        logger.warning(f"Failed to fetch user '{username}': {exc}")
+        return False
+    user_email = (keycloak_user or {}).get("email")
+    if not user_email:
+        logger.warning(f"User '{username}' has no email, removal skipped")
+        return False
+
     user_id = await _get_user_id_by_username(user_email)
     if user_id is None:
         logger.warning(f"Grafana user '{username}' not found, removal skipped")
