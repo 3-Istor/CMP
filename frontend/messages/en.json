@@ -1095,7 +1095,9 @@
       "healthy": "Healthy",
       "degraded": "Degraded",
       "down": "Down",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "asleep": "Asleep",
+      "not_connected": "Not connected"
     },
     "progress": {
       "queued": "Queued",

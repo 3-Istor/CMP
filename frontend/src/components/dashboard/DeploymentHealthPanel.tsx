@@ -12,14 +12,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppHealth } from "@/lib/hooks";
 import type { VMInstance } from "@/types";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Cloud,
-  Database,
-  RefreshCw,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Cloud, Database, Moon, PlugZap, RefreshCw, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 interface Props {
@@ -49,6 +42,10 @@ export function DeploymentHealthPanel({
         return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
       case "down":
         return <XCircle className="h-5 w-5 text-red-500" />;
+      case "asleep":
+        return <Moon className="h-5 w-5 text-indigo-400" />;
+      case "not_connected":
+        return <PlugZap className="h-5 w-5 text-gray-400" />;
       default:
         return <AlertTriangle className="h-5 w-5 text-gray-400" />;
     }
@@ -118,7 +115,9 @@ export function DeploymentHealthPanel({
                     ? "default"
                     : health.status === "degraded"
                       ? "secondary"
-                      : "destructive"
+                      : health.status === "down"
+                        ? "destructive"
+                        : "outline"
                 }
                 className="text-sm capitalize"
               >

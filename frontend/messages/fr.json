@@ -1095,7 +1095,9 @@
       "healthy": "Sain",
       "degraded": "Dégradé",
       "down": "Hors service",
-      "unknown": "Inconnu"
+      "unknown": "Inconnu",
+      "asleep": "Endormie",
+      "not_connected": "Non connecté"
     },
     "progress": {
       "queued": "En file d'attente",
@@ -1530,7 +1532,7 @@
     "states": {
       "healthy": "Sain",
       "degraded": "Dégradé",
-      "down": "Arrêté",
+      "down": "En panne",
       "asleep": "Endormie",
       "not_connected": "Non connecté",
       "unknown": "Inconnu"
