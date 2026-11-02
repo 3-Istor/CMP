@@ -2528,5 +2528,25 @@
     "remove": "Remove from favorites",
     "limitReached": "You can have at most {max} favorite projects and {max} favorite apps.",
     "saveFailed": "Could not save your favorites."
+  },
+  "gettingStarted": {
+    "title": "Getting started",
+    "description": "A few steps to get this project running.",
+    "progress": "{done} of {total}",
+    "dismiss": "Hide this card",
+    "unknown": "Status unavailable",
+    "state": {
+      "done": "Done",
+      "pending": "To do",
+      "unknown": "Status unavailable",
+      "loading": "Checking"
+    },
+    "steps": {
+      "repo": "Link a GitHub repository",
+      "deployed": "Deploy a first application",
+      "release": "Publish a first release",
+      "member": "Add a member to the project",
+      "budget": "Set a FinOps budget"
+    }
   }
 }
