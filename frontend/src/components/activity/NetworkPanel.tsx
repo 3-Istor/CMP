@@ -5,11 +5,14 @@ import { getDeniedFlows } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { DeniedFlow } from "@/types";
 import { ChevronDown, ShieldBan } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { timeLabel } from "./labels";
 
 /** Flows a network policy dropped: "why can't my backend reach X?". */
 export function NetworkPanel({ project }: { project: string }) {
+  const t = useTranslations("activity");
+  const locale = useLocale();
   const [flows, setFlows] = useState<DeniedFlow[] | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -27,7 +30,7 @@ export function NetworkPanel({ project }: { project: string }) {
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
       >
         <ShieldBan className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">Flux réseau refusés · 24 h</span>
+        <span className="font-medium">{t("network.title")}</span>
         <Badge
           variant="outline"
           className={cn(total > 0 && "border-amber-500/40 bg-amber-500/15")}
@@ -35,7 +38,7 @@ export function NetworkPanel({ project }: { project: string }) {
           {flows === null ? "…" : total}
         </Badge>
         <span className="ml-2 text-muted-foreground">
-          Bloqués par une network policy, côté de ce projet.
+          {t("network.description")}
         </span>
         <ChevronDown
           className={cn(
@@ -50,12 +53,12 @@ export function NetworkPanel({ project }: { project: string }) {
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-1.5 font-medium">Source</th>
-                  <th className="px-3 py-1.5 font-medium">Destination</th>
-                  <th className="px-3 py-1.5 font-medium">Port</th>
-                  <th className="px-3 py-1.5 font-medium">Sens</th>
-                  <th className="px-3 py-1.5 text-right font-medium">Fois</th>
-                  <th className="px-3 py-1.5 font-medium">Dernier</th>
+                  <th className="px-3 py-1.5 font-medium">{t("network.table.source")}</th>
+                  <th className="px-3 py-1.5 font-medium">{t("network.table.destination")}</th>
+                  <th className="px-3 py-1.5 font-medium">{t("network.table.port")}</th>
+                  <th className="px-3 py-1.5 font-medium">{t("network.table.direction")}</th>
+                  <th className="px-3 py-1.5 text-right font-medium">{t("network.table.count")}</th>
+                  <th className="px-3 py-1.5 font-medium">{t("network.table.last")}</th>
                 </tr>
               </thead>
               <tbody className="font-mono text-xs">
@@ -67,16 +70,16 @@ export function NetworkPanel({ project }: { project: string }) {
                     <td className="px-3 py-1.5">{f.source}</td>
                     <td className="px-3 py-1.5">{f.destination}</td>
                     <td className="px-3 py-1.5">
-                      {f.port ?? "n/d"} {f.protocol}
+                      {f.port ?? t("network.noPort")} {f.protocol}
                     </td>
                     <td className="px-3 py-1.5">
-                      {f.direction === "ingress" ? "entrant" : "sortant"}
+                      {t(`network.direction.${f.direction === "ingress" ? "ingress" : "egress"}`)}
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {f.count}
                     </td>
                     <td className="px-3 py-1.5 font-sans">
-                      {timeLabel(f.last)}
+                      {timeLabel(t, locale, f.last)}
                     </td>
                   </tr>
                 ))}
@@ -84,7 +87,7 @@ export function NetworkPanel({ project }: { project: string }) {
             </table>
           ) : (
             <p className="px-3 py-4 text-sm text-muted-foreground">
-              Aucun flux refusé sur les dernières 24 heures.
+              {t("network.empty")}
             </p>
           )}
         </div>

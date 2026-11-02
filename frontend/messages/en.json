@@ -79,9 +79,548 @@
     }
   },
   "finops": {},
-  "security": {},
-  "activity": {},
-  "alerts": {},
+  "security": {
+    "common": {
+      "loading": "Loading…",
+      "never": "never",
+      "project": "project",
+      "details": "Details",
+      "save": "Save",
+      "cancel": "Cancel",
+      "noChange": "No change",
+      "backupStarted": "Backup started: {list}"
+    },
+    "tiers": {
+      "core": "Core",
+      "important": "Important",
+      "recommended": "Recommended",
+      "info": "Info"
+    },
+    "categories": {
+      "leaks": {
+        "label": "Leaks",
+        "question": "Does my code leak secrets?"
+      },
+      "dependencies": {
+        "label": "Dependencies",
+        "question": "Do my dependencies have vulnerabilities?"
+      },
+      "container": {
+        "label": "Container",
+        "question": "Is my container built properly?"
+      },
+      "access": {
+        "label": "Access",
+        "question": "Who can reach my app?"
+      },
+      "data": {
+        "label": "Data",
+        "question": "Is my data protected?"
+      },
+      "journal": {
+        "label": "Journal",
+        "question": "What happened?"
+      }
+    },
+    "tabs": {
+      "overview": "Overview",
+      "code": "Code and dependencies",
+      "access": "Access and exposure",
+      "data": "Data",
+      "journal": "Journal",
+      "ignored": "Ignored"
+    },
+    "scanSources": {
+      "trivy-operator": "Running images · Trivy Operator",
+      "ci": "Code · GitHub Actions",
+      "kyverno": "Containers · Kyverno",
+      "cnpg": "Backups · CNPG",
+      "exposure": "Exposure",
+      "cilium": "Network isolation"
+    },
+    "exceptionStatus": {
+      "not_affected": "Does not affect us",
+      "false_positive": "False positive",
+      "accepted_risk": "Accepted risk",
+      "revoked": "Revoked secret"
+    },
+    "justifications": {
+      "component_not_present": "The vulnerable package is not in the image",
+      "vulnerable_code_not_present": "The vulnerable code is not present",
+      "vulnerable_code_not_in_execute_path": "The vulnerable code is never called",
+      "vulnerable_code_cannot_be_controlled_by_adversary": "An attacker cannot reach this code",
+      "inline_mitigations_already_exist": "An existing mitigation already blocks the attack"
+    },
+    "failOn": {
+      "none": "Never blocks, only reports",
+      "critical": "Blocks on a secret or a fixable critical CVE"
+    },
+    "settingsSource": {
+      "platform": "platform default value",
+      "project": "project default",
+      "app": "set for this app"
+    },
+    "settingsAction": {
+      "enable": "Enable",
+      "restrict": "Restrict",
+      "configure": "Configure"
+    },
+    "banner": {
+      "count": "{count, plural, one {# mandatory security action} other {# mandatory security actions}}",
+      "inApp": "{title} in {app}",
+      "show": "View action →"
+    },
+    "alert": {
+      "count": "Warning: {count, plural, one {# mandatory security action} other {# mandatory security actions}}",
+      "view": "View →"
+    },
+    "dashboard": {
+      "score": "Security level",
+      "scans": "Scans",
+      "excepted": "{count, plural, one {# alert ignored, not in the score.} other {# alerts ignored, not in the score.}}",
+      "priority": "Priority actions",
+      "noAction": "No pending action.",
+      "moreActions": "And {count, plural, one {# more action} other {# more actions}}, in the tabs above.",
+      "nothingToReport": "Nothing to report.",
+      "openFullPage": "Open in Security →",
+      "newMajor": "New major flaws",
+      "newMajorDescription": "Per week, core and important",
+      "guarantees": "Platform guarantees",
+      "notApplicable": "not applicable",
+      "guaranteesNote": "Provided by the platform, nothing to do.",
+      "trend": "Score over 90 days",
+      "apps": "Project apps",
+      "noApp": "No app.",
+      "app": "App",
+      "grade": "Grade",
+      "appActions": "Actions",
+      "appMandatory": "Mandatory",
+      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project."
+    },
+    "score": {
+      "nothingToDo": "Nothing to do",
+      "actions": "{count, plural, one {# action to take} other {# actions to take}}",
+      "tierCount": "{count} {tier}",
+      "phase2": "phase 2",
+      "ok": "ok",
+      "arrivesPhase2": "Arrives in phase 2",
+      "pointsLost": "{points, plural, one {−# point} other {−# points}}",
+      "grade": "/100 · grade {grade}"
+    },
+    "trend": {
+      "weekOf": "Week of {date}",
+      "newMajor": "New major flaws",
+      "score": "Score",
+      "noHistory": "No history yet."
+    },
+    "finding": {
+      "pending": "Ignored by {author}, awaiting approval from a project admin.",
+      "viewRun": "View run",
+      "backupNow": "Back up now",
+      "seenBy": "Seen by {sources} since {date}"
+    },
+    "exception": {
+      "ignore": "Ignore",
+      "title": "Ignore this alert",
+      "reason": "Reason",
+      "why": "Why",
+      "explanation": "Explanation",
+      "explanationPlaceholder": "What you checked, in one or two sentences",
+      "expiresOn": "Expires on",
+      "expiryHint": "Defaults to, and at the latest on, {date}. The alert comes back on its own on that date.",
+      "approvalNeeded": "Another project admin must approve it. Until then, the alert still counts.",
+      "saved": "Exception saved, awaiting approval",
+      "ignored": "Alert ignored",
+      "hints": {
+        "not_affected": "The flaw exists in the package but cannot be exploited here. Review in one year.",
+        "false_positive": "The scanner is wrong. Review in one year.",
+        "accepted_risk": "The flaw affects us, we will fix it later. Expires within 90 days at most, and another project admin must approve.",
+        "revoked": "The secret was changed and the old one no longer works. Removing it from the history is not enough."
+      }
+    },
+    "exceptions": {
+      "empty": "No ignored alert.",
+      "awaitingApproval": "Awaiting approval",
+      "byOn": "By {author} on {date}",
+      "approvedBy": "approved by {approver}",
+      "expiresOn": "expires on {date}",
+      "approve": "Approve",
+      "reactivate": "Reactivate",
+      "approved": "Exception approved",
+      "reactivated": "Alert reactivated"
+    },
+    "scans": {
+      "requested": "scan requested, result in a few minutes",
+      "readError": "Read failed, automatic retry",
+      "lastRun": "last {when}",
+      "nextRun": "next {when}",
+      "rerun": "Run again",
+      "started": "Scan started",
+      "firstRun": "The collector's first run will happen in a few minutes."
+    },
+    "alerts": {
+      "title": "Discord alerts",
+      "description": "Each new core issue is sent once, to {target}.",
+      "none": "no channel",
+      "origin": {
+        "app": "this app's webhook",
+        "project": "the project's webhook",
+        "platform": "the platform's default channel"
+      },
+      "scope": {
+        "app": "this app",
+        "project": "this project"
+      },
+      "ownWebhook": "Webhook for {scope}:",
+      "replace": "Replace",
+      "useThis": "Use this webhook",
+      "remove": "Remove",
+      "sendTest": "Send a test",
+      "testSent": "Test message sent",
+      "saved": "Webhook saved",
+      "removed": "Webhook removed",
+      "storedInVault": "The webhook is stored in Vault and is never shown again.",
+      "fallbackToProject": "Without an app webhook, the project's one is used.",
+      "appCanOwn": "An app can have its own."
+    },
+    "backups": {
+      "title": "Backups",
+      "phase": {
+        "completed": "Succeeded",
+        "failed": "Failed",
+        "running": "Running",
+        "started": "Running",
+        "pending": "Pending"
+      },
+      "instances": "{ready}/{total} {total, plural, one {instance ready} other {instances ready}}",
+      "restoring": "Restoring: {phase}",
+      "preparing": "Preparing: {phase}",
+      "restoredAt": "restored from {source}, up to {date}",
+      "restoredBackup": "restored from {source}, backup {backup}",
+      "emptyState": "No backups yet. Enable them in the Configuration tab, « Exposure and data » panel.",
+      "refresh": "Refresh",
+      "database": "Database",
+      "when": "When",
+      "status": "Status",
+      "manual": "manual",
+      "restore": "Restore"
+    },
+    "restore": {
+      "title": "Restore database {database}",
+      "description": "A new database is created from the backup, then the app switches to it. The app is unavailable during the restore, usually a few minutes. The current database is deleted, but its backups remain: you can roll back the same way.",
+      "backupState": "State at the end of the backup",
+      "pointInTime": "State at a given time, after the backup",
+      "pointHint": "Useful to go back just before a mistake, for example a data deletion at 14:32.",
+      "confirm": "Confirm restore",
+      "preview": "Preview the change",
+      "committed": "Restore committed, Argo CD will deploy it in a few minutes"
+    },
+    "settings": {
+      "title": "Settings",
+      "ciBlocking": "CI blocking",
+      "enforced": "Enforced by the project admin",
+      "current": "Currently: {source}",
+      "saved": "Setting committed to deploy/security.yaml",
+      "confirmChange": "Confirm the change",
+      "commit": "Confirm and commit"
+    },
+    "policy": {
+      "title": "Project policy",
+      "ciDefault": "CI blocking, by default",
+      "lock": "Lock",
+      "lockHint": "Apps inherit the value and cannot change it.",
+      "saved": "Policy saved",
+      "appliedTo": "{count, plural, one {Policy saved, applied to # app} other {Policy saved, applied to # apps}}",
+      "notApplied": "Not applied to: {list}"
+    }
+  },
+  "activity": {
+    "common": {
+      "refresh": "Refresh",
+      "loading": "Loading…",
+      "never": "never"
+    },
+    "tab": {
+      "description": {
+        "audit": "Who did what in {scope, select, app {this app} other {this project}}: CMP, kubectl, Vault, Keycloak and deployments.",
+        "logs": "Pod logs for {scope, select, app {this app} other {this project}}, with search and live tail."
+      },
+      "views": {
+        "audit": "Audit",
+        "logs": "Logs"
+      }
+    },
+    "sources": {
+      "cmp": "CMP",
+      "kubernetes": "kubectl",
+      "vault": "Vault",
+      "keycloak": "Keycloak",
+      "deployment": "Deployments"
+    },
+    "periods": {
+      "15m": "15 minutes",
+      "1h": "1 hour",
+      "6h": "6 hours",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "14d": "14 days",
+      "30d": "30 days"
+    },
+    "groups": {
+      "project": "Project and members",
+      "apps": "Applications",
+      "security": "Security",
+      "databases": "Databases",
+      "finops": "FinOps",
+      "shells": "Shells in a pod",
+      "vault": "Vault secrets",
+      "logins": "Failed logins",
+      "deployments": "Deployments"
+    },
+    "roles": {
+      "admin": "admin",
+      "member": "member"
+    },
+    "exposure": {
+      "public": "public",
+      "projectUsers": "project users",
+      "projectMembers": "project members",
+      "projectAdmins": "project admins",
+      "custom": "custom"
+    },
+    "time": {
+      "today": "today {time}"
+    },
+    "events": {
+      "projectCreate": "created project {project}",
+      "projectDelete": "deleted project {project}",
+      "memberAdd": "added {user} to the project ({role})",
+      "memberRemove": "removed {user} from the project",
+      "appCreate": "created app {app}",
+      "appDelete": "deleted app {app}",
+      "configUpdate": "changed the config of {app}",
+      "exposureChange": "changed the exposure of {app} from {from} to {to}",
+      "backupsChange": "changed the backups of {app}",
+      "scanRequest": "started a security scan of {app}",
+      "exceptionRequest": "requested a security exception on {app}",
+      "exceptionApprove": "approved a security exception",
+      "exceptionRevoke": "revoked a security exception",
+      "settingsUpdate": "changed the security settings of {app}",
+      "policyUpdate": "changed the project's security policy",
+      "alertsUpdate": "changed the security alerts target",
+      "alertsTest": "tested the security alerts",
+      "databaseBackup": "started a backup of the database of {app}",
+      "databaseRestore": "restored the database of {app}",
+      "budgetUpdate": "changed the project budget",
+      "recommendationApply": "applied a FinOps recommendation",
+      "recommendationIgnore": "ignored a FinOps recommendation",
+      "recommendationNotify": "notified about a FinOps recommendation",
+      "alertDisabled": "disabled a catalog alert ({target})",
+      "alertUpdated": "updated a catalog alert ({target})",
+      "deploymentSync": "deployed {target}",
+      "login": "signed in ({target})",
+      "loginFailed": "failed to sign in",
+      "vaultRead": "read secret {target}",
+      "vaultList": "listed secrets {target}",
+      "vaultWrite": "wrote secret {target}",
+      "vaultDelete": "deleted secret {target}",
+      "k8sShell": "opened a shell in {name}",
+      "k8sAttach": "attached to {name}",
+      "k8sPortForward": "opened a port-forward to {name}",
+      "k8sReadSecret": "read secret {name}",
+      "k8sVerbs": {
+        "create": "created",
+        "update": "updated",
+        "delete": "deleted",
+        "get": "read",
+        "list": "listed"
+      },
+      "detail": "({detail})"
+    },
+    "audit": {
+      "kpi": {
+        "actions": "Actions · {days} d",
+        "people": "Active people",
+        "notable": "Notable events",
+        "loginFailures": "Failed logins",
+        "delta": "{pct} % vs previous period",
+        "new": "new"
+      },
+      "chart": {
+        "title": "Activity per day and per source",
+        "empty": "No activity in this period."
+      },
+      "unavailable": "Sources temporarily unavailable:",
+      "filters": {
+        "allSources": "All sources",
+        "allPeople": "All people",
+        "allActions": "All actions",
+        "allApps": "All apps",
+        "reads": "Reads",
+        "notableOnly": "Notable only"
+      },
+      "aria": {
+        "source": "Source",
+        "person": "Person",
+        "action": "Action",
+        "app": "App",
+        "period": "Period"
+      },
+      "notable": "Notable",
+      "outcome": {
+        "success": "succeeded",
+        "refused": "refused"
+      },
+      "empty": "No events match these filters.",
+      "loadMore": "Load more",
+      "detail": {
+        "title": "Event details",
+        "close": "Close",
+        "who": "Who",
+        "what": "What",
+        "source": "Source",
+        "when": "When",
+        "app": "App",
+        "target": "Target",
+        "from": "From",
+        "result": "Result",
+        "request": "Request",
+        "allFrom": "All activity from {actor}",
+        "showRaw": "Show raw data",
+        "hideRaw": "Hide raw data"
+      }
+    },
+    "logs": {
+      "aria": {
+        "namespace": "Namespace",
+        "pod": "Pod",
+        "container": "Container",
+        "level": "Level",
+        "period": "Period"
+      },
+      "allNamespaces": "All namespaces",
+      "allPods": "All pods",
+      "allContainers": "All containers",
+      "allLevels": "All levels",
+      "errors": "Errors",
+      "warnings": "Warnings",
+      "search": "Search…",
+      "searchButton": "Search",
+      "lineWrap": "Wrap lines",
+      "timestamp": "Timestamp",
+      "lineCount": "{count, plural, one {# line} other {# lines}}",
+      "download": "Download the displayed lines",
+      "openNewTab": "Open in a new tab",
+      "exitFullscreen": "Exit full screen (Esc)",
+      "fullscreen": "Full screen",
+      "live": "Live",
+      "follow": "Follow",
+      "showStream": "Show this stream",
+      "hideStream": "Hide this stream",
+      "showContext": "Show context",
+      "contextBanner": "Context: one minute before and after the selected line, same container.",
+      "backToResults": "Back to results",
+      "noLines": "No lines match these filters."
+    },
+    "volume": {
+      "title": "Log volume",
+      "total": "{size} over the period",
+      "description": "Lines per minute, per app.",
+      "aria": "Volume period",
+      "empty": "No logs in this period.",
+      "tooltip": "{value} lines/min",
+      "table": {
+        "app": "App",
+        "size": "Size",
+        "lines": "Lines",
+        "peak": "Peak / min"
+      },
+      "size": {
+        "gb": "{value} GB",
+        "mb": "{value} MB",
+        "kb": "{value} KB",
+        "b": "{value} B"
+      }
+    },
+    "network": {
+      "title": "Denied network flows · 24 h",
+      "description": "Blocked by a network policy, on this project's side.",
+      "table": {
+        "source": "Source",
+        "destination": "Destination",
+        "port": "Port",
+        "direction": "Direction",
+        "count": "Count",
+        "last": "Last seen"
+      },
+      "direction": {
+        "ingress": "ingress",
+        "egress": "egress"
+      },
+      "noPort": "n/a",
+      "empty": "No denied flow in the last 24 hours."
+    },
+    "platform": {
+      "alerts": "Active alerts",
+      "noAlerts": "No active alert.",
+      "since": "since {time}",
+      "auditChain": "Audit chain",
+      "archive": "Immutable archive: last archived hour {time}",
+      "collected": "Collection {source}: up to date until {time}"
+    },
+    "insights": {
+      "none": "None.",
+      "logins": {
+        "title": "Logins to the project realm",
+        "success": "Successful",
+        "failure": "Failed",
+        "empty": "No logins in this period.",
+        "failingAccounts": "Failing accounts",
+        "failingIps": "Failing IPs"
+      },
+      "heatmap": {
+        "title": "When human activity happens",
+        "empty": "No human action in this period.",
+        "cell": "{day} {hour}h: {count, plural, one {# action} other {# actions}}",
+        "hour": "{hour}h",
+        "note": "Paris time. Busy nights and weekends deserve a look."
+      }
+    }
+  },
+  "alerts": {
+    "state": {
+      "normal": "OK",
+      "pending": "Pending",
+      "firing": "Firing",
+      "error": "Error",
+      "nodata": "No data"
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning"
+    },
+    "notifies": {
+      "app": "the app's Discord channel",
+      "project": "the project's Discord channel",
+      "platform": "the platform's Discord channel (no project channel configured)"
+    },
+    "noChannel": "no channel: set one up in the Security tab",
+    "summary": "{count, plural, one {# alert active} other {# alerts active}} out of {total} {scope}",
+    "scope": {
+      "app": "for this app",
+      "project": "for the whole project"
+    },
+    "notifiesTo": "Notifications go to {target}. Evaluated by Grafana every minute.",
+    "adminsOnly": "Only project admins can change them.",
+    "viewInGrafana": "View in Grafana",
+    "newCustom": "Create a custom alert",
+    "toggled": {
+      "on": "“{title}” enabled",
+      "off": "“{title}” disabled"
+    },
+    "enable": "Enable {title}",
+    "apply": "Apply"
+  },
   "account": {
     "language": {
       "title": "Language",

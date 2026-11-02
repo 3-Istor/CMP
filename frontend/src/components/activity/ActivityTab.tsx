@@ -2,6 +2,7 @@
 
 import { getSecurityRole } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { AuditView } from "./AuditView";
 import { LogsView } from "./LogsView";
@@ -15,8 +16,10 @@ export function ActivityTab({
   project: string;
   app?: string;
 }) {
+  const t = useTranslations("activity.tab");
   const [view, setView] = useState<View>("audit");
   const [role, setRole] = useState<{ admin: boolean } | null>(null);
+  const scope = app ? "app" : "project";
 
   useEffect(() => {
     getSecurityRole(project).then(
@@ -30,8 +33,8 @@ export function ActivityTab({
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">
           {view === "audit"
-            ? `Qui a fait quoi dans ${app ? "cette app" : "ce projet"} : CMP, kubectl, Vault, Keycloak et déploiements.`
-            : `Les logs des pods ${app ? "de l'app" : "du projet"}, avec recherche et suivi en direct.`}
+            ? t("description.audit", { scope })
+            : t("description.logs", { scope })}
         </p>
         <div className="flex rounded-full border p-0.5">
           {(["audit", "logs"] as const).map((v) => (
@@ -46,7 +49,7 @@ export function ActivityTab({
                   : "text-muted-foreground",
               )}
             >
-              {v === "audit" ? "Audit" : "Logs"}
+              {t(`views.${v}`)}
             </button>
           ))}
         </div>

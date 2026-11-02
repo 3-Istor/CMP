@@ -1,21 +1,15 @@
 "use client";
 
 import type { SecurityCategory, SecuritySegment } from "@/types";
+import { useTranslations } from "next-intl";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { CATEGORY_META, EMPTY_COLOR, OK_COLOR, TIER_META } from "./labels";
+import { EMPTY_COLOR, OK_COLOR, TIER_META } from "./labels";
 
 const TIER_ORDER = ["core", "important", "recommended"] as const;
 
 function segmentColor(segment: SecuritySegment): string {
   if (segment.category === "journal") return EMPTY_COLOR;
   return segment.worst ? TIER_META[segment.worst].color : OK_COLOR;
-}
-
-function countLine(segment: SecuritySegment): string {
-  const parts = TIER_ORDER.filter((t) => segment.counts[t]).map(
-    (t) => `${segment.counts[t]} ${TIER_META[t].label.toLowerCase()}`,
-  );
-  return parts.length ? parts.join(" · ") : "Rien à faire";
 }
 
 /**
@@ -35,7 +29,18 @@ export function ScoreRing({
   segments: SecuritySegment[];
   onSelect: (category: SecurityCategory) => void;
 }) {
+  const t = useTranslations("security");
   const data = segments.map((s) => ({ ...s, value: 1 }));
+
+  function countLine(segment: SecuritySegment): string {
+    const parts = TIER_ORDER.filter((tier) => segment.counts[tier]).map((tier) =>
+      t("score.tierCount", {
+        count: segment.counts[tier] ?? 0,
+        tier: t(`tiers.${tier}`).toLowerCase(),
+      }),
+    );
+    return parts.length ? parts.join(" · ") : t("score.nothingToDo");
+  }
 
   return (
     <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
@@ -70,16 +75,16 @@ export function ScoreRing({
                 return (
                   <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-sm">
                     <p className="font-medium">
-                      {CATEGORY_META[segment.category].question}
+                      {t(`categories.${segment.category}.question`)}
                     </p>
                     <p className="text-muted-foreground">
                       {segment.category === "journal"
-                        ? "Arrive avec la phase 2"
+                        ? t("score.arrivesPhase2")
                         : countLine(segment)}
                     </p>
                     {segment.points_lost > 0 && (
                       <p className="text-muted-foreground">
-                        −{segment.points_lost} points
+                        {t("score.pointsLost", { points: segment.points_lost })}
                       </p>
                     )}
                   </div>
@@ -91,7 +96,7 @@ export function ScoreRing({
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-3xl font-semibold tabular-nums">{score}</span>
           <span className="text-xs text-muted-foreground">
-            /100 · note {grade}
+            {t("score.grade", { grade })}
           </span>
         </div>
       </div>
@@ -99,8 +104,8 @@ export function ScoreRing({
       <div className="w-full space-y-1">
         <p className="mb-2 text-sm font-semibold">
           {actions === 0
-            ? "Rien à faire"
-            : `${actions} action${actions > 1 ? "s" : ""} à faire`}
+            ? t("score.nothingToDo")
+            : t("score.actions", { count: actions })}
         </p>
         {segments.map((s) => (
           <button
@@ -113,12 +118,12 @@ export function ScoreRing({
               className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: segmentColor(s) }}
             />
-            <span className="flex-1">{CATEGORY_META[s.category].label}</span>
+            <span className="flex-1">{t(`categories.${s.category}.label`)}</span>
             <span className="text-xs text-muted-foreground">
               {s.category === "journal"
-                ? "phase 2"
+                ? t("score.phase2")
                 : Object.values(s.counts).reduce((a, b) => a + (b ?? 0), 0) ||
-                  "ok"}
+                  t("score.ok")}
             </span>
           </button>
         ))}
