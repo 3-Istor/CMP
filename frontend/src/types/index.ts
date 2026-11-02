@@ -1128,6 +1128,25 @@ export interface EnvironmentsView {
   canAdminister: boolean;
 }
 
+export interface EnvDiffField {
+  key: string;
+  staging: string | null;
+  prod: string | null;
+  differs: boolean;
+}
+
+export interface EnvDiffValue {
+  path: string;
+  staging: unknown;
+  prod: unknown;
+}
+
+export interface EnvDiff {
+  stagingAvailable: boolean;
+  fields: EnvDiffField[];
+  values: EnvDiffValue[];
+}
+
 export interface StagingOffhours {
   enabled: boolean;
   sleepAt: string;

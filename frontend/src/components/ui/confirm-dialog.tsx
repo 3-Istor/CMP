@@ -100,7 +100,7 @@ function ConfirmBody({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
 
-      {level === 2 && consequences && consequences.length > 0 && (
+      {consequences && consequences.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-sm font-medium">{t("consequencesLabel")}</p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">

@@ -3,6 +3,7 @@
 import { intlLocale } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ import {
   cancelPromotion,
   cancelRun,
   getEnvironments,
+  getEnvironmentsDiff,
   isNotConnected,
   listPromotions,
   listRuns,
@@ -23,6 +25,7 @@ import {
 import { NotConnected } from "@/components/clusters/NotConnected";
 import { cn } from "@/lib/utils";
 import type {
+  EnvDiff,
   EnvironmentState,
   EnvironmentsView,
   Promotion,
@@ -35,6 +38,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage, formatDateTime, TONE } from "../release/format";
+import { diffConsequences, EnvDiffCard } from "./EnvDiffCard";
 import { PromotionPolicyCard } from "./PromotionPolicyCard";
 import { StagingSettingsCard } from "./StagingSettingsCard";
 
@@ -374,6 +378,10 @@ function HistoryCard({
 
 export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
   const t = useTranslations("environments");
+  const td = useTranslations("envDiff");
+  const [diff, setDiff] = useState<EnvDiff | null>(null);
+  const [diffError, setDiffError] = useState<unknown>(null);
+  const [confirming, setConfirming] = useState(false);
   const [view, setView] = useState<EnvironmentsView | null>(null);
   const [runs, setRuns] = useState<VerificationRun[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -383,6 +391,13 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
   const [starting, setStarting] = useState(false);
 
   const refresh = useCallback(async () => {
+    getEnvironmentsDiff(deploymentId).then(
+      (next) => {
+        setDiff(next);
+        setDiffError(null);
+      },
+      setDiffError,
+    );
     try {
       const next = await getEnvironments(deploymentId);
       setView(next);
@@ -436,6 +451,8 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
 
   return (
     <div className="space-y-6">
+      <EnvDiffCard diff={diff} error={diffError} />
+
       {view.staging?.state === "ready" && staging && prod && (
         <Card>
           <CardContent className="space-y-4 pt-6">
@@ -468,7 +485,7 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button onClick={promote} disabled={!promotable || starting || (emergency && !reason)}>
+                  <Button onClick={() => setConfirming(true)} disabled={!promotable || starting || (emergency && !reason)}>
                     {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {emergency
                       ? t("promote.emergency")
@@ -495,6 +512,21 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        level={1}
+        title={td("confirm.title")}
+        description={
+          diffConsequences(td, diff).length > 0
+            ? td("confirm.description")
+            : td("confirm.noDifferences")
+        }
+        consequences={diffConsequences(td, diff)}
+        confirmLabel={td("confirm.confirm")}
+        onConfirm={promote}
+      />
 
       {view.activePromotion && (
         <PromotionCard

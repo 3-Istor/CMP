@@ -959,6 +959,9 @@ export const updateCatalogAlert = (
 export const getEnvironments = (deploymentId: number) =>
   request<import("@/types").EnvironmentsView>(`/deployments/${deploymentId}/environments`);
 
+export const getEnvironmentsDiff = (deploymentId: number) =>
+  request<import("@/types").EnvDiff>(`/deployments/${deploymentId}/environments/diff`);
+
 export const enableStaging = (deploymentId: number, offhours: import("@/types").StagingOffhours) =>
   request<import("@/types").StagingStatus>(`/deployments/${deploymentId}/environments/staging`, {
     method: "POST",
