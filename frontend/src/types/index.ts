@@ -11,6 +11,10 @@ export type DeploymentStatus =
 
 export type ProviderType = "legacy_hybrid" | "kubernetes";
 
+export type AppIconValue =
+  | { kind: "builtin"; name: string; color: string }
+  | { kind: "upload"; hash: string };
+
 export interface Deployment {
   id: number;
   name: string;
@@ -33,6 +37,7 @@ export interface Deployment {
   k8s_namespace: string | null;
   /** The AI assistant that created the app, null when a person did. */
   created_via?: string | null;
+  icon?: AppIconValue | null;
 }
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────

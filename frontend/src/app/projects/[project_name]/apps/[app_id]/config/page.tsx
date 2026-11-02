@@ -1,5 +1,6 @@
 "use client";
 
+import { AppIconPanel } from "@/components/app-icon/AppIconPanel";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { useAppContext } from "@/components/projects/AppContext";
 import { AppSection } from "@/components/projects/AppFrame";
@@ -114,6 +115,7 @@ export default function AppConfigPage() {
     <AppSection
       allowed={deployment.provider_type === "kubernetes" && can("app.viewConfig")}
     >
+      <AppIconPanel />
       {isRunning ? (
         <SearchHighlight>
           <div id="security-data" className="scroll-mt-24">

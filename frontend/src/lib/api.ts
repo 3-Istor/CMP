@@ -1,4 +1,9 @@
-import type { CatalogTemplate, Deployment, TerraformOutputs } from "@/types";
+import type {
+  AppIconValue,
+  CatalogTemplate,
+  Deployment,
+  TerraformOutputs,
+} from "@/types";
 import { getSession, signIn } from "next-auth/react";
 
 // Declare runtime config type
@@ -1229,3 +1234,42 @@ export const updateAgentSettings = (
 
 export const getAgentPublicStats = () =>
   request<import("@/types").AgentPublicStats>("/agents/stats");
+
+export const setBuiltinAppIcon = (
+  id: number,
+  icon: { name: string; color: string },
+) =>
+  request<AppIconValue>(`/deployments/${id}/icon`, {
+    method: "PUT",
+    body: JSON.stringify({ kind: "builtin", ...icon }),
+  });
+
+export const resetAppIcon = (id: number) =>
+  request<void>(`/deployments/${id}/icon`, { method: "DELETE" });
+
+export async function uploadAppIcon(
+  id: number,
+  file: File,
+): Promise<AppIconValue> {
+  const form = new FormData();
+  form.append("file", file);
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${id}/icon`, {
+    method: "PUT",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.text());
+  return res.json();
+}
+
+export async function fetchAppIconBlob(id: number): Promise<Blob> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/deployments/${id}/icon`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.text());
+  return res.blob();
+}

@@ -2206,5 +2206,55 @@
       "outputs": "Sorties Terraform",
       "noOutputs": "Aucune sortie pour le moment."
     }
+  },
+  "appIcon": {
+    "menu": "Changer l'icône",
+    "title": "Icône de l'application",
+    "description": "Choisissez une icône et une couleur pour {name}, ou importez votre propre image.",
+    "preview": "Aperçu",
+    "shape": "Icône",
+    "color": "Couleur",
+    "reset": "Revenir à l'icône par défaut",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "panel": {
+      "title": "Icône",
+      "description": "Affichée dans les listes et l'en-tête de l'application."
+    },
+    "upload": {
+      "title": "Ou importer une image",
+      "choose": "Choisir une image",
+      "limits": "PNG, JPEG ou WebP, 512 Ko maximum. L'image est recadrée en carré et réduite à 256 px.",
+      "selected": "Image choisie : {name}"
+    },
+    "errors": {
+      "wrongType": "Format refusé. Utilisez une image PNG, JPEG ou WebP.",
+      "tooBig": "Image trop lourde. La taille maximale est 512 Ko.",
+      "storage": "Le stockage des images est indisponible. Les icônes prédéfinies restent utilisables.",
+      "forbidden": "Vous n'avez pas le droit de changer l'icône de cette application.",
+      "generic": "L'icône n'a pas pu être enregistrée. Réessayez."
+    },
+    "icons": {
+      "MessageCircle": "Message",
+      "Globe": "Globe",
+      "Database": "Base de données",
+      "ShoppingCart": "Panier",
+      "BarChart3": "Graphique",
+      "Cpu": "Processeur",
+      "Mail": "Courrier",
+      "Calendar": "Calendrier",
+      "Lock": "Cadenas",
+      "Gamepad2": "Manette",
+      "Leaf": "Feuille",
+      "Package": "Colis"
+    },
+    "colors": {
+      "indigo": "Indigo",
+      "emerald": "Émeraude",
+      "amber": "Ambre",
+      "rose": "Rose",
+      "sky": "Ciel",
+      "slate": "Ardoise"
+    }
   }
 }

@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     AVATARS_S3_REGION: str = "eu-west-3"
     AVATARS_PUBLIC_URL_BASE: str = "https://avatars-s3.3istor.com"
 
+    # App icons: private Garage bucket, served through the CMP only.
+    # Unset keys leave the upload disabled and the built-in icons working.
+    ICONS_S3_ENDPOINT: str = ""
+    ICONS_S3_BUCKET: str = "cnp-app-icons"
+    ICONS_S3_ACCESS_KEY_ID: str = ""
+    ICONS_S3_SECRET_ACCESS_KEY: str = ""
+    ICONS_S3_REGION: str = "garage"
+
     # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
     KEYCLOAK_REALM: str = "3istor"
