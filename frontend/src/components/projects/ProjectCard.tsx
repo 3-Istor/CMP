@@ -1,5 +1,6 @@
 "use client";
 
+import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 import { Badge } from "@/components/ui/badge";
 import {
     Card,
@@ -120,9 +121,14 @@ export function ProjectCard({ project, onRetried }: Props) {
                         </Badge>
                     )}
                 </div>
-                <CardTitle className="text-base mt-2 capitalize">
-                    {project.name}
-                </CardTitle>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                    <CardTitle className="text-base capitalize">
+                        {project.name}
+                    </CardTitle>
+                    {!isInFlight && !isFailed && (
+                        <FavoriteToggle kind="project" id={project.name} />
+                    )}
+                </div>
                 <CardDescription className="text-xs">
                     {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
                 </CardDescription>

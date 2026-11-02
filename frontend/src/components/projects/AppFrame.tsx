@@ -2,6 +2,7 @@
 
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { AppIconDialog } from "@/components/app-icon/AppIconDialog";
+import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 
 import { useAppContext } from "@/components/projects/AppContext";
 import {
@@ -290,6 +291,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-2xl font-bold">{current.name}</h1>
+                <FavoriteToggle kind="app" id={current.id} />
                 {healthReady && (
                   <HealthPill
                     loading={healthLoading}

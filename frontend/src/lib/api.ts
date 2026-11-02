@@ -334,6 +334,22 @@ export const updatePreferences = (preferences: {
     { method: "PUT", body: JSON.stringify(preferences) },
   );
 
+export interface Favorites {
+  projects: string[];
+  apps: number[];
+}
+
+export const getFavorites = () =>
+  request<{ favorites: Favorites }>("/account/preferences").then(
+    (r) => r.favorites,
+  );
+
+export const updateFavorites = (favorites: Favorites) =>
+  request<Favorites>("/account/favorites", {
+    method: "PUT",
+    body: JSON.stringify(favorites),
+  });
+
 export const getGitHubStatus = async (): Promise<
   import("@/types").GitHubStatus
 > => {

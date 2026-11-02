@@ -12,9 +12,11 @@ from app.core.database import get_db
 from app.models.user_github import UserGitHubInstallation
 from app.models.user_preference import UserPreference
 from app.schemas.account import (
+    Favorites,
     GitHubInstallationRequest,
     GitHubInstallationResponse,
     PictureUploadResponse,
+    PreferencesUpdate,
     UserPreferences,
     UserProfile,
 )
@@ -32,15 +34,34 @@ def _preference_key(token_payload: dict) -> str:
     )
 
 
-def _stored_locale(db: Session, user_key: str) -> str | None:
+def _stored_record(db: Session, user_key: str) -> UserPreference | None:
     if not user_key:
         return None
-    record = (
+    return (
         db.query(UserPreference)
         .filter(UserPreference.user_sub == user_key)
         .first()
     )
+
+
+def _stored_locale(db: Session, user_key: str) -> str | None:
+    record = _stored_record(db, user_key)
     return record.locale if record else None
+
+
+def _stored_favorites(record: UserPreference | None) -> Favorites:
+    return Favorites.model_validate(
+        (record.favorites if record else None) or {}
+    )
+
+
+def _require_user_key(token_payload: dict) -> str:
+    user_key = _preference_key(token_payload)
+    if not user_key:
+        raise HTTPException(
+            status_code=400, detail="User identifier not found in token"
+        )
+    return user_key
 
 
 @router.get("/preferences", response_model=UserPreferences)
@@ -49,36 +70,54 @@ def get_preferences(
     db: Session = Depends(get_db),
 ) -> UserPreferences:
     """Return the stored UI preferences of the current user."""
+    record = _stored_record(db, _preference_key(token_payload))
     return UserPreferences(
-        locale=_stored_locale(db, _preference_key(token_payload))
+        locale=record.locale if record else None,
+        favorites=_stored_favorites(record),
     )
 
 
 @router.put("/preferences", response_model=UserPreferences)
 def update_preferences(
-    preferences: UserPreferences,
+    preferences: PreferencesUpdate,
     token_payload: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ) -> UserPreferences:
-    """Store the UI preferences of the current user ("fr", "en" or null)."""
-    user_key = _preference_key(token_payload)
-    if not user_key:
-        raise HTTPException(
-            status_code=400, detail="User identifier not found in token"
-        )
+    """Store the UI language of the current user ("fr", "en" or null)."""
+    user_key = _require_user_key(token_payload)
 
-    record = (
-        db.query(UserPreference)
-        .filter(UserPreference.user_sub == user_key)
-        .first()
-    )
+    record = _stored_record(db, user_key)
     if record:
         record.locale = preferences.locale
     else:
-        db.add(UserPreference(user_sub=user_key, locale=preferences.locale))
+        record = UserPreference(user_sub=user_key, locale=preferences.locale)
+        db.add(record)
     db.commit()
 
-    return UserPreferences(locale=preferences.locale)
+    return UserPreferences(
+        locale=preferences.locale, favorites=_stored_favorites(record)
+    )
+
+
+@router.put("/favorites", response_model=Favorites)
+def update_favorites(
+    favorites: Favorites,
+    token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> Favorites:
+    """Replace the starred projects and apps of the current user."""
+    user_key = _require_user_key(token_payload)
+
+    record = _stored_record(db, user_key)
+    if record:
+        record.favorites = favorites.model_dump()
+    else:
+        db.add(
+            UserPreference(user_sub=user_key, favorites=favorites.model_dump())
+        )
+    db.commit()
+
+    return favorites
 
 
 @router.get("/me", response_model=UserProfile)

@@ -2520,5 +2520,13 @@
       "title": "Cluster {cloud} non connecté",
       "body": "Les données de ce projet reviennent quand le cluster est rallumé."
     }
+  },
+  "favorites": {
+    "title": "Favoris",
+    "recents": "Récents",
+    "add": "Ajouter aux favoris",
+    "remove": "Retirer des favoris",
+    "limitReached": "Vous pouvez avoir au maximum {max} projets favoris et {max} apps favorites.",
+    "saveFailed": "Impossible d’enregistrer vos favoris."
   }
 }
