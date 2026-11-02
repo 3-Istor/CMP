@@ -152,6 +152,10 @@ def classify(
         reason = "crashloop" if crashlooping else "no_ready_replica"
         if desired == 0:
             reason = "scaled_to_zero"
+        # Grace for waking apps; with no pod at all there is nothing to time.
+        since = _not_ready_since(live, replica_sets)
+        if live and since and now - since <= SLOW_ROLLOUT:
+            return "degraded", reason, ready, desired
         return "down", reason, ready, desired
     if crashlooping:
         return "degraded", "crashloop", ready, desired

@@ -154,6 +154,28 @@ def test_down_reports_crashloop_when_nothing_is_ready():
     assert _only(health).reason == "crashloop"
 
 
+def test_down_only_after_five_minutes_without_a_ready_replica():
+    pods = [_pod("p1", ready=False, minutes_ago=4)]
+    rs = [_rs(1)]
+
+    early = app_health.classify(pods, rs, False, None, NOW)[:2]
+    later = app_health.classify(
+        pods, rs, False, None, NOW + timedelta(minutes=2)
+    )[:2]
+
+    assert (early, later) == (
+        ("degraded", "no_ready_replica"),
+        ("down", "no_ready_replica"),
+    )
+
+
+def test_no_pod_at_all_is_down_at_once():
+    rs = _rs(1)
+    rs["metadata"]["creationTimestamp"] = _ts(1)
+
+    assert app_health.classify([], [rs], False, None, NOW)[0] == "down"
+
+
 def test_degraded_when_a_pod_crashloops_while_another_serves():
     health = _health(
         _deployment(),
