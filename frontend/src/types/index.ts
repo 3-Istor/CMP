@@ -441,6 +441,7 @@ export interface FinopsSavings {
 export interface FinopsSourceMeta {
   source: string;
   last_ingested_at: string | null;
+  first_day?: string | null;
   latest_day: string | null;
   final_through: string | null;
   has_estimate: boolean;

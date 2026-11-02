@@ -5,8 +5,8 @@ import { budgetStatusColor, formatEUR } from "./format";
 
 /**
  * Barre de progression budget vs consommé avec code couleur dynamique
- * selon les seuils du budget (🟢 < attention · 🟡 < critique · 🔴 au-delà ;
- * 70 % / 90 % par défaut).
+ * selon les seuils du budget (vert sous l'attention, orange sous le critique,
+ * rouge au-delà ; 70 % / 90 % par défaut).
  */
 export function BudgetGauge({ budget }: { budget: Budget }) {
   const pct = budget.consumed_pct ?? 0;
@@ -39,7 +39,7 @@ export function BudgetGauge({ budget }: { budget: Budget }) {
         <span className="font-medium tabular-nums" style={{ color }}>
           {budget.consumed_pct !== null
             ? `${budget.consumed_pct.toFixed(0)}% consommé`
-            : "—"}
+            : "n/d"}
         </span>
         <span className="text-muted-foreground">
           Reste {formatEUR(budget.remaining_eur, budget.currency)}

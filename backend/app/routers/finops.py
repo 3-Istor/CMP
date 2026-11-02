@@ -625,6 +625,9 @@ def get_meta(
         latest = db.scalar(
             select(func.max(CostLineItem.charge_period_start)).where(scoped)
         )
+        first = db.scalar(
+            select(func.min(CostLineItem.charge_period_start)).where(scoped)
+        )
         final = db.scalar(
             select(func.max(CostLineItem.charge_period_start)).where(
                 scoped, CostLineItem.x_is_final.is_(True)
@@ -643,6 +646,7 @@ def get_meta(
                 last_ingested_at=db.scalar(
                     select(func.max(CostLineItem.x_ingested_at)).where(scoped)
                 ),
+                first_day=first.date() if first else None,
                 latest_day=latest.date() if latest else None,
                 final_through=final.date() if final else None,
                 has_estimate=bool(estimated),

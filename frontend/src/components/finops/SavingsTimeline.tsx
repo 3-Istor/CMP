@@ -10,13 +10,21 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatEUR } from "./format";
+import { axisTickFormatter, formatEUR } from "./format";
 
 export const SAVINGS_COLORS = { avoided: "#3B82F6", realized: "#10B981" };
 
 const SERIES = [
-  { key: "avoided_eur", name: "Coût alloué évité", color: SAVINGS_COLORS.avoided },
-  { key: "realized_eur", name: "Économie encaissée", color: SAVINGS_COLORS.realized },
+  {
+    key: "avoided_eur",
+    name: "Coût alloué évité",
+    color: SAVINGS_COLORS.avoided,
+  },
+  {
+    key: "realized_eur",
+    name: "Économie encaissée",
+    color: SAVINGS_COLORS.realized,
+  },
 ] as const;
 
 function SavingsTooltip({
@@ -39,7 +47,9 @@ function SavingsTooltip({
             style={{ backgroundColor: p.color }}
           />
           {p.name}
-          <span className="ml-auto pl-4 tabular-nums">{formatEUR(p.value)}</span>
+          <span className="ml-auto pl-4 tabular-nums">
+            {formatEUR(p.value)}
+          </span>
         </p>
       ))}
     </div>
@@ -48,11 +58,18 @@ function SavingsTooltip({
 
 /** Deux séries indépendantes : évité et encaissé ne sont jamais additionnés. */
 export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
+  const axisMax = Math.max(
+    0,
+    ...data.flatMap((d) => [d.avoided_eur, d.realized_eur]),
+  );
   return (
     <div className="space-y-3">
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+          >
             <CartesianGrid
               strokeDasharray="3 3"
               className="stroke-muted"
@@ -69,8 +86,8 @@ export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              width={48}
-              tickFormatter={(v: number) => `${v.toFixed(0)}€`}
+              width={56}
+              tickFormatter={axisTickFormatter(axisMax, " €")}
             />
             <Tooltip content={<SavingsTooltip />} />
             {SERIES.map((s) => (

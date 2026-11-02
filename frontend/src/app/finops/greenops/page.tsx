@@ -2,6 +2,7 @@
 
 import { CarbonTimeline } from "@/components/finops/CarbonTimeline";
 import { DataFreshness } from "@/components/finops/DataFreshness";
+import { formatNumber } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -24,12 +25,6 @@ const PERIOD_LABEL: Record<string, string> = {
 
 const SELECT_CLASS =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
-
-function formatNumber(value: number, digits = 1): string {
-  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: digits }).format(
-    value,
-  );
-}
 
 function CarbonTable({ rows }: { rows: FinopsCarbon["rows"] }) {
   return (
@@ -54,10 +49,10 @@ function CarbonTable({ rows }: { rows: FinopsCarbon["rows"] }) {
             >
               <td className="px-3 py-2">
                 <Badge variant="outline" className="font-normal">
-                  {r.project || "—"}
+                  {r.project || "n/d"}
                 </Badge>
               </td>
-              <td className="px-3 py-2 font-medium">{r.app || "—"}</td>
+              <td className="px-3 py-2 font-medium">{r.app || "n/d"}</td>
               <td className="px-3 py-2 text-right tabular-nums">
                 {formatNumber(r.energy_kwh)} kWh
               </td>
@@ -228,7 +223,7 @@ function GreenopsInner() {
             <span className="font-medium text-foreground">Méthode.</span>{" "}
             On-prem : puissance mesurée des hyperviseurs (moyenne d&apos;octobre,
             en attendant un exporter continu) × intensité RTE éCO2mix du jour.
-            ACV : même énergie × {lca?.g_per_kwh ?? "—"} g/kWh ({lca?.source}).
+            ACV : même énergie × {lca?.g_per_kwh ?? "n/d"} g/kWh ({lca?.source}).
             Cloud : estimation, à venir.
           </p>
 
@@ -250,6 +245,15 @@ function GreenopsInner() {
                 </CardHeader>
                 <CardContent>
                   <CarbonTimeline data={data.timeline} />
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    L&apos;intensité du réseau est la quantité de CO₂e émise
+                    par kWh produit (gCO₂e/kWh), publiée par RTE éCO2mix toutes
+                    les 15 minutes. Elle varie avec le mix de production :
+                    basse la nuit et quand il y a du vent, plus haute aux pointes
+                    du soir quand le gaz est sollicité. Elle sert à calculer les
+                    émissions mesurées (énergie × intensité horaire) et à choisir
+                    les heures bas carbone pour les traitements batch.
+                  </p>
                 </CardContent>
               </Card>
 

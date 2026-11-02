@@ -108,7 +108,7 @@ function BudgetsInner() {
           {/* Config budget */}
           <Card>
             <CardHeader>
-              <CardTitle>Budget mensuel — {project}</CardTitle>
+              <CardTitle>Budget mensuel · {project}</CardTitle>
               <CardDescription>
                 Définissez l&apos;enveloppe et les seuils d&apos;alerte du projet.
               </CardDescription>
