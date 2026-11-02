@@ -33,12 +33,6 @@ export const OUTCOME_TONE: Record<ReleaseOutcome, keyof typeof TONE> = {
   superseded: "muted",
 };
 
-export const STRATEGY: Record<string, string> = {
-  rolling: "Rolling",
-  canary: "Canary",
-  bluegreen: "Blue/green",
-};
-
 export function isVisibleStep(step: { kind: ReleaseStepKind }): boolean {
   return step.kind !== "scale";
 }

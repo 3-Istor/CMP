@@ -15,49 +15,19 @@ import { Label } from "@/components/ui/label";
 import { createProject } from "@/lib/api";
 import type { TargetCloud } from "@/types";
 import { Check, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface CloudOption {
     value: TargetCloud;
-    label: string;
-    /** Why you'd pick this cloud, shown even while it's disabled, the point
-     * is to let people plan ahead, not just to fill space. */
-    advantages: string[];
     available: boolean;
 }
 
 const CLOUDS: CloudOption[] = [
-    {
-        value: "onprem",
-        label: "On-premise",
-        advantages: [
-            "No data egress cost",
-            "Full infrastructure control",
-            "Already live, zero setup wait",
-        ],
-        available: true,
-    },
-    {
-        value: "aws",
-        label: "AWS",
-        advantages: [
-            "Widest catalog of managed services",
-            "Mature IAM & compliance tooling",
-            "Broad global region coverage",
-        ],
-        available: true,
-    },
-    {
-        value: "gcp",
-        label: "GCP",
-        advantages: [
-            "Native Kubernetes heritage",
-            "Typically the most competitive compute pricing",
-            "Strong data & AI tooling",
-        ],
-        available: true,
-    },
+    { value: "onprem", available: true },
+    { value: "aws", available: true },
+    { value: "gcp", available: true },
 ];
 
 interface Props {
@@ -66,16 +36,19 @@ interface Props {
     onCreated: (projectName: string) => void;
 }
 
+type NameError = "tooShort" | "tooLong" | "invalid";
+
 /** Validates a project name: lowercase, kebab-case, 2–40 chars (backend limit) */
-function validateName(name: string): string | null {
-    if (name.length < 2) return "Name must be at least 2 characters.";
-    if (name.length > 40) return "Name must be at most 40 characters.";
-    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name))
-        return "Use lowercase letters, numbers, and hyphens only. Must start and end with a letter or number.";
+function validateName(name: string): NameError | null {
+    if (name.length < 2) return "tooShort";
+    if (name.length > 40) return "tooLong";
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)) return "invalid";
     return null;
 }
 
 export function CreateProjectModal({ open, onClose, onCreated }: Props) {
+    const t = useTranslations("projects.create");
+    const tc = useTranslations("common");
     const [name, setName] = useState("");
     const [targetCloud, setTargetCloud] = useState<TargetCloud>("onprem");
     const [loading, setLoading] = useState(false);
@@ -97,7 +70,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         const trimmed = name.trim();
         const validationError = validateName(trimmed);
         if (validationError) {
-            setError(validationError);
+            setError(t(`errors.${validationError}`));
             return;
         }
 
@@ -106,7 +79,10 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         try {
             await createProject(trimmed, targetCloud);
             toast.success(
-                `Project "${trimmed}" is being bootstrapped on ${targetCloud}. Keycloak groups and ArgoCD AppProject will be ready shortly.`,
+                t("toasts.created", {
+                    name: trimmed,
+                    cloud: t(`clouds.${targetCloud}.label`),
+                }),
                 { duration: 6000 },
             );
             onCreated(trimmed);
@@ -114,7 +90,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             setError(msg);
-            toast.error(`Failed to create project: ${msg}`);
+            toast.error(t("toasts.failed", { message: msg }));
         } finally {
             setLoading(false);
         }
@@ -124,23 +100,19 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         <Dialog open={open} onOpenChange={(v) => !loading && !v && onClose()}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Create a new Project</DialogTitle>
-                    <DialogDescription>
-                        A project groups your Kubernetes applications under a shared
-                        Keycloak team, Vault policy, and ArgoCD AppProject. Bootstrap runs
-                        in the background. It takes ~30 seconds.
-                    </DialogDescription>
+                    <DialogTitle>{t("title")}</DialogTitle>
+                    <DialogDescription>{t("description")}</DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4 py-2">
                     <div className="space-y-2">
                         <Label htmlFor="project-name">
-                            Project Name <span className="text-destructive">*</span>
+                            {t("name")} <span className="text-destructive">*</span>
                         </Label>
                         <Input
                             ref={inputRef}
                             id="project-name"
-                            placeholder="my-team"
+                            placeholder={t("namePlaceholder")}
                             value={name}
                             maxLength={40}
                             onChange={(e) => {
@@ -155,8 +127,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         ) : (
                             <div className="flex items-center justify-between">
                                 <p className="text-xs text-muted-foreground">
-                                    Lowercase, kebab-case. E.g.{" "}
-                                    <span className="font-mono">platform-team</span>
+                                    {t.rich("nameHint", {
+                                        code: (chunks) => <span className="font-mono">{chunks}</span>,
+                                    })}
                                 </p>
                                 <p className={`text-xs tabular-nums ${name.length > 35 ? "text-destructive" : "text-muted-foreground"}`}>
                                     {name.length}/40
@@ -167,11 +140,11 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
 
                     <div className="space-y-2">
                         <Label>
-                            Target Cloud <span className="text-destructive">*</span>
+                            {t("cloud")} <span className="text-destructive">*</span>
                         </Label>
                         <div
                             role="radiogroup"
-                            aria-label="Target Cloud"
+                            aria-label={t("cloud")}
                             className="grid grid-cols-1 gap-2 sm:grid-cols-3"
                         >
                             {CLOUDS.map((cloud) => {
@@ -196,7 +169,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                                     >
                                         <div className="flex items-center justify-between gap-1">
                                             <span className="font-medium text-foreground">
-                                                {cloud.label}
+                                                {t(`clouds.${cloud.value}.label`)}
                                             </span>
                                             {selected ? (
                                                 <Check className="h-3.5 w-3.5 text-primary" />
@@ -205,13 +178,13 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                                                     variant="secondary"
                                                     className="text-[10px] px-1.5 py-0"
                                                 >
-                                                    Coming soon
+                                                    {t("comingSoon")}
                                                 </Badge>
                                             ) : null}
                                         </div>
                                         <ul className="space-y-0.5 text-muted-foreground">
-                                            {cloud.advantages.map((a) => (
-                                                <li key={a}>{a}</li>
+                                            {(["advantage1", "advantage2", "advantage3"] as const).map((key) => (
+                                                <li key={key}>{t(`clouds.${cloud.value}.${key}`)}</li>
                                             ))}
                                         </ul>
                                     </button>
@@ -219,41 +192,40 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                             })}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            AWS and GCP need a cluster registered by the infra team before
-                            they can be selected.{" "}
-                            <span className="text-foreground">
-                                This cannot be changed later.
-                            </span>{" "}
-                            Moving a project means re-creating it.
+                            {t.rich("cloudNote", {
+                                strong: (chunks) => <span className="text-foreground">{chunks}</span>,
+                            })}
                         </p>
                     </div>
 
                     <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
                         <div className="font-medium text-foreground mb-1.5">
-                            What will be created
+                            {t("preview.title")}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                            Keycloak groups:{" "}
-                            <span className="font-mono">
-                                project-{name || "…"}-admins/members
-                            </span>
+                            {t.rich("preview.keycloak", {
+                                name: name || "…",
+                                code: (chunks) => <span className="font-mono">{chunks}</span>,
+                            })}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
-                            Vault policy scoped to namespace
+                            {t("preview.vault")}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                            ArgoCD AppProject on{" "}
-                            <span className="font-mono">{targetCloud}</span>
+                            {t.rich("preview.argocd", {
+                                cloud: targetCloud,
+                                code: (chunks) => <span className="font-mono">{chunks}</span>,
+                            })}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-primary/25" />
-                            Registry record:{" "}
-                            <span className="font-mono">
-                                registry/projects/{name || "…"}.yaml
-                            </span>
+                            {t.rich("preview.registry", {
+                                name: name || "…",
+                                code: (chunks) => <span className="font-mono">{chunks}</span>,
+                            })}
                         </div>
                     </div>
 
@@ -264,16 +236,16 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                             onClick={onClose}
                             disabled={loading}
                         >
-                            Cancel
+                            {tc("cancel")}
                         </Button>
                         <Button type="submit" disabled={loading || name.trim().length < 2}>
                             {loading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Creating…
+                                    {t("submitting")}
                                 </>
                             ) : (
-                                "Create Project"
+                                t("submit")
                             )}
                         </Button>
                     </DialogFooter>

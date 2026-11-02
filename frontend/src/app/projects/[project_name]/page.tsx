@@ -33,7 +33,6 @@ import {
   getProjectLinks,
   isNotConnected,
 } from "@/lib/api";
-import { ROLE_LABEL } from "@/lib/permissions";
 import type { CatalogTemplate, ProjectLink } from "@/types";
 import {
   FolderKanban,
@@ -54,6 +53,9 @@ export default function ProjectPage() {
   const router = useRouter();
   const ta = useTranslations("actions");
   const tc = useTranslations("confirm");
+  const t = useTranslations("projects.page");
+  const tRoles = useTranslations("projects");
+  const tCommon = useTranslations("common");
   const {
     projectName,
     role,
@@ -172,14 +174,15 @@ export default function ProjectPage() {
             <div>
               <h1 className="text-2xl font-bold capitalize">{projectName}</h1>
               <p className="text-sm text-muted-foreground">
-                Kubernetes project
-                {role ? ` · ${ROLE_LABEL[role]}` : ""}
+                {role
+                  ? t("kubernetesRole", { role: tRoles(`roles.${role}`) })
+                  : t("kubernetes")}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="font-mono text-xs">
-              {apps.length} app{apps.length !== 1 ? "s" : ""}
+              {t("appCount", { count: apps.length })}
             </Badge>
             {canViewObservability && <ToolsMenu links={links} />}
             {canDeploy && (
@@ -229,7 +232,7 @@ export default function ProjectPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <p className="text-sm text-muted-foreground">
-                Applications deployed in this project.
+                {t("description")}
               </p>
               {hasActiveDeployments && (
                 <Badge
@@ -237,7 +240,7 @@ export default function ProjectPage() {
                   className="animate-pulse bg-primary/10 text-primary border-primary/20"
                 >
                   <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  Live updates
+                  {t("live")}
                 </Badge>
               )}
             </div>
@@ -262,23 +265,23 @@ export default function ProjectPage() {
           {showCatalog && canDeploy && (
             <div className="rounded-xl border bg-card p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Select a Kubernetes template</h3>
+                <h3 className="font-semibold">{t("templatesTitle")}</h3>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowCatalog(false)}
                 >
-                  Close
+                  {tCommon("close")}
                 </Button>
               </div>
               {loadingCatalog ? (
                 <div className="flex items-center gap-2 text-muted-foreground py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading templates…
+                  {t("templatesLoading")}
                 </div>
               ) : paasTemplates.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No Kubernetes templates available.
+                  {t("noTemplates")}
                 </p>
               ) : (
                 <CatalogGrid
@@ -304,20 +307,18 @@ export default function ProjectPage() {
             <NotConnected cloud={isNotConnected(appsError)!.cloud} />
           ) : appsError ? (
             <div className="rounded-xl border border-destructive bg-destructive/5 p-6 text-destructive space-y-2">
-              <p className="font-medium">Failed to load applications</p>
+              <p className="font-medium">{t("appsLoadFailed")}</p>
               <p className="text-sm opacity-80">{appsError}</p>
               <Button variant="outline" size="sm" onClick={refreshApps}>
-                Retry
+                {tCommon("retry")}
               </Button>
             </div>
           ) : apps.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-muted-foreground">
               <Rocket className="h-9 w-9 mb-3 text-muted-foreground" />
-              <p className="font-medium">No applications yet</p>
+              <p className="font-medium">{t("noApps")}</p>
               <p className="text-sm mt-1">
-                {canDeploy
-                  ? "Deploy your first app to this project."
-                  : "Nothing has been deployed here yet."}
+                {canDeploy ? t("deployFirst") : t("noAppsReadOnly")}
               </p>
               {canDeploy && (
                 <Button

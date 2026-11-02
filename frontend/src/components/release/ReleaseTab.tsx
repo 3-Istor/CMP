@@ -31,7 +31,6 @@ import {
   isVisibleStep,
   outcomeLabel,
   PHASE_TONE,
-  STRATEGY,
   TONE,
 } from "./format";
 
@@ -438,7 +437,7 @@ export function ReleaseTab({
             )}
             {view.strategy && (
               <Badge variant="secondary">
-                {STRATEGY[view.strategy] ?? view.strategy}
+                {t.has(`strategyNames.${view.strategy}`) ? t(`strategyNames.${view.strategy}`) : view.strategy}
                 {view.preset && ` · ${view.preset}`}
               </Badge>
             )}

@@ -4,20 +4,18 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import type { Deployment, DeploymentStatus } from "@/types";
 import { Check, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
-const CREATION_STEPS: { status: DeploymentStatus; label: string }[] = [
-  { status: "pending", label: "Queued" },
-  { status: "initializing", label: "Initializing" },
-  { status: "planning", label: "Planning" },
-  { status: "deploying", label: "Deploying" },
-  { status: "running", label: "Running" },
+const CREATION_STEPS: DeploymentStatus[] = [
+  "pending",
+  "initializing",
+  "planning",
+  "deploying",
+  "running",
 ];
 
-const DELETION_STEPS: { status: DeploymentStatus; label: string }[] = [
-  { status: "deleting", label: "Destroying" },
-  { status: "deleted", label: "Deleted" },
-];
+const DELETION_STEPS: DeploymentStatus[] = ["deleting", "deleted"];
 
 const STATUS_PROGRESS: Record<DeploymentStatus, number> = {
   pending: 5,
@@ -48,6 +46,7 @@ interface Props {
 }
 
 export function DeploymentStepper({ deployment }: Props) {
+  const t = useTranslations("apps.status");
   const progress = STATUS_PROGRESS[deployment.status] ?? 0;
   const isFailed = deployment.status === "failed";
   const isDeleting =
@@ -60,7 +59,7 @@ export function DeploymentStepper({ deployment }: Props) {
   // Auto-scroll to show current step with context
   useEffect(() => {
     const currentStepIndex = STEPS.findIndex(
-      (step) => step.status === deployment.status,
+      (step) => step === deployment.status,
     );
     if (currentStepIndex === -1) return;
 
@@ -123,14 +122,14 @@ export function DeploymentStepper({ deployment }: Props) {
       >
         <div className="flex items-center gap-2 min-w-max px-2">
           {STEPS.map((step, i) => {
-            const stepProgress = STATUS_PROGRESS[step.status];
+            const stepProgress = STATUS_PROGRESS[step];
             const currentProgress = STATUS_PROGRESS[deployment.status] ?? 0;
             const isDone = currentProgress >= stepProgress && !isFailed;
-            const isActive = deployment.status === step.status;
+            const isActive = deployment.status === step;
 
             return (
               <div
-                key={step.status}
+                key={step}
                 data-step={i}
                 className="flex items-center gap-2 shrink-0"
               >
@@ -154,7 +153,7 @@ export function DeploymentStepper({ deployment }: Props) {
                       : "text-muted-foreground"
                   }`}
                 >
-                  {step.label}
+                  {t(step)}
                 </span>
                 {i < STEPS.length - 1 && (
                   <div
@@ -183,7 +182,7 @@ export function DeploymentStepper({ deployment }: Props) {
               | "outline"
           }
         >
-          {deployment.status.replace(/_/g, " ")}
+          {t(deployment.status)}
         </Badge>
         <span className="text-sm text-muted-foreground">
           {deployment.step_message}

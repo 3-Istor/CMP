@@ -9,6 +9,7 @@ import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -18,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
  * text, not values typed inside inputs.
  */
 function SearchHighlight({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("apps.config");
   const [query, setQuery] = useState("");
   const [count, setCount] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -89,13 +91,13 @@ function SearchHighlight({ children }: { children: React.ReactNode }) {
             indexRef.current = (indexRef.current + 1) % count;
             scrollTo(indexRef.current);
           }}
-          placeholder="Rechercher une option…"
-          aria-label="Rechercher une option"
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchPlaceholder")}
           className="pl-8 pr-24"
         />
         {query.trim() && (
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-            {count} résultat{count > 1 ? "s" : ""}
+            {t("searchCount", { count })}
           </span>
         )}
       </div>
@@ -107,6 +109,7 @@ function SearchHighlight({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppConfigPage() {
+  const t = useTranslations("apps.config");
   const { appId, deployment } = useAppContext();
   const { can } = useProjectContext();
   const isRunning = deployment.status === "running";
@@ -130,8 +133,11 @@ export default function AppConfigPage() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground text-center">
-              Configuration will be available once the application is{" "}
-              <span className="font-medium text-foreground">running</span>.
+              {t.rich("notRunning", {
+                strong: (chunks) => (
+                  <span className="font-medium text-foreground">{chunks}</span>
+                ),
+              })}
             </p>
           </CardContent>
         </Card>

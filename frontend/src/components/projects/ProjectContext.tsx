@@ -47,6 +47,7 @@ export function ProjectProvider({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const t = useTranslations("projects.context");
 
   const { projects } = useProjects();
   const isBeingDeleted = projects.some(
@@ -78,11 +79,11 @@ export function ProjectProvider({
       appsError &&
       (appsError.includes("403") || appsError.includes("Forbidden"))
     ) {
-      toast.error("Access denied: you are not a member of this project");
+      toast.error(t("accessDenied"));
       const timer = setTimeout(() => router.push("/"), 2000);
       return () => clearTimeout(timer);
     }
-  }, [appsError, router]);
+  }, [appsError, router, t]);
 
   const value = useMemo(
     () => ({
@@ -116,11 +117,10 @@ export function ProjectProvider({
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center">
             <Loader2 className="h-8 w-8 animate-spin text-destructive mb-4" />
             <p className="font-medium">
-              &quot;{projectName}&quot; is being deleted
+              {t("beingDeleted", { name: projectName })}
             </p>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              Its resources are being torn down in the background. This page
-              will stay unavailable until that finishes.
+              {t("beingDeletedBody")}
             </p>
             <Button
               variant="outline"
@@ -129,7 +129,7 @@ export function ProjectProvider({
               onClick={() => router.push("/")}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to projects
+              {t("backToProjects")}
             </Button>
           </div>
         </main>

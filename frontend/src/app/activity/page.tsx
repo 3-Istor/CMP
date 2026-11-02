@@ -5,6 +5,7 @@ import { AuditView } from "@/components/activity/AuditView";
 import { PlatformCard } from "@/components/activity/PlatformCard";
 import { getPlatformStatus } from "@/lib/api";
 import { useProjects } from "@/lib/hooks";
+import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -14,6 +15,8 @@ const SELECT =
 const PLATFORM = "__platform__";
 
 function ActivityInner() {
+  const t = useTranslations("activity.page");
+  const tc = useTranslations("common");
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -35,14 +38,13 @@ function ActivityInner() {
     <main className="mx-auto max-w-7xl space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Activité</h1>
+          <h1 className="text-xl font-semibold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">
-            Qui a fait quoi, et les logs, projet par projet
-            {isCnpAdmin ? " ou sur toute la plateforme" : ""}.
+            {isCnpAdmin ? t("descriptionAll") : t("description")}
           </p>
         </div>
         <select
-          aria-label="Projet"
+          aria-label={tc("project")}
           className={SELECT}
           value={selected}
           onChange={(e) =>
@@ -52,7 +54,7 @@ function ActivityInner() {
           }
         >
           {isCnpAdmin && (
-            <option value={PLATFORM}>Plateforme (tous les projets)</option>
+            <option value={PLATFORM}>{t("platformOption")}</option>
           )}
           {projects.map((p) => (
             <option key={p.name} value={p.name}>
@@ -69,7 +71,7 @@ function ActivityInner() {
       ) : selected ? (
         <ActivityTab key={selected} project={selected} />
       ) : (
-        <p className="text-sm text-muted-foreground">Aucun projet.</p>
+        <p className="text-sm text-muted-foreground">{tc("noProjects")}</p>
       )}
     </main>
   );

@@ -86,22 +86,6 @@ export function can(
   return ROLE_RANK[role] >= ROLE_RANK[MIN_ROLE[capability]];
 }
 
-/** Human label for a role, for badges and selects. */
-export const ROLE_LABEL: Record<ProjectRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  member: "Member",
-  guest: "Guest",
-};
-
-/** One-line summary of a role, shown under the project name on cards. */
-export const ROLE_BLURB: Record<ProjectRole, string> = {
-  owner: "Owner",
-  admin: "Full access",
-  member: "Read only",
-  guest: "View only",
-};
-
 /**
  * The Keycloak group backing each role, shown on the project card footer.
  *
