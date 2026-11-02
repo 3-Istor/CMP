@@ -965,7 +965,25 @@
         "get": "a lu",
         "list": "a listé"
       },
-      "detail": "({detail})"
+      "detail": "({detail})",
+      "appSleep": "a mis {app} en veille",
+      "appWake": "a réveillé {app}",
+      "appRestart": "a redémarré {app}",
+      "iconUpdate": "a changé l'icône de {app}",
+      "iconReset": "a réinitialisé l'icône de {app}",
+      "releasePromote": "a promu la release de {app}",
+      "releaseSkip": "a ignoré la release de {app}",
+      "releaseAbort": "a annulé la release de {app}",
+      "releaseRetry": "a relancé la release de {app}",
+      "releaseSettings": "a modifié les réglages de release de {app}",
+      "trafficStart": "a lancé un test de trafic sur {app}",
+      "trafficStop": "a arrêté le test de trafic sur {app}",
+      "agentsUpdate": "a modifié les réglages des assistants IA du projet",
+      "agentConnect": "a connecté un assistant IA",
+      "agentDisconnect": "a déconnecté un assistant IA",
+      "monthClose": "a clôturé un mois FinOps",
+      "costCenters": "a modifié les centres de coût",
+      "catalogSync": "a synchronisé le catalogue"
     },
     "audit": {
       "kpi": {

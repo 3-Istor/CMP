@@ -59,7 +59,7 @@ export function ActivityTab({
           <AuditView
             project={project}
             app={app}
-            canExport={role.admin}
+            canExport
             showLogins={role.admin}
           />
         )
