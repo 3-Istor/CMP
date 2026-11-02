@@ -2584,5 +2584,45 @@
     "noneExpected": "Cette application ne déclare aucun secret attendu. Déclarez-les sous <code>secrets.keys</code> dans <code>deploy/values*.yaml</code>.",
     "loadFailed": "Impossible de vérifier les secrets : {message}",
     "reload": "Revérifier"
+  },
+  "envDiff": {
+    "title": "Différences entre staging et production",
+    "description": "Ce que chaque environnement exécute maintenant, et les valeurs avec lesquelles il est déployé.",
+    "loading": "Lecture des deux environnements",
+    "loadFailed": "Impossible de comparer les environnements : {message}",
+    "stagingOff": "Staging n'est pas activé, il n'y a rien à comparer.",
+    "identical": "Staging et production sont identiques",
+    "columns": {
+      "field": "Champ",
+      "staging": "Staging",
+      "prod": "Production",
+      "status": "Statut"
+    },
+    "differs": "Différent",
+    "same": "Identique",
+    "unknown": "inconnu",
+    "absent": "non défini",
+    "fields": {
+      "imageTag": "Tag de l'image",
+      "imageDigest": "Digest de l'image",
+      "readyReplicas": "Réplicas prêts",
+      "cpuRequest": "Requête CPU",
+      "memoryRequest": "Requête mémoire"
+    },
+    "components": {
+      "app": "Application",
+      "frontend": "Frontend",
+      "backend": "Backend"
+    },
+    "valuesTitle": "Valeurs qui diffèrent",
+    "valuesHint": "Fusion du fichier de valeurs commun et du fichier de chaque environnement. Les secrets ne sont jamais affichés.",
+    "confirm": {
+      "title": "Promouvoir en production ?",
+      "description": "La production exécutera l'image que staging exécute maintenant. Voici les différences entre les deux environnements.",
+      "noDifferences": "Aucune différence trouvée entre staging et production.",
+      "row": "{label} : staging {staging}, production {prod}",
+      "more": "Et {count} autres différences",
+      "confirm": "Promouvoir"
+    }
   }
 }

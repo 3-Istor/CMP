@@ -36,6 +36,7 @@ from app.services.authz import is_cnp_admin
 from app.services.clusters.state import ensure_cluster_up, project_cloud
 from app.services.environments import (
     activation,
+    diff,
     gitops,
     layout,
     observe,
@@ -44,8 +45,12 @@ from app.services.environments import (
     suites,
 )
 from app.services.environments.suites import SuiteSpec
+from app.services.github_service import GitHubAppError
 from app.services.keycloak_service import get_current_user
-from app.services.kube_client import KubeUnavailableError
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    KubeUnavailableError,
+)
 
 router = APIRouter(prefix="/deployments", tags=["Environments"])
 callbacks = APIRouter(prefix="/verification-runs", tags=["Environments"])
@@ -293,6 +298,48 @@ def get_environments(
         ),
         can_operate=_holds(db, token, deployment, ProjectRole.MEMBER),
         can_administer=_holds(db, token, deployment, ProjectRole.ADMIN),
+    )
+
+
+def _runtime_or_unknown(
+    deployment: Deployment, environment: str
+) -> dict[str, diff.Runtime]:
+    try:
+        return diff.read_runtime(deployment, environment)
+    except (KubeUnavailableError, ClusterNotConnectedError):
+        return {
+            component: diff.Runtime()
+            for component in layout.components(gitops.app_type(deployment))
+        }
+
+
+@router.get(
+    "/{deployment_id}/environments/diff", response_model=diff.EnvironmentDiff
+)
+async def get_environments_diff(
+    deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
+):
+    deployment = await run_in_threadpool(
+        _app, db, token, deployment_id, ProjectRole.GUEST
+    )
+    row = await run_in_threadpool(
+        db.get, AppEnvironment, (deployment.id, "staging")
+    )
+    if row is None or row.state != "ready":
+        return diff.compute(False, {}, {}, {}, {})
+    try:
+        staging_values = await diff.read_values(deployment, "staging")
+        prod_values = await diff.read_values(deployment, "prod")
+    except (gitops.GitOpsError, GitHubAppError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    staging_runtime = await run_in_threadpool(
+        _runtime_or_unknown, deployment, "staging"
+    )
+    prod_runtime = await run_in_threadpool(
+        _runtime_or_unknown, deployment, "prod"
+    )
+    return diff.compute(
+        True, staging_runtime, prod_runtime, staging_values, prod_values
     )
 
 
