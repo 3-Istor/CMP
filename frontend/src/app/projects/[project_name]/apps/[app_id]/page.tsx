@@ -1,6 +1,5 @@
 "use client";
 
-import { Github } from "@/components/icons/Github";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { ProjectFinopsPanel } from "@/components/finops/ProjectFinopsPanel";
@@ -35,10 +34,11 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { deleteDeployment, getDeployment } from "@/lib/api";
+import { deleteDeployment, getDeployment, getDeploymentLinks } from "@/lib/api";
+import { LinkButtons } from "@/lib/links";
 import { useCan, useDeploymentPolling } from "@/lib/hooks";
 import { appUrlOf } from "@/lib/utils";
-import type { Deployment } from "@/types";
+import type { Deployment, ProjectLink } from "@/types";
 import {
     ArrowLeft,
     CheckCircle2,
@@ -262,6 +262,15 @@ export default function AppControlCenterPage() {
     useEffect(() => {
         fetchDeployment();
     }, [fetchDeployment]);
+
+    const [links, setLinks] = useState<ProjectLink[]>([]);
+    const linksReady = current?.provider_type === "kubernetes" && canViewLogs;
+    useEffect(() => {
+        if (!linksReady) return;
+        getDeploymentLinks(appId)
+            .then(setLinks)
+            .catch(() => setLinks([]));
+    }, [appId, linksReady, current?.github_repo_url]);
 
     // The deployment row is kept (status=deleted), not removed, once
     // teardown finishes, polling correctly stops, but nothing else takes the
@@ -497,51 +506,26 @@ export default function AppControlCenterPage() {
                     )}
                 </TabsList>
 
-                {/* Quick links, ArgoCD, Vault and the live app follow the
-                    config/secrets permissions; the repo link is for everyone. */}
-                {(() => {
-                    const linkClass = buttonVariants({ variant: "outline", size: "sm" });
-                    const showK8sLinks = isKubernetes && canViewLogs && current.project_id && current.name;
-                    // Determine which ArgoCD app links to show based on template
-                    const templateId = (current.template_id ?? "").toLowerCase();
-                    const hasFrontend = templateId.includes("frontend") || templateId.includes("fullstack") || templateId.includes("full-stack") || templateId.includes("full_stack");
-                    const hasBackend = !templateId.includes("frontend-only");
-                    const base = `https://argocd.3istor.com/applications/argocd/${current.project_id}-${current.name}`;
-                    const links = [
-                        isKubernetes && canViewLogs && appUrl && { href: appUrl, icon: Globe, label: "Open Application" },
-                        current.github_repo_url && { href: current.github_repo_url, icon: Github, label: "GitHub Repository" },
-                        showK8sLinks && hasBackend && { href: `${base}-backend?resource=`, icon: FileCode, label: "ArgoCD · Backend" },
-                        showK8sLinks && hasFrontend && { href: `${base}-frontend?resource=`, icon: FileCode, label: "ArgoCD · Frontend" },
-                        // Vault is admin-only: only admins hold the project's
-                        // Vault policy, so for anyone else this link is a 403.
-                        showK8sLinks && can("app.viewSecretsLink") && {
-                            href: `https://vault.3istor.com/ui/vault/secrets/kvv2/show/projects/${current.project_id}/${current.name}`,
-                            icon: Shield,
-                            label: "Manage Secrets in Vault",
-                        },
-                    ].filter((l) => !!l);
-                    if (links.length === 0) return null;
-                    return (
-                        <div className="mt-4 flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-medium text-muted-foreground mr-1">
-                                Quick links
-                            </span>
-                            {links.map(({ href, icon: Icon, label }) => (
-                                <a
-                                    key={label}
-                                    href={href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={linkClass}
-                                >
-                                    <Icon className="mr-2 h-4 w-4" />
-                                    {label}
-                                    <ExternalLink className="ml-2 h-3 w-3" />
-                                </a>
-                            ))}
-                        </div>
-                    );
-                })()}
+                {((isKubernetes && canViewLogs && appUrl) || links.length > 0) && (
+                    <div className="mt-4 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-medium text-muted-foreground mr-1">
+                            Quick links
+                        </span>
+                        {isKubernetes && canViewLogs && appUrl && (
+                            <a
+                                href={appUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={buttonVariants({ variant: "outline", size: "sm" })}
+                            >
+                                <Globe className="mr-2 h-4 w-4" />
+                                Open Application
+                                <ExternalLink className="ml-2 h-3 w-3" />
+                            </a>
+                        )}
+                        <LinkButtons links={links} />
+                    </div>
+                )}
 
                 <TabsContent value="app" className="mt-6 space-y-6">
                     {/* Deployment progress, collapsed by default once running */}

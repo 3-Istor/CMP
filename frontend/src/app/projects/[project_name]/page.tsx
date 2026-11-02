@@ -11,7 +11,7 @@ import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { ActivityTab } from "@/components/activity/ActivityTab";
 import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -33,20 +33,16 @@ import {
   createDeployment,
   deleteProject,
   getCatalog,
-  getProjectGrafanaUrl,
+  getProjectLinks,
   isNotConnected,
 } from "@/lib/api";
+import { LinkButtons } from "@/lib/links";
 import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
 import { ProjectAgentPanel } from "@/components/agents/ProjectAgentPanel";
 import { ROLE_LABEL } from "@/lib/permissions";
-import type { CatalogTemplate } from "@/types";
+import type { CatalogTemplate, ProjectLink } from "@/types";
 import {
-  Activity,
-  AlarmClock,
   ArrowLeft,
-  BarChart3,
-  ExternalLink,
-  FileCode,
   FolderKanban,
   LayoutGrid,
   Loader2,
@@ -56,7 +52,6 @@ import {
   ShieldCheck,
   Trash2,
   Users,
-  Vault,
   BellRing,
   History,
   Wallet,
@@ -136,13 +131,12 @@ export default function ProjectPage() {
     }
   }, [appsError, router]);
 
-  // The project's own Grafana org; null until Terraform has created it.
-  const [grafanaUrl, setGrafanaUrl] = useState<string | null>(null);
+  const [links, setLinks] = useState<ProjectLink[]>([]);
   useEffect(() => {
     if (!canViewObservability) return;
-    getProjectGrafanaUrl(projectName)
-      .then((r) => setGrafanaUrl(r.url))
-      .catch(() => setGrafanaUrl(null));
+    getProjectLinks(projectName)
+      .then(setLinks)
+      .catch(() => setLinks([]));
   }, [projectName, canViewObservability]);
 
   // Catalog for deploy modal
@@ -331,82 +325,15 @@ export default function ProjectPage() {
 
         <Separator />
 
-        {/* ── Project quick links ──
-            Hidden from guests: these are the observability and secrets
-            surfaces, and a guest who is not allowed to read logs has no
-            business in ArgoCD, Vault or the status page either. */}
-        {canViewObservability && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Project Links</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {/* ArgoCD bootstrap */}
-            <a
-              href={`https://argocd.3istor.com/applications/argocd/${projectName}-bootstrap?resource=`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-            >
-              <FileCode className="mr-2 h-4 w-4" />
-              ArgoCD
-              <ExternalLink className="ml-auto h-3 w-3" />
-            </a>
-
-            {/* Offhours */}
-            <a
-              href={`https://offhours-${projectName}.3istor.com/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-            >
-              <AlarmClock className="mr-2 h-4 w-4" />
-              Offhours
-              <ExternalLink className="ml-auto h-3 w-3" />
-            </a>
-
-            {/* Vault, admin only: a deep link that 403s inside Vault is
-                worse than no link at all. */}
-            {can("app.viewSecretsLink") && (
-              <a
-                href={`https://vault.3istor.com/ui/vault/secrets-engines/project-${encodeURIComponent(projectName)}/kv/list`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-              >
-                <Vault className="mr-2 h-4 w-4" />
-                Vault
-                <ExternalLink className="ml-auto h-3 w-3" />
-              </a>
-            )}
-
-            {/* Gatus / Status */}
-            <a
-              href={`https://status-${projectName}.3istor.com/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-            >
-              <Activity className="mr-2 h-4 w-4" />
-              Status
-              <ExternalLink className="ml-auto h-3 w-3" />
-            </a>
-
-            {/* Grafana, opens on the project's own org */}
-            {grafanaUrl && (
-              <a
-                href={grafanaUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={buttonVariants({ variant: "outline", size: "sm", className: "justify-start" })}
-              >
-                <BarChart3 className="mr-2 h-4 w-4" />
-                Grafana
-                <ExternalLink className="ml-auto h-3 w-3" />
-              </a>
-            )}
-          </CardContent>
-        </Card>
+        {links.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Project Links</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <LinkButtons links={links} className="justify-start" />
+            </CardContent>
+          </Card>
         )}
 
         {/* ── Tabs ── */}
