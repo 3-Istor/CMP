@@ -190,20 +190,29 @@ def test_a_manual_sleep_is_asleep_too(restarts):
     )
 
 
-def test_no_ready_replica_outside_offhours_is_down(restarts):
+@pytest.mark.parametrize("minutes, status", [(2, "degraded"), (6, "down")])
+def test_no_ready_replica_outside_offhours_is_down_after_five_minutes(
+    restarts, minutes, status
+):
     cluster = {
         **HEALTHY,
         "pods": {
-            "frontend": [_pod("fe-1", ready=False, since=1)],
+            "frontend": [_pod("fe-1", ready=False, since=minutes)],
             "backend": [_pod("be-1")],
         },
         "schedules": [_sleeping("frontend", "AWAKE")],
     }
 
     assert _status(_health(cluster)) == (
-        "down",
-        {"frontend": "down", "backend": "healthy"},
+        status,
+        {"frontend": status, "backend": "healthy"},
     )
+
+
+def test_a_component_without_any_pod_is_down(restarts):
+    cluster = {**HEALTHY, "pods": {"frontend": [], "backend": [_pod("be-1")]}}
+
+    assert _status(_health(cluster))[1]["frontend"] == "down"
 
 
 @pytest.mark.parametrize("minutes, status", [(2, "healthy"), (6, "degraded")])

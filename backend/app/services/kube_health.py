@@ -35,7 +35,8 @@ DESIRED_ANNOTATIONS = (
     "deployment.kubernetes.io/desired-replicas",
     "rollout.argoproj.io/desired-replicas",
 )
-MISSING_GRACE = timedelta(minutes=5)
+# Not ready for longer than this: missing replicas degrade, none ready is down.
+GRACE = timedelta(minutes=5)
 RESTARTS_DEGRADED = 3
 # The app takes the status of its worst component.
 SEVERITY = (
@@ -110,16 +111,16 @@ def component_health(
     )
     # ponytail: a replica whose pod was never created (quota, admission) has
     # no date, so it never degrades; read the ReplicaSet's ReplicaFailure if needed.
-    missing_too_long = ready < desired and any(
-        not is_ready and now - since > MISSING_GRACE
-        for is_ready, since in readiness
+    stale = any(
+        not is_ready and now - since > GRACE for is_ready, since in readiness
     )
     if asleep:
         status = "asleep"
     elif ready == 0:
-        status = "down"
+        # Without any pod, nothing is starting up: no grace.
+        status = "down" if stale or not live else "degraded"
     elif (
-        missing_too_long
+        (ready < desired and stale)
         or any(_crash_looping(p) for p in live)
         or (recent or 0) >= RESTARTS_DEGRADED
     ):
