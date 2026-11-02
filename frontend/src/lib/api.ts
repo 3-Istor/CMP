@@ -1289,3 +1289,45 @@ export async function fetchAppIconBlob(id: number): Promise<Blob> {
   if (!res.ok) throw new ApiError(res.status, await res.text());
   return res.blob();
 }
+
+export type NotificationKind =
+  | "deployment_succeeded"
+  | "deployment_failed"
+  | "app_deleted"
+  | "alert"
+  | "member_added"
+  | "approval_request";
+
+export interface AppNotification {
+  id: number;
+  project: string | null;
+  app: string | null;
+  kind: NotificationKind;
+  title_key: string;
+  params: Record<string, string | number>;
+  link: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+export const getNotifications = (
+  options: { unread?: boolean; limit?: number; before?: number } = {},
+) => {
+  const query = new URLSearchParams();
+  if (options.unread) query.set("unread", "true");
+  if (options.limit) query.set("limit", String(options.limit));
+  if (options.before) query.set("before", String(options.before));
+  const qs = query.toString();
+  return request<AppNotification[]>(`/notifications${qs ? `?${qs}` : ""}`);
+};
+
+export const getUnreadNotificationCount = () =>
+  request<{ count: number }>("/notifications/unread-count").then(
+    (r) => r.count,
+  );
+
+export const markNotificationRead = (id: number) =>
+  request<AppNotification>(`/notifications/${id}/read`, { method: "POST" });
+
+export const markAllNotificationsRead = () =>
+  request<{ updated: number }>("/notifications/read-all", { method: "POST" });

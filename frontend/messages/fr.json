@@ -2548,5 +2548,29 @@
       "member": "Ajouter un membre au projet",
       "budget": "Définir un budget FinOps"
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "description": "Événements récents sur vos projets et applications.",
+    "bell": "Notifications, {count, plural, =0 {aucune non lue} one {1 non lue} other {# non lues}}",
+    "markAllRead": "Tout marquer comme lu",
+    "empty": "Aucune notification pour le moment.",
+    "error": "Impossible de charger les notifications.",
+    "loadMore": "Charger plus",
+    "unread": "Non lue",
+    "titles": {
+      "deployment_succeeded": "{app} a été déployée",
+      "deployment_failed": "Le déploiement de {app} a échoué",
+      "app_deleted": "{app} a été supprimée",
+      "app_degraded": "{app} est dégradée",
+      "app_recovered": "{app} est rétablie",
+      "budget_warning": "Alerte budget : {percent} % consommé",
+      "budget_critical": "Budget critique : {percent} % consommé",
+      "budget_forecast": "Dépassement de budget prévu le {date}",
+      "cost_anomaly": "Anomalie de coût sur {app}",
+      "member_added": "Vous êtes désormais {role, select, admin {administrateur} guest {invité} other {membre}} de {project}",
+      "approval_request": "{user} attend votre approbation : {summary}",
+      "unknown": "Nouvelle notification"
+    }
   }
 }

@@ -27,6 +27,7 @@ from app.routers import (
     finops_finance,
     infra,
     links,
+    notifications,
     power,
     projects,
     releases,
@@ -373,6 +374,7 @@ app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
 app.include_router(power.router, prefix="/api")

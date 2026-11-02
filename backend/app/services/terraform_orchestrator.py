@@ -17,6 +17,7 @@ import httpx
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
+from app.services import notifications
 from app.services.github_service import get_installation_token
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
@@ -318,6 +319,7 @@ def run_deployment(deployment_id: int) -> None:
                 DeploymentStatus.RUNNING,
                 f"Running - {output_msg}",
             )
+            _notify(deployment, "deployment_succeeded")
 
             logger.info("=" * 80)
             logger.info(f"Deployment {deployment_id} completed successfully")
@@ -336,6 +338,7 @@ def run_deployment(deployment_id: int) -> None:
                 DeploymentStatus.FAILED,
                 f"Deployment failed: {str(exc)[:200]}",
             )
+            _notify(deployment, "deployment_failed")
     finally:
         logger.debug("Closing database session")
         db.close()
@@ -582,6 +585,7 @@ def run_deletion(deployment_id: int) -> None:
                 DeploymentStatus.DELETED,
                 "Resources destroyed",
             )
+            _notify(deployment, "app_deleted")
 
             logger.info("=" * 80)
             logger.info(f"Deletion {deployment_id} completed successfully")
@@ -603,6 +607,24 @@ def run_deletion(deployment_id: int) -> None:
     finally:
         logger.debug("Closing database session")
         db.close()
+
+
+def _notify(deployment: Deployment, kind: str) -> None:
+    if not deployment.project_id:
+        return
+    link = (
+        f"/projects/{deployment.project_id}"
+        if kind == "app_deleted"
+        else f"/projects/{deployment.project_id}/apps/{deployment.id}"
+    )
+    notifications.notify_project(
+        deployment.project_id,
+        kind=kind,
+        title_key=kind,
+        params={"app": deployment.name},
+        link=link,
+        app=deployment.name,
+    )
 
 
 def _update(

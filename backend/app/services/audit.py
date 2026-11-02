@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.audit import ActivityRecord, AuditEvent
 from app.models.deployment import Deployment
+from app.services import notifications
 from app.services.keycloak_service import decode_platform_token
 
 logger = logging.getLogger(__name__)
@@ -483,4 +484,10 @@ async def audit_retention_loop() -> None:
                 )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("Audit retention error: %s", exc, exc_info=True)
+        try:
+            await run_in_threadpool(notifications.purge_expired)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error(
+                "Notification retention error: %s", exc, exc_info=True
+            )
         await asyncio.sleep(6 * 3600)

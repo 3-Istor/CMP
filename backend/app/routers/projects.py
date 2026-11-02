@@ -14,6 +14,7 @@ Endpoints:
   DELETE /api/projects/{project_name}                  - Delete a project and tear it down
 """
 
+import asyncio
 import json
 import logging
 from typing import Annotated
@@ -35,6 +36,7 @@ from app.schemas.project import (
     ProjectCreateResponse,
     ProjectRead,
 )
+from app.services import notifications
 from app.services.authz import RequireAdmin, RequireGuest, RequireMember
 from app.services.grafana_service import (
     add_user_to_project_org,
@@ -609,6 +611,17 @@ async def add_project_member(
                 username,
                 project_name,
                 grafana_exc,
+            )
+
+        if username != ctx.username:
+            await asyncio.to_thread(
+                notifications.notify_users,
+                [username],
+                kind="member_added",
+                title_key="member_added",
+                params={"project": project_name, "role": role},
+                link=f"/projects/{project_name}",
+                project=project_name,
             )
 
         logger.info(

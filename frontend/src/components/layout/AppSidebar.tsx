@@ -23,6 +23,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { LinksMenu } from "./LinksMenu";
+import { NotificationCenter } from "./NotificationCenter";
 import { ProjectNav } from "./ProjectNav";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { projectFromPath } from "./projectSections";
@@ -258,6 +259,7 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
       )}
 
       <div className="shrink-0 space-y-1 border-t p-2">
+        <NotificationCenter collapsed={collapsed} onNavigate={onNavigate} />
         <LinksMenu collapsed={collapsed} />
         <a
           href={DOCS_URL}

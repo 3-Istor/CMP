@@ -21,9 +21,10 @@ from datetime import date, datetime, timedelta
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import BudgetAlertState, CostAlert, ProjectBudget
-from app.services import discord_service
+from app.services import discord_service, notifications
 from app.services.finops import anomalies, usage
 from app.services.finops.forecast import forecast_for_apps
 from app.services.finops.provider import get_cost_provider
@@ -35,6 +36,21 @@ POLL_INTERVAL_SECONDS = 180
 ANOMALY_LOOKBACK_DAYS = 3
 
 _ACTIVE = [s for s in DeploymentStatus if s != DeploymentStatus.DELETED]
+
+
+async def _notify_cost(
+    project: str, title_key: str, params: dict, app: str | None = None
+) -> None:
+    await asyncio.to_thread(
+        notifications.notify_project,
+        project,
+        kind="alert",
+        title_key=title_key,
+        params=params,
+        link=f"/projects/{project}/costs",
+        app=app,
+        minimum=ProjectRole.ADMIN,
+    )
 
 
 def _project_deployments(db, project_name: str) -> list[Deployment]:
@@ -99,6 +115,11 @@ async def check_budgets() -> None:
                     consumed_pct=consumed_pct,
                     spent_eur=spent,
                     budget_eur=budget.monthly_amount_eur,
+                )
+                await _notify_cost(
+                    budget.project_name,
+                    "budget_" + level_name,
+                    {"percent": round(consumed_pct)},
                 )
                 logger.info(
                     "FinOps budget alert: %s at %.0f%% (level %d)",
@@ -188,6 +209,11 @@ async def check_forecasts(today: date | None = None) -> None:
                 high_eur=forecast["high_eur"],
                 budget_eur=budget.monthly_amount_eur,
             )
+            await _notify_cost(
+                budget.project_name,
+                "budget_forecast",
+                {"date": f"{overrun:%Y-%m-%d}"},
+            )
             logger.info(
                 "FinOps forecast alert: %s overruns on %s",
                 budget.project_name,
@@ -225,6 +251,12 @@ async def check_anomalies(today: date | None = None) -> None:
                 cost_eur=row["cost_eur"],
                 baseline_eur=row["baseline_eur"],
                 cause=row["cause"],
+            )
+            await _notify_cost(
+                row["project_id"],
+                "cost_anomaly",
+                {"app": row["app_name"]},
+                row["app_name"],
             )
             logger.info(
                 "FinOps cost anomaly for %s on %s",
