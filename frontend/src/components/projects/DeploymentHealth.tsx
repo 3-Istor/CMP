@@ -52,7 +52,7 @@ function StateIcon({ state }: { state: string }) {
   return <Icon className={`h-5 w-5 ${color}`} aria-hidden="true" />;
 }
 
-function StateLabel({ state }: { state: string }) {
+export function StateLabel({ state }: { state: string }) {
   const t = useTranslations("health.states");
   const { Icon, color } = stateStyle(state);
   return (
@@ -105,7 +105,7 @@ function ComponentRow({ component }: { component: ComponentHealth }) {
   );
 }
 
-function badgeVariant(state: string) {
+export function badgeVariant(state: string) {
   if (state === "healthy") return "default" as const;
   if (state === "degraded" || state === "asleep" || state === "not_connected")
     return "secondary" as const;
