@@ -1,6 +1,7 @@
-"""Read-only state of the public clusters, from Argo CD's wireguard-<cloud> Applications."""
+"""State of the public clusters, from Argo CD's wireguard-<cloud> Applications."""
 
 import asyncio
+import logging
 import time
 
 from fastapi import HTTPException, Request
@@ -13,12 +14,16 @@ from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
     kube_get,
+    kube_list,
+    kube_merge_patch,
 )
+from app.services.release.route_reconciler import _sync_in_flight
+
+logger = logging.getLogger(__name__)
 
 PUBLIC_CLOUDS = (TargetCloud.AWS, TargetCloud.GCP)
-APP_PATH = (
-    "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/wireguard-{}"
-)
+APPS_PATH = "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications"
+APP_PATH = APPS_PATH + "/wireguard-{}"
 CACHE_TTL = 60
 GUARD_RETRIES = 4  # unknown is re-read every GUARD_DELAY s, ~20 s in all
 GUARD_DELAY = 5
@@ -75,12 +80,60 @@ async def not_connected_response(
     )
 
 
+def resync(cloud: TargetCloud) -> list[str]:
+    """Sync the cloud's unsynced or failed Applications, return their names.
+
+    Their retries are finite and auto-sync never re-attempts a failed revision,
+    so a sync that failed while the cluster was down would stay failed.
+    """
+    synced = []
+    for app in kube_list(APPS_PATH):
+        spec, status = app.get("spec", {}), app.get("status", {})
+        failed = status.get("operationState", {}).get("phase") in (
+            "Failed",
+            "Error",
+        )
+        if (
+            spec.get("destination", {}).get("name") != cloud.value
+            # An operation on a deleting Application would hold its deletion.
+            or "deletionTimestamp" in app["metadata"]
+            or _sync_in_flight(app)
+            or (
+                status.get("sync", {}).get("status") == "Synced" and not failed
+            )
+        ):
+            continue
+        policy = spec.get("syncPolicy", {})
+        # What auto-sync would set: the Application's sync options and retry.
+        kube_merge_patch(
+            f"{APPS_PATH}/{app['metadata']['name']}",
+            {
+                "operation": {
+                    "initiatedBy": {"username": "cmp-cluster-state"},
+                    "sync": {"syncOptions": policy.get("syncOptions", [])},
+                    "retry": policy.get("retry", {}),
+                }
+            },
+        )
+        synced.append(app["metadata"]["name"])
+    return synced
+
+
 async def _refresh() -> None:
     global _cache, _cached_at
+    before = _cache
     _cache = {
         c: await run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS
     }
     _cached_at = time.monotonic()
+    for cloud in PUBLIC_CLOUDS:
+        if _cache[cloud] != "up" or before.get(cloud) == "up":
+            continue
+        try:
+            names = await run_in_threadpool(resync, cloud)
+            logger.info("%s is up, resynced %s", cloud.value, names)
+        except KubeUnavailableError as exc:
+            logger.warning("%s is up, resync failed: %s", cloud.value, exc)
 
 
 async def cluster_states() -> dict[TargetCloud, str]:
