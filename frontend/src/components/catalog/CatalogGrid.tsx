@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import type { CatalogTemplate } from "@/types";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 
 interface Props {
   templates: CatalogTemplate[];
@@ -24,24 +25,26 @@ interface Props {
 }
 
 export function CatalogGrid({ templates, onDeploy, canDeploy = true }: Props) {
-  const handleClick = (t: CatalogTemplate) => {
+  const t = useTranslations("catalog");
+
+  const handleClick = (template: CatalogTemplate) => {
     if (!canDeploy) return;
-    onDeploy(t);
+    onDeploy(template);
   };
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {templates.map((t) => (
+      {templates.map((template) => (
         <Card
-          key={t.id}
+          key={template.id}
           className="flex flex-col hover:shadow-md transition-shadow"
         >
           <CardHeader className="pb-2">
             <div className="flex items-start justify-between">
-              {t.image_path ? (
+              {template.image_path ? (
                 <Image
-                  src={t.image_path}
-                  alt={`${t.name} icon`}
+                  src={template.image_path}
+                  alt={t("iconAlt", { name: template.name })}
                   width={40}
                   height={40}
                   className="object-contain"
@@ -49,28 +52,28 @@ export function CatalogGrid({ templates, onDeploy, canDeploy = true }: Props) {
                   unoptimized
                 />
               ) : (
-                <TemplateIcon icon={t.icon} />
+                <TemplateIcon icon={template.icon} />
               )}
               <Badge variant="outline" className="text-xs">
-                {t.category}
+                {template.category}
               </Badge>
             </div>
-            <CardTitle className="text-base">{t.name}</CardTitle>
+            <CardTitle className="text-base">{template.name}</CardTitle>
             <CardDescription className="text-xs line-clamp-2">
-              {t.description}
+              {template.description}
             </CardDescription>
           </CardHeader>
           <CardContent className="mt-auto pt-0">
             <div className="mb-3 text-xs text-muted-foreground">
-              <span className="font-medium">Template:</span> {t.id}
+              <span className="font-medium">{t("template")}</span> {template.id}
             </div>
             {canDeploy && (
               <Button
                 size="sm"
                 className="w-full"
-                onClick={() => handleClick(t)}
+                onClick={() => handleClick(template)}
               >
-                Deploy
+                {t("deploy")}
               </Button>
             )}
           </CardContent>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { ArrowLeft, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
 
 import { ClientInstructions } from "@/components/agents/ClientInstructions";
@@ -7,54 +8,28 @@ import { InstallButtons } from "@/components/agents/InstallButtons";
 import { Mascot } from "@/components/agents/Mascot";
 import { Logo } from "@/components/brand/Logo";
 
-export const metadata: Metadata = {
-  title: "Connect your AI assistant · CNP",
-  description:
-    "Use CNP from Claude, ChatGPT, Codex, OpenCode, Cursor or VS Code: create, change and release apps in plain language.",
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("agents.meta");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
+
+const ASK_KEYS = ["ask1", "ask2", "ask3", "ask4", "ask5"] as const;
+const ASK_WHO: Record<(typeof ASK_KEYS)[number], string> = {
+  ask1: "anyone",
+  ask2: "anyone",
+  ask3: "manager",
+  ask4: "developer",
+  ask5: "developer",
 };
 
-const ASKS = [
-  {
-    who: "Anyone",
-    text: "“Put a page online with the agenda of the October seminar.”",
-  },
-  {
-    who: "Anyone",
-    text: "“Add the venue map to my seminar page and publish it.”",
-  },
-  {
-    who: "Manager",
-    text: "“Give me a one-screen status of my team's apps this week.”",
-  },
-  {
-    who: "Developer",
-    text: "“Why is the canary of billing-api stuck? Read the logs first.”",
-  },
-  {
-    who: "Developer",
-    text: "“Release what is on main as a minor version and follow the rollout.”",
-  },
-];
+const GUARDRAIL_ICONS = [UserCheck, ShieldCheck, Sparkles] as const;
+const GUARDRAIL_KEYS = ["rights", "checks", "traced"] as const;
 
-const GUARDRAILS = [
-  {
-    icon: UserCheck,
-    title: "Your rights, nothing more",
-    text: "The assistant acts as you: it sees and changes only what you can in the CMP.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Checks that match what is at stake",
-    text: "On a sandbox or demo project it just does it. On a project with real users it asks you first. On a critical one, a person approves in the CMP.",
-  },
-  {
-    icon: Sparkles,
-    title: "Everything is traced",
-    text: "Each action shows who asked and through which assistant. You can disconnect an assistant at any time from your account.",
-  },
-];
-
-export default function ConnectAiPage() {
+export default async function ConnectAiPage() {
+  const t = await getTranslations("agents.connectAi");
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border/60">
@@ -77,64 +52,63 @@ export default function ConnectAiPage() {
           <Mascot mood="happy" className="h-20 w-24 shrink-0" />
           <div>
             <h1 className="font-heading text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-              Connect your AI assistant to CNP
+              {t("title")}
             </h1>
-            <p className="mt-3 max-w-2xl text-muted-foreground">
-              Ask in plain language, the assistant creates the app, writes the
-              code, releases it and follows the rollout, with your company
-              login and your rights.
-            </p>
+            <p className="mt-3 max-w-2xl text-muted-foreground">{t("lead")}</p>
           </div>
         </section>
 
-        <section className="mt-8" aria-label="Install">
+        <section className="mt-8" aria-label={t("install")}>
           <InstallButtons />
         </section>
 
         <section className="mt-10" aria-labelledby="setup">
           <h2 id="setup" className="sr-only">
-            Set up
+            {t("setUp")}
           </h2>
           <ClientInstructions />
         </section>
 
         <section className="mt-14 grid gap-10 lg:grid-cols-2">
           <div>
-            <h2 className="font-heading text-xl font-semibold">
-              Things you can ask
-            </h2>
+            <h2 className="font-heading text-xl font-semibold">{t("asksTitle")}</h2>
             <ul className="mt-4 space-y-2.5">
-              {ASKS.map((ask) => (
+              {ASK_KEYS.map((key) => (
                 <li
-                  key={ask.text}
+                  key={key}
                   className="flex items-baseline gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm"
                 >
                   <span className="w-20 shrink-0 text-xs font-medium text-primary">
-                    {ask.who}
+                    {t(`who.${ASK_WHO[key]}`)}
                   </span>
-                  <span>{ask.text}</span>
+                  <span>{t(`asks.${key}`)}</span>
                 </li>
               ))}
             </ul>
           </div>
           <div>
             <h2 className="font-heading text-xl font-semibold">
-              What keeps it safe
+              {t("guardrailsTitle")}
             </h2>
             <ul className="mt-4 space-y-4">
-              {GUARDRAILS.map((g) => (
-                <li key={g.title} className="flex gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <g.icon className="h-4.5 w-4.5" />
-                  </span>
-                  <div>
-                    <h3 className="text-sm font-semibold">{g.title}</h3>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      {g.text}
-                    </p>
-                  </div>
-                </li>
-              ))}
+              {GUARDRAIL_KEYS.map((key, i) => {
+                const Icon = GUARDRAIL_ICONS[i];
+                return (
+                  <li key={key} className="flex gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Icon className="h-4.5 w-4.5" />
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-semibold">
+                        {t(`guardrails.${key}.title`)}
+                      </h3>
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        {t(`guardrails.${key}.text`)}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </section>

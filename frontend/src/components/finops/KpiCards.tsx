@@ -18,6 +18,7 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { BudgetGauge } from "./BudgetGauge";
 import { DataFreshness } from "./DataFreshness";
 import {
@@ -25,16 +26,10 @@ import {
   STATUS_COLOR,
   formatEUR,
   formatPct,
+  intlLocale,
   parisClock,
   visibleResources,
 } from "./format";
-
-function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-  });
-}
 
 function ForecastLine({
   forecast,
@@ -43,28 +38,40 @@ function ForecastLine({
   forecast: CostForecast;
   currency: string;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
+  const money = (value: number) => formatEUR(value, currency, locale);
   const spread = forecast.high_eur - forecast.projected_eur;
   const overrun = forecast.overrun_date;
   const today = new Date().toISOString().slice(0, 10);
+  const confidence = Math.round(forecast.confidence * 100);
   return (
     <div className="space-y-1.5 text-xs text-muted-foreground">
       <p>
-        Prévision fin de mois :{" "}
+        {t("kpi.forecastEnd")}{" "}
         <span className="font-medium text-foreground tabular-nums">
-          {formatEUR(forecast.projected_eur, currency)}
+          {money(forecast.projected_eur)}
         </span>
         {spread > 0 && (
-          <span className="tabular-nums"> ± {formatEUR(spread, currency)}</span>
+          <span className="tabular-nums">
+            {" "}
+            {t("kpi.forecastSpread", { amount: money(spread) })}
+          </span>
         )}
       </p>
       <p
         className="tabular-nums"
-        title={`Intervalle à ${Math.round(forecast.confidence * 100)} %, ${forecast.days_of_history} jours d'historique`}
+        title={t("kpi.forecastInterval", {
+          confidence,
+          days: forecast.days_of_history,
+        })}
       >
-        {formatEUR(forecast.low_eur, currency)} –{" "}
-        {formatEUR(forecast.high_eur, currency)} (
-        {Math.round(forecast.confidence * 100)} %)
-        {forecast.low_history && " · historique court"}
+        {t("kpi.forecastRange", {
+          low: money(forecast.low_eur),
+          high: money(forecast.high_eur),
+          confidence,
+        })}
+        {forecast.low_history && ` ${t("kpi.forecastShortHistory")}`}
       </p>
       {overrun && (
         <span
@@ -79,12 +86,19 @@ function ForecastLine({
         >
           <AlertTriangle className="h-3 w-3" />
           {overrun < today
-            ? `budget dépassé le ${formatDay(overrun)}`
-            : `dépassement prévu le ${formatDay(overrun)}`}
+            ? t("kpi.overrunPast", { date: formatDay(overrun, locale) })
+            : t("kpi.overrunFuture", { date: formatDay(overrun, locale) })}
         </span>
       )}
     </div>
   );
+}
+
+function formatDay(iso: string, locale: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(locale, {
+    day: "numeric",
+    month: "long",
+  });
 }
 
 function dataStartInMonth(meta: FinopsMeta | null): string | null {
@@ -116,6 +130,9 @@ export function KpiCards({
   savings?: FinopsSavingsYtd | null;
   forecast?: CostForecast | null;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
+  const money = (value: number) => formatEUR(value, summary.currency, locale);
   const trend = summary.trend_pct;
   const trendUp = (trend ?? 0) >= 0;
   const since = dataStartInMonth(meta);
@@ -126,13 +143,13 @@ export function KpiCards({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-muted-foreground">
-            <Wallet className="h-4 w-4" /> Coût du mois en cours
+            <Wallet className="h-4 w-4" /> {t("kpi.monthCost")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-semibold tabular-nums">
-              {formatEUR(summary.month_to_date_eur, summary.currency)}
+              {money(summary.month_to_date_eur)}
             </span>
             {trend !== null && (
               <span
@@ -149,14 +166,17 @@ export function KpiCards({
             )}
           </div>
           {since && (
-            <p className="text-xs text-muted-foreground">depuis le {since}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("kpi.sinceDay", { day: since })}
+            </p>
           )}
           {forecast ? (
             <ForecastLine forecast={forecast} currency={summary.currency} />
           ) : (
             <p className="text-xs text-muted-foreground">
-              Projection fin de mois :{" "}
-              {formatEUR(summary.projected_month_eur, summary.currency)}
+              {t("kpi.projection", {
+                amount: money(summary.projected_month_eur),
+              })}
             </p>
           )}
           <DataFreshness meta={meta} />
@@ -167,15 +187,14 @@ export function KpiCards({
             ).map((r) => (
               <span
                 key={r}
-                title={RESOURCE_META[r].hint}
+                title={r === "platform" ? t("resourceHints.platform") : undefined}
                 className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px]"
               >
                 <span
                   className="h-2 w-2 rounded-full"
                   style={{ backgroundColor: RESOURCE_META[r].color }}
                 />
-                {RESOURCE_META[r].label}{" "}
-                {formatEUR(summary.breakdown[r] ?? 0, summary.currency)}
+                {t(`resources.${r}`)} {money(summary.breakdown[r] ?? 0)}
               </span>
             ))}
           </div>
@@ -186,7 +205,7 @@ export function KpiCards({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-muted-foreground">
-            <PiggyBank className="h-4 w-4" /> Budget alloué vs consommé
+            <PiggyBank className="h-4 w-4" /> {t("kpi.budgetTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -194,13 +213,13 @@ export function KpiCards({
             <BudgetGauge budget={budget} />
           ) : (
             <div className="space-y-2 text-sm text-muted-foreground">
-              <p>Aucun budget défini pour ce projet.</p>
+              <p>{t("kpi.noBudget")}</p>
               {project && (
                 <Link
                   href={`/finops/budgets?project=${encodeURIComponent(project)}`}
                   className="text-primary hover:underline"
                 >
-                  Définir un budget →
+                  {t("kpi.setBudget")}
                 </Link>
               )}
             </div>
@@ -212,7 +231,7 @@ export function KpiCards({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-muted-foreground">
-            <Boxes className="h-4 w-4" /> Applications suivies
+            <Boxes className="h-4 w-4" /> {t("kpi.trackedApps")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -220,8 +239,7 @@ export function KpiCards({
             {summary.app_count}
           </span>
           <p className="mt-1 text-xs text-muted-foreground">
-            Coût réparti sur l&apos;ensemble des applications actives du
-            périmètre.
+            {t("kpi.trackedAppsHint")}
           </p>
         </CardContent>
       </Card>
@@ -230,7 +248,7 @@ export function KpiCards({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-muted-foreground">
-            <PiggyBank className="h-4 w-4" /> Économies potentielles
+            <PiggyBank className="h-4 w-4" /> {t("kpi.potentialSavings")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -238,10 +256,10 @@ export function KpiCards({
             className="text-2xl font-semibold tabular-nums"
             style={{ color: "#10B981" }}
           >
-            {formatEUR(summary.potential_savings_eur, summary.currency)}
+            {money(summary.potential_savings_eur)}
             <span className="text-sm font-normal text-muted-foreground">
               {" "}
-              / mois
+              {t("common.perMonth")}
             </span>
           </span>
           <Link
@@ -252,7 +270,7 @@ export function KpiCards({
             }
             className="block text-xs text-primary hover:underline"
           >
-            Voir les recommandations →
+            {t("kpi.seeRecommendations")}
           </Link>
         </CardContent>
       </Card>
@@ -261,7 +279,7 @@ export function KpiCards({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-muted-foreground">
-              <Leaf className="h-4 w-4" /> Économies encaissées (YTD)
+              <Leaf className="h-4 w-4" /> {t("kpi.realisedSavings")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -269,11 +287,12 @@ export function KpiCards({
               className="text-2xl font-semibold tabular-nums"
               style={{ color: "#10B981" }}
             >
-              {formatEUR(savings.realized_eur, summary.currency)}
+              {formatEUR(savings.realized_eur, summary.currency, locale)}
             </span>
             <p className="text-xs text-muted-foreground">
-              + {formatEUR(savings.avoided_eur, summary.currency)} alloués
-              évités
+              {t("kpi.allocatedAvoided", {
+                amount: formatEUR(savings.avoided_eur, summary.currency, locale),
+              })}
             </p>
             <Link
               href={
@@ -283,7 +302,7 @@ export function KpiCards({
               }
               className="block text-xs text-primary hover:underline"
             >
-              Voir le détail →
+              {t("kpi.seeDetails")}
             </Link>
           </CardContent>
         </Card>

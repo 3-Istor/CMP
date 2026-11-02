@@ -1,6 +1,7 @@
 "use client";
 
 import type { FinopsSavings } from "@/types";
+import { useLocale, useTranslations } from "next-intl";
 import {
   CartesianGrid,
   Line,
@@ -10,21 +11,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { axisTickFormatter, formatEUR } from "./format";
+import { axisTickFormatter, formatEUR, intlLocale } from "./format";
 
 export const SAVINGS_COLORS = { avoided: "#3B82F6", realized: "#10B981" };
 
 const SERIES = [
-  {
-    key: "avoided_eur",
-    name: "Coût alloué évité",
-    color: SAVINGS_COLORS.avoided,
-  },
-  {
-    key: "realized_eur",
-    name: "Économie encaissée",
-    color: SAVINGS_COLORS.realized,
-  },
+  { key: "avoided_eur", labelKey: "savings.seriesAvoided", color: SAVINGS_COLORS.avoided },
+  { key: "realized_eur", labelKey: "savings.seriesRealized", color: SAVINGS_COLORS.realized },
 ] as const;
 
 function SavingsTooltip({
@@ -36,6 +29,7 @@ function SavingsTooltip({
   payload?: Array<{ name: string; value: number; color: string }>;
   label?: string;
 }) {
+  const locale = intlLocale(useLocale());
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
@@ -48,7 +42,7 @@ function SavingsTooltip({
           />
           {p.name}
           <span className="ml-auto pl-4 tabular-nums">
-            {formatEUR(p.value)}
+            {formatEUR(p.value, "EUR", locale)}
           </span>
         </p>
       ))}
@@ -58,6 +52,8 @@ function SavingsTooltip({
 
 /** Deux séries indépendantes : évité et encaissé ne sont jamais additionnés. */
 export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const axisMax = Math.max(
     0,
     ...data.flatMap((d) => [d.avoided_eur, d.realized_eur]),
@@ -87,7 +83,7 @@ export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
               tickLine={false}
               axisLine={false}
               width={56}
-              tickFormatter={axisTickFormatter(axisMax, " €")}
+              tickFormatter={axisTickFormatter(axisMax, " €", locale)}
             />
             <Tooltip content={<SavingsTooltip />} />
             {SERIES.map((s) => (
@@ -95,7 +91,7 @@ export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
                 key={s.key}
                 type="monotone"
                 dataKey={s.key}
-                name={s.name}
+                name={t(s.labelKey)}
                 stroke={s.color}
                 strokeWidth={2}
                 dot={false}
@@ -113,7 +109,7 @@ export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
               className="h-2.5 w-2.5 rounded-sm"
               style={{ backgroundColor: s.color }}
             />
-            {s.name}
+            {t(s.labelKey)}
           </span>
         ))}
       </div>

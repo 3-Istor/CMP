@@ -1,7 +1,7 @@
 "use client";
 
 import { RecommendationCard } from "@/components/finops/RecommendationCard";
-import { formatEUR } from "@/components/finops/format";
+import { formatEUR, intlLocale } from "@/components/finops/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getRecommendations } from "@/lib/api";
@@ -10,6 +10,7 @@ import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import type { ProjectRole, Recommendation } from "@/types";
 import { AlertCircle, Lightbulb } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -17,6 +18,8 @@ type SortKey = "saving" | "confidence" | "effort";
 const EFFORT_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
 
 function RecommendationsInner() {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const searchParams = useSearchParams();
   const [project, setProject] = useState(searchParams.get("project") ?? "");
   const [sort, setSort] = useState<SortKey>("saving");
@@ -35,11 +38,11 @@ function RecommendationsInner() {
       setRecs(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec du chargement");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [project]);
+  }, [project, t]);
 
   useEffect(() => {
     refresh();
@@ -74,12 +77,12 @@ function RecommendationsInner() {
       {/* Filtres */}
       <div className="flex flex-wrap items-center gap-2">
         <select
-          aria-label="Projet"
+          aria-label={t("common.project")}
           value={project}
           onChange={(e) => setProject(e.target.value)}
           className={selectCls}
         >
-          <option value="">Tous les projets</option>
+          <option value="">{t("common.allProjects")}</option>
           {projects.map((p) => (
             <option key={p.name} value={p.name}>
               {p.name}
@@ -87,14 +90,14 @@ function RecommendationsInner() {
           ))}
         </select>
         <select
-          aria-label="Trier par"
+          aria-label={t("recommendations.sortLabel")}
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
           className={selectCls}
         >
-          <option value="saving">Tri : économie potentielle</option>
-          <option value="confidence">Tri : niveau de confiance</option>
-          <option value="effort">Tri : effort requis</option>
+          <option value="saving">{t("recommendations.sort.saving")}</option>
+          <option value="confidence">{t("recommendations.sort.confidence")}</option>
+          <option value="effort">{t("recommendations.sort.effort")}</option>
         </select>
         <button
           onClick={() => setHideDone((v) => !v)}
@@ -105,13 +108,17 @@ function RecommendationsInner() {
               : "border-primary/40 bg-primary/10 text-primary",
           )}
         >
-          {hideDone ? "Masquer traitées" : "Afficher tout"}
+          {hideDone
+            ? t("recommendations.hideDone")
+            : t("recommendations.showAll")}
         </button>
 
         <div className="ml-auto text-sm">
-          <span className="text-muted-foreground">Économies affichées : </span>
+          <span className="text-muted-foreground">
+            {t("recommendations.shownSavings")}{" "}
+          </span>
           <span className="font-semibold" style={{ color: "#10B981" }}>
-            {formatEUR(totalSaving)} / mois
+            {formatEUR(totalSaving, "EUR", locale)} {t("common.perMonth")}
           </span>
         </div>
       </div>
@@ -133,10 +140,8 @@ function RecommendationsInner() {
         <Card>
           <CardContent className="flex flex-col items-center py-12 text-center text-muted-foreground">
             <Lightbulb className="mb-3 h-8 w-8" />
-            <p className="font-medium">Aucune recommandation en attente</p>
-            <p className="text-sm">
-              Vos applications sont correctement dimensionnées pour ce périmètre.
-            </p>
+            <p className="font-medium">{t("recommendations.emptyTitle")}</p>
+            <p className="text-sm">{t("recommendations.emptyText")}</p>
           </CardContent>
         </Card>
       ) : (

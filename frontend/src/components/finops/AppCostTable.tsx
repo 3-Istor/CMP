@@ -3,13 +3,15 @@
 import { Badge } from "@/components/ui/badge";
 import type { AppCostRow } from "@/types";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
-import { RESOURCE_META, formatEUR } from "./format";
+import { useLocale, useTranslations } from "next-intl";
+import { formatEUR, intlLocale } from "./format";
 
 function Trend({ pct }: { pct: number | null }) {
+  const t = useTranslations("finops");
   if (pct === null) {
     return (
       <span className="flex items-center gap-0.5 text-muted-foreground">
-        <Minus className="h-3 w-3" /> n/d
+        <Minus className="h-3 w-3" /> {t("common.na")}
       </span>
     );
   }
@@ -31,10 +33,13 @@ function Trend({ pct }: { pct: number | null }) {
 
 /** Liste exhaustive des applications, triée par coût mensuel décroissant. */
 export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
+
   if (apps.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        Aucune application dans ce périmètre.
+        {t("appCost.empty")}
       </p>
     );
   }
@@ -44,17 +49,23 @@ export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <th className="px-3 py-2 font-medium">Application</th>
-            <th className="px-3 py-2 font-medium">Projet</th>
-            <th className="px-3 py-2 text-right font-medium">Coût / jour</th>
-            <th className="px-3 py-2 text-right font-medium">Coût / mois est.</th>
+            <th className="px-3 py-2 font-medium">{t("common.application")}</th>
+            <th className="px-3 py-2 font-medium">{t("common.project")}</th>
+            <th className="px-3 py-2 text-right font-medium">
+              {t("appCost.costPerDay")}
+            </th>
+            <th className="px-3 py-2 text-right font-medium">
+              {t("appCost.costPerMonth")}
+            </th>
             <th
               className="px-3 py-2 text-right font-medium"
-              title={RESOURCE_META.platform.hint}
+              title={t("resourceHints.platform")}
             >
-              Dont forfait plateforme
+              {t("appCost.ofWhichPlatform")}
             </th>
-            <th className="px-3 py-2 text-right font-medium">Tendance</th>
+            <th className="px-3 py-2 text-right font-medium">
+              {t("appCost.trend")}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -70,17 +81,17 @@ export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
                     {app.project_id}
                   </Badge>
                 ) : (
-                  "n/d"
+                  t("common.na")
                 )}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {formatEUR(app.cost_per_day_eur)}
+                {formatEUR(app.cost_per_day_eur, "EUR", locale)}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {formatEUR(app.cost_month_estimate_eur)}
+                {formatEUR(app.cost_month_estimate_eur, "EUR", locale)}
               </td>
               <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                {formatEUR(app.platform_eur ?? 0)}
+                {formatEUR(app.platform_eur ?? 0, "EUR", locale)}
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end">

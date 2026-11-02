@@ -1,20 +1,20 @@
 import type { FinopsCloud, FinopsResource } from "@/types";
 
+export type IntlLocale = "fr-FR" | "en-GB";
+
+export type Translate = (
+  key: string,
+  values?: Record<string, string | number>,
+) => string;
+
 /** Charte couleur des ressources (alignée sur le backend pricing.py). */
-export const RESOURCE_META: Record<
-  FinopsResource,
-  { label: string; color: string; hint?: string }
-> = {
-  cpu: { label: "CPU", color: "#3B82F6" },
-  ram: { label: "RAM", color: "#10B981" },
-  storage: { label: "Stockage", color: "#F59E0B" },
-  network: { label: "Réseau", color: "#8B5CF6" },
-  ai: { label: "IA", color: "#EC4899" },
-  platform: {
-    label: "Forfait plateforme",
-    color: "#94A3B8",
-    hint: "Part fixe par app des services communs de la plateforme",
-  },
+export const RESOURCE_META: Record<FinopsResource, { color: string }> = {
+  cpu: { color: "#3B82F6" },
+  ram: { color: "#10B981" },
+  storage: { color: "#F59E0B" },
+  network: { color: "#8B5CF6" },
+  ai: { color: "#EC4899" },
+  platform: { color: "#94A3B8" },
 };
 
 export const RESOURCES: FinopsResource[] = [
@@ -46,14 +46,23 @@ export function visibleResources(
   );
 }
 
-export function formatAge(iso: string | null, now = Date.now()): string {
-  if (!iso) return "jamais";
+/** next-intl locale ("fr" | "en") to the Intl locale used for money and numbers. */
+export function intlLocale(locale: string): IntlLocale {
+  return locale === "en" ? "en-GB" : "fr-FR";
+}
+
+export function formatAge(
+  iso: string | null,
+  t: Translate,
+  now = Date.now(),
+): string {
+  if (!iso) return t("age.never");
   const hours = Math.floor(
     (now - new Date(iso.endsWith("Z") ? iso : `${iso}Z`).getTime()) / 3_600_000,
   );
-  if (hours < 1) return "il y a moins d'1 h";
-  if (hours < 48) return `il y a ${hours} h`;
-  return `il y a ${Math.floor(hours / 24)} j`;
+  if (hours < 1) return t("age.lessThanHour");
+  if (hours < 48) return t("age.hoursAgo", { count: hours });
+  return t("age.daysAgo", { count: Math.floor(hours / 24) });
 }
 
 /** Charte couleur budgétaire de la spec. */
@@ -67,11 +76,15 @@ function roundToTwoSignificantDigits(value: number): number {
   return Number(value.toPrecision(2));
 }
 
-export function formatEUR(value: number, currency = "EUR"): string {
+export function formatEUR(
+  value: number,
+  currency = "EUR",
+  locale: IntlLocale = "fr-FR",
+): string {
   const amount = value ?? 0;
   const magnitude = Math.abs(amount);
   const money = (v: number, min: number, max: number) =>
-    new Intl.NumberFormat("fr-FR", {
+    new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
       minimumFractionDigits: min,
@@ -86,31 +99,40 @@ export function formatEUR(value: number, currency = "EUR"): string {
   return money(amount, 2, 2);
 }
 
-export function formatNumber(value: number, digits = 1): string {
+export function formatNumber(
+  value: number,
+  digits = 1,
+  locale: IntlLocale = "fr-FR",
+): string {
   const amount = value ?? 0;
   const magnitude = Math.abs(amount);
   const plain = (v: number, max: number) =>
-    new Intl.NumberFormat("fr-FR", { maximumFractionDigits: max }).format(v);
+    new Intl.NumberFormat(locale, { maximumFractionDigits: max }).format(v);
 
   if (magnitude === 0) return "0";
-  if (magnitude < 0.01) return amount > 0 ? "< 0,01" : "> -0,01";
+  if (magnitude < 0.01) {
+    return amount > 0 ? `< ${plain(0.01, 2)}` : `> ${plain(-0.01, 2)}`;
+  }
   if (magnitude < 1) return plain(roundToTwoSignificantDigits(amount), 3);
   return plain(amount, digits);
 }
 
 /** Décimales de l'axe choisies selon l'échelle : centimes sous 1, une décimale sous 10, entiers au-delà. */
-export function axisTickFormatter(maxValue: number, suffix = "") {
+export function axisTickFormatter(
+  maxValue: number,
+  suffix = "",
+  locale: IntlLocale = "fr-FR",
+) {
   const decimals =
     maxValue < 0.1 ? 3 : maxValue < 1 ? 2 : maxValue < 10 ? 1 : 0;
-  const formatter = new Intl.NumberFormat("fr-FR", {
+  const formatter = new Intl.NumberFormat(locale, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
   return (value: number) => `${formatter.format(value)}${suffix}`;
 }
 
-export function formatPct(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "n/d";
+export function formatPct(value: number): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 

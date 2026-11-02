@@ -24,6 +24,7 @@ import {
 } from "@/lib/hooks";
 import type { FinopsResource } from "@/types";
 import { AlertCircle, Download } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 
 export function FinopsOverviewDashboard({
@@ -36,6 +37,7 @@ export function FinopsOverviewDashboard({
   fixedProject?: string;
   actions?: ReactNode;
 }) {
+  const t = useTranslations("finops");
   const [filters, setFilters] = useState<FinopsFilterState>({
     project: fixedProject ?? initialProject,
     period: "30d",
@@ -75,7 +77,7 @@ export function FinopsOverviewDashboard({
       });
     } catch (err) {
       setExportError(
-        err instanceof Error ? err.message : "Échec de l'export CSV",
+        err instanceof Error ? err.message : t("overview.exportFailed"),
       );
     } finally {
       setExporting(false);
@@ -100,12 +102,12 @@ export function FinopsOverviewDashboard({
             disabled={exporting || meta?.provider === "simulated"}
             title={
               meta?.provider === "simulated"
-                ? "L'export n'est disponible qu'avec des coûts réels."
+                ? t("overview.exportDisabled")
                 : undefined
             }
           >
             <Download className="h-4 w-4" />
-            Exporter CSV
+            {t("overview.exportCsv")}
           </Button>
           {actions}
         </div>
@@ -147,7 +149,7 @@ export function FinopsOverviewDashboard({
 
           <Card>
             <CardHeader>
-              <CardTitle>Répartition par cloud</CardTitle>
+              <CardTitle>{t("overview.cloudSplit")}</CardTitle>
             </CardHeader>
             <CardContent>
               <CloudSplit
@@ -161,7 +163,7 @@ export function FinopsOverviewDashboard({
             <Card className="lg:col-span-2">
               <CardHeader className="flex-row items-center justify-between">
                 <div className="space-y-1">
-                  <CardTitle>Évolution des dépenses</CardTitle>
+                  <CardTitle>{t("overview.costTrend")}</CardTitle>
                   <DataFreshness meta={meta} />
                 </div>
                 {selectedResource && (
@@ -169,7 +171,7 @@ export function FinopsOverviewDashboard({
                     onClick={() => setSelectedResource(null)}
                     className="text-xs text-primary hover:underline"
                   >
-                    Réinitialiser le filtre
+                    {t("overview.resetFilter")}
                   </button>
                 )}
               </CardHeader>
@@ -186,7 +188,7 @@ export function FinopsOverviewDashboard({
 
             <Card>
               <CardHeader>
-                <CardTitle>Distribution des coûts</CardTitle>
+                <CardTitle>{t("overview.costBreakdown")}</CardTitle>
                 <DataFreshness meta={meta} />
               </CardHeader>
               <CardContent>
@@ -201,7 +203,7 @@ export function FinopsOverviewDashboard({
 
           <Card>
             <CardHeader>
-              <CardTitle>Suivi des applications</CardTitle>
+              <CardTitle>{t("overview.appTracking")}</CardTitle>
             </CardHeader>
             <CardContent>
               <AppCostTable apps={data.apps} />
@@ -211,7 +213,7 @@ export function FinopsOverviewDashboard({
           {estimates.data && estimates.data.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>Où faire tourner chaque application</CardTitle>
+                <CardTitle>{t("overview.whereToRun")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <CloudEstimateTable rows={estimates.data} />

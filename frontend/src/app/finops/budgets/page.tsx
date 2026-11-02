@@ -16,6 +16,7 @@ import { useProjects } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
 import type { Budget, CostAlert } from "@/types";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
@@ -26,6 +27,8 @@ const LEVEL_COLOR: Record<string, string> = {
 };
 
 function BudgetsInner() {
+  const t = useTranslations("finops");
+  const locale = useLocale();
   const searchParams = useSearchParams();
   const { projects } = useProjects();
   const [project, setProject] = useState(searchParams.get("project") ?? "");
@@ -76,20 +79,22 @@ function BudgetsInner() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <label className="text-sm text-muted-foreground">Projet</label>
+        <label className="text-sm text-muted-foreground">
+          {t("common.project")}
+        </label>
         <select
-          aria-label="Projet"
+          aria-label={t("common.project")}
           value={project}
           onChange={(e) => setProject(e.target.value)}
           className={selectCls}
         >
           <option value="" disabled>
-            Sélectionner…
+            {t("budgets.selectProject")}
           </option>
           {projects.map((p) => (
             <option key={p.name} value={p.name}>
               {p.name}
-              {p.role === "owner" ? " (owner)" : ""}
+              {p.role === "owner" ? t("budgets.ownerSuffix") : ""}
             </option>
           ))}
         </select>
@@ -98,7 +103,7 @@ function BudgetsInner() {
       {!project ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Sélectionnez un projet pour gérer son budget.
+            {t("budgets.pickProject")}
           </CardContent>
         </Card>
       ) : loading && !budget ? (
@@ -108,10 +113,8 @@ function BudgetsInner() {
           {/* Config budget */}
           <Card>
             <CardHeader>
-              <CardTitle>Budget mensuel · {project}</CardTitle>
-              <CardDescription>
-                Définissez l&apos;enveloppe et les seuils d&apos;alerte du projet.
-              </CardDescription>
+              <CardTitle>{t("budgets.cardTitle", { project })}</CardTitle>
+              <CardDescription>{t("budgets.cardDescription")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {budget && budget.monthly_amount_eur > 0 && (
@@ -133,13 +136,13 @@ function BudgetsInner() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4" /> Historique des alertes
+                <ShieldAlert className="h-4 w-4" /> {t("budgets.alertsTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {alerts.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
-                  Aucune alerte enregistrée.
+                  {t("budgets.noAlerts")}
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -162,7 +165,7 @@ function BudgetsInner() {
                             {a.kind}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(a.triggered_at).toLocaleString("fr-FR")}
+                            {new Date(a.triggered_at).toLocaleString(locale)}
                           </span>
                           {a.value_pct !== null && (
                             <span className="ml-auto text-xs tabular-nums text-muted-foreground">

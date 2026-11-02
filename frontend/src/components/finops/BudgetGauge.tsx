@@ -1,7 +1,8 @@
 "use client";
 
 import type { Budget } from "@/types";
-import { budgetStatusColor, formatEUR } from "./format";
+import { useLocale, useTranslations } from "next-intl";
+import { budgetStatusColor, formatEUR, intlLocale } from "./format";
 
 /**
  * Barre de progression budget vs consommé avec code couleur dynamique
@@ -9,6 +10,8 @@ import { budgetStatusColor, formatEUR } from "./format";
  * rouge au-delà ; 70 % / 90 % par défaut).
  */
 export function BudgetGauge({ budget }: { budget: Budget }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const pct = budget.consumed_pct ?? 0;
   const clamped = Math.min(100, Math.max(0, pct));
   const color = budgetStatusColor(
@@ -21,10 +24,10 @@ export function BudgetGauge({ budget }: { budget: Budget }) {
     <div className="space-y-2">
       <div className="flex items-baseline justify-between">
         <span className="text-2xl font-semibold tabular-nums">
-          {formatEUR(budget.spent_eur, budget.currency)}
+          {formatEUR(budget.spent_eur, budget.currency, locale)}
         </span>
         <span className="text-sm text-muted-foreground">
-          / {formatEUR(budget.monthly_amount_eur, budget.currency)}
+          / {formatEUR(budget.monthly_amount_eur, budget.currency, locale)}
         </span>
       </div>
 
@@ -38,11 +41,15 @@ export function BudgetGauge({ budget }: { budget: Budget }) {
       <div className="flex items-center justify-between text-xs">
         <span className="font-medium tabular-nums" style={{ color }}>
           {budget.consumed_pct !== null
-            ? `${budget.consumed_pct.toFixed(0)}% consommé`
-            : "n/d"}
+            ? t("budgetGauge.consumed", {
+                percent: budget.consumed_pct.toFixed(0),
+              })
+            : t("common.na")}
         </span>
         <span className="text-muted-foreground">
-          Reste {formatEUR(budget.remaining_eur, budget.currency)}
+          {t("budgetGauge.remaining", {
+            amount: formatEUR(budget.remaining_eur, budget.currency, locale),
+          })}
         </span>
       </div>
     </div>

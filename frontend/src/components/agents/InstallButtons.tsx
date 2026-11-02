@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Copy, ExternalLink, Terminal } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const button =
   "inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary";
 
 export function InstallButtons({ className }: { className?: string }) {
+  const t = useTranslations("agents.install");
   const [claudeHint, setClaudeHint] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
 
@@ -48,6 +50,10 @@ export function InstallButtons({ className }: { className?: string }) {
     }
   };
 
+  const strong = (chunks: React.ReactNode) => (
+    <strong className="text-foreground">{chunks}</strong>
+  );
+
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex flex-wrap gap-2">
@@ -59,7 +65,7 @@ export function InstallButtons({ className }: { className?: string }) {
             "border-primary bg-primary text-primary-foreground hover:bg-primary/85",
           )}
         >
-          Add to Claude
+          {t("addToClaude")}
           <ExternalLink className="h-3.5 w-3.5" />
         </button>
         <button
@@ -73,19 +79,19 @@ export function InstallButtons({ className }: { className?: string }) {
           ) : (
             <Terminal className="h-4 w-4" />
           )}
-          {copiedCommand ? "Command copied" : "Claude Code"}
+          {copiedCommand ? t("commandCopied") : t("claudeCode")}
         </button>
         <a
           href={CURSOR_LINK}
           className={cn(button, "border-border bg-card hover:bg-muted")}
         >
-          Add to Cursor
+          {t("addToCursor")}
         </a>
         <a
           href={VSCODE_LINK}
           className={cn(button, "border-border bg-card hover:bg-muted")}
         >
-          Add to VS Code
+          {t("addToVsCode")}
         </a>
       </div>
       {claudeHint && (
@@ -93,20 +99,11 @@ export function InstallButtons({ className }: { className?: string }) {
           role="status"
           className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm"
         >
-          <p className="font-medium">
-            The CNP address is copied. In the Claude tab that just opened:
-          </p>
+          <p className="font-medium">{t("copiedHint")}</p>
           <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-muted-foreground">
-            <li>
-              If CNP is already listed (your organization added it), click{" "}
-              <strong className="text-foreground">Connect</strong>.
-            </li>
-            <li>
-              Otherwise click <strong className="text-foreground">+</strong>,
-              then <strong className="text-foreground">Add custom connector</strong>,
-              name it CNP and paste the address.
-            </li>
-            <li>Sign in with your company account and allow access.</li>
+            <li>{t.rich("connectRich", { strong })}</li>
+            <li>{t.rich("addRich", { strong, plus: strong })}</li>
+            <li>{t("signIn")}</li>
           </ol>
           <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <code className="rounded bg-muted px-1.5 py-0.5">{MCP_URL}</code>
@@ -115,16 +112,16 @@ export function InstallButtons({ className }: { className?: string }) {
               onClick={() => copy(MCP_URL)}
               className="inline-flex items-center gap-1 hover:text-foreground"
             >
-              <Copy className="h-3 w-3" /> copy again
+              <Copy className="h-3 w-3" /> {t("copyAgain")}
             </button>
-            <span>· Team or Enterprise owner:</span>
+            <span>· {t("ownerPrefix")}</span>
             <a
               href="https://claude.ai/admin-settings/connectors"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              add it for everyone
+              {t("addForEveryone")}
             </a>
           </p>
         </div>

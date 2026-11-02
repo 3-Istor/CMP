@@ -10,22 +10,10 @@ import {
 } from "@/lib/api";
 import type { Recommendation } from "@/types";
 import { ArrowRight, BarChart3, Bell, Check, Loader2, X } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { formatEUR } from "./format";
-
-const EFFORT_LABEL: Record<string, string> = {
-  low: "Effort faible",
-  medium: "Effort moyen",
-  high: "Effort élevé",
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  replicas: "Replicas",
-  rightsizing: "Rightsizing",
-  inactivity: "Inactivité",
-  storage: "Stockage",
-};
+import { formatEUR, intlLocale } from "./format";
 
 function ConfigBox({
   title,
@@ -74,6 +62,8 @@ export function RecommendationCard({
    */
   canAct?: boolean;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const [busy, setBusy] = useState<string | null>(null);
   const done = rec.status !== "pending";
 
@@ -82,9 +72,7 @@ export function RecommendationCard({
     fn: () => Promise<{ message: string }>,
   ) => {
     if (!canAct) {
-      toast.error(
-        "Seuls les admins du projet peuvent agir sur une recommandation",
-      );
+      toast.error(t("recommendation.adminsOnlyToast"));
       return;
     }
     setBusy(action);
@@ -93,7 +81,7 @@ export function RecommendationCard({
       toast.success(res.message);
       onChanged?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Action échouée");
+      toast.error(err instanceof Error ? err.message : t("recommendation.actionFailed"));
     } finally {
       setBusy(null);
     }
@@ -107,7 +95,9 @@ export function RecommendationCard({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-medium">{rec.title}</h3>
-              <Badge variant="secondary">{TYPE_LABEL[rec.rec_type]}</Badge>
+              <Badge variant="secondary">
+                {t(`recommendation.type.${rec.rec_type}`)}
+              </Badge>
               {done && (
                 <Badge variant="outline" className="capitalize">
                   {rec.status}
@@ -121,23 +111,31 @@ export function RecommendationCard({
               className="text-lg font-semibold tabular-nums"
               style={{ color: "#10B981" }}
             >
-              {formatEUR(rec.monthly_saving_eur)}
+              {formatEUR(rec.monthly_saving_eur, "EUR", locale)}
               <span className="text-xs font-normal text-muted-foreground">
                 {" "}
-                / mois
+                {t("recommendation.saving")}
               </span>
             </p>
             <p className="text-xs text-muted-foreground">
-              Confiance {rec.confidence}%
+              {t("recommendation.confidence", { confidence: rec.confidence })}
             </p>
           </div>
         </div>
 
         {/* Comparaison Actuelle vs Recommandée */}
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          <ConfigBox title="Configuration actuelle" config={rec.current} tone="current" />
+          <ConfigBox
+            title={t("recommendation.currentConfig")}
+            config={rec.current}
+            tone="current"
+          />
           <ArrowRight className="mx-auto hidden h-5 w-5 shrink-0 text-muted-foreground sm:block" />
-          <ConfigBox title="Recommandée" config={rec.recommended} tone="recommended" />
+          <ConfigBox
+            title={t("recommendation.recommendedConfig")}
+            config={rec.recommended}
+            tone="recommended"
+          />
         </div>
 
         {/* Justification + effort */}
@@ -146,14 +144,14 @@ export function RecommendationCard({
             <BarChart3 className="h-3.5 w-3.5" />
             {rec.justification}
           </p>
-          <Badge variant="outline">{EFFORT_LABEL[rec.effort]}</Badge>
+          <Badge variant="outline">{t(`recommendation.effort.${rec.effort}`)}</Badge>
         </div>
 
         {/* Actions: admins only. Everyone else still sees the finding and
             the estimated saving above. */}
         {!done && !canAct && (
           <p className="text-xs text-muted-foreground">
-            Seuls les admins du projet peuvent appliquer cette recommandation.
+            {t("recommendation.adminsOnlyHint")}
           </p>
         )}
         {!done && canAct && (
@@ -162,9 +160,7 @@ export function RecommendationCard({
               size="sm"
               disabled={busy !== null || !rec.can_apply}
               title={
-                rec.can_apply
-                  ? undefined
-                  : "Cette recommandation ne peut pas être appliquée automatiquement."
+                rec.can_apply ? undefined : t("recommendation.cannotAutoApply")
               }
               onClick={() => run("apply", () => applyRecommendation(rec.id))}
             >
@@ -173,7 +169,7 @@ export function RecommendationCard({
               ) : (
                 <Check className="mr-1.5 h-3.5 w-3.5" />
               )}
-              Appliquer
+              {t("recommendation.apply")}
             </Button>
             <Button
               size="sm"
@@ -186,7 +182,7 @@ export function RecommendationCard({
               ) : (
                 <Bell className="mr-1.5 h-3.5 w-3.5" />
               )}
-              Notifier
+              {t("recommendation.notify")}
             </Button>
             <Button
               size="sm"
@@ -199,7 +195,7 @@ export function RecommendationCard({
               ) : (
                 <X className="mr-1.5 h-3.5 w-3.5" />
               )}
-              Ignorer
+              {t("recommendation.ignore")}
             </Button>
           </div>
         )}

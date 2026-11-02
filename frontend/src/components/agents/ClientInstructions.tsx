@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -11,99 +12,83 @@ type Step = { text: string; code?: string };
 
 type Client = {
   id: string;
-  name: string;
-  forWho: string;
+  key: string;
   steps: Step[];
-  note?: string;
+  hasNote?: boolean;
 };
 
 export const CLIENTS: Client[] = [
   {
     id: "claude-ai",
-    name: "Claude (web, desktop, mobile)",
-    forWho: "Everyone. Nothing to install.",
+    key: "claudeAi",
     steps: [
-      {
-        text: "Open Customize, then Connectors (claude.ai/customize/connectors). If your organization already added CNP, click Connect next to it and skip to the last step.",
-      },
-      {
-        text: "Otherwise click +, then “Add custom connector”, name it CNP and paste this URL:",
-        code: MCP_URL,
-      },
-      {
-        text: "Sign in with your company account and approve the access on the CNP page. Then just ask: “Put a page with … online”.",
-      },
+      { text: "step1" },
+      { text: "step2", code: MCP_URL },
+      { text: "step3" },
     ],
-    note: "On Team and Enterprise plans, an Owner adds it once for everyone in Organization settings, Connectors (claude.ai/admin-settings/connectors); members then only click Connect.",
+    hasNote: true,
   },
   {
     id: "claude-code",
-    name: "Claude Code",
-    forWho: "Developers. Brings the CNP guides with it.",
+    key: "claudeCode",
     steps: [
       {
-        text: "Install the CNP plugin: it configures the connection and adds the platform guides and commands.",
+        text: "step1",
         code: "/plugin marketplace add 3-Istor/cnp-agent-kit\n/plugin install cnp@cnp-agent-kit",
       },
       {
-        text: "Or only the connection:",
+        text: "step2",
         code: `claude mcp add --transport http cnp ${MCP_URL}`,
       },
-      { text: "Run /mcp and choose cnp to sign in." },
+      { text: "step3" },
     ],
   },
   {
     id: "chatgpt",
-    name: "ChatGPT",
-    forWho: "Where your plan allows custom connectors.",
+    key: "chatgpt",
     steps: [
-      {
-        text: "Settings, Apps & Connectors, then create a connector with this URL:",
-        code: MCP_URL,
-      },
-      { text: "Sign in with your company account and approve the access." },
+      { text: "step1", code: MCP_URL },
+      { text: "step2" },
     ],
   },
   {
     id: "codex",
-    name: "Codex",
-    forWho: "Developers, CLI and IDE.",
+    key: "codex",
     steps: [
-      { text: "Add the server:", code: `codex mcp add cnp --url ${MCP_URL}` },
-      { text: "Sign in:", code: "codex mcp login cnp" },
+      { text: "step1", code: `codex mcp add cnp --url ${MCP_URL}` },
+      { text: "step2", code: "codex mcp login cnp" },
     ],
   },
   {
     id: "opencode",
-    name: "OpenCode",
-    forWho: "Developers.",
+    key: "opencode",
     steps: [
       {
-        text: "In opencode.json:",
+        text: "step1",
         code: `{\n  "mcp": {\n    "cnp": { "type": "remote", "url": "${MCP_URL}" }\n  }\n}`,
       },
-      { text: "Sign in:", code: "opencode mcp auth cnp" },
+      { text: "step2", code: "opencode mcp auth cnp" },
     ],
   },
   {
     id: "cursor",
-    name: "Cursor / VS Code",
-    forWho: "Developers.",
+    key: "cursor",
     steps: [
       {
-        text: "Cursor, in ~/.cursor/mcp.json:",
+        text: "step1",
         code: `{\n  "mcpServers": {\n    "cnp": { "url": "${MCP_URL}" }\n  }\n}`,
       },
       {
-        text: "VS Code, in .vscode/mcp.json:",
+        text: "step2",
         code: `{\n  "servers": {\n    "cnp": { "type": "http", "url": "${MCP_URL}" }\n  }\n}`,
       },
-      { text: "The editor opens the CNP sign-in page on first use." },
+      { text: "step3" },
     ],
   },
 ];
 
 export function CopyBlock({ code }: { code: string }) {
+  const t = useTranslations("agents.copyBlock");
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -123,7 +108,7 @@ export function CopyBlock({ code }: { code: string }) {
         type="button"
         onClick={copy}
         className="absolute top-1.5 right-1.5 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-        aria-label={copied ? "Copied" : "Copy"}
+        aria-label={copied ? t("copied") : t("copy")}
       >
         {copied ? (
           <Check className="h-3.5 w-3.5 text-primary" />
@@ -136,13 +121,16 @@ export function CopyBlock({ code }: { code: string }) {
 }
 
 export function ClientInstructions({ initial }: { initial?: string }) {
+  const t = useTranslations("agents");
+  const tCopy = useTranslations("agents.copyBlock");
   const [active, setActive] = useState(initial ?? CLIENTS[0].id);
   const client = CLIENTS.find((c) => c.id === active) ?? CLIENTS[0];
+  const base = `clients.${client.key}`;
   return (
     <div className="grid gap-4 md:grid-cols-[13rem_1fr]">
       <div
         role="tablist"
-        aria-label="Assistant"
+        aria-label={tCopy("assistant")}
         className="flex gap-1 overflow-x-auto md:flex-col"
       >
         {CLIENTS.map((c) => (
@@ -159,13 +147,17 @@ export function ClientInstructions({ initial }: { initial?: string }) {
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
-            {c.name}
+            {t(`clients.${c.key}.name`)}
           </button>
         ))}
       </div>
       <div role="tabpanel" className="min-w-0 rounded-xl border border-border bg-card p-5">
-        <h3 className="font-heading text-base font-semibold">{client.name}</h3>
-        <p className="mt-0.5 text-sm text-muted-foreground">{client.forWho}</p>
+        <h3 className="font-heading text-base font-semibold">
+          {t(`${base}.name`)}
+        </h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {t(`${base}.forWho`)}
+        </p>
         <ol className="mt-4 space-y-4">
           {client.steps.map((step, i) => (
             <li key={i} className="flex gap-3">
@@ -173,14 +165,16 @@ export function ClientInstructions({ initial }: { initial?: string }) {
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1 text-sm">
-                {step.text}
+                {t(`${base}.${step.text}`)}
                 {step.code && <CopyBlock code={step.code} />}
               </div>
             </li>
           ))}
         </ol>
-        {client.note && (
-          <p className="mt-4 text-xs text-muted-foreground">{client.note}</p>
+        {client.hasNote && (
+          <p className="mt-4 text-xs text-muted-foreground">
+            {t(`${base}.note`)}
+          </p>
         )}
       </div>
     </div>
