@@ -1,41 +1,32 @@
 "use client";
 
-import { getSecurityRole } from "@/lib/api";
-import { useProjects } from "@/lib/hooks";
+import { getCurrentUser } from "@/lib/api";
 import { useEffect, useState } from "react";
 
-const answers = new Map<string, Promise<boolean>>();
+let answer: Promise<boolean> | null = null;
 
-function isPlatformAdminVia(project: string): Promise<boolean> {
-  let answer = answers.get(project);
-  if (!answer) {
-    answer = getSecurityRole(project)
-      .then((role) => role.cnp_admin)
-      .catch(() => false);
-    answers.set(project, answer);
-  }
+function fetchPlatformAdmin(): Promise<boolean> {
+  answer ??= getCurrentUser()
+    .then((profile) => profile.cnp_admin === true)
+    .catch(() => {
+      answer = null;
+      return false;
+    });
   return answer;
 }
 
-// The platform admin flag only comes with a project-scoped endpoint, so a user
-// without any project is treated as a non-admin.
 export function usePlatformAdmin(): boolean {
-  const { projects } = useProjects();
-  const firstProject = projects[0]?.name;
-  const [answer, setAnswer] = useState<{ via: string; value: boolean } | null>(
-    null,
-  );
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    if (!firstProject) return;
     let cancelled = false;
-    isPlatformAdminVia(firstProject).then((value) => {
-      if (!cancelled) setAnswer({ via: firstProject, value });
+    fetchPlatformAdmin().then((value) => {
+      if (!cancelled) setIsAdmin(value);
     });
     return () => {
       cancelled = true;
     };
-  }, [firstProject]);
+  }, []);
 
-  return answer !== null && answer.via === firstProject && answer.value;
+  return isAdmin;
 }
