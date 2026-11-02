@@ -65,6 +65,10 @@ jobs:
         working-directory: ./frontend
         run: npm run lint
 
+      - name: Verify GitHub OAuth browser bridge
+        working-directory: ./frontend
+        run: node --test tests/github-oauth-bridge.test.mjs
+
       - name: Build
         working-directory: ./frontend
         run: npm run build
