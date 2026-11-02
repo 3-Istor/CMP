@@ -160,7 +160,25 @@ def test_expected_names_merges_components_and_drops_invalid_names():
     ],
 )
 def test_vault_location_follows_the_chart_vault_path(secrets, expected):
-    assert sp.vault_location([{"secrets": secrets}]) == expected
+    assert sp.vault_location([{"secrets": secrets}], "x") == expected
+
+
+@pytest.mark.parametrize(
+    "vault_path",
+    [
+        "project-other/app",
+        "kvv2/projects/other/app",
+        "kvv2/projects/x/../other/app",
+        "kvv2/platform/credentials",
+        "kvv2/projects/x",
+        "kvv2/arcl-cmp/credentials",
+    ],
+)
+def test_a_vault_path_outside_the_apps_project_is_refused(vault_path):
+    with pytest.raises(sp.ForeignVaultPathError):
+        sp.vault_location(
+            [{"secrets": {"enabled": True, "vaultPath": vault_path}}], "x"
+        )
 
 
 def test_presence_reports_missing_and_extra(client_factory, vault):

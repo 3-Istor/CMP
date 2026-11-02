@@ -34,8 +34,28 @@ def expected_names(values_files: list[dict[str, Any]]) -> list[str]:
     return sorted(names)
 
 
+class ForeignVaultPathError(ValueError):
+    """secrets.vaultPath points outside the app's own project."""
+
+
+def owned_by(mount: str, path: str, project: str) -> bool:
+    # The values files live in the project's repo: without this check a project
+    # could make the CMP token read another project's key names.
+    segments = path.split("/")
+    if not project or any(s in ("", ".", "..") for s in segments):
+        return False
+    if mount == f"project-{project}":
+        return True
+    return (
+        mount == "kvv2"
+        and len(segments) >= 3
+        and segments[:2] == ["projects", project]
+    )
+
+
 def vault_location(
     values_files: list[dict[str, Any]],
+    project: str,
 ) -> tuple[str, str] | None:
     """(mount, path) read by the chart's VaultSecret, from secrets.vaultPath."""
     for values in values_files:
@@ -47,6 +67,8 @@ def vault_location(
             continue
         mount, _, path = vault_path.strip("/").partition("/")
         if mount and path:
+            if not owned_by(mount, path, project):
+                raise ForeignVaultPathError(vault_path)
             return mount, path
     return None
 
