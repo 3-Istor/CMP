@@ -260,6 +260,8 @@ def delete_as(factory, username, project_name, groups_exist):
         "app.services.keycloak_service.get_project_role", return_value=role
     ), mock.patch.object(
         projects_router, "remove_record", new=mock.AsyncMock()
+    ), mock.patch.object(
+        projects_router, "assert_deletable", new=mock.AsyncMock()
     ):
         ctx = assert_project_role(db, token, project_name, ProjectRole.ADMIN)
         asyncio.run(projects_router.delete_project(ctx, background, db))

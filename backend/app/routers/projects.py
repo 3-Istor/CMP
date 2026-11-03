@@ -32,17 +32,25 @@ from app.models.project import Project, ProjectStatus, TargetCloud
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     AddMemberRequest,
+    DeletionProtectionUpdate,
     ProjectCreate,
     ProjectCreateResponse,
     ProjectRead,
 )
 from app.services import notifications
-from app.services.authz import RequireAdmin, RequireGuest, RequireMember
+from app.services.authz import (
+    RequireAdmin,
+    RequireGuest,
+    RequireMember,
+    assert_project_role,
+    is_cnp_admin,
+)
 from app.services.clusters.state import (
     PUBLIC_CLOUDS,
     fresh_state,
     pick_public_cloud,
 )
+from app.services.deletion_protection import assert_deletable
 from app.services.grafana_service import (
     add_user_to_project_org,
     remove_user_from_project_org,
@@ -69,10 +77,13 @@ from app.services.project_preflight import (
 from app.services.project_registry import (
     ImmutableCloudError,
     NameCollisionError,
+    RecordNotFoundError,
     RegistryError,
     ensure_project_names_free,
+    is_deletion_protected,
     publish_record,
     remove_record,
+    set_deletion_protection,
 )
 
 logger = logging.getLogger(__name__)
@@ -758,6 +769,62 @@ async def remove_project_member(
 
 
 # ---------------------------------------------------------------------------
+# Deletion protection
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{project_name}/deletion-protection")
+async def get_deletion_protection(ctx: RequireGuest) -> dict[str, bool]:
+    """Whether the project refuses deletions, of itself and of its apps."""
+    try:
+        return {"enabled": await is_deletion_protected(ctx.project_name)}
+    except RegistryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not read the project registry: {exc}",
+        ) from exc
+
+
+@router.put("/{project_name}/deletion-protection")
+async def update_deletion_protection(
+    project_name: str,
+    payload: DeletionProtectionUpdate,
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    """
+    Turn the project's deletion protection on or off.
+
+    Requirements:
+    - Caller must be a project admin or a platform admin
+    - Not an AI assistant: lifting the protection is a person's decision
+
+    Raises:
+        403: Caller is an assistant, or is not a project admin
+        404: The project has no registry record
+    """
+    if token.get("cnp_agent"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Assistants cannot change deletion protection.",
+        )
+    if not is_cnp_admin(token):
+        assert_project_role(db, token, project_name, ProjectRole.ADMIN)
+    try:
+        await set_deletion_protection(project_name, payload.enabled)
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except RegistryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not update the project registry: {exc}",
+        ) from exc
+    return {"enabled": payload.enabled}
+
+
+# ---------------------------------------------------------------------------
 # DELETE Project
 # ---------------------------------------------------------------------------
 
@@ -784,6 +851,7 @@ async def delete_project(
     Raises:
         400: Project has active applications
         403: Caller is not a project admin
+        409: Deletion protection is on, or still being lifted on the cluster
     """
     project_name = ctx.project_name
 
@@ -815,6 +883,8 @@ async def delete_project(
         target_cloud = (
             row.target_cloud if row is not None else TargetCloud.ONPREM
         )
+
+        await assert_deletable(project_name, target_cloud)
 
         # Removing the registry record is what makes the generated Argo CD
         # Applications and the AppProject disappear, so it is a teardown step

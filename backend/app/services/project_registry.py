@@ -45,6 +45,10 @@ class RegistryError(Exception):
     """Raised when the project registry cannot be read or written."""
 
 
+class RecordNotFoundError(RegistryError):
+    """Raised when a write needs a project's record and it has none."""
+
+
 class ImmutableCloudError(RegistryError):
     """Raised when a write would change an existing record's target cloud.
 
@@ -582,6 +586,63 @@ async def set_app_environments(
     except GitHubAppError as exc:
         raise RegistryError(
             f"Could not update the environments of '{app_name}': {exc}"
+        ) from exc
+
+
+async def is_deletion_protected(project_name: str) -> bool:
+    """
+    Whether the project's record turns deletion protection on.
+
+    A project with no record is not protected.
+
+    Raises:
+        RegistryError: If the registry cannot be read.
+    """
+    existing = await read_record(project_name)
+    if existing is None:
+        return False
+    return (existing[0].get("spec") or {}).get("deletionProtection") is True
+
+
+async def set_deletion_protection(project_name: str, enabled: bool) -> None:
+    """
+    Turn a project's deletion protection on, or off by removing the field.
+
+    Argo CD then flips the protection label on the project's cluster objects.
+
+    Raises:
+        RecordNotFoundError: The project has no registry record.
+        RegistryError: The registry cannot be written.
+    """
+    existing = await read_record(project_name)
+    if existing is None:
+        raise RecordNotFoundError(
+            f"Project '{project_name}' has no registry record."
+        )
+    record, sha = existing
+    spec = record.setdefault("spec", {})
+    if enabled:
+        spec["deletionProtection"] = True
+    else:
+        spec.pop("deletionProtection", None)
+
+    buffer = StringIO()
+    _yaml.dump(record, buffer)
+    token = await _installation_token()
+    verb = "on" if enabled else "off"
+    try:
+        await put_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            record_path(project_name),
+            buffer.getvalue(),
+            message=f"feat(registry): turn deletion protection {verb} for {project_name} [skip ci]",
+            sha=sha,
+            branch=settings.CNP_REGISTRY_BRANCH,
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not update deletion protection of '{project_name}': {exc}"
         ) from exc
 
 
