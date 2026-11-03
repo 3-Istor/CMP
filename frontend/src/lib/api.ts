@@ -522,6 +522,15 @@ export const deleteProject = (project_name: string) =>
     method: "DELETE",
   });
 
+export const getDeletionProtection = (project: string) =>
+  request<{ enabled: boolean }>(`/projects/${project}/deletion-protection`);
+
+export const setDeletionProtection = (project: string, enabled: boolean) =>
+  request<{ enabled: boolean }>(`/projects/${project}/deletion-protection`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
+
 // ── FinOps ────────────────────────────────────────────────────────────────────
 
 function finopsQuery(params: Record<string, string | number | undefined>): string {

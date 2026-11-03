@@ -11,7 +11,10 @@ from app.core.database import Base
 from app.models.project import Project, ProjectStatus, TargetCloud
 from app.routers import projects as projects_router
 from app.schemas.project import ProjectCreate
-from app.services.project_registry import NameCollisionError
+from app.services.project_registry import (
+    NameCollisionError,
+    ProtectedRecordError,
+)
 
 
 @pytest.fixture
@@ -88,6 +91,22 @@ def test_create_project_returns_409_on_name_collision_before_publishing(
     assert excinfo.value.status_code == 409
     assert "project 'foo'" in excinfo.value.detail
     seams.publish.assert_not_called()
+
+
+def test_create_project_returns_409_when_the_record_is_deletion_protected(
+    db, seams
+):
+    seams.publish.side_effect = ProtectedRecordError(
+        "Project 'test-p' is deletion-protected: turn protection off "
+        "before re-creating it."
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        create(db)
+
+    assert excinfo.value.status_code == 409
+    assert "deletion-protected" in excinfo.value.detail
+    assert db.query(Project).count() == 0
 
 
 def test_create_project_skips_the_leftovers_check_when_retrying_a_known_project(

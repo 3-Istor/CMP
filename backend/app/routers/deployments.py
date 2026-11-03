@@ -29,6 +29,7 @@ from app.services import audit, terraform_orchestrator
 from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.catalog_service import get_template_by_id
 from app.services.clusters.state import ensure_cluster_up
+from app.services.deletion_protection import assert_deletable
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
@@ -361,6 +362,7 @@ async def delete_deployment(
 
     Access control: admin or owner of the application's project.
     Frontend must have already shown double-confirmation before calling this.
+    Refused with 409 while the project's deletion protection is on.
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
     if deployment.status in (
@@ -369,6 +371,18 @@ async def delete_deployment(
     ):
         raise HTTPException(
             status_code=409, detail="Deployment is already being deleted"
+        )
+
+    if deployment.project_id:
+        project_row = (
+            db.query(Project)
+            .filter(Project.project_name == deployment.project_id)
+            .first()
+        )
+        await assert_deletable(
+            deployment.project_id,
+            project_row.target_cloud if project_row else TargetCloud.ONPREM,
+            deployment.name,
         )
 
     background_tasks.add_task(

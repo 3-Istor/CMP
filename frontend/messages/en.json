@@ -979,6 +979,8 @@
       "trafficStart": "started a traffic test on {app}",
       "trafficStop": "stopped the traffic test on {app}",
       "agentsUpdate": "changed the AI assistant settings of the project",
+      "protectionOn": "turned on deletion protection",
+      "protectionOff": "turned off deletion protection",
       "agentConnect": "connected an AI assistant",
       "agentDisconnect": "disconnected an AI assistant",
       "monthClose": "closed a FinOps month",
@@ -1846,6 +1848,8 @@
     "settings": "Settings",
     "deleteApp": "Delete application…",
     "newApp": "New app",
+    "protectOn": "Turn on deletion protection",
+    "protectOff": "Turn off deletion protection",
     "deleteProject": "Delete project…",
     "externalLink": "Opens in a new tab",
     "reasons": {
@@ -1853,21 +1857,25 @@
       "noSchedule": "This application has no sleep schedule",
       "unavailable": "The cluster does not allow this action right now",
       "asleep": "Wake the application before restarting it",
-      "busy": "An operation is running on the application"
+      "busy": "An operation is running on the application",
+      "protected": "Deletion protection is on"
     },
     "toasts": {
       "sleeping": "{name} is going to sleep",
       "woken": "{name} is waking up",
       "restarting": "{name} is restarting",
       "deleting": "Deletion of {name} started",
-      "projectDeleting": "Deletion of project {name} started"
+      "projectDeleting": "Deletion of project {name} started",
+      "protectedOn": "Deletion protection turned on",
+      "protectedOff": "Deletion protection turned off"
     },
     "errors": {
       "loadTemplates": "Failed to load templates",
       "deploy": "Deploy failed: {message}",
       "deployStarted": "Deployment of {name} started",
       "wake": "Wake failed: {message}",
-      "notAllowed": "Your role does not allow this action"
+      "notAllowed": "Your role does not allow this action",
+      "protect": "Could not change deletion protection: {message}"
     }
   },
   "confirm": {
@@ -1913,6 +1921,11 @@
       "title": "Cannot delete {name}",
       "description": "{count, plural, one {# application remains} other {# applications remain}} in this project. Delete them first, then come back.",
       "open": "Open {name}"
+    },
+    "unprotect": {
+      "title": "Turn off deletion protection for {name}?",
+      "description": "Admins can then delete the project and its apps.",
+      "confirm": "Turn off"
     }
   },
   "environments": {

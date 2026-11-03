@@ -90,6 +90,12 @@ class AddMemberRequest(BaseModel):
     )
 
 
+class DeletionProtectionUpdate(BaseModel):
+    """Payload for turning a project's deletion protection on or off."""
+
+    enabled: bool
+
+
 class ProjectCreateResponse(BaseModel):
     """Immediate response after triggering project bootstrap."""
 

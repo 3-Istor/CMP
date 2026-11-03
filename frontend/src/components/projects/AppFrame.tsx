@@ -13,6 +13,7 @@ import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
 import { badgeVariant, StateLabel } from "@/components/projects/DeploymentHealth";
+import { MenuText } from "@/components/projects/MenuText";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -27,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   deleteDeployment,
+  getDeletionProtection,
   getDeploymentLinks,
   getPower,
   restartDeployment,
@@ -122,6 +124,14 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       .then(setLinks)
       .catch(() => setLinks([]));
   }, [appId, linksReady, current.github_repo_url]);
+
+  const [protectedOn, setProtectedOn] = useState(false);
+  useEffect(() => {
+    if (!canDelete) return;
+    getDeletionProtection(projectName)
+      .then(({ enabled }) => setProtectedOn(enabled))
+      .catch(() => setProtectedOn(false));
+  }, [projectName, canDelete]);
 
   const inProgress = IN_PROGRESS_STATUSES.includes(current.status);
   const healthReady = isKubernetes && canViewLogs && !inProgress;
@@ -449,13 +459,17 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
-                        disabled={["deleting", "deleted"].includes(
-                          current.status,
-                        )}
+                        disabled={
+                          protectedOn ||
+                          ["deleting", "deleted"].includes(current.status)
+                        }
                         onClick={() => setConfirming("delete")}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden />
-                        {ta("deleteApp")}
+                        <MenuText
+                          label={ta("deleteApp")}
+                          reason={protectedOn ? ta("reasons.protected") : null}
+                        />
                       </DropdownMenuItem>
                     </>
                   )}
@@ -563,19 +577,6 @@ function HealthPill({
     <Badge variant={badgeVariant(state)} className="gap-1" role="status">
       <StateLabel state={state} />
     </Badge>
-  );
-}
-
-function MenuText({ label, reason }: { label: string; reason: string | null }) {
-  return (
-    <span className="flex flex-col">
-      <span>{label}</span>
-      {reason && (
-        <span className="text-xs font-normal text-muted-foreground">
-          {reason}
-        </span>
-      )}
-    </span>
   );
 }
 
