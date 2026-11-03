@@ -138,6 +138,10 @@ export function describe(e: ActivityEvent, t: Translate): string {
       });
     case "project.member.remove":
       return t("events.memberRemove", { user: e.target });
+    case "project.deletion_protection.update":
+      return t(
+        d.enabled === false ? "events.protectionOff" : "events.protectionOn",
+      );
     case "app.create":
       return t("events.appCreate", { app });
     case "app.delete":

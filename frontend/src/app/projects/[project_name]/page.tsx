@@ -2,8 +2,10 @@
 
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
+import { errorMessage } from "@/components/activity/labels";
 import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
+import { MenuText } from "@/components/projects/MenuText";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
@@ -22,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NotConnected } from "@/components/clusters/NotConnected";
@@ -31,8 +34,10 @@ import {
   createDeployment,
   deleteProject,
   getCatalog,
+  getDeletionProtection,
   getProjectLinks,
   isNotConnected,
+  setDeletionProtection,
 } from "@/lib/api";
 import { hasScorecard, useScorecards } from "@/lib/scorecard";
 import type { CatalogTemplate, ProjectLink } from "@/types";
@@ -43,6 +48,8 @@ import {
   Plus,
   Rocket,
   RefreshCw,
+  ShieldCheck,
+  ShieldOff,
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -71,6 +78,7 @@ export default function ProjectPage() {
   } = useProjectContext();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showUnprotectDialog, setShowUnprotectDialog] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "score">("name");
   const scores = useScorecards(
     apps.filter(hasScorecard).map((app) => app.id),
@@ -92,6 +100,7 @@ export default function ProjectPage() {
   // disappearing.
   const canDeploy = can("app.deploy");
   const canDeleteProject = can("project.delete");
+  const canProtect = can("project.protect");
   const canViewObservability = can("app.viewObservability");
 
   const [links, setLinks] = useState<ProjectLink[]>([]);
@@ -101,6 +110,15 @@ export default function ProjectPage() {
       .then(setLinks)
       .catch(() => setLinks([]));
   }, [projectName, canViewObservability]);
+
+  // null until read: the toggle stays hidden rather than offer the wrong action.
+  const [protectedOn, setProtectedOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!canDeleteProject) return;
+    getDeletionProtection(projectName)
+      .then(({ enabled }) => setProtectedOn(enabled))
+      .catch(() => setProtectedOn(null));
+  }, [projectName, canDeleteProject]);
 
   // Catalog for deploy modal
   const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
@@ -181,6 +199,20 @@ export default function ProjectPage() {
     router.push("/");
   };
 
+  const changeProtection = async (enabled: boolean) => {
+    if (!canProtect) throw new Error(ta("errors.notAllowed"));
+    const res = await setDeletionProtection(projectName, enabled);
+    setProtectedOn(res.enabled);
+    toast.success(
+      ta(res.enabled ? "toasts.protectedOn" : "toasts.protectedOff"),
+    );
+  };
+
+  const handleProtect = () =>
+    changeProtection(true).catch((err) =>
+      toast.error(ta("errors.protect", { message: errorMessage(err) })),
+    );
+
   return (
     <div className="min-h-screen">
       <main className="px-6 py-8 max-w-7xl mx-auto space-y-6">
@@ -221,13 +253,37 @@ export default function ProjectPage() {
                     <MoreHorizontal aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[14rem]">
+                <DropdownMenuContent align="end" className="min-w-[16rem]">
+                  {canProtect && protectedOn !== null && (
+                    <>
+                      <DropdownMenuItem
+                        className="gap-2"
+                        onClick={
+                          protectedOn
+                            ? () => setShowUnprotectDialog(true)
+                            : handleProtect
+                        }
+                      >
+                        {protectedOn ? (
+                          <ShieldOff className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <ShieldCheck className="h-4 w-4" aria-hidden />
+                        )}
+                        {ta(protectedOn ? "protectOff" : "protectOn")}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem
                     className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
+                    disabled={protectedOn === true}
                     onClick={() => setShowDeleteDialog(true)}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden />
-                    {ta("deleteProject")}
+                    <MenuText
+                      label={ta("deleteProject")}
+                      reason={protectedOn ? ta("reasons.protected") : null}
+                    />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -408,6 +464,16 @@ export default function ProjectPage() {
         expectedName={projectName}
         confirmLabel={tc("deleteProject.confirm")}
         onConfirm={handleDeleteProject}
+      />
+
+      <ConfirmDialog
+        open={showUnprotectDialog}
+        onOpenChange={setShowUnprotectDialog}
+        level={1}
+        title={tc("unprotect.title", { name: projectName })}
+        description={tc("unprotect.description")}
+        confirmLabel={tc("unprotect.confirm")}
+        onConfirm={() => changeProtection(false)}
       />
 
       <Dialog

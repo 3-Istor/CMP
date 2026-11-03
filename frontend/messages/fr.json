@@ -979,6 +979,8 @@
       "trafficStart": "a lancé un test de trafic sur {app}",
       "trafficStop": "a arrêté le test de trafic sur {app}",
       "agentsUpdate": "a modifié les réglages des assistants IA du projet",
+      "protectionOn": "a activé la protection contre la suppression",
+      "protectionOff": "a désactivé la protection contre la suppression",
       "agentConnect": "a connecté un assistant IA",
       "agentDisconnect": "a déconnecté un assistant IA",
       "monthClose": "a clôturé un mois FinOps",
@@ -1846,6 +1848,8 @@
     "settings": "Paramètres",
     "deleteApp": "Supprimer l'application…",
     "newApp": "Nouvelle app",
+    "protectOn": "Activer la protection contre la suppression",
+    "protectOff": "Désactiver la protection contre la suppression",
     "deleteProject": "Supprimer le projet…",
     "externalLink": "S'ouvre dans un nouvel onglet",
     "reasons": {
@@ -1853,21 +1857,25 @@
       "noSchedule": "Aucune planification de mise en veille sur cette application",
       "unavailable": "Le cluster n'autorise pas cette action pour l'instant",
       "asleep": "Réveillez l'application avant de la redémarrer",
-      "busy": "Opération en cours sur l'application"
+      "busy": "Opération en cours sur l'application",
+      "protected": "La protection contre la suppression est activée"
     },
     "toasts": {
       "sleeping": "{name} est en cours de mise en veille",
       "woken": "{name} se réveille",
       "restarting": "{name} redémarre",
       "deleting": "Suppression de {name} lancée",
-      "projectDeleting": "Suppression du projet {name} lancée"
+      "projectDeleting": "Suppression du projet {name} lancée",
+      "protectedOn": "Protection contre la suppression activée",
+      "protectedOff": "Protection contre la suppression désactivée"
     },
     "errors": {
       "loadTemplates": "Impossible de charger les modèles",
       "deploy": "Échec du déploiement : {message}",
       "deployStarted": "Déploiement de {name} lancé",
       "wake": "Échec du réveil : {message}",
-      "notAllowed": "Votre rôle ne permet pas cette action"
+      "notAllowed": "Votre rôle ne permet pas cette action",
+      "protect": "Échec du changement de protection : {message}"
     }
   },
   "confirm": {
@@ -1913,6 +1921,11 @@
       "title": "Impossible de supprimer {name}",
       "description": "{count, plural, one {# application reste} other {# applications restantes}} dans ce projet. Supprimez-les d'abord, puis revenez ici.",
       "open": "Ouvrir {name}"
+    },
+    "unprotect": {
+      "title": "Désactiver la protection contre la suppression de {name} ?",
+      "description": "Les admins pourront alors supprimer le projet et ses applications.",
+      "confirm": "Désactiver"
     }
   },
   "environments": {
