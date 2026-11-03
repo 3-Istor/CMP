@@ -1,12 +1,6 @@
 """
-Per-project deletion protection.
-
-The registry record's ``spec.deletionProtection`` is the switch. Argo CD copies
-it onto the project's Applications, AppProjects and prod namespaces as the
-``cnp.3istor.com/deletion-protected`` label, and an admission policy refuses to
-delete an object while that label is ``"true"``. Lifting the protection takes
-Argo CD about a minute to reach the cluster, so a deletion also waits for the
-labels to be gone, or the cluster would refuse it halfway through.
+Per-project deletion protection: the registry flag and the cluster labels it
+drives.
 """
 
 import logging

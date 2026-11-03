@@ -77,6 +77,7 @@ from app.services.project_preflight import (
 from app.services.project_registry import (
     ImmutableCloudError,
     NameCollisionError,
+    ProtectedRecordError,
     RecordNotFoundError,
     RegistryError,
     ensure_project_names_free,
@@ -393,7 +394,7 @@ async def create_project(
             owner_username=username,
             target_cloud=payload.target_cloud,
         )
-    except ImmutableCloudError as exc:
+    except (ImmutableCloudError, ProtectedRecordError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
@@ -802,6 +803,7 @@ async def update_deletion_protection(
     Raises:
         403: Caller is an assistant, or is not a project admin
         404: The project has no registry record
+        409: Turning it on while an app of the project is being deleted
     """
     if token.get("cnp_agent"):
         raise HTTPException(
@@ -810,6 +812,24 @@ async def update_deletion_protection(
         )
     if not is_cnp_admin(token):
         assert_project_role(db, token, project_name, ProjectRole.ADMIN)
+    # A label put on the objects of an app that leaves the registry
+    # mid-deletion could never be lifted again.
+    if payload.enabled and (
+        db.query(Deployment)
+        .filter(
+            Deployment.project_id == project_name,
+            Deployment.status == DeploymentStatus.DELETING,
+        )
+        .first()
+        is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "An app of this project is being deleted. "
+                "Turn on deletion protection once it is gone."
+            ),
+        )
     try:
         await set_deletion_protection(project_name, payload.enabled)
     except RecordNotFoundError as exc:

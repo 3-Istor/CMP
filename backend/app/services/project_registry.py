@@ -57,6 +57,10 @@ class ImmutableCloudError(RegistryError):
     """
 
 
+class ProtectedRecordError(RegistryError):
+    """Raised when a write would reset a deletion-protected record."""
+
+
 class NameCollisionError(RegistryError):
     """Raised when a record's derived names collide with another record's."""
 
@@ -245,6 +249,8 @@ async def publish_record(
 
     Raises:
         ImmutableCloudError: If a record already exists on a different cloud.
+        ProtectedRecordError: If the existing record has deletion protection
+            on: overwriting it would drop the flag.
         RegistryError: If the registry cannot be written.
     """
     existing = await read_record(project_name)
@@ -252,6 +258,11 @@ async def publish_record(
 
     if existing is not None:
         record, sha = existing
+        if (record.get("spec") or {}).get("deletionProtection") is True:
+            raise ProtectedRecordError(
+                f"Project '{project_name}' is deletion-protected: turn "
+                "protection off before re-creating it."
+            )
         current = record.get("spec", {}).get("targetCloud")
         if current != target_cloud.value:
             raise ImmutableCloudError(

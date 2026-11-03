@@ -7,7 +7,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException
 from ruamel.yaml import YAML
 
-from app.models.deployment import Deployment
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, TargetCloud
 from app.routers import deployments as deployments_router
 from app.routers import projects as projects_router
@@ -102,6 +102,28 @@ def test_a_platform_admin_may_change_protection(db, roles):  # noqa: F811
 
     assert result == {"enabled": False}
     write.assert_awaited_once_with("alpha", False)
+
+
+def test_protection_cannot_be_turned_on_while_an_app_is_deleting(
+    db, roles  # noqa: F811
+):
+    db.query(Deployment).filter_by(project_id="alpha").one().status = (
+        DeploymentStatus.DELETING
+    )
+    db.commit()
+
+    with mock.patch.object(
+        projects_router, "set_deletion_protection", new=mock.AsyncMock()
+    ) as write:
+        with pytest.raises(HTTPException) as exc:
+            put(db, _user("u1"))
+
+        assert exc.value.status_code == 409
+        assert "being deleted" in exc.value.detail
+        write.assert_not_called()
+
+        assert put(db, _user("u1"), enabled=False) == {"enabled": False}
+        write.assert_awaited_once_with("alpha", False)
 
 
 def test_protection_of_a_project_without_record_is_off(
@@ -326,3 +348,65 @@ def test_turning_protection_off_removes_the_field():
     assert message == (
         "feat(registry): turn deletion protection on for alpha [skip ci]"
     )
+
+
+@pytest.mark.parametrize(
+    "extra, expected",
+    [
+        ("  deletionProtection: true\n", True),
+        ("", False),
+        ("  deletionProtection: false\n", False),
+    ],
+)
+def test_a_protected_record_reads_as_protected(extra, expected):
+    record = YAML().load(RECORD.format(extra=extra))
+
+    with mock.patch.object(
+        project_registry,
+        "read_record",
+        new=mock.AsyncMock(return_value=(record, "sha1")),
+    ):
+        assert (
+            asyncio.run(project_registry.is_deletion_protected("alpha"))
+            is expected
+        )
+
+
+def publish(existing_extra, put_file):
+    record = YAML().load(RECORD.format(extra=existing_extra))
+    with (
+        mock.patch.object(
+            project_registry,
+            "read_record",
+            new=mock.AsyncMock(return_value=(record, "sha1")),
+        ),
+        mock.patch.object(
+            project_registry,
+            "_installation_token",
+            new=mock.AsyncMock(return_value="t"),
+        ),
+        mock.patch.object(project_registry, "put_file_content", new=put_file),
+    ):
+        asyncio.run(
+            project_registry.publish_record("alpha", "u1", TargetCloud.ONPREM)
+        )
+
+
+def test_publishing_over_a_protected_record_is_refused():
+    put_file = mock.AsyncMock()
+
+    with pytest.raises(project_registry.ProtectedRecordError) as exc:
+        publish("  deletionProtection: true\n", put_file)
+
+    assert "turn protection off" in str(exc.value)
+    put_file.assert_not_called()
+
+
+def test_publishing_over_an_unprotected_record_still_overwrites():
+    put_file = mock.AsyncMock()
+
+    publish("  deletionProtection: false\n", put_file)
+
+    put_file.assert_awaited_once()
+    assert put_file.call_args.kwargs["sha"] == "sha1"
+    assert "deletionProtection" not in put_file.call_args.args[3]
