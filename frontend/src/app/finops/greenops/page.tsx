@@ -2,6 +2,7 @@
 
 import { CarbonTimeline } from "@/components/finops/CarbonTimeline";
 import { DataFreshness } from "@/components/finops/DataFreshness";
+import { formatNumber, intlLocale } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -13,37 +14,34 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useFinopsCarbon, useProjects } from "@/lib/hooks";
 import type { FinopsCarbon, FinopsMeta } from "@/types";
 import { Activity, AlertCircle, Cloud, Moon, Zap } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
-const PERIOD_LABEL: Record<string, string> = {
-  "30d": "30 jours",
-  "90d": "90 jours",
-  ytd: "depuis le 1er janvier",
-};
+const PERIODS = ["30d", "90d", "ytd"] as const;
 
 const SELECT_CLASS =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
 
-function formatNumber(value: number, digits = 1): string {
-  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: digits }).format(
-    value,
-  );
-}
-
 function CarbonTable({ rows }: { rows: FinopsCarbon["rows"] }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <th className="px-3 py-2 font-medium">Projet</th>
-            <th className="px-3 py-2 font-medium">Application</th>
-            <th className="px-3 py-2 text-right font-medium">Énergie</th>
+            <th className="px-3 py-2 font-medium">{t("common.project")}</th>
+            <th className="px-3 py-2 font-medium">{t("common.application")}</th>
             <th className="px-3 py-2 text-right font-medium">
-              kg CO₂e (direct RTE)
+              {t("carbon.energyColumn")}
             </th>
-            <th className="px-3 py-2 text-right font-medium">kg CO₂e (ACV)</th>
+            <th className="px-3 py-2 text-right font-medium">
+              {t("carbon.directColumn")}
+            </th>
+            <th className="px-3 py-2 text-right font-medium">
+              {t("carbon.lcaColumn")}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -54,18 +52,18 @@ function CarbonTable({ rows }: { rows: FinopsCarbon["rows"] }) {
             >
               <td className="px-3 py-2">
                 <Badge variant="outline" className="font-normal">
-                  {r.project || "—"}
+                  {r.project || t("common.na")}
                 </Badge>
               </td>
-              <td className="px-3 py-2 font-medium">{r.app || "—"}</td>
+              <td className="px-3 py-2 font-medium">{r.app || t("common.na")}</td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {formatNumber(r.energy_kwh)} kWh
+                {formatNumber(r.energy_kwh, 1, locale)} kWh
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {formatNumber(r.co2e_direct_kg, 2)}
+                {formatNumber(r.co2e_direct_kg, 2, locale)}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {formatNumber(r.co2e_lca_kg, 2)}
+                {formatNumber(r.co2e_lca_kg, 2, locale)}
               </td>
             </tr>
           ))}
@@ -76,6 +74,8 @@ function CarbonTable({ rows }: { rows: FinopsCarbon["rows"] }) {
 }
 
 function GreenopsInner() {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const searchParams = useSearchParams();
   const [project, setProject] = useState(searchParams.get("project") ?? "");
   const [period, setPeriod] = useState("30d");
@@ -105,12 +105,12 @@ function GreenopsInner() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         <select
-          aria-label="Projet"
+          aria-label={t("common.project")}
           value={project}
           onChange={(e) => setProject(e.target.value)}
           className={SELECT_CLASS}
         >
-          <option value="">Tous les projets</option>
+          <option value="">{t("common.allProjects")}</option>
           {projects.map((p) => (
             <option key={p.name} value={p.name}>
               {p.name}
@@ -118,14 +118,16 @@ function GreenopsInner() {
           ))}
         </select>
         <select
-          aria-label="Période"
+          aria-label={t("common.period")}
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
           className={SELECT_CLASS}
         >
-          <option value="30d">30 jours</option>
-          <option value="90d">90 jours</option>
-          <option value="ytd">Depuis le 1er janvier</option>
+          {PERIODS.map((p) => (
+            <option key={p} value={p}>
+              {t(`common.periods.${p}`)}
+            </option>
+          ))}
         </select>
         <DataFreshness meta={meta} />
       </div>
@@ -152,15 +154,17 @@ function GreenopsInner() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                  <Zap className="h-4 w-4" /> Énergie consommée
+                  <Zap className="h-4 w-4" /> {t("carbon.energyTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <span className="text-2xl font-semibold tabular-nums">
-                  {formatNumber(data.totals.energy_kwh)} kWh
+                  {formatNumber(data.totals.energy_kwh, 1, locale)} kWh
                 </span>
                 <p className="text-xs text-muted-foreground">
-                  Sur {PERIOD_LABEL[period]}, serveurs on-prem.
+                  {t("carbon.energyHint", {
+                    period: t(`common.periodsIn.${period}`),
+                  })}
                 </p>
               </CardContent>
             </Card>
@@ -168,15 +172,17 @@ function GreenopsInner() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                  <Cloud className="h-4 w-4" /> Émissions (direct RTE)
+                  <Cloud className="h-4 w-4" /> {t("carbon.emissionsTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <span className="text-2xl font-semibold tabular-nums">
-                  {formatNumber(data.totals.co2e_direct_kg, 2)} kg CO₂e
+                  {formatNumber(data.totals.co2e_direct_kg, 2, locale)} kg CO₂e
                 </span>
                 <p className="text-xs text-muted-foreground">
-                  ACV ADEME : {formatNumber(data.totals.co2e_lca_kg, 2)} kg CO₂e
+                  {t("carbon.lcaHint", {
+                    value: formatNumber(data.totals.co2e_lca_kg, 2, locale),
+                  })}
                 </p>
               </CardContent>
             </Card>
@@ -184,24 +190,24 @@ function GreenopsInner() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                  <Activity className="h-4 w-4" /> Intensité du réseau
+                  <Activity className="h-4 w-4" /> {t("carbon.gridTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {data.latest ? (
                   <>
                     <span className="text-2xl font-semibold tabular-nums">
-                      {formatNumber(data.latest.g_per_kwh)} g/kWh
+                      {formatNumber(data.latest.g_per_kwh, 1, locale)} g/kWh
                     </span>
                     <p className="text-xs text-muted-foreground">
-                      Moyenne du{" "}
-                      {new Date(data.latest.day).toLocaleDateString("fr-FR")}
-                      , RTE éCO2mix.
+                      {t("carbon.gridHint", {
+                        date: new Date(data.latest.day).toLocaleDateString(locale),
+                      })}
                     </p>
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Pas encore de mesure RTE.
+                    {t("carbon.gridEmpty")}
                   </p>
                 )}
               </CardContent>
@@ -210,52 +216,56 @@ function GreenopsInner() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                  <Moon className="h-4 w-4" /> CO₂e évité par la veille
+                  <Moon className="h-4 w-4" /> {t("carbon.avoidedTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <span className="text-2xl font-semibold tabular-nums">
-                  {formatNumber(data.totals.co2e_avoided_kg, 2)} kg CO₂e
+                  {formatNumber(data.totals.co2e_avoided_kg, 2, locale)} kg CO₂e
                 </span>
                 <p className="text-xs text-muted-foreground">
-                  Mise en veille offhours-guard, même intensité RTE.
+                  {t("carbon.avoidedHint")}
                 </p>
               </CardContent>
             </Card>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Méthode.</span>{" "}
-            On-prem : puissance mesurée des hyperviseurs (moyenne d&apos;octobre,
-            en attendant un exporter continu) × intensité RTE éCO2mix du jour.
-            ACV : même énergie × {lca?.g_per_kwh ?? "—"} g/kWh ({lca?.source}).
-            Cloud : estimation, à venir.
+            <span className="font-medium text-foreground">
+              {t("carbon.methodTitle")}
+            </span>{" "}
+            {t("carbon.method", {
+              factor: lca?.g_per_kwh ?? t("common.na"),
+              source: lca?.source ?? "",
+            })}
           </p>
 
           {isEmpty ? (
             <Card>
               <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                Aucune énergie mesurée sur cette période. Les données
-                apparaissent après le premier passage de l&apos;ingester.
+                {t("carbon.emptyText")}
               </CardContent>
             </Card>
           ) : (
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle>Évolution quotidienne</CardTitle>
+                  <CardTitle>{t("common.dailyTrend")}</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Énergie en barres, intensité moyenne du jour en ligne.
+                    {t("carbon.trendHint")}
                   </p>
                 </CardHeader>
                 <CardContent>
                   <CarbonTimeline data={data.timeline} />
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {t("carbon.rteExplainer")}
+                  </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Détail par projet et application</CardTitle>
+                  <CardTitle>{t("carbon.detailTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <CarbonTable rows={data.rows} />

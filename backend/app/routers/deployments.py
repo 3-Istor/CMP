@@ -102,7 +102,7 @@ def _user_project_names(db: Session, token: dict) -> list[str]:
     anything they own.
 
     Owned projects are included separately because ownership lives in the
-    database, not in a group — the same reason ``GET /api/projects/`` merges
+    database, not in a group, the same reason ``GET /api/projects/`` merges
     the two.
     """
     user_id = get_user_id_from_token(token)
@@ -168,7 +168,7 @@ def list_deployments(
     """
     Return the caller's non-deleted deployments.
 
-    Scoped to the projects the caller belongs to — including as a guest, who
+    Scoped to the projects the caller belongs to, including as a guest, who
     is allowed to see which applications exist. Platform admins see them all.
     """
     query = db.query(Deployment).filter(
@@ -315,7 +315,7 @@ async def get_deployment_outputs(
     """
     Return Terraform outputs for a deployment.
 
-    Access control: any role. These are the app's public endpoints — the URLs
+    Access control: any role. These are the app's public endpoints, the URLs
     and IPs already shown on its card.
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
@@ -500,8 +500,8 @@ async def _get_github_token_for_deployment(deployment: Deployment) -> str:
     The installation ID is read from the deployment's ``app_config`` JSON.
 
     Raises:
-        HTTPException 400 — if no installation ID is stored.
-        HTTPException 502 — if GitHub token exchange fails.
+        HTTPException 400, if no installation ID is stored.
+        HTTPException 502, if GitHub token exchange fails.
     """
     app_config: dict = json.loads(deployment.app_config or "{}")
     installation_id: str | None = app_config.get("github_installation_id")
@@ -556,15 +556,15 @@ async def get_deployment_config(
     This allows the frontend to pre-populate the Day-2 configuration form
     without the user needing to know the repository URL.
 
-    Access control: member or above — members read the configuration, only
+    Access control: member or above, members read the configuration, only
     admins may change it (see PATCH below).
 
     Raises:
-        404 — Deployment not found.
-        403 — Caller has no access to the application's project.
-        400 — Not a Kubernetes deployment.
-        409 — GitHub repo not linked yet.
-        502 — GitHub API error.
+        404, Deployment not found.
+        403, Caller has no access to the application's project.
+        400, Not a Kubernetes deployment.
+        409, GitHub repo not linked yet.
+        502, GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token, ProjectRole.MEMBER
@@ -644,11 +644,11 @@ async def update_deployment_config(
     ArgoCD will automatically detect the new commit and sync the application.
 
     **Request body**: a JSON object containing:
-    - ``_sha`` *(required)* — the file SHA returned by ``GET /config``.
+    - ``_sha`` *(required)*, the file SHA returned by ``GET /config``.
       GitHub uses this to prevent concurrent write conflicts (409 Conflict).
     - Any other keys to merge into the YAML file (supports nested objects).
 
-    **Merge strategy**: deep merge — existing keys not mentioned in the
+    **Merge strategy**: deep merge, existing keys not mentioned in the
     payload are preserved, including YAML comments.
 
     Access control: admin or owner of the application's project. This commits
@@ -656,11 +656,11 @@ async def update_deployment_config(
     write in every sense.
 
     Raises:
-        400 — Missing ``_sha``, not a Kubernetes deployment, or no payload keys.
-        403 — Caller is not an admin of the application's project.
-        404 — Deployment not found.
-        409 — SHA conflict (another commit was pushed in between) or repo not linked.
-        502 — GitHub API error.
+        400, Missing ``_sha``, not a Kubernetes deployment, or no payload keys.
+        403, Caller is not an admin of the application's project.
+        404, Deployment not found.
+        409, SHA conflict (another commit was pushed in between) or repo not linked.
+        502, GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token, ProjectRole.ADMIN
@@ -683,7 +683,7 @@ async def update_deployment_config(
     if not payload:
         raise HTTPException(
             status_code=400,
-            detail="No configuration keys provided — nothing to update.",
+            detail="No configuration keys provided, nothing to update.",
         )
 
     # Named gh_token so it cannot shadow the caller's JWT above.

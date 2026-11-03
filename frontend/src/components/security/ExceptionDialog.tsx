@@ -21,13 +21,10 @@ import {
 import { createSecurityException } from "@/lib/api";
 import type { SecurityException, SecurityFinding } from "@/types";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-  errorMessage,
-  EXCEPTION_STATUS_LABELS,
-  JUSTIFICATION_LABELS,
-} from "./labels";
+import { errorMessage, JUSTIFICATIONS } from "./labels";
 
 type Status = SecurityException["status"];
 
@@ -48,16 +45,6 @@ function isoIn(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-const HINTS: Record<Status, string> = {
-  not_affected:
-    "La faille existe dans le paquet, mais ne peut pas être exploitée ici. Revue dans un an.",
-  false_positive: "Le scanner se trompe. Revue dans un an.",
-  accepted_risk:
-    "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus, et un autre admin du projet doit valider.",
-  revoked:
-    "Le secret a été changé et l'ancien ne fonctionne plus. Le retirer de l'historique ne suffit pas.",
-};
-
 export function ExceptionDialog({
   finding,
   project,
@@ -69,6 +56,7 @@ export function ExceptionDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useTranslations("security");
   const statuses = finding ? statusesFor(finding) : [];
   const [status, setStatus] = useState<Status>(statuses[0] ?? "false_positive");
   const [justification, setJustification] = useState(
@@ -95,9 +83,7 @@ export function ExceptionDialog({
         expires_on: expires || null,
       });
       toast.success(
-        needsApproval
-          ? "Exception enregistrée, en attente de validation"
-          : "Alerte ignorée",
+        t(needsApproval ? "exception.saved" : "exception.ignored"),
       );
       onDone();
     } catch (e) {
@@ -111,42 +97,44 @@ export function ExceptionDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Ignorer cette alerte</DialogTitle>
+          <DialogTitle>{t("exception.title")}</DialogTitle>
           <DialogDescription>{finding.title}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Motif</Label>
+            <Label>{t("exception.reason")}</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as Status)}>
               <SelectTrigger className="w-full">
-                <SelectValue>{(v) => EXCEPTION_STATUS_LABELS[v as Status]}</SelectValue>
+                <SelectValue>{(v) => t(`exceptionStatus.${String(v)}`)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {statuses.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {EXCEPTION_STATUS_LABELS[s]}
+                    {t(`exceptionStatus.${s}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{HINTS[status]}</p>
+            <p className="text-xs text-muted-foreground">
+              {t(`exception.hints.${status}`)}
+            </p>
           </div>
 
           {status === "not_affected" && (
             <div className="space-y-1.5">
-              <Label>Pourquoi</Label>
+              <Label>{t("exception.why")}</Label>
               <Select
                 value={justification}
                 onValueChange={(v) => setJustification(String(v))}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue>{(v) => JUSTIFICATION_LABELS[String(v)]}</SelectValue>
+                  <SelectValue>{(v) => t(`justifications.${String(v)}`)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(JUSTIFICATION_LABELS).map(([value, label]) => (
+                  {JUSTIFICATIONS.map((value) => (
                     <SelectItem key={value} value={value}>
-                      {label}
+                      {t(`justifications.${value}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -155,19 +143,19 @@ export function ExceptionDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="exception-statement">Explication</Label>
+            <Label htmlFor="exception-statement">{t("exception.explanation")}</Label>
             <textarea
               id="exception-statement"
               value={statement}
               onChange={(e) => setStatement(e.target.value)}
               rows={3}
-              placeholder="Ce que tu as vérifié, en une ou deux phrases"
+              placeholder={t("exception.explanationPlaceholder")}
               className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="exception-expires">Expire le</Label>
+            <Label htmlFor="exception-expires">{t("exception.expiresOn")}</Label>
             <Input
               id="exception-expires"
               type="date"
@@ -177,26 +165,24 @@ export function ExceptionDialog({
               onChange={(e) => setExpires(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Par défaut et au plus tard le {isoIn(limit)}. L&apos;alerte revient
-              d&apos;elle-même à cette date.
+              {t("exception.expiryHint", { date: isoIn(limit) })}
             </p>
           </div>
 
           {needsApproval && (
             <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-              Un autre admin du projet devra valider. D&apos;ici là, l&apos;alerte
-              reste comptée.
+              {t("exception.approvalNeeded")}
             </p>
           )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button onClick={submit} disabled={saving || statement.trim().length < 10}>
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Ignorer
+            {t("exception.ignore")}
           </Button>
         </DialogFooter>
       </DialogContent>

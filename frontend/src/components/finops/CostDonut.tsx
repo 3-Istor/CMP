@@ -1,8 +1,14 @@
 "use client";
 
 import type { CostBreakdown, FinopsResource } from "@/types";
+import { useLocale, useTranslations } from "next-intl";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { RESOURCE_META, formatEUR, visibleResources } from "./format";
+import {
+  RESOURCE_META,
+  formatEUR,
+  intlLocale,
+  visibleResources,
+} from "./format";
 
 /**
  * Donut de répartition des coûts par ressource. Un clic sur un segment appelle
@@ -18,12 +24,14 @@ export function CostDonut({
   selected?: FinopsResource | null;
   onSelect?: (r: FinopsResource | null) => void;
 }) {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const data = visibleResources(
     (breakdown.ai ?? 0) > 0,
     (breakdown.platform ?? 0) > 0,
   ).map((r) => ({
     resource: r,
-    name: RESOURCE_META[r].label,
+    name: t(`resources.${r}`),
     value: breakdown[r] ?? 0,
     color: RESOURCE_META[r].color,
   }));
@@ -61,7 +69,7 @@ export function CostDonut({
             </Pie>
             <Tooltip
               formatter={(value, name) => [
-                formatEUR(Number(value) || 0),
+                formatEUR(Number(value) || 0, "EUR", locale),
                 String(name),
               ]}
               contentStyle={{
@@ -74,9 +82,9 @@ export function CostDonut({
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xs text-muted-foreground">Total</span>
+          <span className="text-xs text-muted-foreground">{t("donut.total")}</span>
           <span className="text-lg font-semibold tabular-nums">
-            {formatEUR(total)}
+            {formatEUR(total, "EUR", locale)}
           </span>
         </div>
       </div>
@@ -85,7 +93,11 @@ export function CostDonut({
         {data.map((d) => (
           <button
             key={d.resource}
-            title={RESOURCE_META[d.resource].hint}
+            title={
+              d.resource === "platform"
+                ? t("resourceHints.platform")
+                : undefined
+            }
             onClick={() => onSelect?.(selected === d.resource ? null : d.resource)}
             className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-accent"
             style={{ opacity: selected && selected !== d.resource ? 0.4 : 1 }}
@@ -96,7 +108,7 @@ export function CostDonut({
             />
             {d.name}
             <span className="tabular-nums text-muted-foreground">
-              {formatEUR(d.value)}
+              {formatEUR(d.value, "EUR", locale)}
             </span>
           </button>
         ))}

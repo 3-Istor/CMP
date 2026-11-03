@@ -14,6 +14,7 @@ Endpoints:
   DELETE /api/projects/{project_name}                  - Delete a project and tear it down
 """
 
+import asyncio
 import json
 import logging
 from typing import Annotated
@@ -35,10 +36,17 @@ from app.schemas.project import (
     ProjectCreateResponse,
     ProjectRead,
 )
+from app.services import notifications
 from app.services.authz import RequireAdmin, RequireGuest, RequireMember
+from app.services.clusters.state import (
+    PUBLIC_CLOUDS,
+    fresh_state,
+    pick_public_cloud,
+)
 from app.services.grafana_service import (
     add_user_to_project_org,
     remove_user_from_project_org,
+    sync_project_org,
 )
 from app.services.import_policy import require_standard_platform_mode
 from app.services.keycloak_service import (
@@ -96,7 +104,7 @@ def _administers_any_project(db: Session, token_payload: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/projects/users/search  — Keycloak user search for member autocomplete
+# GET /api/projects/users/search , Keycloak user search for member autocomplete
 # ---------------------------------------------------------------------------
 
 
@@ -114,7 +122,7 @@ def search_keycloak_users(
 
     Access control: only users who administer at least one project. The
     endpoint exists to fill the "add a member" field, and that field is
-    admin-only — without this check any authenticated account could
+    admin-only, without this check any authenticated account could
     enumerate every username and email in the realm.
 
     Query params:
@@ -185,20 +193,20 @@ def list_projects(
 
     Projects the user owns are merged in on top, with role ``"owner"``. They
     are added even when no group grants access, so a creator whose Keycloak
-    group assignment is still in flight — or failed outright — can still see
+    group assignment is still in flight, or failed outright, can still see
     what they made.
     """
     username = token_payload.get("preferred_username", "")
-    logger.debug("🔍 Fetching projects for username='%s'", username)
+    logger.debug("Fetching projects for username='%s'", username)
 
     user_id = get_user_id_from_token(token_payload)
-    logger.debug("🔍 Using user_id='%s'", user_id)
+    logger.debug("Using user_id='%s'", user_id)
 
     projects = fetch_user_projects_from_keycloak(user_id)
     by_name = {p["name"]: p for p in projects}
 
     logger.debug(
-        "📋 Found %d projects for user: %s", len(projects), list(by_name)
+        "Found %d projects for user: %s", len(projects), list(by_name)
     )
 
     # Owned projects, plus the registry mirror used to render the cloud badge
@@ -265,7 +273,7 @@ async def create_project(
     """
     Bootstrap a new project by executing the ``k3s-project-bootstrap`` Terraform module.
 
-    This is an async operation — Terraform runs in a background task.
+    This is an async operation, Terraform runs in a background task.
     The module creates:
     - Keycloak groups: ``project-<name>-admins`` / ``-members`` / ``-guests``
     - Vault policies scoped to the project
@@ -347,8 +355,21 @@ async def create_project(
             detail=f"Could not check the project registry: {exc}",
         ) from exc
 
+    if payload.target_cloud == "public":
+        states = {
+            c: await run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS
+        }
+        last = (
+            db.query(Project.target_cloud)
+            .filter(Project.target_cloud.in_(PUBLIC_CLOUDS))
+            .order_by(Project.id.desc())
+            .limit(1)
+            .scalar()
+        )
+        payload.target_cloud = pick_public_cloud(states, last)
+
     logger.info(
-        "🔐 Creating project '%s' for user_id='%s'",
+        "Creating project '%s' for user_id='%s'",
         payload.project_name,
         user_id,
     )
@@ -376,7 +397,7 @@ async def create_project(
             detail=f"Could not register the project: {exc}",
         ) from exc
 
-    # Persist the project owner (creator) — immutable, can never be removed —
+    # Persist the project owner (creator), immutable, can never be removed,
     # and mirror the cloud choice for the portal. This row is what grants the
     # creator access from the very next request: authorization resolves owner
     # from the database, so it does not wait on Terraform or on the background
@@ -402,7 +423,7 @@ async def create_project(
         existing_project.step_message = "Bootstrap queued"
         db.commit()
         logger.info(
-            "👑 Recorded '%s' as owner of project '%s' on '%s'",
+            "Recorded '%s' as owner of project '%s' on '%s'",
             username,
             payload.project_name,
             payload.target_cloud.value,
@@ -426,7 +447,7 @@ async def create_project(
         """Add the project creator as admin once bootstrap has succeeded."""
         if not bootstrap_outcome.get("ok"):
             logger.error(
-                "❌ Skipping creator grant for '%s': bootstrap failed, so "
+                "Skipping creator grant for '%s': bootstrap failed, so "
                 "'project-%s-admins' was never created. Fix the bootstrap "
                 "error above and retry.",
                 payload.project_name,
@@ -437,27 +458,17 @@ async def create_project(
         try:
             add_user_to_project(username, payload.project_name, "admin")
             logger.info(
-                "✅ Added user '%s' as admin of project '%s'",
+                "Added user '%s' as admin of project '%s'",
                 username,
                 payload.project_name,
             )
 
-            # Sync to Grafana (best-effort: failures are logged, not raised)
-            try:
-                await add_user_to_project_org(
-                    payload.project_name, username, "admin"
-                )
-            except Exception as grafana_exc:
-                logger.warning(
-                    "⚠️  Grafana sync failed for creator '%s' in project '%s': %s",
-                    username,
-                    payload.project_name,
-                    grafana_exc,
-                )
+            # The bootstrap that just succeeded created the Grafana org.
+            await sync_project_org(payload.project_name, username)
 
         except Exception as e:
             logger.error(
-                "❌ Failed to add creator to project '%s': %s",
+                "Failed to add creator to project '%s': %s",
                 payload.project_name,
                 e,
             )
@@ -496,11 +507,11 @@ async def list_project_apps(
     """
     Return all applications (deployments) belonging to a project.
 
-    Access control: any role on the project, guests included — seeing the
+    Access control: any role on the project, guests included, seeing the
     application list is the whole of what a guest is for.
     """
     logger.debug(
-        "🔍 Listing apps of '%s' for '%s' (%s)",
+        "Listing apps of '%s' for '%s' (%s)",
         ctx.project_name,
         ctx.username,
         ctx.role.value,
@@ -529,7 +540,7 @@ def get_project_members(
     """
     List every member of a project, across all role groups.
 
-    Access control: member or above. Guests are excluded on purpose — who
+    Access control: member or above. Guests are excluded on purpose, who
     else works on the project is not theirs to see.
 
     ``guests_supported`` is False for projects bootstrapped before the guests
@@ -544,7 +555,7 @@ def get_project_members(
     try:
         members = list_project_members(project_name)
 
-        # Mark the owner (creator) — they always rank above admin and cannot
+        # Mark the owner (creator), they always rank above admin and cannot
         # be removed from the project.
         owner = (
             db.query(Project)
@@ -590,7 +601,7 @@ async def add_project_member(
     takes the strongest group a user is in.
 
     Raises:
-        409: the target group does not exist — the project predates guest
+        409: the target group does not exist, the project predates guest
             support and its Terraform module needs re-running.
     """
     project_name = ctx.project_name
@@ -603,7 +614,7 @@ async def add_project_member(
         try:
             remove_user_from_project(username, project_name)
         except ValueError as exc:
-            # User genuinely does not exist in Keycloak — report it as such
+            # User genuinely does not exist in Keycloak, report it as such
             # rather than letting the add below fail more obscurely.
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
@@ -616,14 +627,25 @@ async def add_project_member(
             await add_user_to_project_org(project_name, username, role)
         except Exception as grafana_exc:
             logger.warning(
-                "⚠️  Grafana sync failed for user '%s' in project '%s': %s",
+                "Grafana sync failed for user '%s' in project '%s': %s",
                 username,
                 project_name,
                 grafana_exc,
             )
 
+        if username != ctx.username:
+            await asyncio.to_thread(
+                notifications.notify_users,
+                [username],
+                kind="member_added",
+                title_key="member_added",
+                params={"project": project_name, "role": role},
+                link=f"/projects/{project_name}",
+                project=project_name,
+            )
+
         logger.info(
-            "👥 '%s' set '%s' to role '%s' on project '%s'",
+            "'%s' set '%s' to role '%s' on project '%s'",
             ctx.username,
             username,
             role,
@@ -653,7 +675,7 @@ async def add_project_member(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"Group '{exc.group_name}' does not exist. This project was "
-                "bootstrapped before guest support was added — re-run the "
+                "bootstrapped before guest support was added, re-run the "
                 f"project-bootstrap Terraform module for '{project_name}' "
                 "to create it."
             ),
@@ -711,7 +733,7 @@ async def remove_project_member(
             await remove_user_from_project_org(project_name, username)
         except Exception as grafana_exc:
             logger.warning(
-                "⚠️  Grafana sync failed for removing user '%s' from project '%s': %s",
+                "Grafana sync failed for removing user '%s' from project '%s': %s",
                 username,
                 project_name,
                 grafana_exc,
@@ -791,7 +813,7 @@ async def delete_project(
                 detail=f"Cannot delete project '{project_name}': it has {app_count} active application(s). Delete all applications first.",
             )
 
-        logger.info(f"🗑️  Scheduling teardown for project '{project_name}'...")
+        logger.info(f"Scheduling teardown for project '{project_name}'...")
 
         target_cloud = (
             row.target_cloud if row is not None else TargetCloud.ONPREM
@@ -799,14 +821,14 @@ async def delete_project(
 
         # Removing the registry record is what makes the generated Argo CD
         # Applications and the AppProject disappear, so it is a teardown step
-        # rather than a cleanup afterwards — and it has to happen before the
+        # rather than a cleanup afterwards, and it has to happen before the
         # Terraform destroy, not after, or Argo CD re-creates what Terraform
         # just removed.
         try:
             await remove_record(project_name)
         except RegistryError as exc:
             logger.error(
-                "Could not deregister '%s' — aborting teardown so the project "
+                "Could not deregister '%s', aborting teardown so the project "
                 "is not half-deleted: %s",
                 project_name,
                 exc,
@@ -828,7 +850,7 @@ async def delete_project(
         )
 
         logger.info(
-            "✅ Project '%s' teardown scheduled on '%s'",
+            "Project '%s' teardown scheduled on '%s'",
             project_name,
             target_cloud.value,
         )
@@ -836,7 +858,7 @@ async def delete_project(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error(f"❌ Failed to delete project '{project_name}': {exc}")
+        logger.error(f"Failed to delete project '{project_name}': {exc}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to delete project: {exc}",

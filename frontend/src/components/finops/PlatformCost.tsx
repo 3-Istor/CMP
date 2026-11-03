@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useFinopsPlatform } from "@/lib/hooks";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import {
   Bar,
@@ -18,13 +19,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatEUR } from "./format";
+import { formatEUR, intlLocale } from "./format";
 
-const PERIODS = [
-  { value: "30d", label: "30 jours" },
-  { value: "90d", label: "90 jours" },
-  { value: "ytd", label: "Année en cours" },
-];
+const PERIODS = ["30d", "90d", "ytd"] as const;
 
 function Kpi({
   label,
@@ -46,26 +43,28 @@ function Kpi({
 
 /** Réservé à la finance et aux admins: l'API refuse les autres rôles. */
 export function PlatformCost() {
+  const t = useTranslations("finops");
+  const locale = intlLocale(useLocale());
   const [period, setPeriod] = useState("30d");
   const { data, error } = useFinopsPlatform(period, true);
+  const money = (value: number) => formatEUR(value, "EUR", locale);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Coût de la plateforme</CardTitle>
+        <CardTitle>{t("platform.title")}</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Services communs et capacité inoccupée, répartis en forfaits fixes
-          par application active.
+          {t("platform.description")}
         </p>
         <select
-          aria-label="Période du coût de la plateforme"
+          aria-label={t("platform.periodAria")}
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
           className="w-44 rounded-md border bg-background px-2 py-1 text-sm"
         >
           {PERIODS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
+            <option key={p} value={p}>
+              {t(`platform.periods.${p}`)}
             </option>
           ))}
         </select>
@@ -76,23 +75,30 @@ export function PlatformCost() {
           <>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Kpi
-                label="Coût de la plateforme"
-                value={formatEUR(data.total_eur)}
-                hint={`dont inoccupé ${formatEUR(data.idle_eur)}`}
+                label={t("platform.total")}
+                value={money(data.total_eur)}
+                hint={t("platform.idleHint", { idle: money(data.idle_eur) })}
               />
               <Kpi
-                label="Recouvert par les forfaits"
-                value={formatEUR(data.recovered_eur)}
+                label={t("platform.covered")}
+                value={money(data.recovered_eur)}
               />
               <Kpi
-                label="Non couvert"
-                value={formatEUR(data.uncovered_eur)}
-                hint={data.uncovered_eur < 0 ? "Forfaits en excédent" : undefined}
+                label={t("platform.uncovered")}
+                value={money(data.uncovered_eur)}
+                hint={
+                  data.uncovered_eur < 0
+                    ? t("platform.uncoveredHint")
+                    : undefined
+                }
               />
               <Kpi
-                label="Forfait par app"
-                value={`${formatEUR(data.fee_per_app_month_eur)} / mois`}
-                hint={`${data.active_apps_avg.toFixed(1)} apps actives pour ${data.app_slots} emplacements`}
+                label={t("platform.feePerApp")}
+                value={`${money(data.fee_per_app_month_eur)} ${t("common.perMonth")}`}
+                hint={t("platform.feeHint", {
+                  active: data.active_apps_avg.toFixed(1),
+                  slots: data.app_slots,
+                })}
               />
             </div>
 
@@ -101,7 +107,9 @@ export function PlatformCost() {
                 <thead>
                   <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="px-3 py-2 font-medium">Namespace</th>
-                    <th className="px-3 py-2 text-right font-medium">Coût</th>
+                    <th className="px-3 py-2 text-right font-medium">
+                      {t("platform.cost")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -109,14 +117,14 @@ export function PlatformCost() {
                     <tr key={n.namespace} className="border-b border-border/50">
                       <td className="px-3 py-2 font-medium">{n.namespace}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {formatEUR(n.eur)}
+                        {money(n.eur)}
                       </td>
                     </tr>
                   ))}
                   <tr className="border-b border-border/50">
-                    <td className="px-3 py-2 font-medium">Capacité inoccupée</td>
+                    <td className="px-3 py-2 font-medium">{t("platform.idle")}</td>
                     <td className="px-3 py-2 text-right tabular-nums">
-                      {formatEUR(data.idle_eur)}
+                      {money(data.idle_eur)}
                     </td>
                   </tr>
                 </tbody>
@@ -130,7 +138,7 @@ export function PlatformCost() {
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip
-                    formatter={(value) => formatEUR(Number(value) || 0)}
+                    formatter={(value) => money(Number(value) || 0)}
                     contentStyle={{
                       borderRadius: 8,
                       fontSize: 12,
@@ -141,13 +149,13 @@ export function PlatformCost() {
                   <Legend />
                   <Bar
                     dataKey="recovered_eur"
-                    name="Recouvert"
+                    name={t("platform.chartCovered")}
                     stackId="pool"
                     fill="#94A3B8"
                   />
                   <Bar
                     dataKey="uncovered_eur"
-                    name="Non couvert"
+                    name={t("platform.chartUncovered")}
                     stackId="pool"
                     fill="#F59E0B"
                   />

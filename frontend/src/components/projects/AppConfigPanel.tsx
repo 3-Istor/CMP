@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { getDeploymentConfig, updateDeploymentConfig } from "@/lib/api";
 import type { DeploymentConfig } from "@/types";
 import { Loader2, RefreshCw, Save, Settings2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -23,7 +24,7 @@ interface Props {
     deploymentId: number;
     /**
      * Show the values but refuse edits. Members are meant to read the
-     * configuration, so the fields are disabled rather than hidden — an empty
+     * configuration, so the fields are disabled rather than hidden, an empty
      * panel would look like a loading failure.
      */
     readOnly?: boolean;
@@ -197,9 +198,15 @@ function deepSet(
     };
 }
 
+const renderCode = (chunks: React.ReactNode) => (
+    <span className="font-mono">{chunks}</span>
+);
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
+    const t = useTranslations("apps.config");
+    const tc = useTranslations("common");
     const [remoteConfig, setRemoteConfig] = useState<DeploymentConfig | null>(
         null,
     );
@@ -249,21 +256,16 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                 { ...localConfig, _sha: shaRef.current },
                 component,
             );
-            toast.success(
-                "Configuration saved. ArgoCD will synchronise the new values in a few moments.",
-                { duration: 7000 },
-            );
+            toast.success(t("saved"), { duration: 7000 });
             // Reload to get the fresh SHA
             await fetchConfig();
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if (msg.includes("409") || msg.toLowerCase().includes("conflict")) {
-                toast.error(
-                    "Conflict: the file was modified since you last loaded it. Reloading…",
-                );
+                toast.error(t("conflict"));
                 await fetchConfig();
             } else {
-                toast.error(`Failed to save: ${msg}`);
+                toast.error(t("saveFailed", { message: msg }));
             }
         } finally {
             setSaving(false);
@@ -278,14 +280,14 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                         <Settings2 className="h-4 w-4 text-muted-foreground" />
-                        <CardTitle className="text-base">Infrastructure Configuration</CardTitle>
+                        <CardTitle className="text-base">{t("title")}</CardTitle>
                     </div>
                     <Button
                         variant="ghost"
                         size="icon"
                         onClick={fetchConfig}
                         disabled={loadingConfig || saving}
-                        title="Reload config from GitHub"
+                        title={t("reload")}
                     >
                         <RefreshCw
                             className={`h-4 w-4 ${loadingConfig ? "animate-spin" : ""}`}
@@ -293,26 +295,13 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                     </Button>
                 </div>
                 <CardDescription className="text-xs">
-                    {readOnly ? (
-                        <>
-                            Read-only view of{" "}
-                            <span className="font-mono">{configFile}</span>.
-                        </>
-                    ) : (
-                        <>
-                            Changes are committed to{" "}
-                            <span className="font-mono">{configFile}</span> on{" "}
-                            <span className="font-mono">main</span>. ArgoCD syncs
-                            automatically.
-                        </>
-                    )}
+                    {readOnly
+                        ? t.rich("readOnly", { file: configFile, code: renderCode })
+                        : t.rich("editable", { file: configFile, code: renderCode })}
                     {remoteConfig?.repo && (
                         <>
                             {" "}
-                            Repo:{" "}
-                            <span className="font-mono text-foreground">
-                                {remoteConfig.repo}
-                            </span>
+                            {t.rich("repo", { repo: remoteConfig.repo, code: renderCode })}
                         </>
                     )}
                 </CardDescription>
@@ -333,7 +322,7 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                                     disabled={saving || (isDirty && !isActive)}
                                     title={
                                         isDirty && !isActive
-                                            ? "Save or reload before switching"
+                                            ? t("switchBlocked")
                                             : undefined
                                     }
                                     onClick={() => setComponent(name)}
@@ -352,11 +341,11 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                     </div>
                 ) : error ? (
                     <div className="rounded-lg border border-destructive bg-destructive/5 p-4 text-sm text-destructive space-y-2">
-                        <p className="font-medium">Failed to load configuration</p>
+                        <p className="font-medium">{t("loadFailed")}</p>
                         <p className="text-xs opacity-80">{error}</p>
                         <Button variant="outline" size="sm" onClick={fetchConfig}>
                             <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                            Retry
+                            {tc("retry")}
                         </Button>
                     </div>
                 ) : (
@@ -373,15 +362,16 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
 
                         {Object.keys(localConfig).length === 0 && (
                             <p className="text-sm text-muted-foreground py-4 text-center">
-                                No configuration keys found in{" "}
-                                <span className="font-mono">{remoteConfig?.file_path}</span>
+                                {t.rich("noKeys", {
+                                    file: remoteConfig?.file_path ?? "",
+                                    code: renderCode,
+                                })}
                             </p>
                         )}
 
                         {readOnly ? (
                             <p className="pt-2 border-t border-border text-xs text-muted-foreground">
-                                Only project admins can change this
-                                configuration.
+                                {t("adminsOnly")}
                             </p>
                         ) : (
                             isDirty && (
@@ -394,12 +384,12 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                                         {saving ? (
                                             <>
                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Saving…
+                                                {t("saving")}
                                             </>
                                         ) : (
                                             <>
                                                 <Save className="mr-2 h-4 w-4" />
-                                                Save Changes
+                                                {t("save")}
                                             </>
                                         )}
                                     </Button>

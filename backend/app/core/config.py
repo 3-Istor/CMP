@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     BACKGROUND_COLLECTORS_ENABLED: bool = True
 
-    # FinOps — comma-separated Keycloak usernames granted the global
+    # FinOps, comma-separated Keycloak usernames granted the global
     # "Admin CNP" role (visibility over every project's costs).
     FINOPS_ADMIN_USERS: str = ""
     # Usernames granted the finance role (read and export every project's
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
 
-    # Project registry — the Git source of truth for project placement (D-01)
+    # Project registry, the Git source of truth for project placement (D-01)
     CNP_REGISTRY_REPO: str = "3-Istor/cnp-projects"
     CNP_REGISTRY_BRANCH: str = "main"
     CNP_REGISTRY_PATH_PREFIX: str = "registry/projects"
@@ -86,6 +86,14 @@ class Settings(BaseSettings):
     AVATARS_S3_SECRET_ACCESS_KEY: str = ""
     AVATARS_S3_REGION: str = "eu-west-3"
     AVATARS_PUBLIC_URL_BASE: str = "https://avatars-s3.3istor.com"
+
+    # App icons: private Garage bucket, served through the CMP only.
+    # Unset keys leave the upload disabled and the built-in icons working.
+    ICONS_S3_ENDPOINT: str = ""
+    ICONS_S3_BUCKET: str = "cnp-app-icons"
+    ICONS_S3_ACCESS_KEY_ID: str = ""
+    ICONS_S3_SECRET_ACCESS_KEY: str = ""
+    ICONS_S3_REGION: str = "garage"
 
     # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
@@ -182,7 +190,7 @@ class Settings(BaseSettings):
     GITHUB_OAUTH_REDIRECT_URI: str = ""
     GITHUB_OAUTH_TOKEN_KEY: str = ""  # Stable Fernet key, stored outside Git.
     GITHUB_APP_PRIVATE_KEY: str = ""  # PEM format RSA private key
-    # Installation ID of the GitHub App on the 3-Istor org — used to mint
+    # Installation ID of the GitHub App on the 3-Istor org, used to mint
     # installation tokens for org-level Terraform operations (e.g. project bootstrap)
     GITHUB_INSTALLATION_ID: str = ""
 

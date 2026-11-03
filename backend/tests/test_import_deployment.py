@@ -120,6 +120,29 @@ class DeploymentGatesTests(unittest.TestCase):
         http.assert_not_called()
         self.assertEqual(self.deployment.status, DeploymentStatus.FAILED)
 
+    def test_normal_deployment_keeps_registry_failure_behavior(self):
+        self.deployment.app_config = json.dumps(
+            {"project_name": "sandbox", "github_token": "test-token"}
+        )
+        self.db.commit()
+        registry, argo, http = self.run_pipeline(
+            registry_error=RegistryError("registry unavailable")
+        )
+        registry.assert_awaited_once()
+        argo.assert_not_called()
+        http.assert_called_once()
+        self.assertEqual(self.deployment.status, DeploymentStatus.RUNNING)
+
+    def test_normal_deployment_keeps_availability_timeout_behavior(self):
+        self.deployment.app_config = json.dumps(
+            {"project_name": "sandbox", "github_token": "test-token"}
+        )
+        self.db.commit()
+        _, argo, http = self.run_pipeline(ready=False)
+        argo.assert_not_called()
+        http.assert_called_once()
+        self.assertEqual(self.deployment.status, DeploymentStatus.RUNNING)
+
     def test_availability_timeout_never_marks_running(self):
         registry, argo, http = self.run_pipeline(ready=False)
         self.assertEqual(self.deployment.status, DeploymentStatus.FAILED)

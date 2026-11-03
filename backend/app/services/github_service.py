@@ -357,7 +357,7 @@ async def put_file_content(
     Create or replace a file in a GitHub repository.
 
     ``sha`` is optional: omit it to create a file that does not exist yet,
-    pass it (from ``get_file_content``) to replace one that does — GitHub
+    pass it (from ``get_file_content``) to replace one that does, GitHub
     rejects a stale one with 409 Conflict.
 
     Args:
@@ -399,7 +399,7 @@ async def put_file_content(
             if response.status_code == 409:
                 raise GitHubAppError(
                     f"Conflict (409) writing '{file_path}': the file SHA is "
-                    "outdated. Another commit modified it — re-read and retry."
+                    "outdated. Another commit modified it, re-read and retry."
                 )
 
             response.raise_for_status()

@@ -1,0 +1,10 @@
+[
+  {
+    "name": "demo",
+    "role": "owner",
+    "target_cloud": "onprem",
+    "status": "active",
+    "step_message": null,
+    "is_accessible": true
+  }
+]

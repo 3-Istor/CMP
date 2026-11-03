@@ -17,14 +17,21 @@ from app.routers import (
     activity,
     agents,
     alerting,
+    app_icons,
+    app_overview,
     catalog,
     deployments,
     environments,
     finops,
     finops_finance,
     infra,
+    links,
+    notifications,
+    power,
     projects,
     releases,
+    scorecard,
+    secrets_presence,
     security,
     security_alerts,
     security_databases,
@@ -37,6 +44,7 @@ from app.services.clusters.state import not_connected_response
 from app.services.environments.loop import environment_loop
 from app.services.finops import alert_poller, monthly_report
 from app.services.finops.ingest import finops_ingest_loop
+from app.services.grafana_service import sync_all_project_orgs
 from app.services.kube_client import ClusterNotConnectedError
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
@@ -97,7 +105,12 @@ def setup_logging():
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    # A dependency installs a bare stderr handler at import time; with a DEBUG
+    # root it dumped full OpenStack responses, user_data included.
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+    root_logger.setLevel(logging.INFO)
+    logging.getLogger("app").setLevel(logging.DEBUG)
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
@@ -116,10 +129,21 @@ def setup_logging():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("git").setLevel(logging.WARNING)
+    for noisy in (
+        "keystoneauth",
+        "openstack",
+        "novaclient",
+        "neutronclient",
+        "botocore",
+        "boto3",
+        "s3transfer",
+        "kubernetes",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Log startup message
     root_logger.info("=" * 80)
-    root_logger.info("🚀 Starting Cloud Management Platform (CMP)")
+    root_logger.info("Starting Cloud Management Platform (CMP)")
     root_logger.info("=" * 80)
     root_logger.info(f"Logs directory: {logs_dir.absolute()}")
     root_logger.info(f"Application log: {logs_dir / 'app.log'}")
@@ -194,7 +218,7 @@ def custom_openapi():
                 ]
 
     app.openapi_schema = openapi_schema
-    logger.info("✅ Custom OpenAPI schema with Keycloak OAuth2 configured")
+    logger.info("Custom OpenAPI schema with Keycloak OAuth2 configured")
     return app.openapi_schema
 
 
@@ -243,6 +267,7 @@ async def lifespan(app: FastAPI):
                 activity_collector_loop,
                 release_recorder_loop,
                 environment_loop,
+                sync_all_project_orgs,
             )
         ]
         if settings.FINOPS_INGEST_ENABLED:
@@ -259,7 +284,7 @@ async def lifespan(app: FastAPI):
     # /.well-known metadata.
     app.mount("/", mcp_server.mcp.streamable_http_app())
 
-    logger.info("✅ Application startup complete")
+    logger.info("Application startup complete")
 
     async with mcp_server.mcp.session_manager.run():
         yield
@@ -281,7 +306,7 @@ async def lifespan(app: FastAPI):
     await close_http_client()
     logger.info("Grafana HTTP client closed")
 
-    logger.info("✅ Application shutdown complete")
+    logger.info("Application shutdown complete")
 
 
 app = FastAPI(
@@ -321,11 +346,17 @@ app.include_router(agents.router, prefix="/api")
 app.include_router(agents.projects_router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(alerting.router, prefix="/api")
+app.include_router(app_icons.router, prefix="/api")
+app.include_router(app_overview.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(infra.router, prefix="/api")
+app.include_router(links.projects, prefix="/api")
+app.include_router(links.deployments, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
+app.include_router(power.router, prefix="/api")
 app.include_router(environments.router, prefix="/api")
 app.include_router(environments.callbacks, prefix="/api")
 app.include_router(environments.projects, prefix="/api")
@@ -334,6 +365,8 @@ app.include_router(finops_finance.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")
+app.include_router(secrets_presence.router, prefix="/api")
+app.include_router(scorecard.router, prefix="/api")
 
 
 internal_api.bind(app)

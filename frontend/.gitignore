@@ -40,5 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# playwright
+/test-results/
+/playwright-report/
+/e2e/report/
+
 # Public template only; generated local credentials remain ignored.
 !.env.local.example

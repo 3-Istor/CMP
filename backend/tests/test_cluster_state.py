@@ -9,6 +9,7 @@ from app.services.clusters import state
 from app.services.kube_client import KubeUnavailableError
 
 AWS = TargetCloud.AWS
+GCP = TargetCloud.GCP
 
 
 def _app(health):
@@ -123,3 +124,99 @@ def test_health_states_never_wait_on_the_read():
     first, second = asyncio.run(run())
     assert first == {AWS: "unknown", TargetCloud.GCP: "unknown"}
     assert second == {AWS: "up", TargetCloud.GCP: "up"}
+
+
+def _argo_app(name, cloud="aws", sync="OutOfSync", phase=None, **top):
+    app = {
+        "metadata": {"name": name},
+        "spec": {
+            "destination": {"name": cloud},
+            "syncPolicy": {
+                "syncOptions": ["ServerSideApply=true"],
+                "retry": {"limit": 10},
+            },
+        },
+        "status": {"sync": {"status": sync}},
+        **top,
+    }
+    if phase:
+        app["status"]["operationState"] = {"phase": phase}
+    return app
+
+
+def test_resync_syncs_the_clouds_unsynced_or_failed_applications():
+    apps = [
+        _argo_app("out-of-sync"),
+        _argo_app("failed", sync="Synced", phase="Failed"),
+        _argo_app("errored", sync="Synced", phase="Error"),
+        _argo_app("synced", sync="Synced", phase="Succeeded"),
+        _argo_app("running", phase="Running"),
+        _argo_app("requested", operation={"sync": {}}),
+        _argo_app("other-cloud", cloud="gcp"),
+        _argo_app("onprem", cloud="onprem"),
+    ]
+    apps.append(_argo_app("deleting"))
+    apps[-1]["metadata"]["deletionTimestamp"] = "2026-11-02T00:00:00Z"
+    with (
+        mock.patch.object(state, "kube_list", return_value=apps),
+        mock.patch.object(state, "kube_merge_patch") as patch,
+    ):
+        assert state.resync(AWS) == ["out-of-sync", "failed", "errored"]
+    assert patch.call_count == 3
+    patch.assert_any_call(
+        "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/failed",
+        {
+            "operation": {
+                "initiatedBy": {"username": "cmp-cluster-state"},
+                "sync": {"syncOptions": ["ServerSideApply=true"]},
+                "retry": {"limit": 10},
+            }
+        },
+    )
+
+
+def _refresh(before, after, **resync_kwargs):
+    state._cache = dict(before)
+    with (
+        mock.patch.object(state, "fresh_state", lambda c: after[c]),
+        mock.patch.object(state, "resync", **resync_kwargs) as resync,
+    ):
+        asyncio.run(state._refresh())
+    return [c.args[0] for c in resync.call_args_list]
+
+
+@pytest.mark.parametrize("before", ["down", "unknown", "starting"])
+def test_a_cloud_coming_up_gets_its_applications_resynced(before):
+    assert _refresh({AWS: before, GCP: "up"}, {AWS: "up", GCP: "up"}) == [AWS]
+
+
+def test_no_resync_without_a_transition_to_up():
+    before = {AWS: "up", GCP: "down"}
+    assert _refresh(before, {AWS: "up", GCP: "starting"}) == []
+
+
+def test_a_failed_resync_keeps_the_refreshed_state():
+    after = {AWS: "up", GCP: "up"}
+    _refresh({}, after, side_effect=KubeUnavailableError("boom"))
+    assert state._cache == after
+
+
+@pytest.mark.parametrize(
+    "states,last,expected",
+    [
+        ({AWS: "up", GCP: "up"}, AWS, GCP),  # alternates
+        ({AWS: "up", GCP: "up"}, GCP, AWS),
+        ({AWS: "up", GCP: "up"}, None, AWS),
+        ({AWS: "down", GCP: "up"}, GCP, GCP),  # only one up
+        ({AWS: "up", GCP: "starting"}, AWS, AWS),
+    ],
+)
+def test_pick_public_cloud_alternates_among_up_clouds(states, last, expected):
+    assert state.pick_public_cloud(states, last) == expected
+
+
+def test_pick_public_cloud_refuses_when_none_is_up():
+    with pytest.raises(HTTPException) as excinfo:
+        state.pick_public_cloud({AWS: "starting", GCP: "unknown"}, AWS)
+    assert excinfo.value.status_code == 409
+    assert "No public cloud is up" in excinfo.value.detail

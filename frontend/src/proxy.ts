@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { isE2eFakeSessionRequest } from "@/lib/e2eFakeSession";
 import { NextResponse } from "next/server";
 
 export default auth((req) => {
@@ -28,7 +29,7 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // The public landing page is for visitors who aren't signed in yet — send
+  // The public landing page is for visitors who aren't signed in yet, send
   // authenticated users straight to the app instead.
   if (isWelcomePage) {
     if (isLoggedIn) {
@@ -40,7 +41,7 @@ export default auth((req) => {
   // Everything else is protected: unauthenticated users land on the marketing
   // homepage, which carries the original destination so we can return there
   // once they log in.
-  if (!isLoggedIn) {
+  if (!isLoggedIn && !isE2eFakeSessionRequest(req.nextUrl.hostname)) {
     const welcomeUrl = new URL("/welcome", req.url);
     welcomeUrl.searchParams.set("callbackUrl", destination);
     return NextResponse.redirect(welcomeUrl);

@@ -1,0 +1,2696 @@
+{
+  "shell": {
+    "meta": {
+      "title": "CNP - Plateforme cloud native",
+      "description": "Plateforme cloud native en libre-service"
+    },
+    "sidebar": {
+      "home": "Accueil",
+      "finops": "FinOps",
+      "security": "Sécurité",
+      "activity": "Activité",
+      "alerts": "Alertes",
+      "assistants": "Assistants IA",
+      "docs": "Documentation",
+      "projects": "Projets",
+      "apps": "Applications",
+      "collapse": "Réduire le menu",
+      "expand": "Déplier le menu",
+      "securityAlert": "Action de sécurité obligatoire",
+      "search": "Rechercher, aller à",
+      "searchHint": "Ctrl K",
+      "groupWork": "Mon travail",
+      "groupPlatform": "Plateforme",
+      "navigation": "Navigation principale",
+      "navigationHint": "Pages de la plateforme, liens, thème et profil.",
+      "openMenu": "Ouvrir le menu",
+      "skipToContent": "Aller au contenu"
+    },
+    "home": {
+      "fallbackName": "Développeur",
+      "greeting": "Bonjour {name}"
+    },
+    "links": {
+      "label": "Liens et aide",
+      "status": "Statut de la plateforme",
+      "roadmap": "Roadmap",
+      "docs": "Documentation",
+      "adminGroup": "Réservé aux admins",
+      "adminOnly": "{count, plural, one {# lien réservé aux admins} other {# liens réservés aux admins}}"
+    },
+    "theme": {
+      "label": "Thème",
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système"
+    },
+    "profile": {
+      "myProfile": "Mon profil",
+      "accountSettings": "Paramètres du compte",
+      "language": "Langue",
+      "logout": "Se déconnecter",
+      "roleAdmin": "Admin plateforme",
+      "roleMember": "Membre",
+      "fallback": "Utilisateur"
+    },
+    "palette": {
+      "title": "Rechercher, aller à",
+      "placeholder": "Rechercher une page, un projet, une application...",
+      "empty": "Aucun résultat.",
+      "pages": "Pages",
+      "projects": "Projets",
+      "apps": "Applications",
+      "links": "Liens"
+    }
+  },
+  "projects": {
+    "home": {
+      "title": "Mes projets",
+      "subtitle": "Chaque projet est un espace d'équipe isolé, avec ses propres groupes Keycloak, ses politiques Vault et son AppProject ArgoCD.",
+      "new": "Nouveau projet",
+      "emptyTitle": "Aucun projet pour l'instant",
+      "emptyBody": "Créez votre premier projet pour déployer des applications, ou <assistant>demandez à votre assistant IA</assistant> de le faire.",
+      "create": "Créer un projet"
+    },
+    "roles": {
+      "owner": "Propriétaire",
+      "admin": "Admin",
+      "member": "Membre",
+      "guest": "Invité"
+    },
+    "roleBlurbs": {
+      "owner": "Propriétaire",
+      "admin": "Accès complet",
+      "member": "Lecture seule",
+      "guest": "Consultation seule"
+    },
+    "page": {
+      "kubernetes": "Projet Kubernetes",
+      "kubernetesRole": "Projet Kubernetes · {role}",
+      "appCount": "{count, plural, one {# app} other {# apps}}",
+      "live": "Mises à jour en direct",
+      "description": "Applications déployées dans ce projet.",
+      "templatesTitle": "Choisir un modèle Kubernetes",
+      "templatesLoading": "Chargement des modèles…",
+      "noTemplates": "Aucun modèle Kubernetes disponible.",
+      "appsLoadFailed": "Impossible de charger les applications",
+      "noApps": "Aucune application pour l'instant",
+      "deployFirst": "Déployez votre première application dans ce projet.",
+      "noAppsReadOnly": "Rien n'a encore été déployé ici."
+    },
+    "logs": {
+      "title": "Logs"
+    },
+    "card": {
+      "kubernetes": "Projet Kubernetes · {blurb}",
+      "creating": "Création",
+      "deleting": "Suppression",
+      "failed": "Échec",
+      "retry": "Réessayer",
+      "retryFailed": "Échec de la nouvelle tentative : {message}",
+      "creatingTitle": "Ce projet est en cours de création",
+      "deletingTitle": "Ce projet est en cours de suppression",
+      "createFailedTitle": "Ce projet n'a pas pu être créé",
+      "deleteFailedTitle": "Ce projet n'a pas pu être supprimé"
+    },
+    "create": {
+      "title": "Créer un nouveau projet",
+      "description": "Un projet regroupe vos applications Kubernetes au sein d'une équipe Keycloak, d'une politique Vault et d'un AppProject ArgoCD communs. Le bootstrap s'exécute en arrière-plan et prend environ 30 secondes.",
+      "name": "Nom du projet",
+      "namePlaceholder": "mon-equipe",
+      "nameHint": "Minuscules, avec des tirets. Par exemple <code>platform-team</code>",
+      "cloud": "Cloud cible",
+      "comingSoon": "Bientôt disponible",
+      "clouds": {
+        "onprem": {
+          "label": "Sur site",
+          "advantage1": "Pas de coût de sortie de données",
+          "advantage2": "Contrôle total de l'infrastructure",
+          "advantage3": "Déjà en service, aucune attente de mise en place"
+        },
+        "aws": {
+          "label": "AWS",
+          "advantage1": "Catalogue de services managés le plus large",
+          "advantage2": "IAM et outils de conformité éprouvés",
+          "advantage3": "Couverture de régions mondiale étendue"
+        },
+        "gcp": {
+          "label": "GCP",
+          "advantage1": "Héritage Kubernetes natif",
+          "advantage2": "Tarification de calcul généralement la plus compétitive",
+          "advantage3": "Outils data et IA performants"
+        }
+      },
+      "cloudNote": "AWS et GCP nécessitent un cluster enregistré par l'équipe infra avant de pouvoir être sélectionnés. <strong>Ce choix ne pourra pas être modifié.</strong> Pour changer de cloud, il faut recréer le projet.",
+      "errors": {
+        "tooShort": "Le nom doit contenir au moins 2 caractères.",
+        "tooLong": "Le nom doit contenir au plus 40 caractères.",
+        "invalid": "Utilisez uniquement des minuscules, des chiffres et des tirets. Le nom doit commencer et finir par une lettre ou un chiffre."
+      },
+      "preview": {
+        "title": "Ce qui sera créé",
+        "keycloak": "Groupes Keycloak : <code>project-{name}-admins/members</code>",
+        "vault": "Politique Vault limitée au namespace",
+        "argocd": "AppProject ArgoCD sur <code>{cloud}</code>",
+        "registry": "Fiche de registre : <code>registry/projects/{name}.yaml</code>"
+      },
+      "submit": "Créer le projet",
+      "submitting": "Création…",
+      "toasts": {
+        "created": "Le projet « {name} » est en cours de création sur {cloud}. Les groupes Keycloak et l'AppProject ArgoCD seront prêts dans quelques instants.",
+        "failed": "Échec de la création du projet : {message}"
+      }
+    },
+    "members": {
+      "onlyAdmins": "Seuls les admins du projet peuvent ajouter ou retirer des membres.",
+      "addTitle": "Ajouter un membre",
+      "addHelp": "Recherchez des utilisateurs dans Keycloak. Ils seront ajoutés au groupe <code>project-{project}-{group}</code>",
+      "guestNote": " : accès en lecture seule aux projets et aux applications",
+      "guestsUnavailable": "Ce projet a été créé avant la prise en charge des invités, le rôle Invité est donc indisponible. Relancez le module Terraform de bootstrap du projet <code>{project}</code> pour l'activer.",
+      "searchPlaceholder": "Rechercher par identifiant ou e-mail…",
+      "addButton": "Ajouter le membre",
+      "added": "{user} ajouté comme {role}",
+      "removed": "{user} retiré du projet",
+      "addFailed": "Échec de l'ajout du membre : {message}",
+      "removeFailed": "Échec du retrait du membre : {message}",
+      "current": "Membres actuels",
+      "loadFailed": "Impossible de charger les membres",
+      "empty": "Aucun membre pour l'instant",
+      "emptyHint": "Ajoutez votre premier membre ci-dessus.",
+      "ownerLocked": "Le propriétaire du projet ne peut pas être retiré",
+      "remove": "Retirer {username}"
+    },
+    "context": {
+      "accessDenied": "Accès refusé : vous n'êtes pas membre de ce projet",
+      "beingDeleted": "« {name} » est en cours de suppression",
+      "beingDeletedBody": "Ses ressources sont démantelées en arrière-plan. Cette page restera indisponible jusqu'à la fin de l'opération.",
+      "backToProjects": "Retour aux projets"
+    }
+  },
+  "apps": {
+    "home": {
+      "allDeployments": "Tous mes déploiements"
+    },
+    "nav": {
+      "label": "Sections de l'application",
+      "breadcrumb": "Fil d'Ariane",
+      "applications": "Applications",
+      "app": "Vue d'ensemble",
+      "release": "Release",
+      "environments": "Environnements",
+      "security": "Sécurité",
+      "config": "Configuration",
+      "costs": "Coûts",
+      "activity": "Activité",
+      "alerts": "Alertes",
+      "logs": "Logs",
+      "deployments": "Déploiements"
+    },
+    "status": {
+      "pending": "En attente",
+      "initializing": "Initialisation",
+      "planning": "Planification",
+      "deploying": "Déploiement",
+      "running": "En cours",
+      "degraded": "Dégradée",
+      "failed": "Échec",
+      "deleting": "Suppression en cours",
+      "deleted": "Supprimée"
+    },
+    "card": {
+      "createdVia": "Créée via {source}",
+      "ai": "IA"
+    },
+    "namespace": "ns : {namespace}",
+    "frame": {
+      "aiCreated": "Créée par un assistant IA pour le compte d'un utilisateur",
+      "via": "via {source}",
+      "legacy": "Hérité",
+      "deployedOn": "Déployée le {date}"
+    },
+    "context": {
+      "loadFailed": "Impossible de charger l'application",
+      "deleted": "« {name} » a été supprimée",
+      "destroying": "Destruction des ressources…"
+    },
+    "costs": {
+      "projectLevel": "Les coûts sont suivis au niveau du projet."
+    },
+    "config": {
+      "title": "Configuration d'infrastructure",
+      "reload": "Recharger la configuration depuis GitHub",
+      "readOnly": "Lecture seule de <code>{file}</code>.",
+      "editable": "Les modifications sont commitées dans <code>{file}</code> sur <code>main</code>. ArgoCD synchronise automatiquement.",
+      "repo": "Dépôt : <code>{repo}</code>",
+      "switchBlocked": "Enregistrez ou rechargez avant de changer de composant",
+      "loadFailed": "Impossible de charger la configuration",
+      "noKeys": "Aucune clé de configuration trouvée dans <code>{file}</code>",
+      "adminsOnly": "Seuls les admins du projet peuvent modifier cette configuration.",
+      "saving": "Enregistrement…",
+      "save": "Enregistrer les modifications",
+      "saved": "Configuration enregistrée. ArgoCD synchronisera les nouvelles valeurs dans quelques instants.",
+      "conflict": "Conflit : le fichier a été modifié depuis votre dernier chargement. Rechargement…",
+      "saveFailed": "Échec de l'enregistrement : {message}",
+      "notRunning": "La configuration sera disponible une fois l'application <strong>en cours</strong>.",
+      "searchPlaceholder": "Rechercher une option…",
+      "searchCount": "{count, plural, one {# résultat} other {# résultats}}"
+    },
+    "data": {
+      "title": "Exposition et données",
+      "reload": "Recharger depuis GitHub",
+      "description": "Ces réglages sont écrits dans les fichiers <code>deploy/values*.yaml</code> du dépôt de l'application. Ils peuvent aussi être modifiés dans le code.",
+      "loadFailed": "Chargement impossible",
+      "empty": "Aucun réglage d'exposition ou de base de données pour cette application.",
+      "adminsOnly": "Seuls les admins du projet peuvent modifier ces réglages.",
+      "exposure": "Exposition",
+      "customExposure": "Personnalisé (défini dans le code). Choisir un profil ci-dessous le remplacera.",
+      "exposureOptions": {
+        "public": {
+          "label": "Public",
+          "hint": "Accessible sans connexion."
+        },
+        "project_users": {
+          "label": "Tout compte connecté",
+          "hint": "Tout compte du realm du projet, y compris n'importe quel utilisateur de la plateforme 3istor via le broker."
+        },
+        "project_members": {
+          "label": "Membres du projet",
+          "hint": "Membres et admins du projet."
+        },
+        "project_admins": {
+          "label": "Admins du projet",
+          "hint": "Admins du projet uniquement."
+        }
+      },
+      "database": "Sauvegardes de la base de données",
+      "backupEnabled": "Activer les sauvegardes",
+      "backupKeep": "Conserver les sauvegardes après suppression",
+      "backupKeepOff": "Désactivé : supprimer l'application ou le projet supprime aussi toutes ses sauvegardes, définitivement.",
+      "retention": "Rétention",
+      "retentionHint": "Nombre suivi de d (jours), w (semaines) ou m (mois), par exemple 7d, 4w ou 3m.",
+      "saving": "Enregistrement…",
+      "save": "Enregistrer",
+      "previewFailed": "Impossible de préparer la modification : {message}",
+      "confirmTitle": "Confirmer la modification",
+      "confirmDescription": "Un commit sera poussé sur {repo}, puis Argo CD l'appliquera.",
+      "confirm": "Confirmer et commiter",
+      "saved": "Paramètres enregistrés. ArgoCD les appliquera dans quelques instants.",
+      "saveFailed": "Échec de l'enregistrement : {message}"
+    }
+  },
+  "finops": {
+    "common": {
+      "project": "Projet",
+      "allProjects": "Tous les projets",
+      "allClouds": "Tous les clouds",
+      "period": "Période",
+      "na": "n/d",
+      "loadFailed": "Échec du chargement",
+      "unknownError": "Erreur inconnue",
+      "perMonth": "/ mois",
+      "total": "Total",
+      "application": "Application",
+      "dailyTrend": "Évolution quotidienne",
+      "periods": {
+        "7d": "7 jours",
+        "30d": "30 jours",
+        "90d": "90 jours",
+        "ytd": "Depuis le 1er janvier"
+      },
+      "periodsIn": {
+        "30d": "sur les 30 derniers jours",
+        "90d": "sur les 90 derniers jours",
+        "ytd": "depuis le 1er janvier"
+      }
+    },
+    "age": {
+      "never": "jamais",
+      "lessThanHour": "il y a moins d'1 h",
+      "hoursAgo": "il y a {count} h",
+      "daysAgo": "il y a {count} j"
+    },
+    "resources": {
+      "cpu": "CPU",
+      "ram": "RAM",
+      "storage": "Stockage",
+      "network": "Réseau",
+      "ai": "IA",
+      "platform": "Forfait plateforme"
+    },
+    "resourceHints": {
+      "platform": "Part fixe par app des services communs de la plateforme"
+    },
+    "dataFreshness": {
+      "real": "réel",
+      "simulated": "simulé",
+      "estimated": "estimé",
+      "estimateNote": "Une partie des coûts repose sur un prix provisoire.",
+      "updated": "màj {age}",
+      "finalUntil": "définitif jusqu'au {date}"
+    },
+    "layout": {
+      "subtitle": "Suivi, analyse et optimisation des coûts d'infrastructure.",
+      "tabs": {
+        "overview": "Vue d'ensemble",
+        "recommendations": "Recommandations",
+        "savings": "Économies",
+        "greenops": "GreenOps",
+        "budgets": "Budgets & alertes",
+        "finance": "Finance"
+      }
+    },
+    "filters": {
+      "cloud": "Cloud",
+      "granularity": "Granularité",
+      "daily": "Quotidien",
+      "weekly": "Hebdomadaire",
+      "monthly": "Mensuel"
+    },
+    "overview": {
+      "exportCsv": "Exporter CSV",
+      "exportDisabled": "L'export n'est disponible qu'avec des coûts réels.",
+      "exportFailed": "Échec de l'export CSV",
+      "resetFilter": "Réinitialiser le filtre",
+      "cloudSplit": "Répartition par cloud",
+      "costTrend": "Évolution des dépenses",
+      "costBreakdown": "Distribution des coûts",
+      "appTracking": "Suivi des applications",
+      "whereToRun": "Où faire tourner chaque application"
+    },
+    "kpi": {
+      "monthCost": "Coût du mois en cours",
+      "sinceDay": "depuis le {day}",
+      "projection": "Projection fin de mois : {amount}",
+      "forecastEnd": "Prévision fin de mois :",
+      "forecastSpread": "± {amount}",
+      "forecastRange": "{low} – {high} ({confidence} %)",
+      "forecastShortHistory": "· historique court",
+      "forecastInterval": "Intervalle à {confidence} %, {days, plural, one {# jour} other {# jours}} d'historique",
+      "overrunPast": "budget dépassé le {date}",
+      "overrunFuture": "dépassement prévu le {date}",
+      "budgetTitle": "Budget alloué vs consommé",
+      "noBudget": "Aucun budget défini pour ce projet.",
+      "setBudget": "Définir un budget →",
+      "trackedApps": "Applications suivies",
+      "trackedAppsHint": "Coût réparti sur l'ensemble des applications actives du périmètre.",
+      "potentialSavings": "Économies potentielles",
+      "seeRecommendations": "Voir les recommandations →",
+      "realisedSavings": "Économies encaissées (YTD)",
+      "allocatedAvoided": "+ {amount} alloués évités",
+      "seeDetails": "Voir le détail →"
+    },
+    "appCost": {
+      "empty": "Aucune application dans ce périmètre.",
+      "costPerDay": "Coût / jour",
+      "costPerMonth": "Coût / mois est.",
+      "ofWhichPlatform": "Dont forfait plateforme",
+      "trend": "Tendance"
+    },
+    "cloudEstimate": {
+      "empty": "Pas encore assez de mesures pour estimer les applications.",
+      "measuredOn": "Mesurée sur",
+      "averageCpuRam": "CPU / RAM moyens",
+      "cpuRam": "{cores} cœur · {ram} Gio",
+      "provisional": "Prix à confirmer : valeur provisoire",
+      "footnote": "CPU et mémoire moyens des 30 derniers jours, au prix de chaque cible (TCO on-prem, prix catalogue des nœuds EKS et GKE). Hors stockage, réseau et forfait plateforme. * prix provisoire."
+    },
+    "budgets": {
+      "selectProject": "Sélectionner…",
+      "ownerSuffix": " (Project Owner)",
+      "pickProject": "Sélectionnez un projet pour gérer son budget.",
+      "cardTitle": "Budget mensuel · {project}",
+      "cardDescription": "Définissez l'enveloppe et les seuils d'alerte du projet.",
+      "alertsTitle": "Historique des alertes",
+      "noAlerts": "Aucune alerte enregistrée."
+    },
+    "budgetForm": {
+      "invalidAmount": "Montant invalide.",
+      "thresholdOrder": "Le seuil d'attention doit être inférieur au seuil critique.",
+      "saved": "Budget enregistré.",
+      "saveFailed": "Échec de l'enregistrement",
+      "ownerRequired": "Seul le Project Owner peut modifier le budget.",
+      "amountLabel": "Enveloppe mensuelle (EUR)",
+      "amountPlaceholder": "ex : 500",
+      "warnLabel": "Seuil d'attention (%)",
+      "criticalLabel": "Seuil critique (%)",
+      "save": "Enregistrer le budget",
+      "ownerOnly": "Seul le <owner>Project Owner</owner> peut définir le budget de ce projet."
+    },
+    "budgetGauge": {
+      "consumed": "{percent}% consommé",
+      "remaining": "Reste {amount}"
+    },
+    "recommendation": {
+      "effort": {
+        "low": "Effort faible",
+        "medium": "Effort moyen",
+        "high": "Effort élevé"
+      },
+      "type": {
+        "replicas": "Replicas",
+        "rightsizing": "Rightsizing",
+        "inactivity": "Inactivité",
+        "storage": "Stockage"
+      },
+      "currentConfig": "Configuration actuelle",
+      "recommendedConfig": "Recommandée",
+      "confidence": "Confiance {confidence}%",
+      "saving": "/ mois",
+      "adminsOnlyToast": "Seuls les admins du projet peuvent agir sur une recommandation",
+      "adminsOnlyHint": "Seuls les admins du projet peuvent appliquer cette recommandation.",
+      "cannotAutoApply": "Cette recommandation ne peut pas être appliquée automatiquement.",
+      "apply": "Appliquer",
+      "notify": "Notifier",
+      "ignore": "Ignorer",
+      "actionFailed": "Action échouée"
+    },
+    "recommendations": {
+      "sortLabel": "Trier par",
+      "sort": {
+        "saving": "Tri : économie potentielle",
+        "confidence": "Tri : niveau de confiance",
+        "effort": "Tri : effort requis"
+      },
+      "hideDone": "Masquer traitées",
+      "showAll": "Afficher tout",
+      "shownSavings": "Économies affichées :",
+      "emptyTitle": "Aucune recommandation en attente",
+      "emptyText": "Vos applications sont correctement dimensionnées pour ce périmètre."
+    },
+    "savings": {
+      "seriesAvoided": "Coût alloué évité",
+      "seriesRealized": "Économie encaissée",
+      "mechanism": {
+        "offhours": "Mise en veille (offhours)",
+        "rightsizingApplied": "Right-sizing appliqué",
+        "idleCleanup": "Nettoyage des ressources inactives"
+      },
+      "columns": {
+        "mechanism": "Mécanisme",
+        "avoided": "Coût alloué évité",
+        "realized": "Économie encaissée",
+        "kwh": "kWh évités",
+        "days": "Jours"
+      },
+      "firstData": "Premières données le {date}",
+      "avoidedHint": "Capacité libérée pendant la veille. Ne baisse la facture que si des nœuds disparaissent.",
+      "realizedHint": "Électricité non consommée on-prem. 0 € dans le cloud sans autoscaler.",
+      "realizedDetail": "On-prem, les pods en veille libèrent de la capacité (évité) mais les 3 nœuds restent allumés : l'économie encaissée ne couvre que la part dynamique de leur consommation électrique. Dans le cloud, elle augmente quand des nœuds sont supprimés.",
+      "kwhHint": "Soit {co2} kg CO₂e évités.",
+      "empty": "Aucune économie enregistrée sur cette période. Les économies apparaissent le lendemain du jour où offhours-guard met des charges de travail en veille.",
+      "timelineHint": "Deux séries distinctes, jamais additionnées.",
+      "detailTitle": "Détail par projet, application et mécanisme"
+    },
+    "carbon": {
+      "energyTitle": "Énergie consommée",
+      "energyHint": "Serveurs on-prem, {period}.",
+      "emissionsTitle": "Émissions (direct RTE)",
+      "lcaHint": "ACV ADEME : {value} kg CO₂e",
+      "gridTitle": "Intensité du réseau",
+      "gridEmpty": "Pas encore de mesure RTE.",
+      "gridHint": "Moyenne du {date}, RTE éCO2mix.",
+      "avoidedTitle": "CO₂e évité par la veille",
+      "avoidedHint": "Mise en veille offhours-guard, même intensité RTE.",
+      "methodTitle": "Méthode.",
+      "method": "On-prem : puissance mesurée des hyperviseurs (moyenne d'octobre, en attendant un exporter continu) × intensité RTE éCO2mix du jour. ACV : même énergie × {factor} g/kWh ({source}). Cloud : estimation, à venir.",
+      "trendHint": "Énergie en barres, intensité moyenne du jour en ligne.",
+      "rteExplainer": "L'intensité du réseau est la quantité de CO₂e émise par kWh produit (gCO₂e/kWh), publiée par RTE éCO2mix toutes les 15 minutes. Elle varie avec le mix de production : basse la nuit et quand il y a du vent, plus haute aux pointes du soir quand le gaz est sollicité. Elle sert à calculer les émissions mesurées (énergie × intensité horaire) et à choisir les heures bas carbone pour les traitements batch.",
+      "detailTitle": "Détail par projet et application",
+      "emptyText": "Aucune énergie mesurée sur cette période. Les données apparaissent après le premier passage de l'ingester.",
+      "energyColumn": "Énergie",
+      "directColumn": "kg CO₂e (direct RTE)",
+      "lcaColumn": "kg CO₂e (ACV)",
+      "series": {
+        "energy": "Énergie (kWh)",
+        "intensity": "Intensité RTE (gCO₂e/kWh)"
+      }
+    },
+    "finance": {
+      "accessDenied": "Cet onglet est réservé à la finance et aux admins CNP.",
+      "closed": "Mois {period} clôturé.",
+      "centersSaved": "Centres de coûts enregistrés.",
+      "exportsTitle": "Exports du mois",
+      "exportsHint": "Électricité on-prem en TTC, factures cloud en HT : la colonne Base de l'export le précise.",
+      "exportXlsx": "Export XLSX",
+      "exportParquet": "Export Parquet",
+      "exportCsv": "Export CSV",
+      "month": "Mois",
+      "statementsTitle": "Relevés par projet",
+      "statementsEmpty": "Aucun projet.",
+      "closingTitle": "Clôture de {period}",
+      "closingHint": "Un mois clôturé n'est plus modifié : une révision tardive devient une ligne d'ajustement sur le premier mois ouvert.",
+      "alreadyClosed": "Ce mois est déjà clôturé.",
+      "closeMonth": "Clôturer ce mois",
+      "closeConfirm": "Clôturer {period} ? Cette action ne peut pas être annulée depuis le CMP.",
+      "forceHint": "{error} Vous pouvez forcer la clôture.",
+      "forceClose": "Forcer la clôture",
+      "confirmClose": "Confirmer la clôture",
+      "cancel": "Annuler",
+      "closedTitle": "Mois clôturés",
+      "closedNone": "Aucun pour l'instant.",
+      "closedBy": "par {user}",
+      "closedOn": ", le {date}",
+      "costCentresTitle": "Centres de coûts",
+      "costCentresHint": "Un centre de coûts vide retire le rattachement. Repris dans l'onglet Projets de l'export XLSX.",
+      "colCostCentre": "Centre de coûts",
+      "colBudgetOwner": "Responsable budget",
+      "costCentreLabel": "Centre de coûts de {project}",
+      "budgetOwnerLabel": "Responsable budget de {project}",
+      "save": "Enregistrer"
+    },
+    "platform": {
+      "title": "Coût de la plateforme",
+      "description": "Services communs et capacité inoccupée, répartis en forfaits fixes par application active.",
+      "periods": {
+        "30d": "30 jours",
+        "90d": "90 jours",
+        "ytd": "Année en cours"
+      },
+      "periodAria": "Période du coût de la plateforme",
+      "total": "Coût de la plateforme",
+      "idleHint": "dont inoccupé {idle}",
+      "covered": "Recouvert par les forfaits",
+      "uncovered": "Non couvert",
+      "uncoveredHint": "Forfaits en excédent",
+      "feePerApp": "Forfait par app",
+      "feeHint": "{active} apps actives pour {slots} emplacements",
+      "cost": "Coût",
+      "idle": "Capacité inoccupée",
+      "chartCovered": "Recouvert",
+      "chartUncovered": "Non couvert"
+    },
+    "projectPanel": {
+      "openDashboard": "Ouvrir le dashboard FinOps"
+    },
+    "timeline": {
+      "inProgress": "en cours",
+      "partialDay": "En cours : {partial} à {hour} h, projeté {projected}",
+      "forecast": "Prévision",
+      "forecastValue": "{value} ({low} – {high})",
+      "forecastRange": "Intervalle de prévision",
+      "forecastLegend": "Prévision ({confidence} %)",
+      "today": "Jour en cours (projeté)",
+      "anomaly": "Anomalie",
+      "anomalyDetail": "Anomalie · {app} : {cost} (médiane {baseline})",
+      "cause": "Cause probable : {cause}"
+    },
+    "donut": {
+      "total": "Total"
+    }
+  },
+  "security": {
+    "common": {
+      "loading": "Chargement…",
+      "never": "jamais",
+      "project": "projet",
+      "details": "Détails",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "noChange": "Aucun changement",
+      "backupStarted": "Sauvegarde lancée : {list}"
+    },
+    "tiers": {
+      "core": "Socle",
+      "important": "Important",
+      "recommended": "Recommandé",
+      "info": "Info"
+    },
+    "categories": {
+      "leaks": {
+        "label": "Fuites",
+        "question": "Mon code fuit-il ?"
+      },
+      "dependencies": {
+        "label": "Dépendances",
+        "question": "Mes dépendances ont-elles des failles ?"
+      },
+      "container": {
+        "label": "Conteneur",
+        "question": "Mon conteneur est-il bien construit ?"
+      },
+      "access": {
+        "label": "Accès",
+        "question": "Qui peut atteindre mon app ?"
+      },
+      "data": {
+        "label": "Données",
+        "question": "Mes données sont-elles protégées ?"
+      },
+      "journal": {
+        "label": "Journal",
+        "question": "Que s'est-il passé ?"
+      }
+    },
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "code": "Code et dépendances",
+      "access": "Accès et exposition",
+      "data": "Données",
+      "journal": "Journal",
+      "ignored": "Ignorées"
+    },
+    "scanSources": {
+      "trivy-operator": "Images en cours · Trivy Operator",
+      "ci": "Code · GitHub Actions",
+      "kyverno": "Conteneurs · Kyverno",
+      "cnpg": "Sauvegardes · CNPG",
+      "exposure": "Exposition",
+      "cilium": "Isolation réseau"
+    },
+    "exceptionStatus": {
+      "not_affected": "Ne nous concerne pas",
+      "false_positive": "Faux positif",
+      "accepted_risk": "Risque accepté",
+      "revoked": "Secret révoqué"
+    },
+    "justifications": {
+      "component_not_present": "Le paquet vulnérable n'est pas dans l'image",
+      "vulnerable_code_not_present": "Le code vulnérable n'est pas présent",
+      "vulnerable_code_not_in_execute_path": "Le code vulnérable n'est jamais appelé",
+      "vulnerable_code_cannot_be_controlled_by_adversary": "Un attaquant ne peut pas atteindre ce code",
+      "inline_mitigations_already_exist": "Une protection en place bloque déjà l'attaque"
+    },
+    "failOn": {
+      "none": "Ne bloque jamais, signale seulement",
+      "critical": "Bloque sur un secret ou une CVE critique corrigeable"
+    },
+    "settingsSource": {
+      "platform": "valeur par défaut de la plateforme",
+      "project": "défaut du projet",
+      "app": "réglé pour cette app"
+    },
+    "settingsAction": {
+      "enable": "Activer",
+      "restrict": "Restreindre",
+      "configure": "Régler"
+    },
+    "banner": {
+      "count": "{count, plural, one {# action de sécurité obligatoire} other {# actions de sécurité obligatoires}}",
+      "inApp": "{title} dans {app}",
+      "show": "Voir l'action →"
+    },
+    "alert": {
+      "count": "Attention : {count, plural, one {# action de sécurité obligatoire} other {# actions de sécurité obligatoires}}",
+      "view": "Voir →"
+    },
+    "dashboard": {
+      "score": "Niveau de sécurité",
+      "scans": "Scans",
+      "excepted": "{count, plural, one {# alerte ignorée, hors score.} other {# alertes ignorées, hors score.}}",
+      "priority": "Actions prioritaires",
+      "noAction": "Aucune action en attente.",
+      "moreActions": "Et {count, plural, one {# autre action} other {# autres actions}}, dans les onglets ci-dessus.",
+      "nothingToReport": "Rien à signaler.",
+      "openFullPage": "Ouvrir dans Sécurité →",
+      "newMajor": "Nouvelles failles majeures",
+      "newMajorDescription": "Par semaine, socle et important",
+      "guarantees": "Garanties plateforme",
+      "notApplicable": "non applicable",
+      "guaranteesNote": "Assurées par la plateforme, rien à faire.",
+      "trend": "Score sur 90 jours",
+      "apps": "Apps du projet",
+      "noApp": "Aucune app.",
+      "app": "App",
+      "grade": "Note",
+      "appActions": "Actions",
+      "appMandatory": "Obligatoires",
+      "journalSoon": "Le journal arrive avec la phase 2 : déploiements, lectures de secrets, connexions et flux refusés, filtrés sur le projet."
+    },
+    "score": {
+      "nothingToDo": "Rien à faire",
+      "actions": "{count, plural, one {# action à faire} other {# actions à faire}}",
+      "tierCount": "{count} {tier}",
+      "phase2": "phase 2",
+      "ok": "ok",
+      "arrivesPhase2": "Arrive avec la phase 2",
+      "pointsLost": "{points, plural, one {−# point} other {−# points}}",
+      "grade": "/100 · note {grade}"
+    },
+    "trend": {
+      "weekOf": "Semaine du {date}",
+      "newMajor": "Nouvelles failles majeures",
+      "score": "Score",
+      "noHistory": "Pas encore d'historique."
+    },
+    "finding": {
+      "pending": "Ignorée par {author}, en attente de validation par un admin du projet.",
+      "viewRun": "Voir le run",
+      "backupNow": "Sauvegarder maintenant",
+      "seenBy": "Vu par {sources} depuis le {date}"
+    },
+    "exception": {
+      "ignore": "Ignorer",
+      "title": "Ignorer cette alerte",
+      "reason": "Motif",
+      "why": "Pourquoi",
+      "explanation": "Explication",
+      "explanationPlaceholder": "Ce que vous avez vérifié, en une ou deux phrases",
+      "expiresOn": "Expire le",
+      "expiryHint": "Par défaut et au plus tard le {date}. L'alerte revient d'elle-même à cette date.",
+      "approvalNeeded": "Un autre admin du projet devra valider. D'ici là, l'alerte reste comptée.",
+      "saved": "Exception enregistrée, en attente de validation",
+      "ignored": "Alerte ignorée",
+      "hints": {
+        "not_affected": "La faille existe dans le paquet, mais ne peut pas être exploitée ici. Revue dans un an.",
+        "false_positive": "Le scanner se trompe. Revue dans un an.",
+        "accepted_risk": "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus, et un autre admin du projet doit valider.",
+        "revoked": "Le secret a été changé et l'ancien ne fonctionne plus. Le retirer de l'historique ne suffit pas."
+      }
+    },
+    "exceptions": {
+      "empty": "Aucune alerte ignorée.",
+      "awaitingApproval": "En attente de validation",
+      "byOn": "Par {author} le {date}",
+      "approvedBy": "validée par {approver}",
+      "expiresOn": "expire le {date}",
+      "approve": "Valider",
+      "reactivate": "Réactiver",
+      "approved": "Exception validée",
+      "reactivated": "Alerte réactivée"
+    },
+    "scans": {
+      "requested": "scan demandé, résultat dans quelques minutes",
+      "readError": "Lecture en échec, réessai automatique",
+      "lastRun": "dernier {when}",
+      "nextRun": "prochain {when}",
+      "rerun": "Relancer",
+      "started": "Scan lancé",
+      "firstRun": "Premier passage du collecteur dans quelques minutes."
+    },
+    "alerts": {
+      "title": "Alertes Discord",
+      "description": "Chaque nouveau problème du socle est envoyé une fois, vers {target}.",
+      "none": "aucun canal",
+      "origin": {
+        "app": "le webhook de cette app",
+        "project": "le webhook du projet",
+        "platform": "le canal par défaut de la plateforme"
+      },
+      "scope": {
+        "app": "cette app",
+        "project": "ce projet"
+      },
+      "ownWebhook": "Webhook de {scope} :",
+      "replace": "Remplacer",
+      "useThis": "Utiliser ce webhook",
+      "remove": "Retirer",
+      "sendTest": "Envoyer un test",
+      "testSent": "Message de test envoyé",
+      "saved": "Webhook enregistré",
+      "removed": "Webhook retiré",
+      "storedInVault": "Le webhook est stocké dans Vault et n'est plus jamais affiché.",
+      "fallbackToProject": "Sans webhook d'app, celui du projet est utilisé.",
+      "appCanOwn": "Une app peut avoir le sien."
+    },
+    "backups": {
+      "title": "Sauvegardes",
+      "phase": {
+        "completed": "Réussie",
+        "failed": "En échec",
+        "running": "En cours",
+        "started": "En cours",
+        "pending": "En attente"
+      },
+      "instances": "{ready}/{total} {total, plural, one {instance prête} other {instances prêtes}}",
+      "restoring": "Restauration en cours : {phase}",
+      "preparing": "En préparation : {phase}",
+      "restoredAt": "restaurée depuis {source}, jusqu'au {date}",
+      "restoredBackup": "restaurée depuis {source}, sauvegarde {backup}",
+      "emptyState": "Aucune sauvegarde. Activez-les dans l'onglet Configuration, panneau « Exposition et données ».",
+      "refresh": "Rafraîchir",
+      "database": "Base",
+      "when": "Quand",
+      "status": "État",
+      "manual": "manuelle",
+      "restore": "Restaurer"
+    },
+    "restore": {
+      "title": "Restaurer la base {database}",
+      "description": "Une nouvelle base est créée à partir de la sauvegarde, puis l'app bascule dessus. L'app est indisponible pendant la restauration, en général quelques minutes. La base actuelle est supprimée, mais ses sauvegardes restent : vous pouvez revenir en arrière de la même façon.",
+      "backupState": "État à la fin de la sauvegarde",
+      "pointInTime": "État à un instant précis, après la sauvegarde",
+      "pointHint": "Utile pour revenir juste avant une erreur, par exemple une suppression de données à 14 h 32.",
+      "confirm": "Confirmer la restauration",
+      "preview": "Voir le changement",
+      "committed": "Restauration commitée, Argo CD la déploie dans quelques minutes"
+    },
+    "settings": {
+      "title": "Réglages",
+      "ciBlocking": "Blocage de la CI",
+      "enforced": "Imposé par l'admin du projet",
+      "current": "Actuellement : {source}",
+      "saved": "Réglage commité dans deploy/security.yaml",
+      "confirmChange": "Confirmer la modification",
+      "commit": "Confirmer et commiter"
+    },
+    "policy": {
+      "title": "Politique du projet",
+      "ciDefault": "Blocage de la CI, par défaut",
+      "lock": "Verrouiller",
+      "lockHint": "Les apps héritent de la valeur sans pouvoir la changer.",
+      "saved": "Politique enregistrée",
+      "appliedTo": "{count, plural, one {Politique enregistrée, appliquée à # app} other {Politique enregistrée, appliquée à # apps}}",
+      "notApplied": "Non appliquée à : {list}"
+    },
+    "layout": {
+      "title": "Sécurité",
+      "subtitle": "Ce qu'il faut corriger dans vos applications, et comment."
+    },
+    "page": {
+      "app": "Application",
+      "wholeProject": "Tout le projet",
+      "developer": "Développeur",
+      "platform": "Plateforme",
+      "core": "{count, plural, one {# obligatoire} other {# obligatoires}}"
+    }
+  },
+  "activity": {
+    "common": {
+      "refresh": "Rafraîchir",
+      "loading": "Chargement…",
+      "never": "jamais"
+    },
+    "tab": {
+      "description": {
+        "audit": "Qui a fait quoi dans {scope, select, app {cette app} other {ce projet}} : CMP, kubectl, Vault, Keycloak et déploiements.",
+        "logs": "Les logs des pods {scope, select, app {de l'app} other {du projet}}, avec recherche et suivi en direct."
+      },
+      "views": {
+        "audit": "Audit",
+        "logs": "Logs"
+      }
+    },
+    "sources": {
+      "cmp": "CMP",
+      "kubernetes": "kubectl",
+      "vault": "Vault",
+      "keycloak": "Keycloak",
+      "deployment": "Déploiements"
+    },
+    "periods": {
+      "15m": "15 minutes",
+      "1h": "1 heure",
+      "6h": "6 heures",
+      "24h": "24 heures",
+      "7d": "7 jours",
+      "14d": "14 jours",
+      "30d": "30 jours"
+    },
+    "groups": {
+      "project": "Projet et membres",
+      "apps": "Applications",
+      "security": "Sécurité",
+      "databases": "Bases de données",
+      "finops": "FinOps",
+      "shells": "Shells dans un pod",
+      "vault": "Secrets Vault",
+      "logins": "Échecs de connexion",
+      "deployments": "Déploiements"
+    },
+    "roles": {
+      "admin": "admin",
+      "member": "membre"
+    },
+    "exposure": {
+      "public": "public",
+      "projectUsers": "utilisateurs du projet",
+      "projectMembers": "membres du projet",
+      "projectAdmins": "admins du projet",
+      "custom": "personnalisée"
+    },
+    "time": {
+      "today": "aujourd'hui {time}"
+    },
+    "events": {
+      "projectCreate": "a créé le projet {project}",
+      "projectDelete": "a supprimé le projet {project}",
+      "memberAdd": "a ajouté {user} au projet ({role})",
+      "memberRemove": "a retiré {user} du projet",
+      "appCreate": "a créé l'app {app}",
+      "appDelete": "a supprimé l'app {app}",
+      "configUpdate": "a modifié la config de {app}",
+      "exposureChange": "a passé l'exposition de {app} de {from} à {to}",
+      "backupsChange": "a modifié les sauvegardes de {app}",
+      "scanRequest": "a lancé un scan de sécurité de {app}",
+      "exceptionRequest": "a demandé une exception de sécurité sur {app}",
+      "exceptionApprove": "a approuvé une exception de sécurité",
+      "exceptionRevoke": "a révoqué une exception de sécurité",
+      "settingsUpdate": "a modifié les réglages de sécurité de {app}",
+      "policyUpdate": "a modifié la politique de sécurité du projet",
+      "alertsUpdate": "a modifié la cible des alertes de sécurité",
+      "alertsTest": "a testé les alertes de sécurité",
+      "databaseBackup": "a lancé une sauvegarde de la base de {app}",
+      "databaseRestore": "a restauré la base de {app}",
+      "budgetUpdate": "a modifié le budget du projet",
+      "recommendationApply": "a appliqué une recommandation FinOps",
+      "recommendationIgnore": "a ignoré une recommandation FinOps",
+      "recommendationNotify": "a notifié une recommandation FinOps",
+      "alertDisabled": "a désactivé une alerte du catalogue ({target})",
+      "alertUpdated": "a réglé une alerte du catalogue ({target})",
+      "deploymentSync": "a déployé {target}",
+      "login": "s'est connecté ({target})",
+      "loginFailed": "a échoué à se connecter",
+      "vaultRead": "a lu le secret {target}",
+      "vaultList": "a listé les secrets {target}",
+      "vaultWrite": "a écrit le secret {target}",
+      "vaultDelete": "a supprimé le secret {target}",
+      "k8sShell": "a ouvert un shell dans {name}",
+      "k8sAttach": "s'est attaché à {name}",
+      "k8sPortForward": "a ouvert un port-forward vers {name}",
+      "k8sReadSecret": "a lu le secret {name}",
+      "k8sVerbs": {
+        "create": "a créé",
+        "update": "a modifié",
+        "delete": "a supprimé",
+        "get": "a lu",
+        "list": "a listé"
+      },
+      "detail": "({detail})",
+      "appSleep": "a mis {app} en veille",
+      "appWake": "a réveillé {app}",
+      "appRestart": "a redémarré {app}",
+      "iconUpdate": "a changé l'icône de {app}",
+      "iconReset": "a réinitialisé l'icône de {app}",
+      "releasePromote": "a promu la release de {app}",
+      "releaseSkip": "a ignoré la release de {app}",
+      "releaseAbort": "a annulé la release de {app}",
+      "releaseRetry": "a relancé la release de {app}",
+      "releaseSettings": "a modifié les réglages de release de {app}",
+      "trafficStart": "a lancé un test de trafic sur {app}",
+      "trafficStop": "a arrêté le test de trafic sur {app}",
+      "agentsUpdate": "a modifié les réglages des assistants IA du projet",
+      "agentConnect": "a connecté un assistant IA",
+      "agentDisconnect": "a déconnecté un assistant IA",
+      "monthClose": "a clôturé un mois FinOps",
+      "costCenters": "a modifié les centres de coût",
+      "catalogSync": "a synchronisé le catalogue"
+    },
+    "audit": {
+      "kpi": {
+        "actions": "Actions · {days} j",
+        "people": "Personnes actives",
+        "notable": "Événements notables",
+        "loginFailures": "Échecs de connexion",
+        "delta": "{pct} % vs période -1",
+        "new": "nouveau"
+      },
+      "chart": {
+        "title": "Activité par jour et par source",
+        "empty": "Aucune activité sur la période."
+      },
+      "unavailable": "Sources momentanément indisponibles :",
+      "filters": {
+        "allSources": "Toutes les sources",
+        "allPeople": "Toutes les personnes",
+        "allActions": "Toutes les actions",
+        "allApps": "Toutes les apps",
+        "reads": "Lectures",
+        "notableOnly": "Notables seulement"
+      },
+      "aria": {
+        "source": "Source",
+        "person": "Personne",
+        "action": "Action",
+        "app": "App",
+        "period": "Période"
+      },
+      "notable": "Notable",
+      "outcome": {
+        "success": "réussi",
+        "refused": "refusé"
+      },
+      "empty": "Aucun événement pour ces filtres.",
+      "loadMore": "Charger plus",
+      "detail": {
+        "title": "Détail de l'événement",
+        "close": "Fermer",
+        "who": "Qui",
+        "what": "Quoi",
+        "source": "Source",
+        "when": "Quand",
+        "app": "App",
+        "target": "Cible",
+        "from": "Depuis",
+        "result": "Résultat",
+        "request": "Requête",
+        "allFrom": "Toute l'activité de {actor}",
+        "showRaw": "Voir les données brutes",
+        "hideRaw": "Masquer les données brutes"
+      }
+    },
+    "logs": {
+      "aria": {
+        "namespace": "Namespace",
+        "pod": "Pod",
+        "container": "Conteneur",
+        "level": "Niveau",
+        "period": "Période"
+      },
+      "allNamespaces": "Tous les namespaces",
+      "allPods": "Tous les pods",
+      "allContainers": "Tous les conteneurs",
+      "allLevels": "Tous les niveaux",
+      "errors": "Erreurs",
+      "warnings": "Avertissements",
+      "search": "Rechercher…",
+      "searchButton": "Rechercher",
+      "lineWrap": "Retour à la ligne",
+      "timestamp": "Horodatage",
+      "lineCount": "{count, plural, one {# ligne} other {# lignes}}",
+      "download": "Télécharger les lignes affichées",
+      "openNewTab": "Ouvrir dans un nouvel onglet",
+      "exitFullscreen": "Quitter le plein écran (Échap)",
+      "fullscreen": "Plein écran",
+      "live": "En direct",
+      "follow": "Suivre",
+      "showStream": "Afficher ce flux",
+      "hideStream": "Masquer ce flux",
+      "showContext": "Voir le contexte",
+      "contextBanner": "Contexte : une minute avant et après la ligne choisie, même conteneur.",
+      "backToResults": "Retour aux résultats",
+      "noLines": "Aucune ligne pour ces filtres."
+    },
+    "volume": {
+      "title": "Volume de logs",
+      "total": "{size} sur la période",
+      "description": "Lignes par minute, par app.",
+      "aria": "Période du volume",
+      "empty": "Aucun log sur la période.",
+      "tooltip": "{value} lignes/min",
+      "table": {
+        "app": "App",
+        "size": "Taille",
+        "lines": "Lignes",
+        "peak": "Pic / min"
+      },
+      "size": {
+        "gb": "{value} Go",
+        "mb": "{value} Mo",
+        "kb": "{value} Ko",
+        "b": "{value} o"
+      }
+    },
+    "network": {
+      "title": "Flux réseau refusés · 24 h",
+      "description": "Bloqués par une politique réseau, côté de ce projet.",
+      "table": {
+        "source": "Source",
+        "destination": "Destination",
+        "port": "Port",
+        "direction": "Sens",
+        "count": "Occurrences",
+        "last": "Dernier passage"
+      },
+      "direction": {
+        "ingress": "entrant",
+        "egress": "sortant"
+      },
+      "noPort": "n/d",
+      "empty": "Aucun flux refusé sur les dernières 24 heures."
+    },
+    "platform": {
+      "alerts": "Alertes actives",
+      "noAlerts": "Aucune alerte en cours.",
+      "since": "depuis {time}",
+      "auditChain": "Chaîne d'audit",
+      "archive": "Archive immuable : dernière heure archivée {time}",
+      "collected": "Collecte {source} : à jour jusqu'à {time}"
+    },
+    "insights": {
+      "none": "Aucun.",
+      "logins": {
+        "title": "Connexions au realm du projet",
+        "success": "Réussies",
+        "failure": "Échouées",
+        "empty": "Aucune connexion sur la période.",
+        "failingAccounts": "Comptes en échec",
+        "failingIps": "IP en échec"
+      },
+      "heatmap": {
+        "title": "Quand l'activité humaine a lieu",
+        "empty": "Aucune action humaine sur la période.",
+        "cell": "{day} {hour}h : {count, plural, one {# action} other {# actions}}",
+        "hour": "{hour}h",
+        "note": "Heure de Paris. Les nuits et les week-ends chargés méritent un regard."
+      }
+    },
+    "page": {
+      "title": "Activité",
+      "description": "Qui a fait quoi, et les logs, projet par projet.",
+      "descriptionAll": "Qui a fait quoi, et les logs, projet par projet ou sur toute la plateforme.",
+      "platformOption": "Plateforme (tous les projets)"
+    }
+  },
+  "alerts": {
+    "state": {
+      "normal": "OK",
+      "pending": "En attente",
+      "firing": "Déclenchée",
+      "error": "Erreur",
+      "nodata": "Pas de données"
+    },
+    "severity": {
+      "critical": "Critique",
+      "warning": "Avertissement"
+    },
+    "notifies": {
+      "app": "le canal Discord de l'app",
+      "project": "le canal Discord du projet",
+      "platform": "le canal Discord de la plateforme (aucun canal projet configuré)"
+    },
+    "noChannel": "aucun canal : configurez-en un dans l'onglet Sécurité",
+    "summary": "{count, plural, one {# alerte active} other {# alertes actives}} sur {total} {scope}",
+    "scope": {
+      "app": "pour cette app",
+      "project": "pour tout le projet"
+    },
+    "notifiesTo": "Notifications vers {target}. Évaluées par Grafana toutes les minutes.",
+    "adminsOnly": "Seuls les admins du projet les modifient.",
+    "viewInGrafana": "Voir dans Grafana",
+    "newCustom": "Créer une alerte personnalisée",
+    "toggled": {
+      "on": "« {title} » activée",
+      "off": "« {title} » désactivée"
+    },
+    "enable": "Activer {title}",
+    "apply": "Appliquer",
+    "page": {
+      "title": "Alertes",
+      "description": "Les alertes prêtes à l'emploi de chaque projet."
+    }
+  },
+  "account": {
+    "language": {
+      "title": "Langue",
+      "description": "Langue de l'interface. Le choix est enregistré sur votre compte et suivi sur tous vos navigateurs."
+    },
+    "page": {
+      "back": "Retour au tableau de bord",
+      "title": "Paramètres du compte",
+      "subtitle": "Gérez votre profil et vos préférences",
+      "loading": "Chargement du profil…",
+      "loadFailed": "Impossible de charger votre profil",
+      "loadFailedToast": "Échec du chargement du profil : {error}",
+      "uploadFailed": "Échec de l'envoi : {error}",
+      "selectFirst": "Sélectionnez d'abord un fichier",
+      "invalidType": "Type de fichier non valide. Formats acceptés : JPG, PNG, GIF, WEBP.",
+      "tooLarge": "Fichier trop volumineux ({size} Mo). La taille maximale est de {max} Mo.",
+      "unknownError": "Erreur inconnue"
+    },
+    "profile": {
+      "title": "Informations du profil",
+      "description": "Les détails de votre compte, issus de Keycloak.",
+      "firstName": "Prénom",
+      "lastName": "Nom",
+      "email": "Adresse e-mail",
+      "userId": "Identifiant utilisateur"
+    },
+    "picture": {
+      "title": "Photo de profil",
+      "description": "Importez une nouvelle image d'avatar",
+      "preview": "Aperçu",
+      "dropTitle": "Glissez-déposez votre image ici",
+      "dropOr": "ou cliquez pour parcourir",
+      "choose": "Choisir un fichier",
+      "ready": "Prêt à être envoyé",
+      "fileSize": "{name} ({size} Ko)",
+      "uploading": "Envoi…",
+      "upload": "Envoyer",
+      "formats": "Formats acceptés : JPG, PNG, GIF, WEBP. Taille maximale : {max} Mo."
+    },
+    "github": {
+      "title": "Intégration GitHub",
+      "description": "Liez votre compte GitHub pour déployer des applications Kubernetes",
+      "loadingStatus": "Chargement du statut…",
+      "linked": "Compte GitHub lié",
+      "installationId": "Identifiant d'installation",
+      "linkedHelp": "Vous pouvez maintenant déployer des applications Kubernetes avec GitOps. La plateforme crée et gère les dépôts pour vous.",
+      "needApp": "Pour déployer des applications Kubernetes, installez l'application GitHub CNP. Elle permet à la plateforme de créer et gérer des dépôts en votre nom.",
+      "linking": "Liaison…",
+      "linkButton": "Lier le compte GitHub",
+      "redirectNote": "Vous serez redirigé vers GitHub pour autoriser l'application CNP Portal.",
+      "or": "Ou",
+      "alreadyInstalled": "L'application est déjà installée ?",
+      "alreadyHelp": "Si l'application GitHub CNP est déjà installée sur votre organisation, saisissez ici l'identifiant d'installation.",
+      "saveId": "Enregistrer l'identifiant",
+      "idHelp": "Vous trouverez l'identifiant d'installation dans les réglages de votre application GitHub.",
+      "callbackSaved": "Compte GitHub lié avec succès !",
+      "callbackFailed": "Échec de la liaison du compte GitHub. Réessayez ou saisissez l'identifiant manuellement.",
+      "statusFailed": "Impossible de charger le statut de l'intégration GitHub",
+      "opened": "L'installation de l'application GitHub s'est ouverte dans un nouvel onglet. Revenez ici une fois l'installation terminée.",
+      "idRequired": "Saisissez un identifiant d'installation",
+      "idSaved": "Identifiant d'installation enregistré",
+      "idSaveFailed": "Échec de l'enregistrement de l'identifiant. Vérifiez-le et réessayez.",
+      "connection": {
+        "title": "Connexion GitHub",
+        "description": "Connectez votre compte GitHub, puis choisissez l’installation CNP-Portal de votre compte ou organisation.",
+        "statusUnavailable": "Vérification GitHub indisponible",
+        "linkedChoose": "Compte GitHub connecté ; choisissez votre installation",
+        "callbackFailed": "Connexion GitHub refusée ou session expirée. Recommencez depuis ce bouton.",
+        "connectionUnavailable": "Connexion GitHub indisponible",
+        "installationSaved": "Installation de {account} sélectionnée pour @{login}",
+        "installationRefused": "Installation GitHub refusée",
+        "checking": "Vérification…",
+        "configurationRequired": "OAuth GitHub doit être configuré dans CMP avant de poursuivre.",
+        "linkedAs": "Compte GitHub connecté : @{login}",
+        "reconnect": "Reconnecter mon compte GitHub",
+        "connect": "Connecter mon compte GitHub",
+        "install": "Installer CNP-Portal sur mon compte ou mon organisation",
+        "installationLabel": "Installation GitHub à utiliser",
+        "chooseInstallation": "Choisir une installation",
+        "noInstallations": "Aucune installation accessible. Installez CNP-Portal sur les dépôts voulus, puis actualisez.",
+        "useInstallation": "Utiliser cette installation",
+        "installationVerified": "Installation sélectionnée et vérifiée",
+        "refresh": "Actualiser la connexion GitHub",
+        "permissionsHelp": "Vos droits et l’accès de l’App aux dépôts sont revérifiés avant l’import. Les secrets OAuth restent côté serveur."
+      }
+    },
+    "theme": {
+      "title": "Apparence",
+      "description": "Par défaut, le thème suit celui du navigateur. Choix gardé sur ce navigateur.",
+      "system": "Navigateur",
+      "light": "Clair",
+      "dark": "Sombre"
+    }
+  },
+  "common": {
+    "language": {
+      "label": "Langue de l'interface",
+      "saveFailed": "Langue appliquée sur ce navigateur, mais non enregistrée sur votre compte.",
+      "names": {
+        "fr": "Français",
+        "en": "English"
+      }
+    },
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "retry": "Réessayer",
+    "project": "Projet",
+    "noProjects": "Aucun projet."
+  },
+  "projectNav": {
+    "navigation": "Navigation du projet",
+    "switchProject": "Changer de projet",
+    "searchProjects": "Rechercher un projet...",
+    "noProject": "Aucun projet trouvé.",
+    "back": "Retour à la plateforme",
+    "projects": "Projets",
+    "newProject": "Nouveau projet",
+    "overview": "Vue d'ensemble",
+    "applications": "Applications",
+    "members": "Membres",
+    "costs": "Coûts",
+    "security": "Sécurité",
+    "activity": "Activité",
+    "alerts": "Alertes",
+    "assistants": "Assistants IA",
+    "seeAll": "Voir tout",
+    "noApps": "Aucune application",
+    "expandApps": "Afficher les applications",
+    "collapseApps": "Masquer les applications",
+    "notAllowedTitle": "Indisponible",
+    "notAllowedBody": "Votre rôle ne donne pas accès à cette section du projet.",
+    "cloud": {
+      "onprem": "Sur site",
+      "aws": "AWS",
+      "gcp": "GCP"
+    },
+    "status": {
+      "running": "En cours",
+      "degraded": "Dégradée",
+      "pending": "En attente",
+      "initializing": "Initialisation",
+      "planning": "Planification",
+      "deploying": "Déploiement",
+      "failed": "Échec",
+      "deleting": "Suppression",
+      "deleted": "Supprimée"
+    }
+  },
+  "catalog": {
+    "iconAlt": "Icône de {name}",
+    "template": "Modèle :",
+    "deploy": "Déployer",
+    "modal": {
+      "title": "Déployer {name}",
+      "vmsSubtitle": "2 VM OpenStack + 2 instances AWS via ASG",
+      "close": "Fermer",
+      "appName": "Nom de l'application",
+      "namePlaceholder": "mon-{id}",
+      "nameHint": "Lettres, chiffres, tirets bas ou tirets. Doit être unique.",
+      "nameTooLong": "Le nom doit comporter 45 caractères au maximum.",
+      "nameChars": "Seuls les lettres, chiffres, tirets bas (_) et tirets (-) sont autorisés, sans espace ni autre caractère.",
+      "configuration": "Configuration",
+      "selectOption": "Sélectionnez une option…",
+      "required": "Requis",
+      "optional": "Facultatif",
+      "githubTitle": "Compte GitHub requis",
+      "githubText": "Pour déployer des applications Kubernetes, vous devez d'abord lier votre compte GitHub.",
+      "githubLink": "Aller aux réglages du compte",
+      "provisionedTitle": "Ce qui sera provisionné",
+      "repo": "Dépôt GitHub privé avec le code du modèle",
+      "namespace": "Namespace Kubernetes avec RBAC",
+      "argocd": "Application ArgoCD pour le GitOps",
+      "vault": "Chemin de secrets Vault",
+      "vmDb": "2× VM OpenStack, couche de données (stateful)",
+      "vmWeb": "2× AWS t3.micro, couche web sans état (ASG + ALB)",
+      "cancel": "Annuler",
+      "deploying": "Déploiement…"
+    }
+  },
+  "dashboard": {
+    "deleteDenied": "Seuls les admins de projet peuvent supprimer une application",
+    "deletionStarted": "Suppression lancée",
+    "deleteFailed": "Échec de la suppression : {error}",
+    "emptyTitle": "Aucun déploiement pour l'instant",
+    "emptyText": "Déployez une application depuis le catalogue pour commencer.",
+    "health": {
+      "checking": "Vérification…",
+      "healthy": "Sain",
+      "degraded": "Dégradé",
+      "down": "Hors service",
+      "unknown": "Inconnu",
+      "asleep": "Endormie",
+      "not_connected": "Non connecté"
+    },
+    "progress": {
+      "queued": "En file d'attente",
+      "deploying": "Déploiement",
+      "deleting": "Suppression",
+      "deleted": "Supprimé",
+      "failed": "Échec"
+    },
+    "states": {
+      "up": "En ligne",
+      "down": "Hors ligne",
+      "starting": "Démarrage",
+      "unknown": "Inconnu"
+    },
+    "instanceHealth": {
+      "healthy": "sain",
+      "unhealthy": "défaillant"
+    },
+    "infra": {
+      "title": "Santé de l'infrastructure",
+      "errorTitle": "Santé de l'infrastructure : erreur",
+      "hypervisors": "Hyperviseurs OpenStack",
+      "noHypervisors": "Aucun hyperviseur trouvé"
+    },
+    "card": {
+      "quickActions": "Actions rapides",
+      "openApp": "Ouvrir l'application",
+      "openRepo": "Ouvrir le dépôt GitHub",
+      "viewArgocd": "Voir dans ArgoCD",
+      "manageSecrets": "Gérer les secrets",
+      "namespace": "Namespace :",
+      "outputs": "Sorties :",
+      "healthDetails": "Détails de santé",
+      "delete": "Supprimer",
+      "confirmTitle": "Supprimer le déploiement ?",
+      "confirmSureTitle": "Êtes-vous absolument certain ?",
+      "confirmText": "Cette action détruit toutes les ressources cloud de «{name}» avec Terraform. Elle est irréversible.",
+      "confirmSureText": "Toutes les ressources ({count}) de «{name}» seront détruites définitivement. Cliquez sur confirmer pour continuer.",
+      "confirmSureUnknownText": "Toutes les ressources de «{name}» seront détruites définitivement. Cliquez sur confirmer pour continuer.",
+      "cancel": "Annuler",
+      "yesDelete": "Oui, supprimer",
+      "confirmDestroy": "Confirmer et tout détruire"
+    },
+    "healthPanel": {
+      "title": "Détails de santé : {name}",
+      "description": "État de santé en temps réel, issu des API cloud",
+      "fetchFailed": "Échec de la récupération des données de santé",
+      "overall": "État général",
+      "overallHealthy": "Tous les composants sont opérationnels",
+      "overallDegraded": "Certains composants sont défaillants",
+      "overallDown": "Aucun composant sain",
+      "overallUnknown": "Impossible à déterminer",
+      "awsLayer": "Couche frontale AWS",
+      "asgName": "Nom de l'ASG",
+      "desiredCapacity": "Capacité souhaitée",
+      "health": "Santé",
+      "counts": "{healthy} / {total} sains",
+      "instances": "Instances ({count}) :",
+      "noInstances": "Aucune instance trouvée",
+      "openstackLayer": "Couche OpenStack",
+      "servers": "Serveurs ({count}) :",
+      "noServers": "Aucun serveur trouvé",
+      "noComponents": "Aucun composant d'infrastructure trouvé",
+      "noComponentsHelp": "Ce déploiement n'a peut-être pas encore été créé, ou utilise une autre architecture."
+    }
+  },
+  "agents": {
+    "meta": {
+      "title": "Connecter votre assistant IA · CNP",
+      "description": "Utilisez CNP depuis Claude, ChatGPT, Codex, OpenCode, Cursor ou VS Code : créez, modifiez et publiez des applications en langage courant."
+    },
+    "never": "jamais",
+    "mascot": {
+      "idle": "Nimbus",
+      "working": "Nimbus travaille",
+      "happy": "Nimbus est ravi"
+    },
+    "scopes": {
+      "readWrite": "lecture et écriture",
+      "readOnly": "lecture seule"
+    },
+    "chatDemo": {
+      "worksWith": "Fonctionne avec",
+      "replay": "Rejouer",
+      "replayLabel": "Rejouer la démo",
+      "clientStatus": "{client} · CNP connecté",
+      "note": "Exemple de conversation. Les outils sont les vrais outils CNP.",
+      "userRequest": "J'ai besoin d'une page avec le programme du séminaire d'octobre et la liste des intervenants. Pouvez-vous la mettre en ligne pour l'équipe ?",
+      "noSandbox": "Vous n'avez pas encore de bac à sable. Puis-je créer « alice-sandbox » pour vos expérimentations ?",
+      "yesGo": "Oui, allez-y.",
+      "online": "C'est en ligne, derrière la connexion de l'entreprise. Voulez-vous que j'ajoute le plan du lieu ?",
+      "detail": {
+        "yourSpace": "votre espace CNP",
+        "sandbox": "bac à sable",
+        "staticSite": "site statique",
+        "files": "{count, plural, one {# fichier} other {# fichiers}}",
+        "running": "en service",
+        "version": "v0.1.0"
+      },
+      "companyLogin": "connexion entreprise",
+      "duration": "4 min"
+    },
+    "liveStats": "apps créées via des assistants IA ce mois-ci, par {assistants, plural, one {# assistant connecté} other {# assistants connectés}}. Chiffre en direct.",
+    "assistant": {
+      "asks": [
+        "Mettez en ligne une page avec le programme de notre prochain événement d'équipe.",
+        "Donnez-moi un état de mes projets, en une page, pour cette semaine.",
+        "Pourquoi mon app est-elle lente ? Lisez ses logs et dites-le-moi avant de rien modifier."
+      ],
+      "since": {
+        "minutes": "il y a {count} min",
+        "hours": "il y a {count} h",
+        "days": "il y a {count, plural, one {# jour} other {# jours}}"
+      },
+      "copyHint": "Copier, puis coller dans votre assistant",
+      "title": "Votre assistant IA",
+      "connectedText": "{count, plural, one {# app créée} other {# apps créées}} via un assistant · dernière action {since}",
+      "emptyText": "Demandez à Claude, ChatGPT ou Codex de créer et publier des applications pour vous, avec vos droits.",
+      "connectAnother": "Connecter un autre assistant",
+      "connectOne": "Connecter un assistant",
+      "waitingApproval": "{count} en attente de votre approbation",
+      "tryAsking": "Essayez :"
+    },
+    "clients": {
+      "claudeAi": {
+        "name": "Claude (web, bureau, mobile)",
+        "forWho": "Tout le monde. Rien à installer.",
+        "step1": "Ouvrez Personnaliser, puis Connecteurs (claude.ai/customize/connectors). Si votre organisation a déjà ajouté CNP, cliquez sur Connecter à côté et passez à la dernière étape.",
+        "step2": "Sinon, cliquez sur +, puis « Ajouter un connecteur personnalisé », nommez-le CNP et collez cette URL :",
+        "step3": "Connectez-vous avec votre compte d'entreprise et autorisez l'accès sur la page CNP. Demandez ensuite simplement : « Mettez une page en ligne avec … »",
+        "note": "Sur les offres Team et Enterprise, un propriétaire l'ajoute une fois pour tout le monde dans Paramètres de l'organisation, Connecteurs (claude.ai/admin-settings/connectors) ; les membres n'ont ensuite qu'à cliquer sur Connecter."
+      },
+      "claudeCode": {
+        "name": "Claude Code",
+        "forWho": "Développeurs. Apporte les guides CNP.",
+        "step1": "Installez le plugin CNP : il configure la connexion et ajoute les guides et les commandes de la plateforme.",
+        "step2": "Ou seulement la connexion :",
+        "step3": "Lancez /mcp et choisissez cnp pour vous connecter."
+      },
+      "chatgpt": {
+        "name": "ChatGPT",
+        "forWho": "Là où votre offre autorise les connecteurs personnalisés.",
+        "step1": "Paramètres, Apps et connecteurs, puis créez un connecteur avec cette URL :",
+        "step2": "Connectez-vous avec votre compte d'entreprise et autorisez l'accès."
+      },
+      "codex": {
+        "name": "Codex",
+        "forWho": "Développeurs, CLI et IDE.",
+        "step1": "Ajoutez le serveur :",
+        "step2": "Connectez-vous :"
+      },
+      "opencode": {
+        "name": "OpenCode",
+        "forWho": "Développeurs.",
+        "step1": "Dans opencode.json :",
+        "step2": "Connectez-vous :"
+      },
+      "cursor": {
+        "name": "Cursor / VS Code",
+        "forWho": "Développeurs.",
+        "step1": "Cursor, dans ~/.cursor/mcp.json :",
+        "step2": "VS Code, dans .vscode/mcp.json :",
+        "step3": "L'éditeur ouvre la page de connexion CNP à la première utilisation."
+      }
+    },
+    "copyBlock": {
+      "copied": "Copié",
+      "copy": "Copier",
+      "assistant": "Assistant"
+    },
+    "consent": {
+      "expired": "Cette demande de connexion a expiré. Relancez la connexion depuis votre assistant.",
+      "failed": "Une erreur est survenue. Relancez la connexion depuis votre assistant.",
+      "incomplete": "Ce lien est incomplet. Relancez la connexion depuis votre assistant.",
+      "title": "{client} veut utiliser CNP en tant que {name}",
+      "body": "Il agira avec vos droits, dans les projets auxquels vous avez accès. Vous pouvez le déconnecter à tout moment depuis votre compte.",
+      "seeTitle": "Voir vos projets et applications",
+      "seeText": "État, logs, versions, coûts.",
+      "writeTitle": "Créer et modifier des applications",
+      "writeText": "Créer des applications, pousser du code, publier. Les actions sensibles vous demandent toujours confirmation, selon le projet.",
+      "writeSwitch": "Autoriser la création et la modification d'applications",
+      "redirect": "Vous serez renvoyé vers {host}.",
+      "decline": "Refuser",
+      "allow": "Autoriser",
+      "you": "vous"
+    },
+    "install": {
+      "addToClaude": "Ajouter à Claude",
+      "commandCopied": "Commande copiée",
+      "claudeCode": "Claude Code",
+      "addToCursor": "Ajouter à Cursor",
+      "addToVsCode": "Ajouter à VS Code",
+      "copiedHint": "L'adresse CNP est copiée. Dans l'onglet Claude qui vient de s'ouvrir :",
+      "connectRich": "Si CNP figure déjà dans la liste (votre organisation l'a ajouté), cliquez sur <strong>Connecter</strong>.",
+      "addRich": "Sinon, cliquez sur <plus>+</plus>, puis sur <strong>Ajouter un connecteur personnalisé</strong>, nommez-le CNP et collez l'adresse.",
+      "signIn": "Connectez-vous avec votre compte d'entreprise et autorisez l'accès.",
+      "copyAgain": "copier à nouveau",
+      "ownerPrefix": "Propriétaire d'une offre Team ou Enterprise :",
+      "addForEveryone": "l'ajouter pour tout le monde"
+    },
+    "projectPanel": {
+      "levels": {
+        "sandbox": {
+          "label": "Bac à sable",
+          "text": "Expérimentations personnelles. L'assistant agit directement."
+        },
+        "demo": {
+          "label": "Démo",
+          "text": "Pas d'utilisateurs réels : casser l'app pendant 10 minutes n'est pas grave. Pas de confirmation."
+        },
+        "standard": {
+          "label": "Standard",
+          "text": "Utilisateurs internes réels. Les publications et les réglages demandent d'abord votre accord."
+        },
+        "critical": {
+          "label": "Critique",
+          "text": "Données métier ou utilisateurs externes. Le code passe par une pull request, les publications nécessitent une approbation dans le CMP."
+        }
+      },
+      "actions": {
+        "read": "Lire l'état, les logs, les coûts",
+        "projectCreate": "Créer un projet",
+        "appCreate": "Créer une application",
+        "codePush": "Pousser le code d'application",
+        "codePushSensitive": "Modifier la CI, le Dockerfile, les réglages de déploiement",
+        "releaseCut": "Publier une version",
+        "releasePromote": "Promouvoir un canary",
+        "releaseRetry": "Relancer une vérification en échec",
+        "releaseSkip": "Ignorer une vérification",
+        "releaseAbort": "Annuler un déploiement progressif",
+        "releaseSettings": "Modifier les réglages de publication",
+        "appDelete": "Supprimer une application"
+      },
+      "outcomes": {
+        "allow": "Seul, sans demander",
+        "ask": "Demande dans le chat",
+        "pr": "Pull request",
+        "confirm": "Approbation dans le CMP",
+        "deny": "Uniquement dans le CMP"
+      },
+      "saved": "Enregistré",
+      "adminsOnly": "Seuls les admins du projet peuvent modifier cela.",
+      "pendingTitle": "En attente d'une approbation",
+      "stakeTitle": "Ce qui est en jeu dans ce projet",
+      "stakeText": "Définit la liberté d'action des assistants IA ici. Suggéré :",
+      "windowTitle": "Fenêtre autonome",
+      "windowActive": "Les assistants agissent comme sur un projet de démo jusqu'à {time}.",
+      "windowIdle": "Laissez les assistants travailler sans demander pendant quelques heures, pour une session de travail.",
+      "closeNow": "Fermer maintenant",
+      "hours": "{hours} h",
+      "rulesTitle": "Ce que fait un assistant ici ({level})",
+      "rulesNote": "Pendant qu'une alerte est active sur une application, annuler ou relancer son déploiement progressif reste toujours permis. Chaque action figure dans l'onglet Activité, avec l'assistant qui l'a faite."
+    },
+    "connected": {
+      "title": "Assistants IA connectés",
+      "description": "Assistants qui agissent sur CNP avec vos droits. Déconnecter un assistant coupe son accès immédiatement.",
+      "connectOne": "Connecter un assistant",
+      "empty": "Aucun assistant connecté.",
+      "meta": "{scope} · connecté {created} · dernière utilisation {lastUsed}",
+      "revoked": "{name} déconnecté",
+      "revokeFailed": "Impossible de déconnecter l'assistant. Réessayez.",
+      "disconnect": "Déconnecter"
+    },
+    "confirmation": {
+      "done": {
+        "approved": "Approuvé. Retournez voir votre assistant et demandez-lui de continuer.",
+        "denied": "Refusé. L'assistant ne le fera pas.",
+        "expired": "Cette demande a expiré. Redemandez à votre assistant si c'est toujours nécessaire.",
+        "used": "Déjà fait."
+      },
+      "notFound": "Cette demande n'existe pas ou n'est pas dans un de vos projets.",
+      "decideFailed": "Impossible d'enregistrer votre décision.",
+      "critical": "Projet critique · une personne doit intervenir",
+      "project": "Projet",
+      "askedBy": "Demandé par",
+      "askedVia": "{user}, via un assistant",
+      "action": "Action",
+      "expires": "Expire le",
+      "decline": "Refuser",
+      "approve": "Approuver"
+    },
+    "connectAi": {
+      "title": "Connectez votre assistant IA à CNP",
+      "lead": "Demandez en langage courant : l'assistant crée l'application, écrit le code, la publie et suit le déploiement, avec votre connexion d'entreprise et vos droits.",
+      "install": "Installation",
+      "setUp": "Mise en place",
+      "asksTitle": "Ce que vous pouvez demander",
+      "who": {
+        "anyone": "Tout le monde",
+        "manager": "Responsable",
+        "developer": "Développeur"
+      },
+      "asks": {
+        "ask1": "« Mettez en ligne une page avec le programme du séminaire d'octobre. »",
+        "ask2": "« Ajoutez le plan du lieu à ma page du séminaire et publiez-la. »",
+        "ask3": "« Donnez-moi un état des applications de mon équipe, en une page, pour cette semaine. »",
+        "ask4": "« Pourquoi le canary de billing-api est-il bloqué ? Lisez d'abord les logs. »",
+        "ask5": "« Publiez ce qui est sur main en version mineure et suivez le déploiement. »"
+      },
+      "guardrailsTitle": "Ce qui assure la sécurité",
+      "guardrails": {
+        "rights": {
+          "title": "Vos droits, rien de plus",
+          "text": "L'assistant agit en tant que vous : il voit et modifie uniquement ce que vous pouvez voir et modifier dans le CMP."
+        },
+        "checks": {
+          "title": "Des contrôles adaptés aux enjeux",
+          "text": "Sur un projet bac à sable ou de démo, il agit directement. Sur un projet avec de vrais utilisateurs, il vous demande d'abord. Sur un projet critique, une personne approuve dans le CMP."
+        },
+        "traced": {
+          "title": "Tout est tracé",
+          "text": "Chaque action indique qui l'a demandée et via quel assistant. Vous pouvez déconnecter un assistant à tout moment depuis votre compte."
+        }
+      }
+    }
+  },
+  "welcome": {
+    "meta": {
+      "title": "CNP : mettez vos applications dans le cloud hybride en quelques clics",
+      "description": "CNP est une plateforme en libre-service pour déployer, sécuriser et superviser vos applications sur OpenStack et AWS. Ni CLI, ni Terraform, ni ticket IT."
+    },
+    "tagline": "Plateforme cloud native",
+    "logIn": "Se connecter",
+    "hero": {
+      "badge": "Déploiements en libre-service sur OpenStack + AWS, désormais depuis votre assistant IA",
+      "title": "Mettez vos apps dans le cloud en <accent>quelques clics</accent>, ou en une phrase à votre assistant IA",
+      "lead": "{platform} permet à vos équipes de déployer, sécuriser et superviser des stacks applicatives complètes sur un cloud hybride. Ni CLI, ni connaissance de Terraform, ni ticket IT. Du dépôt Git à une app en service et supervisée en moins de deux minutes.",
+      "getStarted": "Commencer : se connecter",
+      "connect": "Connecter votre assistant IA"
+    },
+    "stats": {
+      "repo": "du dépôt à l'application en service",
+      "faster": "plus rapide qu'une mise en place manuelle",
+      "success": "taux de réussite des déploiements",
+      "spend": "de dépenses cloud en moins grâce au FinOps",
+      "illustrative": "Chiffres indicatifs, basés sur un usage typique de la plateforme."
+    },
+    "services": {
+      "title": "Tout ce qu'il faut pour mettre en ligne",
+      "intro": "Une seule plateforme couvre le parcours complet, du premier déploiement aux applications en production, avec les contrôles de coûts et d'accès pour les garder en bonne santé.",
+      "oneClick": {
+        "title": "Déploiements en un clic",
+        "desc": "Mettez votre projet en ligne d'un seul clic. CNP provisionne l'infrastructure, configure le réseau et déploie votre application. Il vous suffit d'appuyer sur Déployer."
+      },
+      "templates": {
+        "title": "Modèles prêts à l'emploi",
+        "desc": "Partez d'un modèle sélectionné (FastAPI · Python, HTML/CSS statique) ou apportez le vôtre. Importez un dépôt Git existant, nous nous chargeons du reste."
+      },
+      "secrets": {
+        "title": "Gestion des secrets",
+        "desc": "Stockez clés d'API, jetons et identifiants dans un coffre géré par Vault. Les secrets sont chiffrés, limités à votre projet et injectés à l'exécution, jamais dans votre code."
+      },
+      "rbac": {
+        "title": "Gestion d'équipe RBAC",
+        "desc": "Invitez vos coéquipiers et contrôlez précisément qui peut voir, déployer ou administrer chaque projet, grâce à un contrôle d'accès par rôles détaillé."
+      },
+      "visible": {
+        "title": "Applications visibles dans la plateforme",
+        "desc": "Chaque application déployée obtient une entrée en direct sur CNP : ouvrez-la, partagez-la et accédez à votre service depuis le tableau de bord."
+      },
+      "health": {
+        "title": "Santé en temps réel",
+        "desc": "Des contrôles de santé continus affichent l'état en direct de chaque application : vous repérez les problèmes dès leur apparition, et non des heures plus tard."
+      },
+      "finops": {
+        "title": "FinOps intégré",
+        "desc": "Suivez le coût de chaque déploiement en temps réel, repérez les plus coûteux et gardez votre facture cloud sous contrôle, sans tableur."
+      },
+      "identity": {
+        "title": "Comptes basés sur l'identité",
+        "desc": "Connectez-vous via votre fournisseur d'identité (IDP). Authentification unique, identité centralisée et aucun mot de passe supplémentaire à gérer."
+      }
+    },
+    "benefits": {
+      "kicker": "Pourquoi les équipes choisissent {platform}",
+      "title": "Moins de plomberie. Plus de livraisons.",
+      "text": "{platform} supprime les frictions entre votre code et le cloud, pour que votre équipe consacre son énergie au produit, pas à l'infrastructure.",
+      "start": "Commencer à déployer",
+      "steps": {
+        "title": "Suivez chaque étape du déploiement en direct",
+        "desc": "Observez chaque étape de votre déploiement se dérouler en temps réel (provisionnement, build, mise en production), avec une transparence totale plutôt qu'une boîte noire."
+      },
+      "simple": {
+        "title": "Aussi simple ou aussi poussé que vous le voulez",
+        "desc": "Des valeurs par défaut raisonnables permettent aux non-experts de publier en quelques minutes, et chaque réglage reste entièrement personnalisable pour les équipes qui veulent un contrôle fin."
+      },
+      "visibility": {
+        "title": "Visibilité en temps réel",
+        "desc": "La supervision en direct vous tient informé de la santé et du comportement de vos applications d'un coup d'œil : moins de temps à deviner, plus de temps à construire."
+      },
+      "catalogue": {
+        "title": "Un catalogue qui fait le plus gros du travail",
+        "desc": "Un catalogue de services et de modèles en constante croissance supprime le code répétitif et rend le développement et le déploiement nettement plus simples."
+      },
+      "docs": {
+        "title": "Documentation automatique",
+        "desc": "CNP génère la documentation directement dans le dépôt de chaque application déployée. Votre projet reste documenté sans effort supplémentaire."
+      }
+    },
+    "numbers": "En chiffres",
+    "cta": {
+      "title": "Votre prochain déploiement est à un clic",
+      "text": "Connectez-vous avec votre fournisseur d'identité et déployez dès aujourd'hui votre premier projet sur {platform}.",
+      "button": "Se connecter pour commencer",
+      "cli": "Aucun CLI requis",
+      "terraform": "Pas de Terraform",
+      "ticket": "Aucun ticket IT"
+    },
+    "footer": {
+      "tagline": "Plateforme cloud native",
+      "excellence": "L'excellence depuis 2026."
+    }
+  },
+  "links": {
+    "argocd_project": "Argo CD",
+    "argocd_component": "Argo CD",
+    "status": "Statut",
+    "offhours": "Mise en veille",
+    "vault": "Vault",
+    "grafana_org": "Grafana",
+    "github_repo": "Dépôt GitHub",
+    "github_actions": "GitHub Actions"
+  },
+  "health": {
+    "title": "Santé",
+    "overall": "État global",
+    "refresh": "Actualiser",
+    "expand": "Déplier",
+    "collapse": "Replier",
+    "fetchFailed": "Impossible de récupérer la santé",
+    "noComponents": "Aucun composant trouvé",
+    "states": {
+      "healthy": "Sain",
+      "degraded": "Dégradé",
+      "down": "En panne",
+      "asleep": "Endormie",
+      "not_connected": "Non connecté",
+      "unknown": "Inconnu"
+    },
+    "summary": {
+      "healthy": "Tous les composants fonctionnent",
+      "degraded": "Un composant est dégradé",
+      "down": "Un composant n'a aucun réplica prêt",
+      "asleep": "Hors des heures de service",
+      "not_connected": "Le cluster est injoignable",
+      "unknown": "État impossible à déterminer"
+    },
+    "reasons": {
+      "crashloop": "Le conteneur redémarre en boucle",
+      "no_ready_replica": "Aucun réplica prêt",
+      "rollout_slow": "Réplicas non prêts depuis plus de 5 minutes",
+      "restarts": "Redémarrages répétés en 15 minutes",
+      "sleeping": "Planification hors-heures active",
+      "cluster_unreachable": "Cluster injoignable",
+      "scaled_to_zero": "Aucun réplica demandé",
+      "no_workload": "Aucune charge de travail trouvée"
+    },
+    "components": {
+      "frontend": "Frontend",
+      "backend": "Backend",
+      "app": "Application"
+    },
+    "replicas": "Réplicas",
+    "restarts": "Redémarrages (15 min)",
+    "argocd": "Argo CD",
+    "argocdUnknown": "Argo CD indisponible",
+    "legacy": {
+      "aws": "Couche frontend AWS",
+      "openstack": "Couche OpenStack",
+      "asgName": "Nom de l'ASG",
+      "desired": "Capacité souhaitée",
+      "health": "Santé",
+      "healthyOf": "{healthy} / {total} sains",
+      "instances": "Instances ({count})",
+      "servers": "Serveurs ({count})",
+      "noInstances": "Aucune instance trouvée",
+      "noServers": "Aucun serveur trouvé"
+    }
+  },
+  "actions": {
+    "tools": "Outils",
+    "toolsGroups": {
+      "view": "Voir",
+      "code": "Code",
+      "admin": "Admin"
+    },
+    "toolsEmpty": "Aucun outil disponible",
+    "openApp": "Ouvrir l'application",
+    "more": "Plus d'actions",
+    "refresh": "Actualiser",
+    "refreshed": "Données actualisées",
+    "sleep": "Endormir maintenant",
+    "wake": "Réveiller",
+    "restart": "Redémarrer",
+    "settings": "Paramètres",
+    "deleteApp": "Supprimer l'application…",
+    "newApp": "Nouvelle app",
+    "deleteProject": "Supprimer le projet…",
+    "externalLink": "S'ouvre dans un nouvel onglet",
+    "reasons": {
+      "loading": "Lecture de l'état en cours",
+      "noSchedule": "Aucune planification de mise en veille sur cette application",
+      "unavailable": "Le cluster n'autorise pas cette action pour l'instant",
+      "asleep": "Réveillez l'application avant de la redémarrer",
+      "busy": "Opération en cours sur l'application"
+    },
+    "toasts": {
+      "sleeping": "{name} est en cours de mise en veille",
+      "woken": "{name} se réveille",
+      "restarting": "{name} redémarre",
+      "deleting": "Suppression de {name} lancée",
+      "projectDeleting": "Suppression du projet {name} lancée"
+    },
+    "errors": {
+      "loadTemplates": "Impossible de charger les modèles",
+      "deploy": "Échec du déploiement : {message}",
+      "deployStarted": "Déploiement de {name} lancé",
+      "wake": "Échec du réveil : {message}",
+      "notAllowed": "Votre rôle ne permet pas cette action"
+    }
+  },
+  "confirm": {
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "pending": "En cours…",
+    "typeToConfirm": "Tapez {name} pour confirmer",
+    "consequencesLabel": "Ce qui sera perdu",
+    "failed": "Échec : {message}",
+    "sleep": {
+      "title": "Endormir {name} maintenant ?",
+      "description": "L'application sera indisponible pour tous ses utilisateurs jusqu'à son réveil, manuel ou planifié. Ses données ne sont pas touchées.",
+      "confirm": "Endormir"
+    },
+    "restart": {
+      "title": "Redémarrer {name} ?",
+      "description": "Les pods sont recréés progressivement. Les utilisateurs connectés peuvent voir des erreurs ou perdre leur session pendant quelques secondes.",
+      "confirm": "Redémarrer"
+    },
+    "deleteApp": {
+      "title": "Supprimer l'application {name} ?",
+      "description": "Cette action est définitive et ne peut pas être annulée. Tous les membres du projet perdent l'accès à cette application.",
+      "consequences": {
+        "resources": "Toutes les ressources déployées, détruites avec Terraform",
+        "data": "Les données et la configuration de l'application dans le cluster",
+        "users": "L'accès de ses utilisateurs, immédiatement"
+      },
+      "confirm": "Supprimer l'application"
+    },
+    "deleteProject": {
+      "title": "Supprimer le projet {name} ?",
+      "description": "Cette action est définitive et ne peut pas être annulée. Tous les membres du projet perdent l'accès.",
+      "consequences": {
+        "apps": "Les applications du projet (aucune ne reste à ce stade)",
+        "vault": "Les secrets Vault du projet",
+        "grafana": "L'organisation Grafana et ses tableaux de bord",
+        "keycloak": "Les groupes Keycloak (admins, membres, invités)",
+        "argocd": "Le projet Argo CD (AppProject)"
+      },
+      "confirm": "Supprimer le projet"
+    },
+    "projectHasApps": {
+      "title": "Impossible de supprimer {name}",
+      "description": "{count, plural, one {# application reste} other {# applications restantes}} dans ce projet. Supprimez-les d'abord, puis revenez ici.",
+      "open": "Ouvrir {name}"
+    }
+  },
+  "environments": {
+    "lane": {
+      "unreachable": "Cluster injoignable",
+      "asleep": "En veille, hors heures ouvrées",
+      "converged": "Une seule version, pods prêts",
+      "notConverged": "Déploiement en cours ou pods non prêts",
+      "wake": "Réveiller"
+    },
+    "wakeStarted": "Staging se réveille",
+    "stepKind": {
+      "run": "Vérification",
+      "soak": "Temps en staging",
+      "approve": "Approbation",
+      "promote": "Mise en prod"
+    },
+    "promotionStatus": {
+      "running": "En cours",
+      "waiting_approval": "En attente",
+      "done": "En prod",
+      "failed": "Échouée",
+      "cancelled": "Annulée"
+    },
+    "promotion": {
+      "titleVersion": "Promotion de {version} vers la prod",
+      "titleRelease": "Promotion de la release vers la prod",
+      "emergency": "Urgence",
+      "accept": "Accepter",
+      "approve": "Approuver",
+      "cancel": "Annuler la promotion",
+      "requestedBy": "Demandée par {actor} le {date}",
+      "requestedByReason": "Demandée par {actor} le {date} · {reason}"
+    },
+    "runStatus": {
+      "running": "En cours",
+      "passed": "OK",
+      "failed": "Échec",
+      "inconclusive": "Inconclusif",
+      "cancelled": "Annulé",
+      "error": "Erreur"
+    },
+    "runs": {
+      "title": "Suites de vérification sur staging",
+      "empty": "Aucune suite lancée sur staging pour l'instant.",
+      "launched": "Suite {suite} lancée sur staging",
+      "columns": {
+        "suite": "Suite",
+        "version": "Version",
+        "result": "Résultat",
+        "detail": "Détail",
+        "startedAt": "Lancée"
+      },
+      "logs": "logs",
+      "cancel": "Annuler"
+    },
+    "history": {
+      "title": "Historique des promotions",
+      "columns": {
+        "version": "Version",
+        "status": "Statut",
+        "by": "Par",
+        "when": "Quand",
+        "commit": "Commit"
+      },
+      "rollbackTag": "(retour)",
+      "rollback": "Revenir à cette version",
+      "rolledBackStarted": "Retour à {version} lancé"
+    },
+    "emergency": {
+      "reasonLabel": "Raison de l'urgence (tracée et notifiée)",
+      "reasonPlaceholder": "Correctif du paiement en échec en prod",
+      "cancel": "Annuler l'urgence",
+      "toggle": "Urgence…"
+    },
+    "promote": {
+      "emergency": "Mettre en prod en urgence",
+      "now": "Mettre en prod",
+      "request": "Demander la mise en prod",
+      "alreadyInProd": "La prod tourne déjà la version de staging.",
+      "stagingNotReady": "Staging doit tourner une seule version, pods prêts.",
+      "explainer": "La mise en prod envoie l'image exacte qui tourne en staging, puis la stratégie de release de la prod (canary ou rolling) prend le relais dans l'onglet Release."
+    },
+    "policy": {
+      "saved": "Politique de promotion enregistrée",
+      "title": "Étapes de promotion",
+      "intro": "Une promotion passe toujours par le smoke de la plateforme sur staging, puis par les suites choisies ici, dans cet ordre. Un résultat ne vaut que pour la version testée et reste valable 7 jours.",
+      "platformAlways": "plateforme, toujours",
+      "suiteName": "Nom",
+      "externalSuite": "Workflow GitHub",
+      "metricsSuite": "Métriques Envoy",
+      "removeSuite": "Retirer {name}",
+      "workflowFile": "Fichier du workflow",
+      "timeoutMinutes": "Délai max (min)",
+      "windowMinutes": "Fenêtre (min)",
+      "minRequests": "Requêtes min.",
+      "errorsMax": "Erreurs max (%)",
+      "p95Max": "p95 max (ms)",
+      "ifNotEnoughTraffic": "Si pas assez de trafic",
+      "noRealTraffic": "Staging n'a pas de trafic réel : lancez une suite de charge, la recette ou le trafic de démo juste avant.",
+      "addExternal": "Workflow GitHub",
+      "addMetrics": "Métriques",
+      "soak": "Temps en staging éveillé (min, 0 = aucun)",
+      "approval": "Approbation d'un admin",
+      "auto": "Promotion automatique",
+      "adminNote": "Sans le rôle admin, lancer une promotion revient à la demander : une approbation par un autre admin est ajoutée. La promotion automatique démarre dès qu'une nouvelle version tourne en staging et s'arrête à l'approbation s'il y en a une.",
+      "save": "Enregistrer"
+    },
+    "inconclusive": {
+      "ask": "Demander à un admin",
+      "fail": "Bloquer",
+      "pass": "Laisser passer (tracé)"
+    },
+    "offhours": {
+      "label": "Mettre staging en veille hors des heures ouvrées",
+      "hint": "Offhours-guard endort les pods de staging, jamais ceux de la prod. La base reste allumée. Une release candidate ou un test réveille staging le temps de tourner.",
+      "sleepCron": "Mise en veille (cron)",
+      "wakeCron": "Réveil (cron)",
+      "timezone": "Fuseau horaire"
+    },
+    "staging": {
+      "title": "Environnement staging",
+      "intro": "Avec staging, un tag <code>vX.Y.Z-rc.N</code> déploie la version en staging seulement. La prod ne change plus que par une promotion depuis cet onglet, qui envoie exactement l'image testée. Staging double à peu près la mémoire de l'app en journée : gardez-le pour les apps qui en ont l'usage.",
+      "adminOnly": "Seul un admin du projet peut activer staging.",
+      "enable": "Activer staging",
+      "enableStarted": "Création de staging lancée",
+      "titleWithState": "Staging · {state}",
+      "saveSchedule": "Enregistrer la veille",
+      "scheduleSaved": "Veille de staging enregistrée",
+      "confirmDelete": "Confirmer : supprimer staging et sa base",
+      "disable": "Désactiver staging",
+      "deleteStarted": "Suppression de staging lancée"
+    },
+    "stagingState": {
+      "provisioning": "Création en cours",
+      "ready": "Actif",
+      "failed": "En échec",
+      "removing": "Suppression en cours"
+    }
+  },
+  "release": {
+    "name": {
+      "numbered": "Release #{revision}",
+      "plain": "Release"
+    },
+    "duration": {
+      "seconds": "{count} s",
+      "minutes": "{count} min",
+      "minutesSeconds": "{minutes} min {seconds} s",
+      "hoursMinutes": "{hours} h {minutes}"
+    },
+    "metric": {
+      "percent": "{value} %",
+      "milliseconds": "{value} ms",
+      "withUnit": "{value} {unit}"
+    },
+    "disabled": {
+      "title": "Release non activée",
+      "rolling": "Cette application est mise à jour en rolling update : chaque nouvelle version remplace les pods directement. Pour la livrer progressivement, avec une part du trafic d'abord, une analyse automatique des erreurs et une validation manuelle, passez la stratégie en Canary dans les réglages ci-dessous, ou dans la section <code>release</code> du fichier values du dépôt.",
+      "synced": "Une fois le changement synchronisé par Argo CD, la version suivante passe par les étapes du préréglage."
+    },
+    "banner": {
+      "canaryRejected": "Canary rejeté automatiquement · {release}",
+      "aborted": "{release} abandonnée",
+      "degraded": "{release} dégradée",
+      "metricReachedThreshold": "{name} a atteint {value} pour un seuil de {threshold}.",
+      "metricReached": "{name} a atteint {value}.",
+      "stableServes": "Le stable {stable} sert 100 % du trafic. Pour corriger, poussez un nouveau commit : la prochaine version repartira en canary.",
+      "forced": "{release} promue de force",
+      "forcedBody": "{stable} sert 100 % du trafic. Des étapes ont été ignorées, le motif est enregistré dans l'historique.",
+      "promoted": "{release} promue",
+      "stableIs": "{stable} est le stable."
+    },
+    "split": {
+      "title": "Répartition du trafic",
+      "ariaLabel": "Stable {stable} %, canary {canary} %",
+      "percent": "{value} %",
+      "stableTag": "Stable {tag}",
+      "canaryTag": "Canary {tag}"
+    },
+    "pods": {
+      "ready": "pods prêts"
+    },
+    "revisions": {
+      "title": "Révisions",
+      "empty": "Aucun ReplicaSet actif."
+    },
+    "role": {
+      "stable": "stable",
+      "canary": "canary"
+    },
+    "activity": {
+      "title": "Activité",
+      "empty": "Aucune activité enregistrée pour cette release.",
+      "started": "Release #{revision} démarrée",
+      "reason": "motif : « {reason} »"
+    },
+    "action": {
+      "continued": "a continué la release",
+      "promotedAll": "a tout promu",
+      "skippedStep": "a passé une étape",
+      "aborted": "a abandonné la release"
+    },
+    "outcome": {
+      "running": "En cours",
+      "promoted": "Promue",
+      "aborted_auto": "Rejetée auto",
+      "aborted_manual": "Abandonnée",
+      "superseded": "Remplacée"
+    },
+    "errors": {
+      "readState": "Impossible de lire l'état de la release : {error}"
+    },
+    "history": {
+      "title": "Historique des releases",
+      "empty": "Aucune release enregistrée pour cette application.",
+      "columns": {
+        "revision": "Révision",
+        "version": "Version",
+        "outcome": "Résultat",
+        "progress": "Progression",
+        "startedAt": "Démarrée",
+        "duration": "Durée"
+      },
+      "forced": "Forcée",
+      "reason": "Motif : {reason}"
+    },
+    "phase": {
+      "Progressing": "En cours",
+      "Paused": "En pause",
+      "Healthy": "Stable",
+      "Degraded": "Dégradée",
+      "Aborted": "Abandonnée"
+    },
+    "badges": {
+      "forced": "Forcée"
+    },
+    "live": {
+      "stream": "Temps réel",
+      "polling": "Actualisé toutes les 3 s",
+      "connecting": "Connexion…"
+    },
+    "fields": {
+      "version": "Version",
+      "toward": "vers",
+      "step": "Étape",
+      "eta": "Fin estimée",
+      "startedSr": "Démarrée",
+      "startedOn": "Démarrée le {date}"
+    },
+    "eta": {
+      "approx": "≈ {duration}",
+      "afterApproval": "après validation"
+    },
+    "actions": {
+      "promoteAll": "Tout promouvoir",
+      "abort": "Abandonner"
+    },
+    "confirm": {
+      "promoteAllTitle": "Tout promouvoir maintenant ?",
+      "abortTitle": "Abandonner la release ?",
+      "promoteAllBody": "Les étapes restantes, analyses comprises, seront ignorées. La release sera marquée « forcée ».",
+      "abortBody": "Le trafic repasse à 100 % sur le stable. La version rejetée reste dans Git jusqu'au prochain commit.",
+      "reason": "Motif",
+      "reasonOptional": "Motif (facultatif)",
+      "submit": "Confirmer",
+      "cancel": "Annuler"
+    },
+    "toast": {
+      "promotedAll": "Release promue à 100 %",
+      "aborted": "Release abandonnée, le stable sert 100 % du trafic",
+      "nextStep": "Étape suivante lancée",
+      "stepSkipped": "Étape passée, release marquée « forcée »"
+    },
+    "steps": {
+      "title": "Étapes",
+      "preset": "préréglage {preset}",
+      "empty": "Aucune étape progressive pour cette stratégie."
+    },
+    "metrics": {
+      "compliant": "(conforme)",
+      "outOfRange": "(hors seuil)",
+      "threshold": "seuil {value}"
+    },
+    "stepMessage": {
+      "inconclusive": "Pas assez de trafic sur la nouvelle version pour conclure : le nombre de requêtes canary est resté sous le minimum. La release attend votre décision : passer l'étape, tout promouvoir ou abandonner."
+    },
+    "time": {
+      "approx": "≈ {duration}",
+      "runningOf": "{elapsed} / ≈ {expected}"
+    },
+    "stepKind": {
+      "analysis": "analyse",
+      "setWeight": "poids",
+      "pause": "pause",
+      "scale": "pods"
+    },
+    "stepStatus": {
+      "done": "terminée",
+      "active": "en pause, action requise",
+      "running": "en cours",
+      "pending": "à venir",
+      "failed": "en échec",
+      "skipped": "ignorée"
+    },
+    "scale": {
+      "preparing": "Préparation des pods canary"
+    },
+    "stepper": {
+      "running": "En cours…",
+      "continue": "Continuer"
+    },
+    "skip": {
+      "button": "Passer l'étape",
+      "warning": "L'analyse sera arrêtée et la release marquée « forcée ».",
+      "reason": "Motif",
+      "cancel": "Annuler"
+    },
+    "progress": {
+      "reached": "Étape {reached} sur {total}",
+      "unknown": "Progression inconnue"
+    },
+    "settings": {
+      "loadFailed": "Impossible de lire les réglages de la release : {error}",
+      "title": "Réglages de la release",
+      "savedIn": "Enregistrés dans Git, section <code>release</code> de {files}. Modifier le fichier à la main revient au même.",
+      "noSection": "Aucune section <code>release</code> dans Git : ce sont les valeurs par défaut de la plateforme.",
+      "strategy": "Stratégie",
+      "fullstackCanary": "Application fullstack : le canary s'applique au frontend, qui est exposé. Le backend reste en rolling update, car il n'a pas de route propre : le frontend lui relaie <code>/api</code>.",
+      "canaryUnavailable": "Canary indisponible pour l'instant : {reason}",
+      "migrationsWithCommand": "Les migrations seront activées dans le même commit, avec <code>{command}</code>.",
+      "preset": "Préréglage",
+      "smokeThen": "Smoke test → {steps}",
+      "stickiness": "Affinité de session",
+      "smokePath": "Chemin du smoke test",
+      "errorRate": "Taux d'erreur max (%)",
+      "minRequests": "Requêtes minimum",
+      "inconclusiveNote": "Sous le minimum de requêtes dans la fenêtre d'analyse, le résultat est « non concluant » et la release se met en pause.",
+      "allowForce": "Autoriser « Tout promouvoir »",
+      "allowForceHint": "Passer directement à 100 % avec une raison, tracée dans l'historique.",
+      "upToDate": "Réglages déjà à jour dans Git.",
+      "committed": "Réglages commités. Argo CD les applique à la prochaine synchronisation ; la prochaine version suivra cette stratégie.",
+      "keptRolling": "Le {component} reste en rolling update : il n'est pas exposé directement, le frontend lui relaie /api. Le canary s'applique au frontend.",
+      "inProgress": "Une release est en cours : promouvez-la ou annulez-la avant de changer ses réglages.",
+      "adminOnly": "Seuls les admins du projet peuvent changer ces réglages.",
+      "save": "Enregistrer dans Git"
+    },
+    "presets": {
+      "safe": {
+        "label": "Safe",
+        "steps": "10 % → analyse 2 min → 25 % → validation manuelle → 50 % → analyse 2 min → 100 %"
+      },
+      "fast": {
+        "label": "Fast",
+        "steps": "25 % → analyse 1 min → 100 %"
+      },
+      "demo": {
+        "label": "Démo",
+        "steps": "10 % → analyse 30 s → 50 % → pause 10 s → 100 %"
+      },
+      "manual": {
+        "label": "Manuel",
+        "steps": "10 % → validation manuelle → 50 % → validation manuelle → 100 %"
+      }
+    },
+    "strategies": {
+      "rolling": {
+        "label": "Rolling update",
+        "hint": "Chaque nouvelle version remplace les pods directement, sans étape."
+      },
+      "canary": {
+        "label": "Canary",
+        "hint": "La nouvelle version reçoit d'abord une part du trafic, analysée avant d'aller plus loin."
+      }
+    },
+    "stickiness": {
+      "cookie": "Cookie : chaque utilisateur reste sur la version qui l'a servi",
+      "none": "Aucune : chaque requête est tirée au sort"
+    },
+    "blockers": {
+      "db_without_migrations": {
+        "title": "Activer les migrations pour passer en Canary",
+        "short": "l'app a une base de données sans migrations.",
+        "why": "Pendant un canary, l'ancienne et la nouvelle version tournent ensemble sur la même base. La plateforme doit donc migrer le schéma une seule fois, avant le démarrage de la nouvelle version : c'est le Job de migration du standard CNP."
+      },
+      "no_route": {
+        "title": "Exposer l'app pour passer en Canary",
+        "short": "l'app n'est pas exposée.",
+        "why": "Le canary répartit le trafic entre les deux versions via la route HTTP de l'app. Sans exposition, il n'y a pas de trafic à répartir.",
+        "fix": "Activez l'exposition dans l'onglet Configuration, section Exposition, puis revenez ici."
+      },
+      "no_service": {
+        "title": "Le canary a besoin du Service de l'app",
+        "short": "le Service de l'app est désactivé.",
+        "why": "Le canary route le trafic vers deux Services, stable et canary, construits à partir de celui de l'app.",
+        "fix": "Réactivez service.enabled dans la configuration de l'app."
+      }
+    },
+    "migrations": {
+      "commandLabel": "Commande de migration de l'image",
+      "commandHint": "<code>/app/migrate</code> pour le template FastAPI + React. Elle doit être idempotente : relancée sans rien à faire, elle sort en 0.",
+      "databaseHint": "L'app n'utilise pas sa base ? Désactivez-la plutôt dans l'onglet Configuration, section Base de données. Attention, cela supprime la base.",
+      "enable": "Activer les migrations et passer en Canary"
+    },
+    "dialog": {
+      "cancel": "Annuler",
+      "close": "Fermer"
+    },
+    "traffic": {
+      "title": "Trafic de démo",
+      "intro": "Le CMP joue des visiteurs : un utilisateur technique se connecte par le SSO de l'app, puis chaque requête arrive comme un nouveau visiteur. Envoy les répartit selon les poids du canary, et l'analyse les compte comme du vrai trafic.",
+      "ariaCounts": "{stable} réponses stable, {canary} canary, {error} en erreur",
+      "idle": "Aucun trafic de démo en cours",
+      "labels": {
+        "stable": "Stable",
+        "canary": "Canary",
+        "error": "Erreurs"
+      },
+      "total": "{count} au total",
+      "split": "Sur les 10 dernières secondes, Envoy a envoyé {stable} % des requêtes sur stable et {canary} % sur canary, pour des poids configurés de {weightStable} % / {weightCanary} %.",
+      "running": "{rps} req/s · reste {remaining}",
+      "startedBy": "lancé par {user}",
+      "stop": "Arrêter",
+      "rate": "{count} req/s",
+      "minutes": "{count} min",
+      "start": "Générer du trafic",
+      "remainingMinutes": "{minutes} min {seconds} s",
+      "remainingSeconds": "{seconds} s"
+    },
+    "strategyNames": {
+      "rolling": "Rolling",
+      "canary": "Canary",
+      "bluegreen": "Bleu/vert"
+    }
+  },
+  "appPage": {
+    "common": {
+      "restricted": "Réservé aux membres",
+      "retry": "Réessayer",
+      "loadFailed": "Impossible de charger ces données.",
+      "stale": "Données non actualisées depuis {time}",
+      "openGrafana": "Ouvrir dans Grafana, lien externe",
+      "openArgo": "Ouvrir {name} dans Argo CD, lien externe"
+    },
+    "metrics": {
+      "requests": "Requêtes/s",
+      "errors": "Erreurs 5xx (%)",
+      "cpu": "CPU (millicores)",
+      "cost": "Coût du mois",
+      "noTraffic": "Pas de données de trafic",
+      "noData": "Pas de données",
+      "noCost": "Pas de coût pour cette application",
+      "perSecond": "req/s",
+      "last24h": "Sur 24 h",
+      "cpuRequest": "Sur 24 h, demande {value} m",
+      "costNote": "Cumul du mois, estimation {estimate}"
+    },
+    "components": {
+      "title": "Composants"
+    },
+    "logs": {
+      "recent": "Logs récents",
+      "open": "Ouvrir les logs",
+      "emptyRecent": "Aucune ligne de log sur la dernière heure",
+      "region": "Logs de l'application",
+      "level": "Niveau",
+      "allLevels": "Tous les niveaux",
+      "component": "Composant",
+      "allComponents": "Tous les composants",
+      "window": "Période",
+      "windows": {
+        "15m": "15 minutes",
+        "1h": "1 heure",
+        "24h": "24 heures"
+      },
+      "search": "Recherche",
+      "searchPlaceholder": "Filtrer le texte",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "live": "En direct, actualisation toutes les 3 s",
+      "paused": "En pause",
+      "lineCount": "{count, plural, =0 {aucune ligne} one {# ligne} other {# lignes}}",
+      "emptyFiltered": "Aucune ligne ne correspond à ces filtres.",
+      "restricted": "Réservé aux membres",
+      "loadFailed": "Impossible de charger les logs.",
+      "retry": "Réessayer",
+      "stale": "Logs non actualisés, la dernière lecture a échoué.",
+      "levels": {
+        "error": "ERREUR",
+        "warn": "AVERT.",
+        "info": "INFO",
+        "debug": "DEBUG"
+      }
+    },
+    "deployments": {
+      "recent": "Derniers déploiements",
+      "open": "Ouvrir les déploiements",
+      "history": "Historique des déploiements",
+      "empty": "Aucun déploiement enregistré",
+      "version": "Version",
+      "outcome": "Résultat",
+      "who": "Par",
+      "when": "Quand",
+      "duration": "Durée",
+      "automatic": "Automatique",
+      "forced": "Forcée",
+      "outcomes": {
+        "running": "En cours",
+        "promoted": "Promue",
+        "aborted_auto": "Rejetée automatiquement",
+        "aborted_manual": "Abortée",
+        "superseded": "Remplacée"
+      }
+    },
+    "events": {
+      "title": "Événements Kubernetes",
+      "empty": "Aucun événement récent",
+      "warning": "Avertissement",
+      "normal": "Normal",
+      "count": "{count} fois"
+    },
+    "console": {
+      "title": "Console de déploiement",
+      "download": "Télécharger les logs",
+      "clear": "Vider la console",
+      "minimize": "Réduire",
+      "maximize": "Agrandir",
+      "expand": "Déplier la console",
+      "collapse": "Replier la console",
+      "filter": "Filtrer les logs",
+      "matches": "{count, plural, one {# résultat} other {# résultats}}",
+      "noMatch": "Aucune ligne ne correspond au filtre.",
+      "empty": "La console est vide. En attente d'une activité de déploiement.",
+      "cleared": "--- Console vidée ---"
+    },
+    "deploymentStatus": {
+      "pending": "En attente",
+      "initializing": "Initialisation",
+      "planning": "Planification",
+      "deploying": "Déploiement en cours",
+      "deleting": "Suppression en cours",
+      "failed": "Échec du déploiement"
+    },
+    "legacy": {
+      "outputs": "Sorties Terraform",
+      "noOutputs": "Aucune sortie pour le moment."
+    }
+  },
+  "appIcon": {
+    "menu": "Changer l'icône",
+    "title": "Icône de l'application",
+    "description": "Choisissez une icône et une couleur pour {name}, ou importez votre propre image.",
+    "preview": "Aperçu",
+    "shape": "Icône",
+    "color": "Couleur",
+    "reset": "Revenir à l'icône par défaut",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "panel": {
+      "title": "Icône",
+      "description": "Affichée dans les listes et l'en-tête de l'application."
+    },
+    "upload": {
+      "title": "Ou importer une image",
+      "choose": "Choisir une image",
+      "limits": "PNG, JPEG ou WebP, 512 Ko maximum. L'image est recadrée en carré et réduite à 256 px.",
+      "selected": "Image choisie : {name}"
+    },
+    "errors": {
+      "wrongType": "Format refusé. Utilisez une image PNG, JPEG ou WebP.",
+      "tooBig": "Image trop lourde. La taille maximale est 512 Ko.",
+      "storage": "Le stockage des images est indisponible. Les icônes prédéfinies restent utilisables.",
+      "forbidden": "Vous n'avez pas le droit de changer l'icône de cette application.",
+      "generic": "L'icône n'a pas pu être enregistrée. Réessayez."
+    },
+    "icons": {
+      "MessageCircle": "Message",
+      "Globe": "Globe",
+      "Database": "Base de données",
+      "ShoppingCart": "Panier",
+      "BarChart3": "Graphique",
+      "Cpu": "Processeur",
+      "Mail": "Courrier",
+      "Calendar": "Calendrier",
+      "Lock": "Cadenas",
+      "Gamepad2": "Manette",
+      "Leaf": "Feuille",
+      "Package": "Colis"
+    },
+    "colors": {
+      "indigo": "Indigo",
+      "emerald": "Émeraude",
+      "amber": "Ambre",
+      "rose": "Rose",
+      "sky": "Ciel",
+      "slate": "Ardoise"
+    }
+  },
+  "signin": {
+    "redirecting": "Redirection vers Keycloak…",
+    "wait": "Veuillez patienter pendant la redirection vers la page de connexion."
+  },
+  "clusters": {
+    "notConnected": {
+      "title": "Cluster {cloud} non connecté",
+      "body": "Les données de ce projet reviennent quand le cluster est rallumé."
+    }
+  },
+  "favorites": {
+    "title": "Favoris",
+    "recents": "Récents",
+    "add": "Ajouter aux favoris",
+    "remove": "Retirer des favoris",
+    "limitReached": "Vous pouvez avoir au maximum {max} projets favoris et {max} apps favorites.",
+    "saveFailed": "Impossible d’enregistrer vos favoris."
+  },
+  "gettingStarted": {
+    "title": "Pour démarrer",
+    "description": "Quelques étapes pour mettre ce projet en service.",
+    "progress": "{done} sur {total}",
+    "dismiss": "Masquer cette carte",
+    "unknown": "Statut indisponible",
+    "state": {
+      "done": "Fait",
+      "pending": "À faire",
+      "unknown": "Statut indisponible",
+      "loading": "Vérification en cours"
+    },
+    "steps": {
+      "repo": "Relier un dépôt GitHub",
+      "deployed": "Déployer une première application",
+      "release": "Publier une première version",
+      "member": "Ajouter un membre au projet",
+      "budget": "Définir un budget FinOps"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "description": "Événements récents sur vos projets et applications.",
+    "bell": "Notifications, {count, plural, =0 {aucune non lue} one {1 non lue} other {# non lues}}",
+    "markAllRead": "Tout marquer comme lu",
+    "empty": "Aucune notification pour le moment.",
+    "error": "Impossible de charger les notifications.",
+    "loadMore": "Charger plus",
+    "unread": "Non lue",
+    "titles": {
+      "deployment_succeeded": "{app} a été déployée",
+      "deployment_failed": "Le déploiement de {app} a échoué",
+      "app_deleted": "{app} a été supprimée",
+      "app_degraded": "{app} est dégradée",
+      "app_recovered": "{app} est rétablie",
+      "budget_warning": "Alerte budget : {percent} % consommé",
+      "budget_critical": "Budget critique : {percent} % consommé",
+      "budget_forecast": "Dépassement de budget prévu le {date}",
+      "cost_anomaly": "Anomalie de coût sur {app}",
+      "member_added": "Vous êtes désormais {role, select, admin {administrateur} guest {invité} other {membre}} de {project}",
+      "approval_request": "{user} attend votre approbation : {summary}",
+      "unknown": "Nouvelle notification"
+    }
+  },
+  "secretsPresence": {
+    "title": "Secrets",
+    "description": "Les secrets attendus par cette application. Seuls les noms sont affichés, jamais les valeurs.",
+    "set": "Défini",
+    "missing": "Manquant",
+    "define": "Définir",
+    "defineHint": "Ouvre Vault pour définir {name}",
+    "extraTitle": "Présents mais non attendus",
+    "noneExpected": "Cette application ne déclare aucun secret attendu. Déclarez-les sous <code>secrets.keys</code> dans <code>deploy/values*.yaml</code>.",
+    "loadFailed": "Impossible de vérifier les secrets : {message}",
+    "reload": "Revérifier"
+  },
+  "envDiff": {
+    "title": "Différences entre staging et production",
+    "description": "Ce que chaque environnement exécute maintenant, et les valeurs avec lesquelles il est déployé.",
+    "loading": "Lecture des deux environnements",
+    "loadFailed": "Impossible de comparer les environnements : {message}",
+    "stagingOff": "Staging n'est pas activé, il n'y a rien à comparer.",
+    "identical": "Staging et production sont identiques",
+    "columns": {
+      "field": "Champ",
+      "staging": "Staging",
+      "prod": "Production",
+      "status": "Statut"
+    },
+    "differs": "Différent",
+    "same": "Identique",
+    "unknown": "inconnu",
+    "absent": "non défini",
+    "fields": {
+      "imageTag": "Tag de l'image",
+      "imageDigest": "Digest de l'image",
+      "readyReplicas": "Réplicas prêts",
+      "cpuRequest": "Requête CPU",
+      "memoryRequest": "Requête mémoire"
+    },
+    "components": {
+      "app": "Application",
+      "frontend": "Frontend",
+      "backend": "Backend"
+    },
+    "valuesTitle": "Valeurs qui diffèrent",
+    "valuesHint": "Fusion du fichier de valeurs commun et du fichier de chaque environnement. Les secrets ne sont jamais affichés.",
+    "confirm": {
+      "title": "Promouvoir en production ?",
+      "description": "La production exécutera l'image que staging exécute maintenant. Voici les différences entre les deux environnements.",
+      "noDifferences": "Aucune différence trouvée entre staging et production.",
+      "row": "{label} : staging {staging}, production {prod}",
+      "more": "Et {count} autres différences",
+      "confirm": "Promouvoir"
+    }
+  },
+  "scorecard": {
+    "title": "Score",
+    "badgeLabel": "Score {grade}, {score} sur {max}",
+    "sortBy": "Trier par :",
+    "sortName": "Nom",
+    "sortScore": "Score",
+    "criteria": {
+      "security": "Sécurité",
+      "cost": "Coût",
+      "reliability": "Fiabilité",
+      "documentation": "Documentation",
+      "owner": "Responsable"
+    },
+    "reasons": {
+      "source_unavailable": "Ces données sont indisponibles pour le moment.",
+      "no_scan": "Aucun scan de sécurité n'a encore tourné.",
+      "critical_findings": "Des failles critiques sont ouvertes.",
+      "high_findings": "Des failles élevées sont ouvertes.",
+      "no_budget": "Le projet n'a pas de budget.",
+      "over_budget_pace": "Les dépenses dépassent le rythme du budget du mois.",
+      "open_recommendations": "Des recommandations de coût sont ouvertes.",
+      "asleep": "L'application est endormie.",
+      "degraded": "L'application est dégradée.",
+      "down": "L'application est à l'arrêt.",
+      "unknown": "L'état de l'application est inconnu.",
+      "not_connected": "Le cluster n'est pas connecté.",
+      "restarts": "Plus de 5 redémarrages en 15 minutes.",
+      "no_readme": "Pas de README.md à la racine du dépôt.",
+      "readme_short": "Le README fait 20 lignes ou moins.",
+      "project_owner": "Seul le responsable du projet est connu, l'application n'a pas de responsable propre.",
+      "no_owner": "Aucun responsable trouvé."
+    },
+    "actions": {
+      "run_scan": "Lancer un scan",
+      "fix_critical": "Corriger les failles critiques",
+      "fix_high": "Corriger les failles élevées",
+      "set_budget": "Définir un budget",
+      "reduce_cost": "Voir les coûts de l'application",
+      "apply_recommendations": "Examiner les recommandations",
+      "fix_health": "Consulter les logs",
+      "fix_restarts": "Consulter les logs",
+      "add_readme": "Ajouter un README",
+      "expand_readme": "Étoffer le README"
+    }
+  }
+}

@@ -22,68 +22,22 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { getReleaseSettings, updateReleaseSettings } from "@/lib/api";
-import type { CanaryBlockerCode, ReleaseSettings, ReleaseSettingsRead } from "@/types";
+import type { ReleaseSettings, ReleaseSettingsRead } from "@/types";
 import { Loader2, Save, SlidersHorizontal } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "./format";
 
-const STRATEGIES: Record<ReleaseSettings["strategy"], { label: string; hint: string }> = {
-  rolling: {
-    label: "Rolling update",
-    hint: "Chaque nouvelle version remplace les pods directement, sans étape.",
-  },
-  canary: {
-    label: "Canary",
-    hint: "La nouvelle version reçoit d'abord une part du trafic, analysée avant d'aller plus loin.",
-  },
-};
-
-const PRESETS: Record<ReleaseSettings["preset"], { label: string; steps: string }> = {
-  safe: {
-    label: "Safe",
-    steps: "10 % → analyse 2 min → 25 % → validation manuelle → 50 % → analyse 2 min → 100 %",
-  },
-  fast: { label: "Fast", steps: "25 % → analyse 1 min → 100 %" },
-  demo: { label: "Démo", steps: "10 % → analyse 30 s → 50 % → pause 10 s → 100 %" },
-  manual: {
-    label: "Manuel",
-    steps: "10 % → validation manuelle → 50 % → validation manuelle → 100 %",
-  },
-};
-
-const STICKINESS: Record<ReleaseSettings["stickiness"], string> = {
-  cookie: "Cookie : chaque utilisateur reste sur la version qui l'a servi",
-  none: "Aucune : chaque requête est tirée au sort",
-};
-
-const BLOCKERS: Record<
-  CanaryBlockerCode,
-  { title: string; short: string; why: string; fix: string }
-> = {
-  db_without_migrations: {
-    title: "Activer les migrations pour passer en Canary",
-    short: "l'app a une base de données sans migrations.",
-    why: "Pendant un canary, l'ancienne et la nouvelle version tournent ensemble sur la même base. La plateforme doit donc migrer le schéma une seule fois, avant le démarrage de la nouvelle version : c'est le Job de migration du standard CNP.",
-    fix: "",
-  },
-  no_route: {
-    title: "Exposer l'app pour passer en Canary",
-    short: "l'app n'est pas exposée.",
-    why: "Le canary répartit le trafic entre les deux versions via la route HTTP de l'app. Sans exposition, il n'y a pas de trafic à répartir.",
-    fix: "Activez l'exposition dans l'onglet Configuration, section Exposition, puis revenez ici.",
-  },
-  no_service: {
-    title: "Le canary a besoin du Service de l'app",
-    short: "le Service de l'app est désactivé.",
-    why: "Le canary route le trafic vers deux Services, stable et canary, construits à partir de celui de l'app.",
-    fix: "Réactivez service.enabled dans la configuration de l'app.",
-  },
-};
+const STRATEGY_OPTIONS: ReleaseSettings["strategy"][] = ["rolling", "canary"];
+const PRESET_OPTIONS: ReleaseSettings["preset"][] = ["safe", "fast", "demo", "manual"];
+const STICKINESS_OPTIONS: ReleaseSettings["stickiness"][] = ["cookie", "none"];
 
 function componentOf(file: string): string {
   return file.match(/values-(\w+)\.yaml$/)?.[1] ?? file;
 }
+
+const code = (chunks: ReactNode) => <code className="font-mono">{chunks}</code>;
 
 export function ReleaseSettingsCard({
   deploymentId,
@@ -92,6 +46,7 @@ export function ReleaseSettingsCard({
   deploymentId: number;
   inProgress: boolean;
 }) {
+  const t = useTranslations("release");
   const [remote, setRemote] = useState<ReleaseSettingsRead | null>(null);
   const [draft, setDraft] = useState<ReleaseSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +76,7 @@ export function ReleaseSettingsCard({
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Impossible de lire les réglages de la release : {error}
+          {t("settings.loadFailed", { error })}
         </CardContent>
       </Card>
     );
@@ -165,15 +120,14 @@ export function ReleaseSettingsCard({
         .map(([file]) => componentOf(file));
       toast.success(
         Object.keys(saved.commits).length === 0
-          ? "Réglages déjà à jour dans Git."
-          : "Réglages commités. Argo CD les applique à la prochaine synchronisation ; la prochaine version suivra cette stratégie.",
+          ? t("settings.upToDate")
+          : t("settings.committed"),
         { duration: 7000 },
       );
       if (kept.length > 0) {
-        toast.info(
-          `Le ${kept.join(" et le ")} reste en rolling update : il n'est pas exposé directement, le frontend lui relaie /api. Le canary s'applique au frontend.`,
-          { duration: 9000 },
-        );
+        toast.info(t("settings.keptRolling", { component: kept.join(", ") }), {
+          duration: 9000,
+        });
       }
       await load();
     } catch (e) {
@@ -188,29 +142,21 @@ export function ReleaseSettingsCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm">
           <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-          Réglages de la release
+          {t("settings.title")}
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Enregistrés dans Git, section <code className="font-mono">release</code> de{" "}
-          {remote.files.map((f, i) => (
-            <span key={f}>
-              {i > 0 && ", "}
-              <code className="font-mono">{f}</code>
-            </span>
-          ))}
-          . Modifier le fichier à la main revient au même.
+          {t.rich("settings.savedIn", { code, files: remote.files.join(", ") })}
         </p>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         {!remote.declared && (
           <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-            Aucune section <code className="font-mono">release</code> dans Git : ce sont les
-            valeurs par défaut de la plateforme.
+            {t.rich("settings.noSection", { code })}
           </p>
         )}
 
         <div className="space-y-1.5">
-          <Label>Stratégie</Label>
+          <Label>{t("settings.strategy")}</Label>
           <Select
             value={draft.strategy}
             onValueChange={(v) => chooseStrategy(v as ReleaseSettings["strategy"])}
@@ -218,34 +164,36 @@ export function ReleaseSettingsCard({
           >
             <SelectTrigger className="w-full">
               <SelectValue>
-                {(v) => STRATEGIES[v as ReleaseSettings["strategy"]].label}
+                {(v) => t(`strategies.${v as ReleaseSettings["strategy"]}.label`)}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(STRATEGIES).map(([value, s]) => (
+              {STRATEGY_OPTIONS.map((value) => (
                 <SelectItem key={value} value={value}>
-                  {s.label}
+                  {t(`strategies.${value}.label`)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">{STRATEGIES[draft.strategy].hint}</p>
+          <p className="text-xs text-muted-foreground">
+            {t(`strategies.${draft.strategy}.hint`)}
+          </p>
           {draft.strategy === "canary" && remote.files.length > 1 && (
             <p className="text-xs text-muted-foreground">
-              Application fullstack : le canary s&apos;applique au frontend, qui est
-              exposé. Le backend reste en rolling update, car il n&apos;a pas de route
-              propre : le frontend lui relaie <code className="font-mono">/api</code>.
+              {t.rich("settings.fullstackCanary", { code })}
             </p>
           )}
           {blocker && draft.strategy === "rolling" && (
             <p className="text-xs text-muted-foreground">
-              Canary indisponible pour l&apos;instant : {BLOCKERS[blocker.code].short}
+              {t("settings.canaryUnavailable", { reason: t(`blockers.${blocker.code}.short`) })}
             </p>
           )}
           {pendingMigrations && draft.strategy === "canary" && (
             <p className="text-xs text-muted-foreground">
-              Les migrations seront activées dans le même commit, avec{" "}
-              <code className="font-mono">{pendingMigrations.join(" ")}</code>.
+              {t.rich("settings.migrationsWithCommand", {
+                code,
+                command: pendingMigrations.join(" "),
+              })}
             </p>
           )}
         </div>
@@ -253,7 +201,7 @@ export function ReleaseSettingsCard({
         {draft.strategy === "canary" && (
           <>
             <div className="space-y-1.5">
-              <Label>Preset</Label>
+              <Label>{t("settings.preset")}</Label>
               <Select
                 value={draft.preset}
                 onValueChange={(v) => set("preset", v as ReleaseSettings["preset"])}
@@ -261,24 +209,24 @@ export function ReleaseSettingsCard({
               >
                 <SelectTrigger className="w-full">
                   <SelectValue>
-                    {(v) => PRESETS[v as ReleaseSettings["preset"]].label}
+                    {(v) => t(`presets.${v as ReleaseSettings["preset"]}.label`)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(PRESETS).map(([value, p]) => (
+                  {PRESET_OPTIONS.map((value) => (
                     <SelectItem key={value} value={value}>
-                      {p.label}
+                      {t(`presets.${value}.label`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Smoke test → {PRESETS[draft.preset].steps}
+                {t("settings.smokeThen", { steps: t(`presets.${draft.preset}.steps`) })}
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Affinité de session</Label>
+              <Label>{t("settings.stickiness")}</Label>
               <Select
                 value={draft.stickiness}
                 onValueChange={(v) => set("stickiness", v as ReleaseSettings["stickiness"])}
@@ -286,13 +234,13 @@ export function ReleaseSettingsCard({
               >
                 <SelectTrigger className="w-full">
                   <SelectValue>
-                    {(v) => STICKINESS[v as ReleaseSettings["stickiness"]]}
+                    {(v) => t(`stickiness.${v as ReleaseSettings["stickiness"]}`)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(STICKINESS).map(([value, label]) => (
+                  {STICKINESS_OPTIONS.map((value) => (
                     <SelectItem key={value} value={value}>
-                      {label}
+                      {t(`stickiness.${value}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -301,7 +249,7 @@ export function ReleaseSettingsCard({
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label htmlFor="release-smoke">Chemin du smoke test</Label>
+                <Label htmlFor="release-smoke">{t("settings.smokePath")}</Label>
                 <Input
                   id="release-smoke"
                   value={draft.smokePath}
@@ -311,7 +259,7 @@ export function ReleaseSettingsCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="release-error-rate">Taux d&apos;erreur max (%)</Label>
+                <Label htmlFor="release-error-rate">{t("settings.errorRate")}</Label>
                 <Input
                   id="release-error-rate"
                   type="number"
@@ -324,7 +272,7 @@ export function ReleaseSettingsCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="release-min-requests">Requêtes minimum</Label>
+                <Label htmlFor="release-min-requests">{t("settings.minRequests")}</Label>
                 <Input
                   id="release-min-requests"
                   type="number"
@@ -336,17 +284,12 @@ export function ReleaseSettingsCard({
                 />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Sous le minimum de requêtes dans la fenêtre d&apos;analyse, le résultat est
-              « non concluant » et la release se met en pause.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("settings.inconclusiveNote")}</p>
 
             <div className="flex items-center justify-between gap-4">
               <div>
-                <Label htmlFor="release-allow-force">Autoriser « Tout promouvoir »</Label>
-                <p className="text-xs text-muted-foreground">
-                  Passer directement à 100 % avec une raison, tracée dans l&apos;historique.
-                </p>
+                <Label htmlFor="release-allow-force">{t("settings.allowForce")}</Label>
+                <p className="text-xs text-muted-foreground">{t("settings.allowForceHint")}</p>
               </div>
               <Switch
                 id="release-allow-force"
@@ -359,14 +302,11 @@ export function ReleaseSettingsCard({
         )}
 
         {inProgress && (
-          <p className="text-xs text-muted-foreground">
-            Une release est en cours : promouvez-la ou annulez-la avant de changer ses
-            réglages.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("settings.inProgress")}</p>
         )}
         {!remote.canEdit ? (
           <p className="border-t border-border pt-2 text-xs text-muted-foreground">
-            Seuls les admins du projet peuvent changer ces réglages.
+            {t("settings.adminOnly")}
           </p>
         ) : (
           dirty &&
@@ -378,7 +318,7 @@ export function ReleaseSettingsCard({
                 ) : (
                   <Save className="mr-2 h-4 w-4" />
                 )}
-                Enregistrer dans Git
+                {t("settings.save")}
               </Button>
             </div>
           )
@@ -389,14 +329,14 @@ export function ReleaseSettingsCard({
         <Dialog open={blockerOpen} onOpenChange={setBlockerOpen}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>{BLOCKERS[blocker.code].title}</DialogTitle>
-              <DialogDescription>{BLOCKERS[blocker.code].why}</DialogDescription>
+              <DialogTitle>{t(`blockers.${blocker.code}.title`)}</DialogTitle>
+              <DialogDescription>{t(`blockers.${blocker.code}.why`)}</DialogDescription>
             </DialogHeader>
             {blocker.code === "db_without_migrations" ? (
               <div className="space-y-3 text-sm">
                 <div className="space-y-1.5">
                   <Label htmlFor="release-migrations-command">
-                    Commande de migration de l&apos;image
+                    {t("migrations.commandLabel")}
                   </Label>
                   <Input
                     id="release-migrations-command"
@@ -405,30 +345,30 @@ export function ReleaseSettingsCard({
                     className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground">
-                    <code className="font-mono">/app/migrate</code> pour le template
-                    FastAPI + React. Elle doit être idempotente : relancée sans rien à
-                    faire, elle sort en 0.
+                    {t.rich("migrations.commandHint", { code })}
                   </p>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  L&apos;app n&apos;utilise pas sa base ? Désactivez-la plutôt dans
-                  l&apos;onglet Configuration, section Base de données. Attention, cela
-                  supprime la base.
+                  {t("migrations.databaseHint")}
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">{BLOCKERS[blocker.code].fix}</p>
+              <p className="text-sm text-muted-foreground">
+                {t(`blockers.${blocker.code}.fix`)}
+              </p>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setBlockerOpen(false)}>
-                {blocker.code === "db_without_migrations" ? "Annuler" : "Fermer"}
+                {blocker.code === "db_without_migrations"
+                  ? t("dialog.cancel")
+                  : t("dialog.close")}
               </Button>
               {blocker.code === "db_without_migrations" && (
                 <Button
                   onClick={enableMigrationsAndCanary}
                   disabled={migrationsCommand.trim() === ""}
                 >
-                  Activer les migrations et passer en Canary
+                  {t("migrations.enable")}
                 </Button>
               )}
             </DialogFooter>

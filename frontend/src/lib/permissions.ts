@@ -2,7 +2,7 @@
  * What each project role is allowed to do.
  *
  * One table, so the answer is the same on every screen. Import `can` rather
- * than comparing roles inline — a scattered `role === "admin"` is how the
+ * than comparing roles inline, a scattered `role === "admin"` is how the
  * Members tab and the app page end up disagreeing.
  *
  * Mirrors `backend/app/core/roles.py` and the endpoint matrix in
@@ -24,7 +24,9 @@ export const ROLE_RANK: Record<ProjectRole, number> = {
 export type Capability =
   | "project.delete"
   | "app.deploy"
+  | "app.operate"
   | "app.delete"
+  | "app.editIcon"
   | "app.viewLogs"
   | "app.viewConfig"
   | "app.editConfig"
@@ -50,7 +52,9 @@ export type Capability =
 const MIN_ROLE: Record<Capability, ProjectRole> = {
   "project.delete": "admin",
   "app.deploy": "admin",
+  "app.operate": "member",
   "app.delete": "admin",
+  "app.editIcon": "member",
   "app.viewLogs": "member",
   "app.viewConfig": "member",
   "app.editConfig": "admin",
@@ -70,7 +74,7 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
 /**
  * Return true if *role* holds *capability*.
  *
- * A null or undefined role — not loaded yet, or no access to this project —
+ * A null or undefined role, not loaded yet, or no access to this project,
  * holds nothing. Callers should render controls as absent while the role is
  * still loading rather than assume the permissive case.
  */
@@ -82,26 +86,10 @@ export function can(
   return ROLE_RANK[role] >= ROLE_RANK[MIN_ROLE[capability]];
 }
 
-/** Human label for a role, for badges and selects. */
-export const ROLE_LABEL: Record<ProjectRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  member: "Member",
-  guest: "Guest",
-};
-
-/** One-line summary of a role, shown under the project name on cards. */
-export const ROLE_BLURB: Record<ProjectRole, string> = {
-  owner: "Owner",
-  admin: "Full access",
-  member: "Read only",
-  guest: "View only",
-};
-
 /**
  * The Keycloak group backing each role, shown on the project card footer.
  *
- * `owner` has no group — it is the `projects.owner_username` column — so it
+ * `owner` has no group, it is the `projects.owner_username` column, so it
  * reads as the admins group, which the owner always effectively holds.
  */
 export const GROUP_SUFFIX: Record<ProjectRole, string> = {

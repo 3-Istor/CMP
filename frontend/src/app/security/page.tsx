@@ -5,6 +5,7 @@ import { getSecurityOverview, getSecurityRole } from "@/lib/api";
 import { useProjectApps, useProjects } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import type { SecurityProjectOverview, SecurityView } from "@/types";
+import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -12,6 +13,8 @@ const SELECT =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 function SecurityInner() {
+  const t = useTranslations("security.page");
+  const tc = useTranslations("common");
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -54,7 +57,7 @@ function SecurityInner() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         <select
-          aria-label="Projet"
+          aria-label={tc("project")}
           className={SELECT}
           value={project}
           onChange={(e) => navigate({ project: e.target.value, app: null })}
@@ -64,18 +67,19 @@ function SecurityInner() {
             return (
               <option key={p.name} value={p.name}>
                 {p.name}
-                {o ? ` · ${o.grade}${o.core ? ` · ${o.core} obligatoire${o.core > 1 ? "s" : ""}` : ""}` : ""}
+                {o ? ` · ${o.grade}` : ""}
+                {o?.core ? ` · ${t("core", { count: o.core })}` : ""}
               </option>
             );
           })}
         </select>
         <select
-          aria-label="Application"
+          aria-label={t("app")}
           className={SELECT}
           value={app ?? ""}
           onChange={(e) => navigate({ app: e.target.value || null })}
         >
-          <option value="">Tout le projet</option>
+          <option value="">{t("wholeProject")}</option>
           {apps.map((a) => (
             <option key={a.id} value={a.name}>
               {a.name}
@@ -96,7 +100,7 @@ function SecurityInner() {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {v === "developer" ? "Développeur" : "Plateforme"}
+              {v === "developer" ? t("developer") : t("platform")}
             </button>
           ))}
         </div>
@@ -106,7 +110,7 @@ function SecurityInner() {
       {project ? (
         <SecurityDashboard key={`${project}/${app}/${view}`} project={project} app={app} view={view} />
       ) : (
-        <p className="text-sm text-muted-foreground">Aucun projet.</p>
+        <p className="text-sm text-muted-foreground">{tc("noProjects")}</p>
       )}
     </div>
   );

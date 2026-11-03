@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { requestSecurityRestore, type SecurityBackup } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "./labels";
@@ -39,6 +40,8 @@ export function RestoreDialog({
   onClose: () => void;
   onRestored: () => void;
 }) {
+  const t = useTranslations("security");
+  const locale = useLocale();
   const stoppedAt = utc(backup.stopped_at!);
   const [mode, setMode] = useState<"backup" | "time">("backup");
   const [time, setTime] = useState(localInput(new Date()));
@@ -62,7 +65,7 @@ export function RestoreDialog({
       if (dryRun) {
         setPreview(result);
       } else {
-        toast.success("Restauration commitée, Argo CD la déploie dans quelques minutes");
+        toast.success(t("restore.committed"));
         onRestored();
         onClose();
       }
@@ -77,20 +80,15 @@ export function RestoreDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Restaurer la base {backup.database}</DialogTitle>
-          <DialogDescription>
-            Une nouvelle base est créée à partir de la sauvegarde, puis l&apos;app
-            bascule dessus. L&apos;app est indisponible pendant la restauration, en
-            général quelques minutes. La base actuelle est supprimée, mais ses
-            sauvegardes restent : tu peux revenir en arrière de la même façon.
-          </DialogDescription>
+          <DialogTitle>{t("restore.title", { database: backup.database })}</DialogTitle>
+          <DialogDescription>{t("restore.description")}</DialogDescription>
         </DialogHeader>
 
         {preview ? (
           <>
             <p className="text-sm">{preview.message}</p>
             <pre className="max-h-[40vh] overflow-auto rounded-md bg-muted p-3 font-mono text-[11px]">
-              {preview.diff || "Aucun changement"}
+              {preview.diff || t("common.noChange")}
             </pre>
           </>
         ) : (
@@ -103,9 +101,9 @@ export function RestoreDialog({
                 onChange={() => setMode("backup")}
               />
               <span>
-                État à la fin de la sauvegarde
+                {t("restore.backupState")}
                 <span className="block text-xs text-muted-foreground">
-                  {stoppedAt.toLocaleString("fr-FR")}
+                  {stoppedAt.toLocaleString(locale)}
                 </span>
               </span>
             </label>
@@ -117,7 +115,7 @@ export function RestoreDialog({
                 onChange={() => setMode("time")}
               />
               <span className="flex-1 space-y-1.5">
-                État à un instant précis, après la sauvegarde
+                {t("restore.pointInTime")}
                 <Input
                   type="datetime-local"
                   value={time}
@@ -127,8 +125,7 @@ export function RestoreDialog({
                   onChange={(e) => setTime(e.target.value)}
                 />
                 <span className="block text-xs text-muted-foreground">
-                  Utile pour revenir juste avant une erreur, par exemple une
-                  suppression de données à 14 h 32.
+                  {t("restore.pointHint")}
                 </span>
               </span>
             </label>
@@ -137,17 +134,17 @@ export function RestoreDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           {preview ? (
             <Button variant="destructive" onClick={() => run(false)} disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              Confirmer la restauration
+              {t("restore.confirm")}
             </Button>
           ) : (
             <Button onClick={() => run(true)} disabled={busy || (mode === "time" && !time)}>
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              Voir le changement
+              {t("restore.preview")}
             </Button>
           )}
         </DialogFooter>
