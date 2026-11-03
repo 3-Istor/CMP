@@ -31,6 +31,7 @@ from app.services.github_service import (
     generate_jwt,
     get_installation_token,
 )
+from app.services.import_policy import valid_import_image_prefix
 
 TERMINAL = {"completed", "failed", "cancelled"}
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -67,7 +68,7 @@ def enabled():
         and SHA.fullmatch(settings.IMPORT_CHART_SHA)
         and settings.CNP_REGISTRY_BRANCH == "main"
         and settings.IMPORT_OIDC_AUDIENCE
-        and settings.IMPORT_IMAGE_PREFIX.startswith("ghcr.io/")
+        and valid_import_image_prefix(settings.IMPORT_IMAGE_PREFIX)
         and settings.IMPORT_CALLBACK_URL.startswith("https://")
         and settings.IMPORT_CALLBACK_URL.rstrip("/").endswith("/api")
         and settings.IMPORT_ARGOCD_URL.startswith("https://")

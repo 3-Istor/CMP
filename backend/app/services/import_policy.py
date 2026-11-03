@@ -1,9 +1,24 @@
 """Preserve the source/version validated by the central import pipeline."""
 
+import re
+
 from fastapi import HTTPException
 
 from app.core.config import settings
 from app.models.repository_import import RepositoryImport
+
+_GHCR_IMAGE_PREFIX = re.compile(
+    r"ghcr\.io/([a-z0-9]+(?:-[a-z0-9]+)*)"
+    r"(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*"
+)
+
+
+def valid_import_image_prefix(value: str) -> bool:
+    """Accept only a canonical GHCR owner and optional OCI repository path."""
+    if len(value) > 255:
+        return False
+    match = _GHCR_IMAGE_PREFIX.fullmatch(value)
+    return bool(match and len(match.group(1)) <= 39)
 
 
 def is_imported_source(db, deployment):

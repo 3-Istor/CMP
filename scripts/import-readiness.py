@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from app.core.config import settings
 from app.services.github_account import check_oauth_configuration
 from app.services.github_service import generate_jwt
+from app.services.import_policy import valid_import_image_prefix
 from app.services.repository_imports import (
     github,
     import_state_configuration,
@@ -26,8 +27,8 @@ def configuration_checks():
     return {
         "IMPORT_DISPATCH_WORKFLOW": settings.IMPORT_DISPATCH_WORKFLOW
         in {"docker-image.yml", "import-project.yml"},
-        "IMPORT_IMAGE_PREFIX": settings.IMPORT_IMAGE_PREFIX.startswith(
-            "ghcr.io/"
+        "IMPORT_IMAGE_PREFIX": valid_import_image_prefix(
+            settings.IMPORT_IMAGE_PREFIX
         ),
         "IMPORT_WORKFLOW_SHA": bool(
             re.fullmatch(r"[0-9a-f]{40}", settings.IMPORT_WORKFLOW_SHA)

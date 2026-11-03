@@ -174,3 +174,96 @@ def test_unavailable_chart_prevents_argo_and_vault_checks(monkeypatch):
     argo.assert_not_awaited()
 
     preflight.github_linking_checks.assert_not_awaited()
+
+
+@pytest.fixture
+def complete_import_configuration(monkeypatch):
+    values = {
+        "IMPORT_ENABLED": True,
+        "TF_BACKEND_S3_ENABLED": True,
+        "TF_BACKEND_S3_BUCKET": "recipe-state",
+        "TF_BACKEND_AWS_REGION": "eu-west-3",
+        "IMPORT_DISPATCH_WORKFLOW": "docker-image.yml",
+        "IMPORT_WORKFLOW_SHA": "a" * 40,
+        "IMPORT_CHART_SHA": "b" * 40,
+        "CNP_REGISTRY_BRANCH": "main",
+        "IMPORT_OIDC_AUDIENCE": "cnp-import",
+        "IMPORT_CALLBACK_URL": "https://cmp.example.org/api",
+        "IMPORT_ARGOCD_URL": "https://argo.example.org",
+        "IMPORT_ARGOCD_TOKEN": "test-argo-token",
+        "GITHUB_APP_PRIVATE_KEY": "test-app-key",
+        "GITHUB_INSTALLATION_ID": "11",
+        "GITHUB_REGISTRY_TOKEN": "test-registry-token",
+    }
+    for field, value in values.items():
+        monkeypatch.setattr(settings, field, value)
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "ghcr.io/3-istor/cnp-imports",
+        "ghcr.io/joe",
+        "ghcr.io/joe/application/path.with-dots_and__underscores",
+        "ghcr.io/joe/application--image",
+    ],
+)
+def test_canonical_image_prefix_is_accepted_by_both_gates(
+    monkeypatch, complete_import_configuration, prefix
+):
+    monkeypatch.setattr(settings, "IMPORT_IMAGE_PREFIX", prefix)
+    imports.enabled()
+    assert preflight.configuration_checks()["IMPORT_IMAGE_PREFIX"] is True
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "ghcr.io/",
+        "ghcr.io//owner/app",
+        "ghcr.io/owner/",
+        "ghcr.io/owner//app",
+        "ghcr.io/owner/../app",
+        "ghcr.io/owner/./app",
+        "ghcr.io/owner/%2e%2e/app",
+        "ghcr.io/owner/app%2fevil",
+        "ghcr.io/owner/app?registry=evil.example",
+        "ghcr.io/owner/app#fragment",
+        "ghcr.io/owner/app@sha256:" + "a" * 64,
+        "ghcr.io/owner/app:latest",
+        "ghcr.io/owner@evil.example/app",
+        "ghcr.io/user:password@evil.example/app",
+        "ghcr.io/owner/https://evil.example/app",
+        "https://ghcr.io/owner/app",
+        "http://ghcr.io/owner/app",
+        "//ghcr.io/owner/app",
+        "ghcr.io.evil.example/owner/app",
+        "ghcr.io./owner/app",
+        "ghcrXio/owner/app",
+        "GHCR.IO/owner/app",
+        "ghcr.io/Owner/app",
+        "ghcr.io/owner/App",
+        "ghcr.io/-owner/app",
+        "ghcr.io/owner-/app",
+        "ghcr.io/owner--name/app",
+        "ghcr.io/" + "o" * 40 + "/app",
+        "ghcr.io/owner/" + "a" * 255,
+        "ghcr.io/owner/app ",
+        " ghcr.io/owner/app",
+        "ghcr.io/owner/app\n",
+        "ghcr.io/owner/app\r\n",
+        "ghcr.io/owner/\tapp",
+        "ghcr.io/owner/\x00app",
+        "ghcr.io\\owner/app",
+        "ghcr.io/ownér/app",
+    ],
+)
+def test_unsafe_image_prefix_stops_import_and_preflight(
+    monkeypatch, complete_import_configuration, prefix
+):
+    monkeypatch.setattr(settings, "IMPORT_IMAGE_PREFIX", prefix)
+    with pytest.raises(HTTPException) as error:
+        imports.enabled()
+    assert error.value.status_code == 503
+    assert preflight.configuration_checks()["IMPORT_IMAGE_PREFIX"] is False
