@@ -522,8 +522,8 @@ async def set_app_environments(
     Applications, tunnel route and image updater.
 
     Raises:
-        RegistryError: No record or no such app, staging not allowed by the
-            project or over its cap, or the registry cannot be written.
+        RegistryError: No record or no such app, staging over the project's
+            cap, or the registry cannot be written.
     """
     existing = await read_record(project_name)
     if existing is None:
@@ -540,17 +540,16 @@ async def set_app_environments(
         )
 
     if "staging" in environments:
-        allowed = {
-            env.get("name"): env
-            for env in spec.get("environments") or [{"name": "prod"}]
-            if isinstance(env, dict)
-        }
-        if "staging" not in allowed:
-            raise RegistryError(
-                f"Project '{project_name}' does not allow staging environments: "
-                "a platform admin has to enable them first."
-            )
-        cap = allowed["staging"].get("maxApps", 1)
+        staging = next(
+            (
+                env
+                for env in spec.get("environments") or []
+                if isinstance(env, dict) and env.get("name") == "staging"
+            ),
+            {},
+        )
+        # Without a staging entry a project gets one app; maxApps 0 forbids it.
+        cap = staging.get("maxApps", 1)
         others = [
             app.get("name")
             for app in apps
@@ -560,7 +559,8 @@ async def set_app_environments(
         if len(others) >= cap:
             raise RegistryError(
                 f"Project '{project_name}' already has {len(others)} app(s) with staging, "
-                f"its limit is {cap}: {', '.join(others)}."
+                f"its limit is {cap}: {', '.join(others) or 'none'}. "
+                "A platform admin can raise it."
             )
         problems = check_app(
             project_name,
@@ -659,7 +659,7 @@ async def set_deletion_protection(project_name: str, enabled: bool) -> None:
 
 async def set_project_staging(project_name: str, max_apps: int) -> None:
     """
-    Allow (max_apps > 0) or forbid staging environments for a project.
+    Set how many apps of a project may run staging; 0 forbids it.
 
     Raises:
         RegistryError: No record, apps still use staging beyond the new cap,
@@ -687,10 +687,10 @@ async def set_project_staging(project_name: str, max_apps: int) -> None:
         for env in spec.get("environments") or [{"name": "prod"}]
         if env.get("name") != "staging"
     ]
-    if max_apps > 0:
-        environments.append(
-            {"name": "staging", "offhours": True, "maxApps": max_apps}
-        )
+    # Written even at 0: an absent entry would allow one app.
+    environments.append(
+        {"name": "staging", "offhours": True, "maxApps": max_apps}
+    )
     spec["environments"] = environments
 
     buffer = StringIO()
