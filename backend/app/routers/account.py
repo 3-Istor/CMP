@@ -4,7 +4,14 @@ from typing import Annotated
 import boto3
 import requests
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+)
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -13,13 +20,17 @@ from app.models.user_github import UserGitHubInstallation
 from app.models.user_preference import UserPreference
 from app.schemas.account import (
     Favorites,
+    GitHubConnectionStatus,
     GitHubInstallationRequest,
     GitHubInstallationResponse,
+    GitHubOAuthCallbackRequest,
+    GitHubOAuthStartRequest,
     PictureUploadResponse,
     PreferencesUpdate,
     UserPreferences,
     UserProfile,
 )
+from app.services import github_account
 from app.services.authz import is_cnp_admin
 from app.services.keycloak_service import _get_admin_token, get_current_user
 
@@ -193,7 +204,19 @@ def get_user_profile(
     if user_sub:
         github_record = (
             db.query(UserGitHubInstallation)
-            .filter(UserGitHubInstallation.user_sub == user_sub)
+            .filter(
+                UserGitHubInstallation.user_sub.in_(
+                    [
+                        value
+                        for value in (
+                            user_sub,
+                            user_uuid,
+                            token_payload.get("sub"),
+                        )
+                        if value
+                    ]
+                )
+            )
             .first()
         )
         if github_record:
@@ -376,68 +399,64 @@ async def upload_profile_picture(
     )
 
 
+@router.get("/github", response_model=GitHubConnectionStatus)
+async def github_connection_status(
+    response: Response,
+    token_payload: dict = Depends(github_account.portal_user),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await github_account.connection_status(db, token_payload)
+
+
+@router.post("/github-connect", response_model=GitHubInstallationResponse)
+async def connect_github(
+    request_data: GitHubInstallationRequest,
+    token_payload: dict = Depends(github_account.portal_user),
+    db: Session = Depends(get_db),
+):
+    return await github_account.connect(
+        db, token_payload, request_data.installation_id
+    )
+
+
 @router.post("/github-installation", response_model=GitHubInstallationResponse)
 async def save_github_installation(
     request_data: GitHubInstallationRequest,
-    token_payload: dict = Depends(get_current_user),
+    token_payload: dict = Depends(github_account.portal_user),
     db: Session = Depends(get_db),
-) -> GitHubInstallationResponse:
-    """
-    Save GitHub App installation ID to database.
-
-    This endpoint is called either:
-    1. Automatically when GitHub redirects back after app installation
-    2. Manually when user enters existing installation ID
-    """
-    installation_id = request_data.installation_id.strip()
-
-    if not installation_id:
-        raise HTTPException(
-            status_code=400, detail="Installation ID cannot be empty"
-        )
-
-    # Get user identifier from token (use preferred_username for consistency)
-    user_sub = (
-        token_payload.get("preferred_username")
-        or token_payload.get("sub")
-        or token_payload.get("username")
+):
+    """Legacy entrypoint uses the same OAuth proof; an ID alone grants nothing."""
+    return await github_account.connect(
+        db, token_payload, request_data.installation_id
     )
 
-    if not user_sub:
-        raise HTTPException(
-            status_code=400,
-            detail=f"User identifier not found in token. Available fields: {list(token_payload.keys())}",
-        )
 
-    try:
-        # Check if record exists
-        existing = (
-            db.query(UserGitHubInstallation)
-            .filter(UserGitHubInstallation.user_sub == user_sub)
-            .first()
-        )
+@router.post("/github/oauth/start")
+async def start_github_oauth(
+    request_data: GitHubOAuthStartRequest,
+    response: Response,
+    token_payload: dict = Depends(github_account.portal_user),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await github_account.begin(
+        db, token_payload, request_data.binding, request_data.mode
+    )
 
-        if existing:
-            # Update existing record
-            existing.installation_id = installation_id
-        else:
-            # Create new record
-            new_record = UserGitHubInstallation(
-                user_sub=user_sub, installation_id=installation_id
-            )
-            db.add(new_record)
 
-        db.commit()
-
-    except Exception as e:
-        db.rollback()
-        logger.error("/github-installation: database error: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to save GitHub installation ID: {str(e)}",
-        ) from e
-
-    return GitHubInstallationResponse(
-        message="GitHub installation ID saved successfully",
-        installation_id=installation_id,
+@router.post("/github/oauth/callback")
+async def complete_github_oauth(
+    request_data: GitHubOAuthCallbackRequest,
+    response: Response,
+    token_payload: dict = Depends(github_account.portal_user),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await github_account.callback(
+        db,
+        token_payload,
+        request_data.state,
+        request_data.code,
+        request_data.binding,
     )

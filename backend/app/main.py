@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -245,46 +244,40 @@ async def lifespan(app: FastAPI):
     backfill_gitops_repo_urls()
 
     # Mount static files after repository is cloned
-    if os.path.exists("data/templates/templates"):
+    templates_directory = repo.repo_path / "templates"
+    if templates_directory.is_dir():
         logger.info("Mounting static files...")
         app.mount(
             "/static/templates",
-            StaticFiles(directory="data/templates/templates"),
+            StaticFiles(directory=str(templates_directory)),
             name="templates",
         )
         logger.info("Static files mounted")
 
-    # Start background health poller
-    logger.info("Starting health poller...")
-    health_poller_task = asyncio.create_task(
-        health_poller.health_poller_loop()
-    )
-    logger.info("Health poller started")
-
-    # Start background FinOps budget/consumption alert poller
-    logger.info("Starting FinOps alert poller...")
-    finops_poller_task = asyncio.create_task(alert_poller.finops_alert_loop())
-    logger.info("FinOps alert poller started")
-    finops_ingest_task = (
-        asyncio.create_task(finops_ingest_loop())
-        if settings.FINOPS_INGEST_ENABLED
-        else None
-    )
-
-    finops_report_task = (
-        asyncio.create_task(monthly_report.finops_monthly_report_loop())
-        if settings.FINOPS_MONTHLY_REPORT_ENABLED
-        else None
-    )
-
-    logger.info("Starting security collector...")
-    security_collector_task = asyncio.create_task(security_collector_loop())
-    audit_retention_task = asyncio.create_task(audit_retention_loop())
-    activity_collector_task = asyncio.create_task(activity_collector_loop())
-    release_recorder_task = asyncio.create_task(release_recorder_loop())
-    environment_task = asyncio.create_task(environment_loop())
-    # Runs once, after startup: Grafana being down only logs.
-    grafana_sync_task = asyncio.create_task(sync_all_project_orgs())
+    # The local import UI has no cloud/cluster data to collect.
+    tasks = []
+    if settings.BACKGROUND_COLLECTORS_ENABLED:
+        tasks = [
+            asyncio.create_task(collector())
+            for collector in (
+                health_poller.health_poller_loop,
+                alert_poller.finops_alert_loop,
+                security_collector_loop,
+                audit_retention_loop,
+                activity_collector_loop,
+                release_recorder_loop,
+                environment_loop,
+                sync_all_project_orgs,
+            )
+        ]
+        if settings.FINOPS_INGEST_ENABLED:
+            tasks.append(asyncio.create_task(finops_ingest_loop()))
+        if settings.FINOPS_MONTHLY_REPORT_ENABLED:
+            tasks.append(
+                asyncio.create_task(
+                    monthly_report.finops_monthly_report_loop()
+                )
+            )
 
     # Last, so it only gets the paths no router claimed: /mcp, the OAuth
     # endpoints (/authorize, /token, /register, /revoke) and their
@@ -298,28 +291,9 @@ async def lifespan(app: FastAPI):
 
     # Shutdown: cancel background tasks
     logger.info("Shutting down application...")
-    health_poller_task.cancel()
-    finops_poller_task.cancel()
-    if finops_ingest_task:
-        finops_ingest_task.cancel()
-    if finops_report_task:
-        finops_report_task.cancel()
-    security_collector_task.cancel()
-    audit_retention_task.cancel()
-    activity_collector_task.cancel()
-    release_recorder_task.cancel()
-    environment_task.cancel()
-    grafana_sync_task.cancel()
-    for task in (
-        health_poller_task,
-        finops_poller_task,
-        security_collector_task,
-        audit_retention_task,
-        activity_collector_task,
-        release_recorder_task,
-        environment_task,
-        grafana_sync_task,
-    ):
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
         try:
             await task
         except asyncio.CancelledError:
@@ -364,6 +338,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.routers import repository_imports
+
+app.include_router(repository_imports.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(agents.projects_router, prefix="/api")

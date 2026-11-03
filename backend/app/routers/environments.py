@@ -46,6 +46,7 @@ from app.services.environments import (
 )
 from app.services.environments.suites import SuiteSpec
 from app.services.github_service import GitHubAppError
+from app.services.import_policy import require_mutable_source
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import (
     ClusterNotConnectedError,
@@ -77,7 +78,12 @@ def _holds(
 def _app(
     db: Session, token: dict, deployment_id: int, role: ProjectRole
 ) -> Deployment:
-    return _get_kubernetes_deployment_or_404(deployment_id, db, token, role)
+    deployment = _get_kubernetes_deployment_or_404(
+        deployment_id, db, token, role
+    )
+    if role != ProjectRole.GUEST:
+        require_mutable_source(db, deployment)
+    return deployment
 
 
 def _conflict(exc: Exception) -> HTTPException:

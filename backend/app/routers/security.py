@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.database import get_db
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
+from app.models.repository_import import RepositoryImport
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
 from app.services.authz import is_cnp_admin
@@ -544,6 +545,14 @@ async def _sync_exceptions_file(
     if app is None:
         return None
     deployment = _app_deployment(db, project, app)
+    if (
+        db.query(RepositoryImport)
+        .filter_by(deployment_id=deployment.id)
+        .first()
+    ):
+        # Keep the reviewed source immutable. Exceptions remain in CMP's database;
+        # they do not override the central import workflow's blocking scans.
+        return None
     installation_token, repo = await _github_token(deployment)
     today = utcnow().date()
     tiers = {
@@ -765,8 +774,15 @@ async def _policy(
 
 
 async def _write_app_settings(
-    deployment: Deployment, fail_on: str, author: str, dry_run: bool
+    deployment: Deployment,
+    fail_on: str,
+    author: str,
+    dry_run: bool,
+    db: Session,
 ) -> dict[str, str]:
+    from app.routers.deployments import require_mutable_source
+
+    require_mutable_source(db, deployment)
     installation_token, repo = await _github_token(deployment)
     content = app_settings.render_settings(fail_on)
     message = f"chore(cmp): set CI blocking to {fail_on} ({author})"
@@ -855,7 +871,7 @@ async def update_settings(
             detail="Ce réglage est imposé par l'admin du projet.",
         )
     return await _write_app_settings(
-        deployment, payload.ci_fail_on.value, _username(token), dry_run
+        deployment, payload.ci_fail_on.value, _username(token), dry_run, db
     )
 
 
@@ -911,7 +927,11 @@ async def update_policy(
         for deployment in deployments:
             try:
                 await _write_app_settings(
-                    deployment, locked.value.value, author, dry_run=False
+                    deployment,
+                    locked.value.value,
+                    author,
+                    dry_run=False,
+                    db=db,
                 )
                 updated.append(deployment.name)
             except HTTPException as exc:

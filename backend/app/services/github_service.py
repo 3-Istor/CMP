@@ -85,7 +85,9 @@ def generate_jwt() -> str:
         raise GitHubAppError(f"Failed to generate JWT: {exc}") from exc
 
 
-async def get_installation_token(installation_id: str) -> str:
+async def get_installation_token(
+    installation_id: str, *, permissions: dict[str, str] | None = None
+) -> str:
     """
     Exchange the GitHub App JWT for a short-lived Installation Access Token.
 
@@ -93,6 +95,7 @@ async def get_installation_token(installation_id: str) -> str:
     the permissions defined in the GitHub App configuration.
 
     Args:
+        permissions: Optional reduced permission set; omitted for existing callers.
         installation_id: The GitHub App installation ID (stored in the
             ``user_github_installations`` table and in the deployment's app_config)
 
@@ -115,7 +118,16 @@ async def get_installation_token(installation_id: str) -> str:
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, timeout=10.0)
+            response = await client.post(
+                url,
+                headers=headers,
+                timeout=10.0,
+                **(
+                    {"json": {"permissions": permissions}}
+                    if permissions is not None
+                    else {}
+                ),
+            )
             response.raise_for_status()
 
             data = response.json()

@@ -120,7 +120,7 @@ def list_for(factory, username, keycloak_projects):
     ), mock.patch.object(
         projects_router, "get_user_id_from_token", return_value="uid"
     ):
-        return asyncio.run(projects_router.list_projects(token, db))
+        return projects_router.list_projects(token, db)
 
 
 def test_list_projects_shows_owner_a_failed_bootstrap_without_keycloak_groups(

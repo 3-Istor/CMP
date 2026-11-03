@@ -92,32 +92,17 @@ Credentials (AWS, Terraform state, Keycloak, Vault, Grafana, Loki, GitHub App...
 
 The local backend then shares the prod Terraform states in `istor-cnp-tfstate-757826`: only deploy or destroy throwaway projects.
 
-### 3. Configure Authentication (Optional)
+### 3. Configure Authentication
 
-CMP supports two authentication modes:
+The UI and API require a valid Keycloak login. There is no skip-auth mode.
+For this import branch, use the dedicated local launcher described in
+[docs/repository-import.md](docs/repository-import.md): make import-setup,
+fill the Keycloak client secret in both ignored env files, make import-doctor,
+then make import-local. It uses a dedicated local database and the sibling
+app-templates branch, without the OpenStack tunnel or remote Terraform states.
+The import form is available to project admins/owners; actual CI/deployment
+stays disabled in this launcher.
 
-**Development Mode (Skip Auth)** - Recommended for local development:
-
-```bash
-cd frontend
-echo "NEXT_PUBLIC_SKIP_AUTH=true" > .env.local
-```
-
-**Production Mode (Keycloak)** - For production deployment:
-
-```bash
-cd frontend
-cat > .env.local << EOF
-NEXT_PUBLIC_SKIP_AUTH=false
-NEXTAUTH_URL=https://cmp.3istor.com
-NEXTAUTH_SECRET=$(openssl rand -base64 32)
-KEYCLOAK_CLIENT_ID=3-istor-openid
-KEYCLOAK_CLIENT_SECRET=your-secret
-KEYCLOAK_ISSUER=https://auth.3istor.com/realms/3istor
-EOF
-```
-
-See [le guide des identités](https://github.com/3-Istor/cnp-docs/blob/main/docs/02-core-components/02-identity-keycloak.md) for complete authentication documentation.
 
 ### 4. Start Backend
 

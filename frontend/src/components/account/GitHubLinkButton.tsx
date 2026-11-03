@@ -1,237 +1,102 @@
 "use client";
 
-import { CheckCircle2, GitBranch, Loader2 } from "lucide-react";
+import { CheckCircle2, GitBranch, Loader2, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { getGitHubStatus, saveGitHubInstallationId } from "@/lib/api";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { connectGitHubAccount, getGitHubConnectionStatus, startGitHubLink } from "@/lib/api";
+import type { GitHubConnectionStatus } from "@/types";
 
 export function GitHubLinkButton() {
-  const t = useTranslations("account.github");
-  const [isLinked, setIsLinked] = useState(false);
-  const [installationId, setInstallationId] = useState<string | null>(null);
+  const t = useTranslations("account.github.connection");
+  const [status, setStatus] = useState<GitHubConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [manualId, setManualId] = useState("");
+  const [error, setError] = useState("");
+  const [callbackError, setCallbackError] = useState("");
+  const [installation, setInstallation] = useState("");
 
-  const searchParams = useSearchParams();
-
-  const handleCallback = async () => {
-    // Check if we have an installation_id in the URL (GitHub callback)
-    const callbackInstallationId = searchParams.get("installation_id");
-
-    if (callbackInstallationId) {
-      console.log(
-        "GitHub callback detected with installation_id:",
-        callbackInstallationId,
-      );
-
-      try {
-        setSaving(true);
-        await saveGitHubInstallationId(callbackInstallationId);
-
-        // Clean the URL
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname,
-        );
-
-        toast.success(t("callbackSaved"));
-
-        // Refresh status
-        await fetchGitHubStatus();
-      } catch (error) {
-        console.error("Failed to save installation ID from callback:", error);
-        toast.error(t("callbackFailed"));
-      } finally {
-        setSaving(false);
-      }
-    } else {
-      // No callback, just fetch current status
-      await fetchGitHubStatus();
-    }
-  };
-
-  const fetchGitHubStatus = async () => {
+  const reload = useCallback(async () => {
+    setLoading(true); setError("");
     try {
-      setLoading(true);
-      const data = await getGitHubStatus();
-      setIsLinked(!!data.github_installation_id);
-      setInstallationId(data.github_installation_id);
+      const result = await getGitHubConnectionStatus();
+      setStatus(result);
+      setInstallation(result.github_installation_id || "");
     } catch (error) {
-      console.error("Failed to fetch GitHub status:", error);
-      toast.error(t("statusFailed"));
-    } finally {
-      setLoading(false);
-    }
-  };
+      setStatus(null);
+      setError(error instanceof Error ? error.message : t("statusUnavailable"));
+    } finally { setLoading(false); }
+  }, [t]);
 
   useEffect(() => {
-    handleCallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timer = setTimeout(() => {
+      const url = new URL(window.location.href);
+      const outcome = url.searchParams.get("github");
+      if (outcome === "linked") toast.success(t("linkedChoose"));
+      if (outcome === "failed") setCallbackError(t("callbackFailed"));
+      if (outcome) {
+        url.searchParams.delete("github");
+        window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+      }
+      void reload();
+    }, 0);
+    const refresh = () => { void reload(); };
+    window.addEventListener("focus", refresh);
+    return () => { clearTimeout(timer); window.removeEventListener("focus", refresh); };
+  }, [reload, t]);
 
-  const handleLink = () => {
-    // Open GitHub App installation in a new tab
-    // The callback URL should be set in the GitHub App settings to return to this page
-    window.open(
-      "https://github.com/apps/cnp-portal/installations/new",
-      "_blank",
-      "noopener,noreferrer",
-    );
-
-    // Show a message to the user
-    toast.info(t("opened"));
-  };
-
-  const handleManualSave = async () => {
-    const trimmedId = manualId.trim();
-
-    if (!trimmedId) {
-      toast.error(t("idRequired"));
-      return;
-    }
-
+  async function authorize(mode: "authorize" | "install" = "authorize") {
+    setSaving(true); setError(""); setCallbackError("");
     try {
-      setSaving(true);
-      await saveGitHubInstallationId(trimmedId);
-
-      toast.success(t("idSaved"));
-      setManualId("");
-
-      // Refresh status
-      await fetchGitHubStatus();
+      const result = await startGitHubLink(mode);
+      window.location.assign(result.authorization_url);
     } catch (error) {
-      console.error("Failed to save installation ID:", error);
-      toast.error(t("idSaveFailed"));
-    } finally {
+      setError(error instanceof Error ? error.message : t("connectionUnavailable"));
       setSaving(false);
     }
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GitBranch className="h-5 w-5" />
-            {t("title")}
-          </CardTitle>
-          <CardDescription>{t("description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">{t("loadingStatus")}</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <GitBranch className="h-5 w-5" />
-          {t("title")}
-        </CardTitle>
-        <CardDescription>{t("description")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLinked ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-green-600 dark:text-green-500">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium">{t("linked")}</span>
-            </div>
-            <div className="rounded-lg bg-muted p-3">
-              <p className="text-xs text-muted-foreground mb-1">
-                {t("installationId")}
-              </p>
-              <p className="text-sm font-mono">{installationId}</p>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("linkedHelp")}</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">{t("needApp")}</p>
-            <Button onClick={handleLink} className="w-full" disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t("linking")}
-                </>
-              ) : (
-                <>
-                  <GitBranch className="mr-2 h-4 w-4" />
-                  {t("linkButton")}
-                </>
-              )}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              {t("redirectNote")}
-            </p>
+  async function connect() {
+    setSaving(true); setError("");
+    try {
+      const result = await connectGitHubAccount(installation);
+      toast.success(t("installationSaved", { account: result.account, login: result.github_login }));
+      await reload();
+    } catch (error) { setError(error instanceof Error ? error.message : t("installationRefused")); }
+    finally { setSaving(false); }
+  }
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator className="w-full" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  {t("or")}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="manual-installation-id" className="text-sm">
-                {t("alreadyInstalled")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("alreadyHelp")}
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  id="manual-installation-id"
-                  type="text"
-                  placeholder="12345678"
-                  value={manualId}
-                  onChange={(e) => setManualId(e.target.value)}
-                  disabled={saving}
-                  className="flex-1"
-                />
-                <Button
-                  onClick={handleManualSave}
-                  disabled={saving || !manualId.trim()}
-                  variant="outline"
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    t("saveId")
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">{t("idHelp")}</p>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+  return <Card aria-label={t("title")}>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2"><GitBranch className="h-5 w-5" />{t("title")}</CardTitle>
+      <CardDescription>{t("description")}</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      {loading && <p role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />{t("checking")}</p>}
+      {status && <>
+        {!status.oauth_configured && <p role="status" className="rounded border p-3 text-sm">{t("configurationRequired")}</p>}
+        {status.identity_linked && <p className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 text-green-600" />{t("linkedAs", { login: status.github_login || "" })}</p>}
+        <Button variant="outline" disabled={!status.oauth_configured || saving || loading} onClick={() => void authorize()}>
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{status.identity_linked ? t("reconnect") : t("connect")}
+        </Button>
+        {status.installation_url && <Button variant="outline" disabled={saving || loading} onClick={() => void authorize("install")}>{t("install")}</Button>}
+        {status.identity_linked && <>
+          <label className="block space-y-1 text-sm"><span>{t("installationLabel")}</span>
+            <select aria-label={t("installationLabel")} className="w-full rounded border bg-background p-2" value={installation} onChange={(event) => setInstallation(event.target.value)} disabled={saving || loading}>
+              <option value="">{t("chooseInstallation")}</option>
+              {status.installations.map((item) => <option key={item.id} value={item.id}>{item.account} ({item.account_type})</option>)}
+            </select>
+          </label>
+          {!status.installations.length && <p role="status" className="text-sm">{t("noInstallations")}</p>}
+          <Button onClick={() => void connect()} disabled={!installation || saving || loading}>{t("useInstallation")}</Button>
+          {status.github_installation_id && <p className="text-sm text-green-600">{t("installationVerified")}</p>}
+        </>}
+      </>}
+      {(error || callbackError) && <p role="alert" className="text-sm text-destructive">{error || callbackError}</p>}
+      <Button variant="ghost" size="sm" disabled={loading || saving} onClick={() => void reload()}><RefreshCw className="mr-2 h-4 w-4" />{t("refresh")}</Button>
+      <p className="text-xs text-muted-foreground">{t("permissionsHelp")}</p>
+    </CardContent>
+  </Card>;
 }

@@ -1240,7 +1240,30 @@
       "opened": "The GitHub App installation opened in a new tab. Come back here once it is installed.",
       "idRequired": "Enter an installation ID",
       "idSaved": "Installation ID saved",
-      "idSaveFailed": "Failed to save the ID. Check it and try again."
+      "idSaveFailed": "Failed to save the ID. Check it and try again.",
+      "connection": {
+        "title": "GitHub connection",
+        "description": "Connect your GitHub account, then choose the CNP-Portal installation for your account or organisation.",
+        "statusUnavailable": "GitHub verification unavailable",
+        "linkedChoose": "GitHub account connected; choose your installation",
+        "callbackFailed": "GitHub connection refused or session expired. Start again using this button.",
+        "connectionUnavailable": "GitHub connection unavailable",
+        "installationSaved": "Installation for {account} selected for @{login}",
+        "installationRefused": "GitHub installation refused",
+        "checking": "Checking…",
+        "configurationRequired": "Configure GitHub OAuth in CMP before continuing.",
+        "linkedAs": "GitHub account connected: @{login}",
+        "reconnect": "Reconnect my GitHub account",
+        "connect": "Connect my GitHub account",
+        "install": "Install CNP-Portal on my account or organisation",
+        "installationLabel": "GitHub installation to use",
+        "chooseInstallation": "Choose an installation",
+        "noInstallations": "No accessible installation. Install CNP-Portal on the repositories you need, then refresh.",
+        "useInstallation": "Use this installation",
+        "installationVerified": "Installation selected and verified",
+        "refresh": "Refresh GitHub connection",
+        "permissionsHelp": "Your permissions and the App’s repository access are checked again before import. OAuth secrets remain on the server."
+      }
     },
     "theme": {
       "title": "Appearance",

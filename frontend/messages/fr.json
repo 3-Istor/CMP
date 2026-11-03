@@ -1240,7 +1240,30 @@
       "opened": "L'installation de l'application GitHub s'est ouverte dans un nouvel onglet. Revenez ici une fois l'installation terminée.",
       "idRequired": "Saisissez un identifiant d'installation",
       "idSaved": "Identifiant d'installation enregistré",
-      "idSaveFailed": "Échec de l'enregistrement de l'identifiant. Vérifiez-le et réessayez."
+      "idSaveFailed": "Échec de l'enregistrement de l'identifiant. Vérifiez-le et réessayez.",
+      "connection": {
+        "title": "Connexion GitHub",
+        "description": "Connectez votre compte GitHub, puis choisissez l’installation CNP-Portal de votre compte ou organisation.",
+        "statusUnavailable": "Vérification GitHub indisponible",
+        "linkedChoose": "Compte GitHub connecté ; choisissez votre installation",
+        "callbackFailed": "Connexion GitHub refusée ou session expirée. Recommencez depuis ce bouton.",
+        "connectionUnavailable": "Connexion GitHub indisponible",
+        "installationSaved": "Installation de {account} sélectionnée pour @{login}",
+        "installationRefused": "Installation GitHub refusée",
+        "checking": "Vérification…",
+        "configurationRequired": "OAuth GitHub doit être configuré dans CMP avant de poursuivre.",
+        "linkedAs": "Compte GitHub connecté : @{login}",
+        "reconnect": "Reconnecter mon compte GitHub",
+        "connect": "Connecter mon compte GitHub",
+        "install": "Installer CNP-Portal sur mon compte ou mon organisation",
+        "installationLabel": "Installation GitHub à utiliser",
+        "chooseInstallation": "Choisir une installation",
+        "noInstallations": "Aucune installation accessible. Installez CNP-Portal sur les dépôts voulus, puis actualisez.",
+        "useInstallation": "Utiliser cette installation",
+        "installationVerified": "Installation sélectionnée et vérifiée",
+        "refresh": "Actualiser la connexion GitHub",
+        "permissionsHelp": "Vos droits et l’accès de l’App aux dépôts sont revérifiés avant l’import. Les secrets OAuth restent côté serveur."
+      }
     },
     "theme": {
       "title": "Apparence",

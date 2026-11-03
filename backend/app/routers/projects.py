@@ -48,6 +48,7 @@ from app.services.grafana_service import (
     remove_user_from_project_org,
     sync_project_org,
 )
+from app.services.import_policy import require_standard_platform_mode
 from app.services.keycloak_service import (
     ProjectGroupMissingError,
     add_user_to_project,
@@ -284,6 +285,7 @@ async def create_project(
     - GITHUB_INSTALLATION_ID, GITHUB_APP_PRIVATE_KEY
     - DISCORD_WEBHOOK_URL
     """
+    require_standard_platform_mode()
     # Validate required settings are present before accepting the request
     missing = []
     if not settings.KEYCLOAK_URL:
@@ -785,6 +787,7 @@ async def delete_project(
         400: Project has active applications
         403: Caller is not a project admin
     """
+    require_standard_platform_mode()
     project_name = ctx.project_name
 
     try:

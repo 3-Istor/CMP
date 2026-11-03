@@ -6,6 +6,53 @@ import type {
 } from "@/types";
 import { getSession, signIn } from "next-auth/react";
 
+export interface RepositoryImportAvailability {
+  ready: boolean;
+  message: string;
+}
+
+export function getRepositoryImportAvailability() {
+  return request<RepositoryImportAvailability>("/repository-imports/availability");
+}
+
+export interface RepositoryImport {
+  id: string;
+  project_name: string;
+  app_name: string;
+  repository_url: string;
+  status: string;
+  message: string;
+  pull_request: number | null;
+  source_sha: string | null;
+  deployment_id: number | null;
+  report: Record<string, unknown>;
+}
+
+export function getRepositoryImports(project: string) {
+  return request<RepositoryImport[]>(`/repository-imports?project_name=${encodeURIComponent(project)}`);
+}
+
+export function createRepositoryImport(payload: {
+  project_name: string; app_name: string; repository_url: string; source_branch?: string;
+  project_path: string; port: number; health_path: string; allow_changes: boolean;
+  runtime_environment?: Record<string, string>; smoke_environment?: Record<string, string>;
+  runtime_secret_keys?: string[];
+}) {
+  return request<RepositoryImport>("/repository-imports", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function resumeRepositoryImport(id: string) {
+  return request<RepositoryImport>(`/repository-imports/${encodeURIComponent(id)}/resume`, { method: "POST" });
+}
+
+export function retryRepositoryImport(id: string) {
+  return request<RepositoryImport>(`/repository-imports/${encodeURIComponent(id)}/retry`, { method: "POST" });
+}
+
+export function cancelRepositoryImport(id: string) {
+  return request<RepositoryImport>(`/repository-imports/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+}
+
 // Declare runtime config type
 declare global {
   interface Window {
@@ -357,17 +404,19 @@ export const getGitHubStatus = async (): Promise<
   return { github_installation_id: profile.github_installation_id ?? null };
 };
 
-export const saveGitHubInstallationId = async (
-  installation_id: string,
-): Promise<import("@/types").GitHubInstallationResponse> => {
-  return request<import("@/types").GitHubInstallationResponse>(
-    "/account/github-installation",
-    {
-      method: "POST",
-      body: JSON.stringify({ installation_id }),
-    },
-  );
-};
+export const getGitHubConnectionStatus = () =>
+  request<import("@/types").GitHubConnectionStatus>("/account/github");
+
+export const connectGitHubAccount = (installation_id: string) =>
+  request<import("@/types").GitHubInstallationResponse>("/account/github-connect", {
+    method: "POST", body: JSON.stringify({ installation_id }),
+  });
+
+export async function startGitHubLink(mode: "authorize" | "install" = "authorize"): Promise<{ authorization_url: string }> {
+  const response = await fetch("/api/auth/github/link", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) });
+  if (!response.ok) throw new Error("La connexion OAuth GitHub est indisponible ou non configurée");
+  return response.json();
+}
 
 // Projects (Phase 4)
 export const getProjects = () =>

@@ -3,6 +3,7 @@
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { AppCard } from "@/components/projects/AppCard";
+import { RepositoryImports } from "@/components/projects/RepositoryImports";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
@@ -234,6 +235,8 @@ export default function ProjectPage() {
             )}
           </div>
         </div>
+
+        {canDeploy && <RepositoryImports projectName={projectName} onDeploymentChange={refreshApps} />}
 
         {canViewObservability && (
           <SecurityAlert

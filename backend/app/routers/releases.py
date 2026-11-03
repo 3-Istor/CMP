@@ -43,6 +43,10 @@ from app.services import app_security_data as security_data
 from app.services import audit
 from app.services.clusters.state import cluster_states, project_cloud
 from app.services.github_service import GitHubAppError, put_file_content
+from app.services.import_policy import (
+    is_imported_source,
+    require_mutable_source,
+)
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import (
     ClusterNotConnectedError,
@@ -247,6 +251,7 @@ def _act(
     *decide* returns ``(patch, action, forced)`` or raises.
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    require_mutable_source(db, deployment)
     view, snapshot, event = _compute(db, deployment, source)
     if snapshot is None or event is None:
         raise HTTPException(
@@ -434,7 +439,7 @@ async def get_release_settings(
     return release_settings.ReleaseSettingsRead(
         settings=current,
         files=[file_path for file_path, _, _ in loaded],
-        can_edit=can_edit,
+        can_edit=can_edit and not is_imported_source(db, deployment),
         declared=bool(declared),
         # A fullstack app can go canary as soon as one component can.
         canary_blocker=blockers[0] if all(blockers) else None,
@@ -464,6 +469,7 @@ async def update_release_settings(
         token,
         ProjectRole.ADMIN,
     )
+    require_mutable_source(db, deployment)
     view = (await run_in_threadpool(_compute, db, deployment, source))[0]
     if (
         view.phase in ("Progressing", "Paused")

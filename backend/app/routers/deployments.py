@@ -16,6 +16,7 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,7 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
+from app.models.repository_import import RepositoryImport
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
@@ -34,6 +36,10 @@ from app.services.github_service import (
     get_file_content,
     get_installation_token,
     put_file_content,
+)
+from app.services.import_policy import (
+    require_mutable_source,
+    require_standard_platform_mode,
 )
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
@@ -48,6 +54,26 @@ from app.services.project_registry import (
 )
 
 router = APIRouter(prefix="/deployments", tags=["Deployments"])
+optional_bearer = HTTPBearer(auto_error=False)
+
+
+def imported_portal_guard(db, deployment, credentials):
+    from app.services import repository_imports
+
+    job = (
+        db.query(RepositoryImport)
+        .filter_by(deployment_id=deployment.id)
+        .one_or_none()
+    )
+    if job:
+        if not credentials:
+            raise HTTPException(401, "Authentifiez-vous dans le portail CNP")
+        claims = repository_imports.verify_token(credentials.credentials)
+        repository_imports.fresh_project(
+            db, job.project_name, claims["sub"], claims["preferred_username"]
+        )
+    return job
+
 
 # Type alias for the authenticated caller, so the endpoint signatures below
 # stay readable.
@@ -170,6 +196,7 @@ async def create_deployment(
     from the request body, so it is checked here rather than through a path
     dependency.
     """
+    require_standard_platform_mode()
     if not payload.project_id:
         raise HTTPException(
             status_code=400,
@@ -185,6 +212,16 @@ async def create_deployment(
             ProjectRole.ADMIN,
         )
 
+    # Imported repositories can only enter through the validated portal protocol.
+    if (
+        payload.app_config.get("repository_mode", "create") != "create"
+        or "existing_repository_url" in payload.app_config
+    ):
+        raise HTTPException(
+            403, "Use the repository import flow for an existing repository"
+        )
+    if db.query(RepositoryImport).filter_by(app_name=payload.name).first():
+        raise HTTPException(409, "Ce nom est réservé par un parcours d’import")
     # Validate template exists
     template = get_template_by_id(payload.template_id)
     if not template:
@@ -355,6 +392,9 @@ async def delete_deployment(
     background_tasks: BackgroundTasks,
     token: CurrentUser,
     db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer
+    ),
 ):
     """
     Trigger deletion of all Terraform-managed resources.
@@ -363,6 +403,7 @@ async def delete_deployment(
     Frontend must have already shown double-confirmation before calling this.
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
+    imported_portal_guard(db, deployment, credentials)
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,
@@ -503,6 +544,9 @@ async def get_deployment_config(
     token: CurrentUser,
     component: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer
+    ),
 ) -> dict[str, Any]:
     """
     Fetch the app's values file from its GitHub repository and return it as
@@ -527,8 +571,13 @@ async def get_deployment_config(
     )
     app_type = _app_type_of(deployment)
     file_path = _config_file_for(app_type, component)
-    # Named gh_token so it cannot shadow the caller's JWT above.
-    gh_token = await _get_github_token_for_deployment(deployment)
+    job = imported_portal_guard(db, deployment, credentials)
+    if job:
+        from app.services.repository_imports import scoped_token
+
+        gh_token = await scoped_token(job)
+    else:
+        gh_token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment.github_repo_url)
 
     try:
@@ -584,6 +633,9 @@ async def update_deployment_config(
         },
     ),
     db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer
+    ),
 ) -> dict[str, Any]:
     """
     Partially update the app's values file (same ``component`` rule as
@@ -614,6 +666,8 @@ async def update_deployment_config(
         deployment_id, db, token, ProjectRole.ADMIN
     )
     file_path = _config_file_for(_app_type_of(deployment), component)
+    if imported_portal_guard(db, deployment, credentials):
+        require_mutable_source(db, deployment)
 
     # Validate _sha is present in the body
     sha: str | None = payload.pop("_sha", None)
@@ -802,6 +856,7 @@ async def update_security_data(
         deployment_id, db, token_payload, ProjectRole.ADMIN
     )
 
+    require_mutable_source(db, deployment)
     token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment.github_repo_url)
     exposure_file, database_file = security_data.values_files_for(

@@ -239,6 +239,17 @@ def _app_summary(app: dict) -> dict:
     }
 
 
+def _require_mutable_import(app_id: int) -> None:
+    from app.models.deployment import Deployment
+    from app.services.import_policy import require_mutable_source
+
+    with SessionLocal() as db:
+        deployment = db.get(Deployment, app_id)
+        if deployment is None:
+            raise HTTPException(404, "Deployment not found")
+        require_mutable_source(db, deployment)
+
+
 async def _repo_token(caller: Caller, app: dict) -> tuple[str, str]:
     if not app.get("github_repo_url"):
         raise ValueError(
@@ -713,6 +724,7 @@ async def push_files(
     app = await caller.api("GET", f"/api/deployments/{app_id}")
     project = app["project_id"]
     await caller.require_role(project, ProjectRole.MEMBER)
+    await to_thread.run_sync(_require_mutable_import, app_id)
     normalized = {repo_ops.normalize_path(p): c for p, c in files.items()}
     repo_ops.check_size(normalized)
     kind = repo_ops.classify(list(normalized))
@@ -849,6 +861,7 @@ async def cut_release(
     app = await caller.api("GET", f"/api/deployments/{app_id}")
     project = app["project_id"]
     await caller.require_role(project, ProjectRole.MEMBER)
+    await to_thread.run_sync(_require_mutable_import, app_id)
     await caller.require_cluster_up(project)
     token, repo = await _repo_token(caller, app)
     current = await repo_ops.latest_version(token, repo)
