@@ -104,7 +104,7 @@ export function RepositoryImports({ projectName, onDeploymentChange }: { project
     <Button variant="outline" onClick={() => setOpen(true)}>Importer un repo</Button>
     {error && !open && <div role="alert" className="text-sm text-destructive">{error} <Button variant="ghost" size="sm" onClick={() => void reload()}>Actualiser</Button></div>}
     {jobs.map((job) => <article key={job.id} className="rounded-lg border p-4 space-y-2">
-      <p className="font-medium">{job.app_name} — {labels[job.status] ?? job.status}</p>
+      <p className="font-medium">{job.app_name} : {labels[job.status] ?? job.status}</p>
       <p className="text-sm text-muted-foreground" aria-live="polite">{job.message}</p>
       <a className="text-sm underline" href={job.repository_url} target="_blank" rel="noreferrer">Voir le repo source</a>
       {job.pull_request && <a className="ml-4 text-sm underline" href={`${job.repository_url}/pull/${job.pull_request}`} target="_blank" rel="noreferrer">Voir la PR #{job.pull_request}</a>}
@@ -127,10 +127,10 @@ export function RepositoryImports({ projectName, onDeploymentChange }: { project
           <details className="space-y-3 rounded border p-3">
             <summary className="cursor-pointer text-sm font-medium">Configuration de l’application</summary>
             <p className="text-sm text-muted-foreground">Les variables non secrètes seront proposées dans la PR. Les valeurs sensibles restent dans Vault.</p>
-            <div className="space-y-1"><Label htmlFor="import-runtime">Variables non secrètes — une ligne NOM=valeur</Label><textarea id="import-runtime" className="min-h-24 w-full rounded border bg-transparent p-2 text-sm" value={runtimeEnvironment} onChange={(e) => setRuntimeEnvironment(e.target.value)} placeholder="FRONTEND_URL=https://mon-application.example.com" maxLength={16384} /></div>
-            <div className="space-y-1"><Label htmlFor="import-secret-keys">Noms des secrets requis — séparés par des virgules</Label><Input id="import-secret-keys" value={secretKeys} onChange={(e) => setSecretKeys(e.target.value)} placeholder="APP_SECRET, GOOGLE_CLIENT_SECRET" /></div>
+            <div className="space-y-1"><Label htmlFor="import-runtime">Variables non secrètes : une ligne NOM=valeur</Label><textarea id="import-runtime" className="min-h-24 w-full rounded border bg-transparent p-2 text-sm" value={runtimeEnvironment} onChange={(e) => setRuntimeEnvironment(e.target.value)} placeholder="FRONTEND_URL=https://mon-application.example.com" maxLength={16384} /></div>
+            <div className="space-y-1"><Label htmlFor="import-secret-keys">Noms des secrets requis : séparés par des virgules</Label><Input id="import-secret-keys" value={secretKeys} onChange={(e) => setSecretKeys(e.target.value)} placeholder="APP_SECRET, GOOGLE_CLIENT_SECRET" /></div>
             <p className="break-all text-xs text-muted-foreground">Configurer ces clés dans Vault : project-{projectName}/{name || "nom-application"}/runtime. Seuls les noms des clés sont transmis à la CI.</p>
-            <div className="space-y-1"><Label htmlFor="import-smoke">Variables du test de démarrage — une ligne NOM=valeur</Label><textarea id="import-smoke" className="min-h-24 w-full rounded border bg-transparent p-2 text-sm" value={smokeEnvironment} onChange={(e) => setSmokeEnvironment(e.target.value)} placeholder={"APP_SECRET=__CNP_RANDOM_SECRET__\nGOOGLE_CLIENT_SECRET=cnp-smoke-google"} maxLength={16384} /></div>
+            <div className="space-y-1"><Label htmlFor="import-smoke">Variables du test de démarrage : une ligne NOM=valeur</Label><textarea id="import-smoke" className="min-h-24 w-full rounded border bg-transparent p-2 text-sm" value={smokeEnvironment} onChange={(e) => setSmokeEnvironment(e.target.value)} placeholder={"APP_SECRET=__CNP_RANDOM_SECRET__\nGOOGLE_CLIENT_SECRET=cnp-smoke-google"} maxLength={16384} /></div>
             <p className="text-xs text-muted-foreground">Ces valeurs remplacent uniquement celles du test de démarrage de l’image. Pour un secret de test, utilisez __CNP_RANDOM_SECRET__ ou une valeur cnp-smoke-*. Les secrets de production restent hors du job de construction.</p>
           </details>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required /><span>J’autorise CNP à cloner ce repo et à proposer les fichiers nécessaires sur une branche par PR. Je validerai la PR avant le déploiement.</span></label>
