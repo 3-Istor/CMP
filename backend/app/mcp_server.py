@@ -923,14 +923,31 @@ async def get_release(app_id: int) -> dict:
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 async def list_releases(
-    app_id: int, limit: Annotated[int, Field(ge=1, le=50)] = 10
+    app_id: int,
+    environment: Literal["staging", "prod"] | None = None,
+    component: str | None = None,
+    version: Annotated[
+        str | None, Field(description="Part of the image tag, e.g. rc.4")
+    ] = None,
+    limit: Annotated[int, Field(ge=1, le=50)] = 10,
 ) -> dict:
-    """Past releases of an app with their outcome."""
+    """Past releases of an app with their outcome, newest first."""
     caller = Caller()
-    events = await caller.api("GET", f"/api/deployments/{app_id}/releases")
+    filters = {
+        "environment": environment,
+        "component": component,
+        "version": version,
+    }
+    events = await caller.api(
+        "GET",
+        f"/api/deployments/{app_id}/releases",
+        params={"limit": limit} | {k: v for k, v in filters.items() if v},
+    )
     return {
         "releases": [
             {
+                "environment": e.get("environment"),
+                "component": e.get("component"),
                 "revision": e["revision"],
                 "image": e.get("image"),
                 "outcome": e["outcome"],
@@ -938,7 +955,7 @@ async def list_releases(
                 "finished_at": e.get("finished_at"),
                 "forced": e.get("forced"),
             }
-            for e in events[:limit]
+            for e in events
         ]
     }
 

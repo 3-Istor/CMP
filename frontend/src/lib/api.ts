@@ -1077,8 +1077,17 @@ export const cancelPromotion = (deploymentId: number, promotionId: number) =>
 export const getRelease = (deploymentId: number) =>
   request<import("@/types").ReleaseView>(`/deployments/${deploymentId}/release`);
 
-export const getReleaseHistory = (deploymentId: number) =>
-  request<import("@/types").ReleaseEvent[]>(`/deployments/${deploymentId}/releases`);
+export const getReleaseHistory = (
+  deploymentId: number,
+  filters: { environment?: string; component?: string; version?: string } = {},
+) => {
+  const qs = new URLSearchParams(
+    Object.entries(filters).filter((entry): entry is [string, string] => !!entry[1]),
+  ).toString();
+  return request<import("@/types").ReleaseEvent[]>(
+    `/deployments/${deploymentId}/releases${qs ? `?${qs}` : ""}`,
+  );
+};
 
 export const promoteRelease = (
   deploymentId: number,

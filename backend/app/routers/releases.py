@@ -10,9 +10,9 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from io import StringIO
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -123,10 +123,16 @@ def get_release(
 def list_releases(
     deployment_id: int,
     token: CurrentUser,
+    environment: Literal["staging", "prod"] | None = None,
+    component: Annotated[str | None, Query(max_length=64)] = None,
+    version: Annotated[str | None, Query(max_length=128)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
     db: Session = Depends(get_db),
 ):
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
-    events = history.list_events(db, deployment_id)
+    events = history.list_events(
+        db, deployment_id, limit, environment, component, version
+    )
     targets = history.rollback_targets(db, deployment, events)
     rows = [ReleaseEventRead.model_validate(e) for e in events]
     for row in rows:
