@@ -12,7 +12,7 @@ import { abortRelease, isNotConnected, promoteRelease, skipReleaseStep } from "@
 import { useCan, useRelease, useReleaseHistory } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import type { ReleaseEvent, ReleaseRevision, ReleaseView } from "@/types";
-import { AlertTriangle, ArrowRight, CheckCircle2, Rocket, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
@@ -39,28 +39,6 @@ type Confirming = null | "full" | "abort";
 
 function releaseName(revision: number | null | undefined, t: Translate): string {
   return revision != null ? t("name.numbered", { revision }) : t("name.plain");
-}
-
-function DisabledCard() {
-  const t = useTranslations("release");
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Rocket className="h-4 w-4 text-muted-foreground" />
-          {t("disabled.title")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm text-muted-foreground">
-        <p>
-          {t.rich("disabled.rolling", {
-            code: (chunks) => <code className="font-mono">{chunks}</code>,
-          })}
-        </p>
-        <p>{t("disabled.synced")}</p>
-      </CardContent>
-    </Card>
-  );
 }
 
 function Banner({ view }: { view: ReleaseView }) {
@@ -377,7 +355,6 @@ export function ReleaseTab({
             <NewReleaseButton deploymentId={deploymentId} />
           </div>
         )}
-        <DisabledCard />
         {canReadSettings && (
           <ReleaseSettingsCard deploymentId={deploymentId} inProgress={false} />
         )}
