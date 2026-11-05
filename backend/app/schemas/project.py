@@ -104,6 +104,12 @@ class DeletionProtectionUpdate(BaseModel):
     enabled: bool
 
 
+class CustomerSignupUpdate(BaseModel):
+    """Payload for turning a project's customer sign-up on or off."""
+
+    enabled: bool
+
+
 class ProjectCreateResponse(BaseModel):
     """Immediate response after triggering project bootstrap."""
 

@@ -9,6 +9,8 @@ narrowest roles of that realm's ``realm-management`` client, never
 ``manage-realm``. Turning sign-up off only closes registration.
 """
 
+import asyncio
+import logging
 import time
 from typing import Any
 from urllib.parse import quote
@@ -16,6 +18,9 @@ from urllib.parse import quote
 import requests
 
 from app.core.config import settings
+from app.services import project_registry
+
+logger = logging.getLogger(__name__)
 
 # Org CRUD, adding members by user, and looking users up. Not manage-realm.
 APP_ADMIN_ROLES = ("manage-organizations", "manage-users", "view-users")
@@ -194,3 +199,17 @@ def apply(project: str, enabled: bool) -> None:
     for name in live:
         _grant_apps(name, project)
     _set_realm(project, realms[project], {"registrationAllowed": True})
+
+
+def apply_if_enabled(project: str) -> None:
+    """
+    Re-apply the switch when the project has it on, so a new app client gets
+    its roles. Never raises: a Keycloak or registry failure must not fail the
+    deployment. Blocking and starts its own event loop: from async code, call
+    it through ``asyncio.to_thread``.
+    """
+    try:
+        if asyncio.run(project_registry.is_self_registration_on(project)):
+            apply(project, True)
+    except Exception:
+        logger.exception("Customer sign-up not applied to '%s'", project)

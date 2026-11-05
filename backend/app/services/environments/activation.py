@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, Promotion, VerificationRun
-from app.services import project_registry
+from app.services import customer_identity, project_registry
 from app.services.environments import gitops, layout, registry, staging_realm
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
@@ -213,6 +213,10 @@ async def _enable(deployment_id: int, offhours: dict[str, Any]) -> None:
                 deployment.name,
                 ["prod", STAGING],
                 row.hostname,
+            )
+            # Swallows its own errors: staging is up whatever Keycloak says.
+            await asyncio.to_thread(
+                customer_identity.apply_if_enabled, deployment.project_id
             )
             _set(db, row, "ready", None)
         except Exception as exc:  # whatever broke, the row must say so

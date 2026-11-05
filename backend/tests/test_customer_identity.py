@@ -355,3 +355,39 @@ def test_admin_wraps_a_success_that_is_not_json(no_token):
         with pytest.raises(CustomerIdentityError) as err:
             ci._admin("GET", "/admin/realms/p")
     assert err.value.status == 502
+
+
+@pytest.mark.parametrize(
+    "flag, applied",
+    [(True, [("p", True)]), (False, [])],
+)
+def test_apply_if_enabled_follows_the_registry_flag(flag, applied):
+    with (
+        mock.patch.object(
+            ci.project_registry,
+            "is_self_registration_on",
+            new=mock.AsyncMock(return_value=flag),
+        ),
+        mock.patch.object(ci, "apply") as apply,
+    ):
+        ci.apply_if_enabled("p")
+
+    assert [c.args for c in apply.call_args_list] == applied
+
+
+@pytest.mark.parametrize("broken", ["registry", "keycloak"])
+def test_apply_if_enabled_never_raises(broken):
+    registry = mock.AsyncMock(return_value=True)
+    apply = mock.Mock()
+    if broken == "registry":
+        registry.side_effect = RuntimeError("registry down")
+    else:
+        apply.side_effect = CustomerIdentityError(502, "keycloak down")
+
+    with (
+        mock.patch.object(
+            ci.project_registry, "is_self_registration_on", new=registry
+        ),
+        mock.patch.object(ci, "apply", new=apply),
+    ):
+        ci.apply_if_enabled("p")

@@ -17,7 +17,7 @@ import httpx
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
-from app.services import notifications
+from app.services import customer_identity, notifications
 from app.services.github_service import get_installation_token
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
@@ -313,6 +313,10 @@ def run_deployment(deployment_id: int) -> None:
             logger.info("STEP 6: Finalization")
             logger.info("─" * 80)
             output_msg = _format_outputs_message(outputs)
+            # Only gitops apps get an OIDC client. Swallows its own errors:
+            # the deployment already succeeded.
+            if deployment.template_id == "k3s-gitops-app":
+                customer_identity.apply_if_enabled(app_config["project_name"])
             _update(
                 db,
                 deployment,

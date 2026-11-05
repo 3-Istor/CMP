@@ -32,12 +32,13 @@ from app.models.project import Project, ProjectStatus, TargetCloud
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     AddMemberRequest,
+    CustomerSignupUpdate,
     DeletionProtectionUpdate,
     ProjectCreate,
     ProjectCreateResponse,
     ProjectRead,
 )
-from app.services import notifications
+from app.services import customer_identity, notifications
 from app.services.authz import (
     RequireAdmin,
     RequireGuest,
@@ -82,9 +83,11 @@ from app.services.project_registry import (
     RegistryError,
     ensure_project_names_free,
     is_deletion_protected,
+    is_self_registration_on,
     publish_record,
     remove_record,
     set_deletion_protection,
+    set_self_registration,
 )
 
 logger = logging.getLogger(__name__)
@@ -840,6 +843,80 @@ async def update_deletion_protection(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not update the project registry: {exc}",
+        ) from exc
+    return {"enabled": payload.enabled}
+
+
+# ---------------------------------------------------------------------------
+# Customer sign-up
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{project_name}/customer-signup")
+async def get_customer_signup(ctx: RequireGuest) -> dict[str, bool]:
+    """Whether customers can sign up to the project's apps."""
+    try:
+        return {"enabled": await is_self_registration_on(ctx.project_name)}
+    except RegistryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not read the project registry: {exc}",
+        ) from exc
+
+
+@router.put("/{project_name}/customer-signup")
+async def update_customer_signup(
+    project_name: str,
+    payload: CustomerSignupUpdate,
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    """
+    Turn the project's customer sign-up on or off.
+
+    Writes the registry flag, then makes the project's Keycloak realms match.
+
+    Requirements:
+    - Caller must be a project admin or a platform admin
+    - Not an AI assistant: opening the project to the public is a person's
+      decision
+
+    Raises:
+        403: Caller is an assistant, or is not a project admin
+        404: The project has no registry record
+        502: The registry or Keycloak failed. After a Keycloak failure the flag
+            is already saved: the next deployment of an app re-applies it when
+            on, and so does sending the value again.
+    """
+    if token.get("cnp_agent"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Assistants cannot change customer sign-up.",
+        )
+    if not is_cnp_admin(token):
+        assert_project_role(db, token, project_name, ProjectRole.ADMIN)
+    try:
+        await set_self_registration(project_name, payload.enabled)
+    except RecordNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except RegistryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not update the project registry: {exc}",
+        ) from exc
+    try:
+        await run_in_threadpool(
+            customer_identity.apply, project_name, payload.enabled
+        )
+    except customer_identity.CustomerIdentityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "The setting is saved, but Keycloak was not updated: "
+                f"{exc}. Switch it back and forth to retry."
+            ),
         ) from exc
     return {"enabled": payload.enabled}
 
