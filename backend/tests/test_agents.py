@@ -1,9 +1,11 @@
+import asyncio
 import base64
 import contextlib
 import hashlib
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
@@ -532,17 +534,57 @@ def test_a_committed_token_is_detected():
     assert repo.find_secrets(files) == ["app.js"]
 
 
-@pytest.mark.parametrize(
-    "current,bump,expected",
-    [
-        (None, "patch", "v0.1.0"),
-        ("v1.2.3", "patch", "v1.2.4"),
-        ("v1.2.3", "minor", "v1.3.0"),
-        ("v1.2.3", "major", "v2.0.0"),
-    ],
-)
-def test_next_version_follows_semver(current, bump, expected):
-    assert repo.next_version(current, bump) == expected
+@pytest.fixture
+def cut(monkeypatch):
+    """cut_release with the platform's choices and GitHub faked."""
+    offered = {
+        "commitSha": "abc123",
+        "commitMessage": "fix: x",
+        "staged": True,
+        "choices": [
+            {"kind": "patch", "tag": "v1.0.1-rc.1"},
+            {"kind": "minor", "tag": "v1.1.0-rc.1"},
+        ],
+    }
+
+    async def api(method, path, **kwargs):
+        if path.endswith("/release/choices"):
+            return offered
+        return {"id": 5, "name": "shop", "project_id": "demo"}
+
+    caller = SimpleNamespace(
+        claims={"preferred_username": "alice"},
+        require_write=lambda: None,
+        require_role=mock.AsyncMock(),
+        require_cluster_up=mock.AsyncMock(),
+        api=api,
+    )
+    create_tag = mock.AsyncMock(return_value="abc123")
+    monkeypatch.setattr(mcp_server, "Caller", lambda: caller)
+    monkeypatch.setattr(
+        mcp_server, "_repo_token", mock.AsyncMock(return_value=("tok", "o/a"))
+    )
+    monkeypatch.setattr(
+        mcp_server, "_gate", mock.AsyncMock(return_value=("go", None))
+    )
+    monkeypatch.setattr(mcp_server.audit, "record_agent_event", mock.Mock())
+    monkeypatch.setattr(repo, "create_tag", create_tag)
+    return create_tag
+
+
+def test_cut_release_tags_the_commit_of_the_chosen_kind(cut):
+    result = asyncio.run(mcp_server.cut_release(5, bump="minor"))
+
+    assert result["version"] == "v1.1.0-rc.1"
+    cut.assert_awaited_once_with("tok", "o/a", "v1.1.0-rc.1", sha="abc123")
+
+
+def test_cut_release_names_the_kind_the_app_does_not_offer(cut):
+    result = asyncio.run(mcp_server.cut_release(5, bump="candidate"))
+
+    assert result["ok"] is False
+    assert result["error"].startswith("No candidate to cut")
+    cut.assert_not_awaited()
 
 
 def test_an_assistant_is_slowed_down_past_its_write_budget():

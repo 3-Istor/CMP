@@ -239,40 +239,6 @@ async def commit_files(
         )
 
 
-_SEMVER = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
-
-
-async def latest_version(token: str, repo: str) -> str | None:
-    async with httpx.AsyncClient() as client:
-        tags = await _request(
-            client,
-            "GET",
-            f"{GITHUB_API_BASE}/repos/{repo}/tags",
-            token,
-            params={"per_page": 100},
-        )
-    versions = [
-        tuple(int(x) for x in m.groups())
-        for t in tags
-        if (m := _SEMVER.match(t["name"]))
-    ]
-    if not versions:
-        return None
-    major, minor, patch = max(versions)
-    return f"v{major}.{minor}.{patch}"
-
-
-def next_version(current: str | None, bump: str) -> str:
-    if current is None:
-        return "v0.1.0" if bump != "major" else "v1.0.0"
-    major, minor, patch = (int(x) for x in _SEMVER.match(current).groups())
-    if bump == "major":
-        return f"v{major + 1}.0.0"
-    if bump == "minor":
-        return f"v{major}.{minor + 1}.0"
-    return f"v{major}.{minor}.{patch + 1}"
-
-
 async def list_tags(token: str, repo: str) -> list[str]:
     async with httpx.AsyncClient() as client:
         tags = await _request(
@@ -297,7 +263,7 @@ async def head_commit(
             f"{GITHUB_API_BASE}/repos/{repo}/commits/{branch}",
             token,
         )
-    return commit["sha"], commit["commit"]["message"].splitlines()[0]
+    return commit["sha"], commit["commit"]["message"].partition("\n")[0]
 
 
 async def create_tag(
@@ -307,7 +273,7 @@ async def create_tag(
     branch: str = "main",
     sha: str | None = None,
 ) -> str:
-    """A lightweight tag on ``sha``, or on the branch head; returns the commit."""
+    """A lightweight tag on ``sha`` or the branch head; returns the commit."""
     base_url = f"{GITHUB_API_BASE}/repos/{repo}"
     async with httpx.AsyncClient() as client:
         if sha is None:

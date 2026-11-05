@@ -84,6 +84,10 @@ ACTIONS: dict[tuple[str, str], str] = {
     ): "finops.recommendation.notify",
     (
         "POST",
+        "/api/deployments/{deployment_id}/release/tags",
+    ): "release.cut",
+    (
+        "POST",
         "/api/deployments/{deployment_id}/release/promote",
     ): "release.promote",
     (

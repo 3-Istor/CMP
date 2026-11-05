@@ -957,6 +957,24 @@ export interface ReleaseSettingsRead {
   migrationsCommand: string[] | null;
 }
 
+export interface ReleaseChoice {
+  kind: "candidate" | "patch" | "minor" | "major";
+  tag: string;
+}
+
+export interface ReleaseChoices {
+  commitSha: string;
+  commitMessage: string;
+  staged: boolean;
+  choices: ReleaseChoice[];
+}
+
+export interface ReleaseTagCreated {
+  tag: string;
+  sha: string;
+  runsUrl: string;
+}
+
 export interface ReleaseSettingsSaved {
   repo: string;
   commits: Record<string, string>;

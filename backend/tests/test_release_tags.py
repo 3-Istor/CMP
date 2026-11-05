@@ -135,6 +135,15 @@ def test_head_commit_returns_sha_and_subject(github):
     assert github[0][1].endswith("/repos/org/app/commits/dev")
 
 
+def test_head_commit_accepts_an_empty_message(monkeypatch):
+    async def fake_request(*args, **kwargs):
+        return {"sha": "abc", "commit": {"message": ""}}
+
+    monkeypatch.setattr(repo, "_request", fake_request)
+
+    assert asyncio.run(repo.head_commit("tok", "org/app")) == ("abc", "")
+
+
 def test_create_tag_on_a_given_sha_skips_the_branch_lookup(github):
     sha = asyncio.run(repo.create_tag("tok", "org/app", "v1.0.0", sha="abc"))
 

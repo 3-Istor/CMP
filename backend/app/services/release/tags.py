@@ -33,7 +33,7 @@ def release_choices(tags: list[str], staged: bool) -> list[ReleaseChoice]:
     base = max(finals | candidates.keys(), default=None)
 
     def choice(kind, version):
-        tag = "v%d.%d.%d" % version
+        tag = "v" + ".".join(map(str, version))
         if staged:
             tag += f"-rc.{candidates.get(version, 0) + 1}"
         return ReleaseChoice(kind, tag)

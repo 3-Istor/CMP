@@ -837,13 +837,15 @@ def _release_summary(view: dict) -> dict:
 @tool_errors
 async def cut_release(
     app_id: int,
-    bump: Literal["patch", "minor", "major"] = "patch",
+    bump: Literal["candidate", "patch", "minor", "major"] = "patch",
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
 ) -> dict:
-    """Release what is on main: tags the next version vX.Y.Z. CI builds the
-    image and the platform deploys it (canary when configured). Follow it
-    with get_release."""
+    """Release what is on main: tags the next version vX.Y.Z, or vX.Y.Z-rc.N
+    when the app has a staging environment (a candidate, deployed to staging
+    first; "candidate" adds one to the version already in progress). CI
+    builds the image and the platform deploys it (canary when configured).
+    Follow it with get_release."""
     caller = Caller()
     caller.require_write()
     app = await caller.api("GET", f"/api/deployments/{app_id}")
@@ -851,15 +853,22 @@ async def cut_release(
     await caller.require_role(project, ProjectRole.MEMBER)
     await caller.require_cluster_up(project)
     token, repo = await _repo_token(caller, app)
-    current = await repo_ops.latest_version(token, repo)
-    version = repo_ops.next_version(current, bump)
+    offered = await caller.api(
+        "GET", f"/api/deployments/{app_id}/release/choices"
+    )
+    choice = next((c for c in offered["choices"] if c["kind"] == bump), None)
+    if choice is None:
+        kinds = ", ".join(c["kind"] for c in offered["choices"])
+        raise ValueError(f"No {bump} to cut: this app offers {kinds}.")
+    version = choice["tag"]
     verdict, answer = await _gate(
         caller,
         "release.cut",
         project,
         tool="cut_release",
         arguments={"app_id": app_id, "bump": bump},
-        summary=f"Release '{app['name']}' {version} (now {current or 'none'})?",
+        summary=f"Release '{app['name']}' {version} "
+        f"(main at {offered['commitSha'][:7]})?",
         deployment_id=app_id,
         namespace=app.get("k8s_namespace"),
         user_confirmed=user_confirmed,
@@ -867,7 +876,9 @@ async def cut_release(
     )
     if verdict == "stop":
         return answer
-    sha = await repo_ops.create_tag(token, repo, version)
+    sha = await repo_ops.create_tag(
+        token, repo, version, sha=offered["commitSha"]
+    )
     await to_thread.run_sync(
         audit.record_agent_event,
         caller.claims,
@@ -876,12 +887,11 @@ async def cut_release(
         app["name"],
         version,
         True,
-        {"commit": sha, "previous": current},
+        {"commit": sha, "kind": bump},
     )
     return {
         "ok": True,
         "version": version,
-        "previous": current,
         "next": "CI takes a few minutes to build. Then call get_release to "
         "follow the rollout.",
     }
