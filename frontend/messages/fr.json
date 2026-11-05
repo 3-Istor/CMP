@@ -2341,7 +2341,7 @@
       "viewRun": "Voir l'exécution CI",
       "loadFailed": "Impossible de charger les versions : {error}",
       "kind": {
-        "candidate": "Candidat",
+        "candidate": "Candidate",
         "patch": "Correctif",
         "minor": "Mineure",
         "major": "Majeure"

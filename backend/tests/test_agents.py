@@ -579,6 +579,24 @@ def test_cut_release_tags_the_commit_of_the_chosen_kind(cut):
     cut.assert_awaited_once_with("tok", "o/a", "v1.1.0-rc.1", sha="abc123")
 
 
+def test_cut_release_approval_binds_the_tag_and_the_commit(cut):
+    asyncio.run(mcp_server.cut_release(5, bump="minor"))
+
+    assert mcp_server._gate.await_args.kwargs["arguments"] == {
+        "app_id": 5,
+        "bump": "minor",
+        "tag": "v1.1.0-rc.1",
+        "sha": "abc123",
+    }
+
+
+def test_cut_release_points_a_staged_app_to_the_promotion(cut):
+    result = asyncio.run(mcp_server.cut_release(5, bump="minor"))
+
+    assert "promotion" in result["next"]
+    assert "get_release" not in result["next"]
+
+
 def test_cut_release_names_the_kind_the_app_does_not_offer(cut):
     result = asyncio.run(mcp_server.cut_release(5, bump="candidate"))
 

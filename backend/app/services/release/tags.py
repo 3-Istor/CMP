@@ -1,14 +1,16 @@
 """
 Release tags the "New release" button proposes: ``vX.Y.Z``, or
 ``vX.Y.Z-rc.N`` for an app with a staging environment (release candidates
-deploy to staging). Any other tag is ignored.
+deploy to staging). A promotion to prod leaves a ``release/X.Y.Z-rc.N`` tag
+(never ``vX.Y.Z``, which would start CI): it makes X.Y.Z final. Any other tag
+is ignored.
 """
 
 import re
 from dataclasses import dataclass
 from typing import Literal
 
-_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?", re.ASCII)
+_TAG = re.compile(r"(v|release/)(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?", re.ASCII)
 
 
 @dataclass(frozen=True)
@@ -23,12 +25,12 @@ def release_choices(tags: list[str], staged: bool) -> list[ReleaseChoice]:
     for name in tags:
         if not (match := _TAG.fullmatch(name)):
             continue
-        version = tuple(int(part) for part in match.groups()[:3])
-        if match[4] is None:
+        version = tuple(int(part) for part in match.groups()[1:4])
+        if match[1] == "release/" or match[5] is None:
             finals.add(version)
         else:
             candidates[version] = max(
-                candidates.get(version, 0), int(match[4])
+                candidates.get(version, 0), int(match[5])
             )
     base = max(finals | candidates.keys(), default=None)
 

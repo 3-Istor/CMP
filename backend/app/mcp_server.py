@@ -66,8 +66,10 @@ How to work:
   a sandbox project (create_project with level "sandbox").
 - Stacks: "static" (HTML/CSS/JS served by nginx) or "fullstack" (FastAPI +
   React + PostgreSQL). Prefer static unless the app must store data.
-- A release is a git tag vX.Y.Z (cut_release). CI builds the image, the
-  platform deploys it, with a canary when the app has one.
+- A release is a git tag vX.Y.Z (cut_release); an app with a staging
+  environment gets release candidates vX.Y.Z-rc.N, promoted to prod from the
+  CMP. CI builds the image, the platform deploys it, with a canary when the
+  app has one.
 - Never put secrets in files: use request_secret, the user types the value
   in the CMP.
 - Some actions answer "needs_user_confirmation": ask the user in plain words,
@@ -866,7 +868,13 @@ async def cut_release(
         "release.cut",
         project,
         tool="cut_release",
-        arguments={"app_id": app_id, "bump": bump},
+        # The approval covers the tag and commit shown: main moves on.
+        arguments={
+            "app_id": app_id,
+            "bump": bump,
+            "tag": version,
+            "sha": offered["commitSha"],
+        },
         summary=f"Release '{app['name']}' {version} "
         f"(main at {offered['commitSha'][:7]})?",
         deployment_id=app_id,
@@ -889,12 +897,17 @@ async def cut_release(
         True,
         {"commit": sha, "kind": bump},
     )
-    return {
-        "ok": True,
-        "version": version,
-        "next": "CI takes a few minutes to build. Then call get_release to "
-        "follow the rollout.",
-    }
+    if offered["staged"]:
+        follow_up = (
+            "CI takes a few minutes to build, then the candidate deploys to "
+            "staging. Prod changes through a promotion in the CMP."
+        )
+    else:
+        follow_up = (
+            "CI takes a few minutes to build. Then call get_release to "
+            "follow the rollout."
+        )
+    return {"ok": True, "version": version, "next": follow_up}
 
 
 @mcp.tool(annotations=READ_ONLY)

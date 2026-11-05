@@ -85,6 +85,36 @@ def _choices(tags, staged):
                 ("major", "v2.0.0-rc.1"),
             ],
         ),
+        # a promotion leaves a release/ tag: that version is final
+        (
+            ["v1.2.0-rc.3", "release/1.2.0-rc.3"],
+            True,
+            [
+                ("patch", "v1.2.1-rc.1"),
+                ("minor", "v1.3.0-rc.1"),
+                ("major", "v2.0.0-rc.1"),
+            ],
+        ),
+        # a release/ tag alone is final: it invents no candidate
+        (
+            ["release/1.2.0-rc.3"],
+            True,
+            [
+                ("patch", "v1.2.1-rc.1"),
+                ("minor", "v1.3.0-rc.1"),
+                ("major", "v2.0.0-rc.1"),
+            ],
+        ),
+        # other release/ tags are ignored
+        (
+            ["release/foo", "release/v1.9.0", "release/1.9", "v1.0.0"],
+            False,
+            [
+                ("patch", "v1.0.1"),
+                ("minor", "v1.1.0"),
+                ("major", "v2.0.0"),
+            ],
+        ),
         # a candidate below the latest final is not in progress
         (
             ["v1.2.0-rc.3", "v1.3.0"],
