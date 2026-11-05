@@ -40,6 +40,22 @@ def _environments(db: Session, deployment: Deployment) -> list[str]:
     )
 
 
+def _record_rolling(db: Session, deployment: Deployment, cloud: TargetCloud):
+    # Own guard: a canary app's route must still reconcile when this fails.
+    # Also read for canary apps, a fullstack one keeps its backend on rolling.
+    try:
+        sync_rolling(
+            db,
+            deployment.id,
+            read_rolling(deployment, cloud, _environments(db, deployment)),
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(
+            "Rolling history skipped for %s: %s", deployment.id, exc
+        )
+        db.rollback()
+
+
 def record_all(source: ReleaseSource) -> int:
     """Sync the history of every Kubernetes app, return how many have a Rollout."""
     recorded = 0
@@ -56,13 +72,6 @@ def record_all(source: ReleaseSource) -> int:
             cloud = project_cloud(db, deployment.project_id)
             try:
                 view, snapshot, _ = sync.compute(db, deployment, source)
-                sync_rolling(
-                    db,
-                    deployment.id,
-                    read_rolling(
-                        deployment, cloud, _environments(db, deployment)
-                    ),
-                )
             except ClusterNotConnectedError as exc:
                 logger.debug("Release recorder: skipped, %s", exc)
                 continue
@@ -82,6 +91,7 @@ def record_all(source: ReleaseSource) -> int:
                 )
                 db.rollback()
                 continue
+            _record_rolling(db, deployment, cloud)
             if deployment.project_id:
                 try:
                     reconcile_route(

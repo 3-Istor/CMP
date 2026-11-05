@@ -18,6 +18,8 @@ from app.services.environments import gitops, layout, observe
 from app.services.kube_client import kube_get, kube_list
 
 REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
+# Set when a rollback reuses an old ReplicaSet under a new revision number.
+REUSED_ANNOTATION = "deployment.kubernetes.io/revision-history"
 # What the Progressing condition's reason says about the newest revision.
 OUTCOMES = {
     "ProgressDeadlineExceeded": "failed",
@@ -53,9 +55,22 @@ def _image_of(replica_set: dict) -> str | None:
     return None
 
 
+def _started_at(replica_set: dict) -> datetime:
+    meta = replica_set["metadata"]
+    if REUSED_ANNOTATION in (meta.get("annotations") or {}):
+        # creationTimestamp is the first use of the template, not this one.
+        return datetime.now(timezone.utc)
+    return datetime.fromisoformat(meta["creationTimestamp"])
+
+
 def _newest_outcome(deployment_obj: dict | None) -> str:
-    conditions = (deployment_obj or {}).get("status", {}).get("conditions")
-    for condition in conditions or []:
+    deployment_obj = deployment_obj or {}
+    status = deployment_obj.get("status", {})
+    generation = deployment_obj.get("metadata", {}).get("generation", 0)
+    # The conditions still describe the previous generation until observed.
+    if status.get("observedGeneration", 0) < generation:
+        return "running"
+    for condition in status.get("conditions") or []:
         if condition.get("type") == "Progressing":
             return OUTCOMES.get(condition.get("reason"), "running")
     return "running"
@@ -81,9 +96,7 @@ def revisions_of(
             component=component,
             revision=revision,
             image=_image_of(rs),
-            started_at=datetime.fromisoformat(
-                rs["metadata"]["creationTimestamp"]
-            ),
+            started_at=_started_at(rs),
             outcome=newest if i == len(found) - 1 else "deployed",
         )
         for i, (revision, rs) in enumerate(found)
@@ -123,6 +136,24 @@ def read_rolling(
     return found
 
 
+def _next_outcome(
+    row: ReleaseEvent, top: int, current: RollingRevision | None
+) -> str | None:
+    """Where a row moves to given what is seen now, None to leave it."""
+    if row.outcome == "running":
+        # An older revision's ReplicaSet may be gone: compare numbers only.
+        if row.revision < top:
+            return "superseded"
+        if current and current.outcome != "running":
+            return current.outcome
+    # A failed rollout recovers when its pods come up late. Only the newest
+    # revision tells: the older ones are always labelled deployed.
+    elif row.outcome == "failed" and row.revision == top:
+        if current and current.outcome == "deployed":
+            return "deployed"
+    return None
+
+
 def sync_rolling(
     db: Session, deployment_id: int, revisions: list[RollingRevision]
 ) -> int:
@@ -149,16 +180,11 @@ def sync_rolling(
     changes = 0
 
     for row in rows:
-        known.add((row.environment, row.component, row.revision))
-        top = newest.get((row.environment, row.component))
-        if row.outcome != "running" or top is None:
-            continue
-        # An older revision's ReplicaSet may be gone: compare numbers only.
-        current = seen.get((row.environment, row.component, row.revision))
-        outcome = (
-            "superseded" if row.revision < top else current and current.outcome
-        )
-        if outcome and outcome != "running":
+        key = (row.environment, row.component, row.revision)
+        known.add(key)
+        top = newest.get(key[:2])
+        outcome = top and _next_outcome(row, top, seen.get(key))
+        if outcome:
             row.outcome = outcome
             row.finished_at = now
             changes += 1

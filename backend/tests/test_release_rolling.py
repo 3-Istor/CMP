@@ -1,10 +1,15 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 import pytest
 
+from app.models.deployment import Deployment
+from app.models.project import TargetCloud
 from app.models.release import ReleaseEvent
+from app.services.release import rolling
 from app.services.release.rolling import (
     RollingRevision,
+    read_rolling,
     revisions_of,
     sync_rolling,
 )
@@ -165,3 +170,111 @@ def test_a_running_row_is_closed_when_a_newer_revision_appears(
 
     # Assert
     assert (changed, _rows(session_factory)[2].outcome) == (1, "failed")
+
+
+def test_a_failed_rollout_that_recovers_becomes_deployed(session_factory):
+    # Arrange: revision 1 failed long ago, revision 2 has just failed too
+    with session_factory() as db:
+        sync_rolling(db, 7, [_revision(1, "failed"), _revision(2, "failed")])
+
+    # Act: the pods of revision 2 come up late
+    with session_factory() as db:
+        changed = sync_rolling(db, 7, [_revision(1), _revision(2)])
+
+    # Assert: only the newest revision tells, the older one stays failed
+    rows = _rows(session_factory)
+    assert changed == 1
+    assert (rows[2].outcome, rows[1].outcome) == ("deployed", "failed")
+    assert rows[2].finished_at is not None
+
+
+def test_a_reused_replica_set_is_dated_when_seen():
+    # Arrange: a rollback to an old template gives it a new revision
+    reused = _rs(3)
+    reused["metadata"]["creationTimestamp"] = "2020-01-01T00:00:00Z"
+    reused["metadata"]["annotations"][
+        "deployment.kubernetes.io/revision-history"
+    ] = "1"
+
+    # Act
+    (found,) = revisions_of("prod", "app", [reused], None)
+
+    # Assert
+    seen = datetime.now(timezone.utc) - found.started_at
+    assert timedelta(0) <= seen < timedelta(minutes=1)
+
+
+def test_a_deployment_not_yet_observed_reads_running():
+    # Arrange: the status still describes the previous generation
+    stale = {
+        "metadata": {"generation": 4},
+        "status": {
+            "observedGeneration": 3,
+            "conditions": [
+                {"type": "Progressing", "reason": "NewReplicaSetAvailable"}
+            ],
+        },
+    }
+
+    # Act
+    found = revisions_of("prod", "app", [_rs(1), _rs(2)], stale)
+
+    # Assert
+    assert [r.outcome for r in found] == ["deployed", "running"]
+
+
+def test_read_rolling_reads_each_environment_of_the_app():
+    # Arrange
+    app = Deployment(id=7, name="web", project_id="shop")
+    asked = []
+
+    def fake_list(path, params=None, cloud=None):
+        asked.append(("list", path, params, cloud))
+        return [_rs(1)]
+
+    def fake_get(path, params=None, cloud=None):
+        asked.append(("get", path, params, cloud))
+        if "-stg/" in path:
+            return None
+        return _deployment("NewReplicaSetAvailable")
+
+    # Act
+    with (
+        mock.patch.object(rolling, "kube_list", fake_list),
+        mock.patch.object(rolling, "kube_get", fake_get),
+    ):
+        found = read_rolling(app, TargetCloud.AWS, ["prod", "staging"])
+
+    # Assert
+    chart = "shop-web-app-cnp-generic-app"
+    assert asked == [
+        (
+            "list",
+            "/apis/apps/v1/namespaces/shop-web/replicasets",
+            {"labelSelector": "app.kubernetes.io/instance=shop-web-app"},
+            TargetCloud.AWS,
+        ),
+        (
+            "get",
+            f"/apis/apps/v1/namespaces/shop-web/deployments/{chart}",
+            None,
+            TargetCloud.AWS,
+        ),
+        (
+            "list",
+            "/apis/apps/v1/namespaces/shop-web-stg/replicasets",
+            {"labelSelector": "app.kubernetes.io/instance=shop-web-app-stg"},
+            TargetCloud.AWS,
+        ),
+        (
+            "get",
+            f"/apis/apps/v1/namespaces/shop-web-stg/deployments/{chart}",
+            None,
+            TargetCloud.AWS,
+        ),
+    ]
+    # A missing Deployment (404) leaves the newest revision running.
+    assert [(r.environment, r.component, r.outcome) for r in found] == [
+        ("prod", "app", "deployed"),
+        ("staging", "app", "running"),
+    ]

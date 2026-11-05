@@ -109,6 +109,25 @@ def test_a_rolling_row_does_not_disturb_the_canary_history(session_factory):
     assert latest.component is None
 
 
+@pytest.mark.parametrize("error", [KubeUnavailableError("down"), ValueError()])
+def test_record_all_reconciles_the_route_when_the_rolling_read_fails(
+    session_factory, read_rolling, error
+):
+    # Arrange
+    read_rolling.side_effect = error
+
+    # Act
+    with (
+        mock.patch.object(recorder, "SessionLocal", session_factory),
+        mock.patch.object(recorder, "reconcile_route") as reconcile,
+    ):
+        recorded = recorder.record_all(FakeSource(_paused()))
+
+    # Assert
+    assert recorded == 1
+    reconcile.assert_called_once()
+
+
 def _record_a_rolling_app(session_factory, read_rolling, staging=None):
     started = datetime(2026, 11, 5, 9, 0, tzinfo=timezone.utc)
     read_rolling.return_value = [
