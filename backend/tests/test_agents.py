@@ -611,3 +611,38 @@ def test_an_assistant_is_slowed_down_past_its_write_budget():
 
     with pytest.raises(ratelimit.RateLimited):
         ratelimit.check(424242, "write")
+
+
+def test_list_releases_filters_in_the_api(monkeypatch):
+    api = mock.AsyncMock(
+        return_value=[
+            {
+                "revision": 3,
+                "image": "ghcr.io/o/a/backend:1.2.0",
+                "outcome": "deployed",
+                "started_at": "2026-11-05T10:00:00Z",
+                "environment": "prod",
+                "component": "backend",
+            }
+        ]
+    )
+    monkeypatch.setattr(mcp_server, "Caller", lambda: SimpleNamespace(api=api))
+
+    result = asyncio.run(
+        mcp_server.list_releases(
+            5, environment="prod", component="backend", version="1.2", limit=3
+        )
+    )
+
+    api.assert_awaited_once_with(
+        "GET",
+        "/api/deployments/5/releases",
+        params={
+            "limit": 3,
+            "environment": "prod",
+            "component": "backend",
+            "version": "1.2",
+        },
+    )
+    assert result["releases"][0]["environment"] == "prod"
+    assert result["releases"][0]["component"] == "backend"

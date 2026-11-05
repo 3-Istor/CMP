@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getAppLogs } from "@/lib/api";
 import { useAppHealth } from "@/lib/hooks";
 import { useCardData } from "@/lib/useCardData";
+import { useDebounced } from "@/lib/useDebounced";
 import { AlertTriangle, Lock, Pause, Play } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -18,15 +19,6 @@ const LEVELS = ["error", "warn", "info", "debug"] as const;
 
 const SELECT_CLASS =
   "h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
-
-function useDebounced<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 export function LogsView({ appId }: { appId: number }) {
   const t = useTranslations("appPage.logs");

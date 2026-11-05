@@ -359,6 +359,77 @@ def test_history_lists_the_attempts(session_factory, keycloak):
     ]
 
 
+class TestHistoryFilters:
+    @pytest.fixture
+    def client(self, session_factory, keycloak):
+        with session_factory() as db:
+            for environment, component, tag in [
+                ("prod", "backend", "1.2.0"),
+                ("prod", "frontend", "1.2.0"),
+                ("staging", "backend", "1.2.1-RC.4"),
+                ("staging", "frontend", "1.2.1_rc.5"),
+            ]:
+                db.add(
+                    ReleaseEvent(
+                        deployment_id=7,
+                        revision=1,
+                        image=f"ghcr.io/3-istor/web/{component}:{tag}",
+                        strategy="rolling",
+                        started_at=datetime.now(timezone.utc),
+                        outcome="deployed",
+                        forced=False,
+                        environment=environment,
+                        component=component,
+                    )
+                )
+            db.commit()
+        return _client(session_factory, FakeSource(None))
+
+    @staticmethod
+    def _tags(client, **params):
+        rows = client.get("/api/deployments/7/releases", params=params).json()
+        return sorted(
+            (r["environment"], r["component"], r["image"].rsplit(":", 1)[1])
+            for r in rows
+        )
+
+    def test_environment_and_component_combine(self, client):
+        assert self._tags(client, environment="prod", component="backend") == [
+            ("prod", "backend", "1.2.0")
+        ]
+
+    def test_version_is_a_case_insensitive_substring(self, client):
+        assert self._tags(client, version="rc.4") == [
+            ("staging", "backend", "1.2.1-RC.4")
+        ]
+
+    def test_version_wildcards_are_literal(self, client):
+        # "_" must not match any character as in SQL LIKE.
+        assert self._tags(client, version="1_rc") == [
+            ("staging", "frontend", "1.2.1_rc.5")
+        ]
+
+    def test_injection_payloads_are_plain_values(self, client):
+        for params in (
+            {"component": "x' OR '1'='1"},
+            {"version": "'; DROP TABLE release_events; --"},
+        ):
+            assert self._tags(client, **params) == []
+        assert len(self._tags(client)) == 4
+
+    def test_limit_keeps_the_newest(self, client):
+        rows = client.get(
+            "/api/deployments/7/releases", params={"limit": 1}
+        ).json()
+        assert [r["image"].rsplit(":", 1)[1] for r in rows] == ["1.2.1_rc.5"]
+
+    def test_unknown_environment_is_refused(self, client):
+        response = client.get(
+            "/api/deployments/7/releases", params={"environment": "dev"}
+        )
+        assert response.status_code == 422
+
+
 DIGEST = "sha256:" + "a" * 64
 LIVE = "sha256:" + "b" * 64
 

@@ -2460,6 +2460,10 @@
       "rollbackTitle": "Revenir à {version} en prod ?",
       "rollbackDescription": "La prod exécutera de nouveau cette version, sans les vérifications de staging.",
       "rollbackStarted": "Retour à {version} lancé",
+      "allEnvironments": "Tous les environnements",
+      "allComponents": "Tous les composants",
+      "searchPlaceholder": "Version, ex. rc.4",
+      "noMatch": "Aucun déploiement ne correspond à ces filtres",
       "outcomes": {
         "running": "En cours",
         "promoted": "Promue",

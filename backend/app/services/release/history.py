@@ -32,15 +32,26 @@ def latest_event(db: Session, deployment_id: int) -> ReleaseEvent | None:
 
 
 def list_events(
-    db: Session, deployment_id: int, limit: int = 50
+    db: Session,
+    deployment_id: int,
+    limit: int = 50,
+    environment: str | None = None,
+    component: str | None = None,
+    version: str | None = None,
 ) -> list[ReleaseEvent]:
-    return (
-        db.query(ReleaseEvent)
-        .filter(ReleaseEvent.deployment_id == deployment_id)
-        .order_by(ReleaseEvent.id.desc())
-        .limit(limit)
-        .all()
+    query = db.query(ReleaseEvent).filter(
+        ReleaseEvent.deployment_id == deployment_id
     )
+    if environment:
+        query = query.filter(ReleaseEvent.environment == environment)
+    if component:
+        query = query.filter(ReleaseEvent.component == component)
+    if version:
+        # The version is the image tag; autoescape keeps % and _ literal.
+        query = query.filter(
+            ReleaseEvent.image.icontains(version, autoescape=True)
+        )
+    return query.order_by(ReleaseEvent.id.desc()).limit(limit).all()
 
 
 def _digest(ref: str | None) -> str | None:
