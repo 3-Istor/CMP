@@ -54,6 +54,7 @@ import {
   ShieldOff,
   Trash2,
   UserPlus,
+  UserX,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -310,11 +311,15 @@ export default function ProjectPage() {
                           className="gap-2"
                           onClick={handleSignup}
                         >
-                          <UserPlus className="h-4 w-4" aria-hidden />
+                          {signupOn ? (
+                            <UserX className="h-4 w-4" aria-hidden />
+                          ) : (
+                            <UserPlus className="h-4 w-4" aria-hidden />
+                          )}
                           {ta(
                             signupOn
-                              ? "customerSignupOn"
-                              : "customerSignupOff",
+                              ? "customerSignupOff"
+                              : "customerSignupOn",
                           )}
                         </DropdownMenuItem>
                       )}

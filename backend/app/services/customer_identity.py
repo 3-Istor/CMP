@@ -22,8 +22,9 @@ from app.services import project_registry
 
 logger = logging.getLogger(__name__)
 
-# Org CRUD, adding members by user, and looking users up. Not manage-realm.
-APP_ADMIN_ROLES = ("manage-organizations", "manage-users", "view-users")
+# Org CRUD and members by user; manage-users already implies view-users.
+# Not manage-realm.
+APP_ADMIN_ROLES = ("manage-organizations", "manage-users")
 
 _USERS_GROUP = "users"
 _SCOPE = "organization"
@@ -122,10 +123,16 @@ def _default_users_group(realm: str) -> None:
         _admin("PUT", f"{base}/default-groups/{group['id']}")
 
 
-def _grant_apps(realm: str, project: str) -> None:
+def _grant_apps(realm: str, project: str, staging: bool) -> None:
     base = _base(realm)
     clients = _admin("GET", f"{base}/clients")
-    apps = [c for c in clients if c["clientId"].startswith(f"cnp-{project}-")]
+    # `-stg` clients only get rights in the staging realm, never in prod's.
+    apps = [
+        c
+        for c in clients
+        if c["clientId"].startswith(f"cnp-{project}-")
+        and c["clientId"].endswith("-stg") == staging
+    ]
     if not apps:
         return
     rm = next(
@@ -197,7 +204,7 @@ def apply(project: str, enabled: bool) -> None:
 
     _default_users_group(project)
     for name in live:
-        _grant_apps(name, project)
+        _grant_apps(name, project, staging=name != project)
     _set_realm(project, realms[project], {"registrationAllowed": True})
 
 

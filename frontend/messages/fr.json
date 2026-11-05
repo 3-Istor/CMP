@@ -1853,8 +1853,8 @@
     "newApp": "Nouvelle app",
     "protectOn": "Activer la protection contre la suppression",
     "protectOff": "Désactiver la protection contre la suppression",
-    "customerSignupOn": "Inscription des clients : activée",
-    "customerSignupOff": "Inscription des clients : désactivée",
+    "customerSignupOn": "Activer l'inscription des clients",
+    "customerSignupOff": "Désactiver l'inscription des clients",
     "deleteProject": "Supprimer le projet…",
     "externalLink": "S'ouvre dans un nouvel onglet",
     "reasons": {

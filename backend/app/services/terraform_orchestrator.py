@@ -296,6 +296,12 @@ def run_deployment(deployment_id: int) -> None:
 
             db.commit()
 
+            # The OIDC client exists after apply, so grant its rights before
+            # the (long) URL wait. Only gitops apps have one. Swallows its own
+            # errors: the deployment already succeeded.
+            if deployment.template_id == "k3s-gitops-app":
+                customer_identity.apply_if_enabled(app_config["project_name"])
+
             # Step 5: Wait for app URL to become accessible
             logger.info("─" * 80)
             logger.info("STEP 5: Waiting for app to be accessible")
@@ -313,10 +319,6 @@ def run_deployment(deployment_id: int) -> None:
             logger.info("STEP 6: Finalization")
             logger.info("─" * 80)
             output_msg = _format_outputs_message(outputs)
-            # Only gitops apps get an OIDC client. Swallows its own errors:
-            # the deployment already succeeded.
-            if deployment.template_id == "k3s-gitops-app":
-                customer_identity.apply_if_enabled(app_config["project_name"])
             _update(
                 db,
                 deployment,

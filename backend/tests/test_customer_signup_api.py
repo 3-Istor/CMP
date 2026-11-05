@@ -60,16 +60,22 @@ def seams():
         yield calls
 
 
-@pytest.mark.parametrize("enabled", [True, False])
-def test_an_admin_switches_sign_up(db, roles, seams, enabled):  # noqa: F811
+@pytest.mark.parametrize(
+    "enabled, order",
+    [(True, ["registry", "keycloak"]), (False, ["keycloak", "registry"])],
+)
+def test_an_admin_switches_sign_up(
+    db, roles, seams, enabled, order  # noqa: F811
+):
     assert put(db, _user("u1"), enabled=enabled) == {"enabled": enabled}
 
-    # Registry first, so a deploy heals Keycloak if the second step fails;
+    # On: registry first, so a deploy heals Keycloak if the second step fails.
+    # Off: Keycloak first, so a failure never leaves it open with the flag off.
     # Keycloak calls are blocking, so off the event loop.
-    assert seams[0] == ("registry", "alpha", enabled)
-    assert seams[1][:3] == ("keycloak", "alpha", enabled)
-    assert seams[1][3] != threading.get_ident()
-    assert len(seams) == 2
+    assert [c[0] for c in seams] == order
+    assert all(c[:3][1:] == ("alpha", enabled) for c in seams)
+    keycloak = next(c for c in seams if c[0] == "keycloak")
+    assert keycloak[3] != threading.get_ident()
 
 
 def test_a_platform_admin_may_switch_sign_up(db, roles, seams):  # noqa: F811
@@ -139,6 +145,38 @@ def test_a_keycloak_failure_says_the_setting_is_saved(
     assert "saved" in exc.value.detail
     assert "PUT /admin: forbidden" in exc.value.detail
     assert seams == [("registry", "alpha", True)]
+
+
+def test_a_keycloak_failure_keeps_sign_up_on_in_the_registry(
+    db, roles, seams  # noqa: F811
+):
+    with mock.patch.object(
+        customer_identity,
+        "apply",
+        side_effect=CustomerIdentityError(502, "keycloak down"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            put(db, _user("u1"), enabled=False)
+
+    assert exc.value.status_code == 502
+    assert "unchanged" in exc.value.detail
+    assert "keycloak down" in exc.value.detail
+    assert seams == []  # the flag was never written
+
+
+def test_an_unwritable_registry_after_closing_keycloak_is_a_bad_gateway(
+    db, roles, seams  # noqa: F811
+):
+    with mock.patch.object(
+        projects_router,
+        "set_self_registration",
+        new=mock.AsyncMock(side_effect=RegistryError("down")),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            put(db, _user("u1"), enabled=False)
+
+    assert exc.value.status_code == 502
+    assert [c[0] for c in seams] == ["keycloak"]
 
 
 def test_reading_the_switch(roles):  # noqa: F811
@@ -274,7 +312,11 @@ class FakeExecutor:
         return ""
 
     def apply(self, config):
-        return {"hostname": "web-demo.example.test", "app_type": "static"}
+        return {
+            "hostname": "web-demo.example.test",
+            "app_type": "static",
+            "app_url": "https://web-demo.example.test",
+        }
 
     def get_state_summary(self):
         return {"resource_count": 1}
@@ -299,6 +341,7 @@ def test_a_new_app_gets_the_rights_when_sign_up_is_on(
     seen, during = seen_by_apply_if_enabled(
         session_factory, lambda db: db.get(Deployment, 1).status
     )
+    wait = mock.Mock(side_effect=lambda *_: seen.append("url wait") or True)
     repo = mock.Mock()
     repo.get_template_by_id.return_value = {"_template_path": str(tmp_path)}
 
@@ -309,6 +352,7 @@ def test_a_new_app_gets_the_rights_when_sign_up_is_on(
             orchestrator, "create_executor", return_value=FakeExecutor()
         ),
         mock.patch.object(orchestrator, "_notify"),
+        mock.patch.object(orchestrator, "_wait_for_url_ready", new=wait),
         mock.patch.object(
             project_registry, "register_app", new=mock.AsyncMock()
         ),
@@ -318,8 +362,9 @@ def test_a_new_app_gets_the_rights_when_sign_up_is_on(
     ):
         orchestrator.run_deployment(1)
 
-    # Before the app is reported running, so it never serves without the roles.
-    assert seen == [("demo", DeploymentStatus.DEPLOYING)]
+    # The client exists after apply: don't wait for the URL first, or the app
+    # serves without the roles in the meantime.
+    assert seen == [("demo", DeploymentStatus.DEPLOYING), "url wait"]
     with session_factory() as db:
         assert db.get(Deployment, 1).status == DeploymentStatus.RUNNING
 
@@ -354,6 +399,7 @@ def test_staging_gets_the_rights_before_it_is_ready(session_factory):
         mock.patch.object(
             activation, "_executor", return_value=FakeExecutor()
         ),
+        mock.patch.object(activation.staging_realm, "ensure"),
         mock.patch.object(
             activation, "_write_env_files", new=mock.AsyncMock()
         ),
@@ -397,6 +443,7 @@ def test_a_broken_sign_up_never_fails_the_staging_activation(session_factory):
         mock.patch.object(
             activation, "_executor", return_value=FakeExecutor()
         ),
+        mock.patch.object(activation.staging_realm, "ensure"),
         mock.patch.object(
             activation, "_write_env_files", new=mock.AsyncMock()
         ),

@@ -161,8 +161,11 @@ class FakeKeycloak:
 @pytest.fixture
 def kc():
     fake = FakeKeycloak()
-    fake.add_realm("p", ["cnp-p-web", "cnp-other-x"])
-    fake.add_realm("p-staging", ["cnp-p-web-stg"], registrationAllowed=True)
+    # A staging client left in the prod realm (not yet moved) must stay untouched.
+    fake.add_realm("p", ["cnp-p-web", "cnp-p-web-stg", "cnp-other-x"])
+    fake.add_realm(
+        "p-staging", ["cnp-p-web-stg", "cnp-p-api"], registrationAllowed=True
+    )
     with mock.patch.object(ci, "_admin", fake):
         yield fake
 
@@ -190,7 +193,15 @@ def test_each_app_client_gets_the_roles_of_its_own_realm(kc):
     assert kc.roles_of("p", "cnp-p-web") == set(APP_ADMIN_ROLES)
     # The fake rejects a role id from another realm, and `p` stays empty.
     assert kc.roles_of("p-staging", "cnp-p-web-stg") == set(APP_ADMIN_ROLES)
+    stray = kc.client("p", "cnp-p-web-stg")
     assert kc.roles_of("p", "cnp-p-web-stg") == set()
+    assert stray["serviceAccountsEnabled"] is False
+    assert "organization" not in stray["defaultClientScopes"]
+    assert kc.realms["p"]["mappings"].keys() == {"sa:p:cnp-p-web"}
+    # And a prod client in the staging realm gets nothing there either.
+    assert kc.realms["p-staging"]["mappings"].keys() == {
+        "sa:p-staging:cnp-p-web-stg"
+    }
     for realm, cid in (("p", "cnp-p-web"), ("p-staging", "cnp-p-web-stg")):
         client = kc.client(realm, cid)
         assert client["serviceAccountsEnabled"] is True

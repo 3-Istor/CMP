@@ -874,7 +874,8 @@ async def update_customer_signup(
     """
     Turn the project's customer sign-up on or off.
 
-    Writes the registry flag, then makes the project's Keycloak realms match.
+    On: writes the registry flag, then opens Keycloak. Off: closes Keycloak,
+    then writes the flag, so a failure never leaves sign-up open.
 
     Requirements:
     - Caller must be a project admin or a platform admin
@@ -884,9 +885,10 @@ async def update_customer_signup(
     Raises:
         403: Caller is an assistant, or is not a project admin
         404: The project has no registry record
-        502: The registry or Keycloak failed. After a Keycloak failure the flag
-            is already saved: the next deployment of an app re-applies it when
-            on, and so does sending the value again.
+        502: The registry or Keycloak failed. Turning on, the flag is already
+            saved after a Keycloak failure: the next deployment of an app
+            re-applies it, and so does sending the value again. Turning off,
+            a Keycloak failure leaves the flag on.
     """
     if token.get("cnp_agent"):
         raise HTTPException(
@@ -895,29 +897,38 @@ async def update_customer_signup(
         )
     if not is_cnp_admin(token):
         assert_project_role(db, token, project_name, ProjectRole.ADMIN)
-    try:
-        await set_self_registration(project_name, payload.enabled)
-    except RecordNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from exc
-    except RegistryError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not update the project registry: {exc}",
-        ) from exc
-    try:
-        await run_in_threadpool(
-            customer_identity.apply, project_name, payload.enabled
-        )
-    except customer_identity.CustomerIdentityError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                "The setting is saved, but Keycloak was not updated: "
-                f"{exc}. Switch it back and forth to retry."
-            ),
-        ) from exc
+
+    async def save() -> None:
+        try:
+            await set_self_registration(project_name, payload.enabled)
+        except RecordNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            ) from exc
+        except RegistryError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not update the project registry: {exc}",
+            ) from exc
+
+    async def sync() -> None:
+        try:
+            await run_in_threadpool(
+                customer_identity.apply, project_name, payload.enabled
+            )
+        except customer_identity.CustomerIdentityError as exc:
+            saved = (
+                "The setting is saved, but Keycloak was not updated"
+                if payload.enabled
+                else "The setting is unchanged: Keycloak was not updated"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"{saved}: {exc}. Try again.",
+            ) from exc
+
+    for step in (save, sync) if payload.enabled else (sync, save):
+        await step()
     return {"enabled": payload.enabled}
 
 

@@ -1853,8 +1853,8 @@
     "newApp": "New app",
     "protectOn": "Turn on deletion protection",
     "protectOff": "Turn off deletion protection",
-    "customerSignupOn": "Customer sign-up: on",
-    "customerSignupOff": "Customer sign-up: off",
+    "customerSignupOn": "Turn on customer sign-up",
+    "customerSignupOff": "Turn off customer sign-up",
     "deleteProject": "Delete project…",
     "externalLink": "Opens in a new tab",
     "reasons": {
