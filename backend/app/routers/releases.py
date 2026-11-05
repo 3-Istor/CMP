@@ -113,8 +113,13 @@ def list_releases(
     token: CurrentUser,
     db: Session = Depends(get_db),
 ):
-    _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
-    return history.list_events(db, deployment_id)
+    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    events = history.list_events(db, deployment_id)
+    targets = history.rollback_targets(db, deployment, events)
+    rows = [ReleaseEventRead.model_validate(e) for e in events]
+    for row in rows:
+        row.rollback_promotion_id = targets.get(row.id)
+    return rows
 
 
 def _poll_frame(deployment_id: int, source: ReleaseSource) -> str | None:

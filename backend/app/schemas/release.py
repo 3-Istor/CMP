@@ -17,7 +17,13 @@ StepStatus = Literal[
 ]
 Phase = Literal["Progressing", "Paused", "Healthy", "Degraded", "Aborted"]
 Outcome = Literal[
-    "running", "promoted", "aborted_auto", "aborted_manual", "superseded"
+    "running",
+    "promoted",
+    "aborted_auto",
+    "aborted_manual",
+    "superseded",
+    "deployed",
+    "failed",
 ]
 
 
@@ -155,3 +161,6 @@ class ReleaseEventRead(BaseModel):
     reached_step: int | None
     steps: list[dict[str, Any]] | None
     actors: list[ReleaseActor] | None
+    environment: str
+    component: str | None
+    rollback_promotion_id: int | None = None

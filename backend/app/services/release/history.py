@@ -11,15 +11,21 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.models.deployment import Deployment
+from app.models.environment import AppEnvironment, Promotion
 from app.models.release import ReleaseEvent
 from app.schemas.release import ReleaseView
 from app.services.release.view import ReleaseHint
 
 
 def latest_event(db: Session, deployment_id: int) -> ReleaseEvent | None:
+    # Rolling rows are not canary attempts: the canary sync must not see them.
     return (
         db.query(ReleaseEvent)
-        .filter(ReleaseEvent.deployment_id == deployment_id)
+        .filter(
+            ReleaseEvent.deployment_id == deployment_id,
+            ReleaseEvent.strategy != "rolling",
+        )
         .order_by(ReleaseEvent.id.desc())
         .first()
     )
@@ -35,6 +41,48 @@ def list_events(
         .limit(limit)
         .all()
     )
+
+
+def _digest(ref: str | None) -> str | None:
+    # An event image may carry a tag before the digest, a promotion does not.
+    return (ref or "").partition("@")[2] or None
+
+
+def rollback_targets(
+    db: Session, deployment: Deployment, events: list[ReleaseEvent]
+) -> dict[int, int]:
+    """
+    Event id -> id of the prod promotion that can put that version back.
+
+    Only apps with a staging have promotions; a rolled-back row keeps its
+    digest, so the newest matching promotion wins. What prod runs (the newest
+    promotion, prod only changes by promotion) offers none: it would 409.
+    """
+    if db.get(AppEnvironment, (deployment.id, "staging")) is None:
+        return {}
+    promotions = (
+        db.query(Promotion)
+        .filter(
+            Promotion.deployment_id == deployment.id,
+            Promotion.target_env == "prod",
+            Promotion.status == "done",
+        )
+        .order_by(Promotion.id.desc())
+        .all()
+    )
+    live = {_digest(ref) for p in promotions[:1] for ref in p.digests.values()}
+    by_digest: dict[str, int] = {}
+    for promotion in promotions:
+        for ref in promotion.digests.values():
+            digest = _digest(ref)
+            if digest and digest not in live:
+                by_digest.setdefault(digest, promotion.id)
+    return {
+        e.id: by_digest[digest]
+        for e in events
+        if e.environment == "prod"
+        and (digest := _digest(e.image)) in by_digest
+    }
 
 
 def hint_from(event: ReleaseEvent | None, revision: int | None) -> ReleaseHint:

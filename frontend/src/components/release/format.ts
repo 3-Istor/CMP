@@ -31,6 +31,8 @@ export const OUTCOME_TONE: Record<ReleaseOutcome, keyof typeof TONE> = {
   aborted_auto: "bad",
   aborted_manual: "bad",
   superseded: "muted",
+  deployed: "ok",
+  failed: "bad",
 };
 
 export function isVisibleStep(step: { kind: ReleaseStepKind }): boolean {

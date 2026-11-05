@@ -406,9 +406,11 @@ export function ReleaseTab({
           ),
         )
       : null;
+  // A fullstack canary keeps its backend rolling, with the same revision numbers.
+  const canaryEvents = events.filter((e) => e.strategy !== "rolling");
   const currentEvent =
-    events.find((e) => e.revision === view.revision) ??
-    events.find((e) => e.outcome === "running");
+    canaryEvents.find((e) => e.revision === view.revision) ??
+    canaryEvents.find((e) => e.outcome === "running");
   const eta =
     view.etaSeconds != null
       ? t("eta.approx", { duration: formatDuration(view.etaSeconds, t) })
@@ -636,7 +638,7 @@ export function ReleaseTab({
           {historyLoading ? (
             <Skeleton className="h-24 w-full" />
           ) : (
-            <ReleaseHistoryTable events={events} />
+            <ReleaseHistoryTable events={canaryEvents} />
           )}
         </CardContent>
       </Card>

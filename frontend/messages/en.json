@@ -2134,7 +2134,9 @@
       "promoted": "Promoted",
       "aborted_auto": "Auto-rejected",
       "aborted_manual": "Aborted",
-      "superseded": "Superseded"
+      "superseded": "Superseded",
+      "deployed": "Deployed",
+      "failed": "Failed"
     },
     "errors": {
       "readState": "Could not read the release state: {error}"
@@ -2432,12 +2434,21 @@
       "duration": "Duration",
       "automatic": "Automatic",
       "forced": "Forced",
+      "env": "Env",
+      "component": "Component",
+      "actions": "Actions",
+      "rollback": "Roll back",
+      "rollbackTitle": "Roll back prod to {version}?",
+      "rollbackDescription": "Prod will run this version again, without the staging checks.",
+      "rollbackStarted": "Rollback to {version} started",
       "outcomes": {
         "running": "In progress",
         "promoted": "Promoted",
         "aborted_auto": "Automatically rejected",
         "aborted_manual": "Aborted",
-        "superseded": "Superseded"
+        "superseded": "Superseded",
+        "deployed": "Deployed",
+        "failed": "Failed"
       }
     },
     "events": {
