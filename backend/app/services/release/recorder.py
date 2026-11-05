@@ -8,8 +8,11 @@ which leaves holes in it and in the delivery metrics built on it.
 import asyncio
 import logging
 
+from sqlalchemy.orm import Session
+
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.environment import AppEnvironment
 from app.models.project import TargetCloud
 from app.services.clusters.state import cluster_states, project_cloud
 from app.services.kube_client import (
@@ -17,6 +20,7 @@ from app.services.kube_client import (
     KubeUnavailableError,
 )
 from app.services.release import sync
+from app.services.release.rolling import read_rolling, sync_rolling
 from app.services.release.route_reconciler import reconcile_route
 from app.services.release.source import KubeReleaseSource, ReleaseSource
 
@@ -25,6 +29,15 @@ logger = logging.getLogger(__name__)
 RECORD_INTERVAL_SECONDS = 30
 # A canary shifting or holding traffic: re-syncing its route would reset the weights.
 MOVING_PHASES = {"Progressing", "Paused"}
+
+
+def _environments(db: Session, deployment: Deployment) -> list[str]:
+    staging = db.get(AppEnvironment, (deployment.id, "staging"))
+    return (
+        ["prod", "staging"]
+        if staging and staging.state == "ready"
+        else ["prod"]
+    )
 
 
 def record_all(source: ReleaseSource) -> int:
@@ -43,6 +56,13 @@ def record_all(source: ReleaseSource) -> int:
             cloud = project_cloud(db, deployment.project_id)
             try:
                 view, snapshot, _ = sync.compute(db, deployment, source)
+                sync_rolling(
+                    db,
+                    deployment.id,
+                    read_rolling(
+                        deployment, cloud, _environments(db, deployment)
+                    ),
+                )
             except ClusterNotConnectedError as exc:
                 logger.debug("Release recorder: skipped, %s", exc)
                 continue
