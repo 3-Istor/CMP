@@ -1,7 +1,8 @@
 "use client";
 
-import { imageTag } from "@/components/release/format";
+import { imageTag, OUTCOME_TONE, TONE } from "@/components/release/format";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { OpenDashboardButton } from "@/components/ui/open-dashboard-button";
 import { getReleaseHistory } from "@/lib/api";
 import { useCardData } from "@/lib/useCardData";
@@ -10,27 +11,35 @@ import { useLocale, useTranslations } from "next-intl";
 import { dateTime, duration } from "./format";
 import { OverviewCard } from "./OverviewCard";
 
-const OUTCOME_TONE: Record<string, string> = {
-  promoted: "border-green-600/40 text-green-700 dark:text-green-400",
-  running: "border-sky-500/40 text-sky-700 dark:text-sky-300",
-  aborted_auto: "border-red-600/40 text-red-700 dark:text-red-400",
-  aborted_manual: "border-red-600/40 text-red-700 dark:text-red-400",
-  superseded: "text-muted-foreground",
-};
-
-export function DeploymentsTable({ events }: { events: ReleaseEvent[] }) {
+export function DeploymentsTable({
+  events,
+  onRollback,
+}: {
+  events: ReleaseEvent[];
+  onRollback?: (event: ReleaseEvent) => void;
+}) {
   const t = useTranslations("appPage.deployments");
   const locale = useLocale();
+  const showComponent = events.some((e) => e.component);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             <th scope="col" className="py-2 pr-4 font-medium">{t("version")}</th>
+            <th scope="col" className="py-2 pr-4 font-medium">{t("env")}</th>
+            {showComponent && (
+              <th scope="col" className="py-2 pr-4 font-medium">{t("component")}</th>
+            )}
             <th scope="col" className="py-2 pr-4 font-medium">{t("outcome")}</th>
             <th scope="col" className="py-2 pr-4 font-medium">{t("who")}</th>
             <th scope="col" className="py-2 pr-4 font-medium">{t("when")}</th>
-            <th scope="col" className="py-2 font-medium">{t("duration")}</th>
+            <th scope="col" className="py-2 pr-4 font-medium">{t("duration")}</th>
+            {onRollback && (
+              <th scope="col" className="py-2 font-medium">
+                <span className="sr-only">{t("actions")}</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -42,7 +51,15 @@ export function DeploymentsTable({ events }: { events: ReleaseEvent[] }) {
                   {imageTag(e.image)}
                 </td>
                 <td className="py-2 pr-4">
-                  <Badge variant="outline" className={OUTCOME_TONE[e.outcome]}>
+                  <Badge variant="outline" className={e.environment === "prod" ? undefined : TONE.muted}>
+                    {e.environment}
+                  </Badge>
+                </td>
+                {showComponent && (
+                  <td className="py-2 pr-4 font-mono">{e.component ?? "-"}</td>
+                )}
+                <td className="py-2 pr-4">
+                  <Badge variant="outline" className={TONE[OUTCOME_TONE[e.outcome]]}>
                     {t.has(`outcomes.${e.outcome}`)
                       ? t(`outcomes.${e.outcome}`)
                       : e.outcome}
@@ -57,9 +74,18 @@ export function DeploymentsTable({ events }: { events: ReleaseEvent[] }) {
                 <td className="py-2 pr-4 font-mono text-xs tabular-nums">
                   {dateTime(e.started_at, locale)}
                 </td>
-                <td className="py-2 font-mono text-xs tabular-nums">
+                <td className="py-2 pr-4 font-mono text-xs tabular-nums">
                   {duration(e.started_at, e.finished_at)}
                 </td>
+                {onRollback && (
+                  <td className="py-2">
+                    {e.rollback_promotion_id != null && (
+                      <Button variant="ghost" size="sm" onClick={() => onRollback(e)}>
+                        {t("rollback")}
+                      </Button>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}

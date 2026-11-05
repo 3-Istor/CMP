@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.models.deployment import Deployment
+from app.models.environment import AppEnvironment, Promotion
 from app.models.release import ReleaseEvent
 from app.schemas.release import ReleaseView
 from app.services.release.view import ReleaseHint
@@ -39,6 +41,46 @@ def list_events(
         .limit(limit)
         .all()
     )
+
+
+def _digest(ref: str | None) -> str | None:
+    # An event image may carry a tag before the digest, a promotion does not.
+    return (ref or "").partition("@")[2] or None
+
+
+def rollback_targets(
+    db: Session, deployment: Deployment, events: list[ReleaseEvent]
+) -> dict[int, int]:
+    """
+    Event id -> id of the prod promotion that can put that version back.
+
+    Only apps with a staging have promotions; a rolled-back row keeps its
+    digest, so the newest matching promotion wins.
+    """
+    if db.get(AppEnvironment, (deployment.id, "staging")) is None:
+        return {}
+    promotions = (
+        db.query(Promotion)
+        .filter(
+            Promotion.deployment_id == deployment.id,
+            Promotion.target_env == "prod",
+            Promotion.status == "done",
+        )
+        .order_by(Promotion.id.desc())
+        .all()
+    )
+    by_digest: dict[str, int] = {}
+    for promotion in promotions:
+        for ref in promotion.digests.values():
+            digest = _digest(ref)
+            if digest:
+                by_digest.setdefault(digest, promotion.id)
+    return {
+        e.id: by_digest[digest]
+        for e in events
+        if e.environment == "prod"
+        and (digest := _digest(e.image)) in by_digest
+    }
 
 
 def hint_from(event: ReleaseEvent | None, revision: int | None) -> ReleaseHint:

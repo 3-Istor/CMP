@@ -2134,7 +2134,9 @@
       "promoted": "Promue",
       "aborted_auto": "Rejetée auto",
       "aborted_manual": "Abandonnée",
-      "superseded": "Remplacée"
+      "superseded": "Remplacée",
+      "deployed": "Déployée",
+      "failed": "Échouée"
     },
     "errors": {
       "readState": "Impossible de lire l'état de la release : {error}"
@@ -2432,12 +2434,21 @@
       "duration": "Durée",
       "automatic": "Automatique",
       "forced": "Forcée",
+      "env": "Env",
+      "component": "Composant",
+      "actions": "Actions",
+      "rollback": "Revenir en arrière",
+      "rollbackTitle": "Revenir à {version} en prod ?",
+      "rollbackDescription": "La prod exécutera de nouveau cette version, sans les vérifications de staging.",
+      "rollbackStarted": "Retour à {version} lancé",
       "outcomes": {
         "running": "En cours",
         "promoted": "Promue",
         "aborted_auto": "Rejetée automatiquement",
         "aborted_manual": "Abortée",
-        "superseded": "Remplacée"
+        "superseded": "Remplacée",
+        "deployed": "Déployée",
+        "failed": "Échouée"
       }
     },
     "events": {

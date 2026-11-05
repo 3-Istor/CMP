@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 from unittest import mock
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.environment import AppEnvironment, Promotion
 from app.models.release import ReleaseEvent
 from app.routers import releases
 from app.services import audit, keycloak_service
@@ -354,6 +356,103 @@ def test_history_lists_the_attempts(session_factory, keycloak):
     assert [(r["revision"], r["outcome"], r["image"]) for r in rows] == [
         (5, "running", "ghcr.io/3-istor/web:1.4.0")
     ]
+
+
+DIGEST = "sha256:" + "a" * 64
+
+
+def _rolling_row(
+    db, environment="prod", image=f"ghcr.io/3-istor/web:1.4.0@{DIGEST}"
+):
+    event = ReleaseEvent(
+        deployment_id=7,
+        revision=3,
+        image=image,
+        strategy="rolling",
+        started_at=datetime.now(timezone.utc),
+        outcome="deployed",
+        forced=False,
+        environment=environment,
+        component="backend",
+    )
+    db.add(event)
+    db.commit()
+    return event.id
+
+
+def _promotion(db, status="done", digest=DIGEST, target_env="prod"):
+    promotion = Promotion(
+        deployment_id=7,
+        source_env="staging",
+        target_env=target_env,
+        digests={"backend": f"ghcr.io/3-istor/web@{digest}"},
+        status=status,
+        actor="dev",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(promotion)
+    db.commit()
+    return promotion.id
+
+
+def _with_staging(db):
+    db.add(
+        AppEnvironment(
+            deployment_id=7,
+            name="staging",
+            state="ready",
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
+
+
+def _rollback_ids(session_factory):
+    client = _client(session_factory, FakeSource(None))
+    rows = client.get("/api/deployments/7/releases").json()
+    return [r["rollback_promotion_id"] for r in rows]
+
+
+class TestRollbackTarget:
+    def test_a_prod_row_from_a_promotion_offers_a_rollback(
+        self, session_factory, keycloak
+    ):
+        with session_factory() as db:
+            _with_staging(db)
+            _promotion(db)  # older one with the same digest
+            newest = _promotion(db)
+            _rolling_row(db)
+
+        assert _rollback_ids(session_factory) == [newest]
+
+    def test_a_staging_row_offers_none(self, session_factory, keycloak):
+        with session_factory() as db:
+            _with_staging(db)
+            _promotion(db)
+            _rolling_row(db, environment="staging")
+
+        assert _rollback_ids(session_factory) == [None]
+
+    def test_an_app_without_staging_offers_none(
+        self, session_factory, keycloak
+    ):
+        with session_factory() as db:
+            _promotion(db)
+            _rolling_row(db)
+
+        assert _rollback_ids(session_factory) == [None]
+
+    def test_a_failed_or_cancelled_promotion_offers_none(
+        self, session_factory, keycloak
+    ):
+        with session_factory() as db:
+            _with_staging(db)
+            _promotion(db, status="failed")
+            _promotion(db, status="cancelled")
+            _promotion(db, target_env="staging")
+            _rolling_row(db)
+
+        assert _rollback_ids(session_factory) == [None]
 
 
 class TestStream:
