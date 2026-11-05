@@ -975,6 +975,7 @@
       "releaseSkip": "skipped the release of {app}",
       "releaseAbort": "aborted the release of {app}",
       "releaseRetry": "retried the release of {app}",
+      "releaseCut": "created a release of {app}",
       "releaseSettings": "changed the release settings of {app}",
       "trafficStart": "started a traffic test on {app}",
       "trafficStop": "stopped the traffic test on {app}",
@@ -2331,6 +2332,20 @@
       "commandHint": "<code>/app/migrate</code> for the FastAPI + React template. It must be idempotent: run again with nothing to do, it exits with 0.",
       "databaseHint": "Doesn't the app use its database? Disable it instead in the Configuration tab, Database section. Warning: this deletes the database.",
       "enable": "Enable migrations and switch to Canary"
+    },
+    "new": {
+      "button": "New release",
+      "title": "New release",
+      "create": "Create",
+      "created": "{tag} created",
+      "viewRun": "View CI run",
+      "loadFailed": "Could not load the versions: {error}",
+      "kind": {
+        "candidate": "Candidate",
+        "patch": "Patch",
+        "minor": "Minor",
+        "major": "Major"
+      }
     },
     "dialog": {
       "cancel": "Cancel",

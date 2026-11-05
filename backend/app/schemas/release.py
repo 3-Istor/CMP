@@ -11,6 +11,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
+from app.services.release.tags import ReleaseChoice
+
 StepKind = Literal["analysis", "setWeight", "pause", "scale", "other"]
 StepStatus = Literal[
     "done", "active", "running", "pending", "failed", "skipped"
@@ -164,3 +166,25 @@ class ReleaseEventRead(BaseModel):
     environment: str
     component: str | None
     rollback_promotion_id: int | None = None
+
+
+class ReleaseChoices(_Camel):
+    """What the "New release" dialog offers, computed from the repo's tags."""
+
+    commit_sha: str
+    commit_message: str
+    # An app with a ready staging environment releases candidates first.
+    staged: bool
+    choices: list[ReleaseChoice]
+
+
+class ReleaseTagRequest(BaseModel):
+    tag: str
+    # The head of main the user was shown: the tag is refused if it moved.
+    sha: str
+
+
+class ReleaseTagCreated(_Camel):
+    tag: str
+    sha: str
+    runs_url: str

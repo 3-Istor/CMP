@@ -56,6 +56,7 @@ const APP_ACTION_KEYS: Record<string, string> = {
   "app.restart": "appRestart",
   "app.icon.update": "iconUpdate",
   "app.icon.reset": "iconReset",
+  "release.cut": "releaseCut",
   "release.promote": "releasePromote",
   "release.skip": "releaseSkip",
   "release.abort": "releaseAbort",

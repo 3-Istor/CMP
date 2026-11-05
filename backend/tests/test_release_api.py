@@ -1,10 +1,11 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -630,3 +631,158 @@ class TestStream:
 
 async def _one_frame(*_):
     yield "data: {}\n\n"
+
+
+@pytest.fixture
+def github(session_factory):
+    """A linked repo whose tags and main head the test controls."""
+    with session_factory() as db:
+        db.get(Deployment, 7).github_repo_url = (
+            "https://github.com/3-istor/web"
+        )
+        db.commit()
+    fake = SimpleNamespace(
+        list_tags=mock.AsyncMock(return_value=["v1.0.0", "v1.1.0-rc.1"]),
+        head_commit=mock.AsyncMock(return_value=("abc123", "fix: x")),
+        create_tag=mock.AsyncMock(return_value="abc123"),
+    )
+    with (
+        mock.patch.object(
+            releases.gitops, "token_for", mock.AsyncMock(return_value="gh")
+        ),
+        mock.patch.multiple(
+            releases.repo_ops,
+            list_tags=fake.list_tags,
+            head_commit=fake.head_commit,
+            create_tag=fake.create_tag,
+        ),
+    ):
+        yield fake
+
+
+@pytest.fixture
+def staged(session_factory):
+    with session_factory() as db:
+        db.add(
+            AppEnvironment(
+                deployment_id=7,
+                name="staging",
+                state="ready",
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+
+class TestCutRelease:
+    def test_choices_are_release_candidates_when_staging_is_ready(
+        self, session_factory, keycloak, github, staged
+    ):
+        client = _client(session_factory, FakeSource(None))
+
+        response = client.get("/api/deployments/7/release/choices")
+
+        assert response.json() == {
+            "commitSha": "abc123",
+            "commitMessage": "fix: x",
+            "staged": True,
+            "choices": [
+                {"kind": "candidate", "tag": "v1.1.0-rc.2"},
+                {"kind": "patch", "tag": "v1.1.1-rc.1"},
+                {"kind": "minor", "tag": "v1.2.0-rc.1"},
+                {"kind": "major", "tag": "v2.0.0-rc.1"},
+            ],
+        }
+
+    def test_choices_are_final_versions_without_staging(
+        self, session_factory, keycloak, github
+    ):
+        client = _client(session_factory, FakeSource(None))
+
+        body = client.get("/api/deployments/7/release/choices").json()
+
+        assert (body["staged"], [c["tag"] for c in body["choices"]]) == (
+            False,
+            ["v1.1.1", "v1.2.0", "v2.0.0"],
+        )
+
+    def test_the_tag_is_created_on_the_commit_the_user_saw(
+        self, session_factory, keycloak, github, staged
+    ):
+        client = _client(session_factory, FakeSource(None))
+
+        response = client.post(
+            "/api/deployments/7/release/tags",
+            json={"tag": "v1.1.0-rc.2", "sha": "abc123"},
+        )
+
+        assert (response.status_code, response.json()) == (
+            201,
+            {
+                "tag": "v1.1.0-rc.2",
+                "sha": "abc123",
+                "runsUrl": "https://github.com/3-istor/web/actions",
+            },
+        )
+        github.create_tag.assert_awaited_once_with(
+            "gh", "3-istor/web", "v1.1.0-rc.2", sha="abc123"
+        )
+
+    def test_a_tag_that_is_no_longer_offered_is_refused(
+        self, session_factory, keycloak, github, staged
+    ):
+        client = _client(session_factory, FakeSource(None))
+
+        response = client.post(
+            "/api/deployments/7/release/tags",
+            json={"tag": "v1.1.0-rc.1", "sha": "abc123"},
+        )
+
+        assert response.status_code == 409
+        github.create_tag.assert_not_awaited()
+
+    def test_a_moved_main_is_refused(
+        self, session_factory, keycloak, github, staged
+    ):
+        github.head_commit.return_value = ("def456", "feat: y")
+        client = _client(session_factory, FakeSource(None))
+
+        response = client.post(
+            "/api/deployments/7/release/tags",
+            json={"tag": "v1.1.0-rc.2", "sha": "abc123"},
+        )
+
+        assert response.status_code == 409
+        assert "main moved" in response.json()["detail"]
+        github.create_tag.assert_not_awaited()
+
+    def test_a_down_cluster_refuses_the_tag(
+        self, session_factory, keycloak, github, staged
+    ):
+        client = _client(session_factory, FakeSource(None))
+        down = HTTPException(status_code=409, detail="The AWS cluster is down")
+
+        with mock.patch.object(
+            releases, "ensure_cluster_up", mock.AsyncMock(side_effect=down)
+        ):
+            response = client.post(
+                "/api/deployments/7/release/tags",
+                json={"tag": "v1.1.0-rc.2", "sha": "abc123"},
+            )
+
+        assert response.status_code == 409
+        github.create_tag.assert_not_awaited()
+
+    def test_a_guest_cannot_read_the_choices_nor_tag(
+        self, session_factory, keycloak, github, staged
+    ):
+        client = _client(session_factory, FakeSource(None), "guest")
+
+        read = client.get("/api/deployments/7/release/choices")
+        cut = client.post(
+            "/api/deployments/7/release/tags",
+            json={"tag": "v1.1.0-rc.2", "sha": "abc123"},
+        )
+
+        assert (read.status_code, cut.status_code) == (403, 403)
+        github.create_tag.assert_not_awaited()

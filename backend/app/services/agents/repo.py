@@ -239,50 +239,48 @@ async def commit_files(
         )
 
 
-_SEMVER = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
-
-
-async def latest_version(token: str, repo: str) -> str | None:
+async def list_tags(token: str, repo: str) -> list[str]:
     async with httpx.AsyncClient() as client:
         tags = await _request(
             client,
             "GET",
             f"{GITHUB_API_BASE}/repos/{repo}/tags",
             token,
+            # ponytail: first 100 tags, paginate if a repo outgrows it
             params={"per_page": 100},
         )
-    versions = [
-        tuple(int(x) for x in m.groups())
-        for t in tags
-        if (m := _SEMVER.match(t["name"]))
-    ]
-    if not versions:
-        return None
-    major, minor, patch = max(versions)
-    return f"v{major}.{minor}.{patch}"
+    return [tag["name"] for tag in tags]
 
 
-def next_version(current: str | None, bump: str) -> str:
-    if current is None:
-        return "v0.1.0" if bump != "major" else "v1.0.0"
-    major, minor, patch = (int(x) for x in _SEMVER.match(current).groups())
-    if bump == "major":
-        return f"v{major + 1}.0.0"
-    if bump == "minor":
-        return f"v{major}.{minor + 1}.0"
-    return f"v{major}.{minor}.{patch + 1}"
+async def head_commit(
+    token: str, repo: str, branch: str = "main"
+) -> tuple[str, str]:
+    """Sha and first message line of the branch head."""
+    async with httpx.AsyncClient() as client:
+        commit = await _request(
+            client,
+            "GET",
+            f"{GITHUB_API_BASE}/repos/{repo}/commits/{branch}",
+            token,
+        )
+    return commit["sha"], commit["commit"]["message"].partition("\n")[0]
 
 
 async def create_tag(
-    token: str, repo: str, tag: str, branch: str = "main"
+    token: str,
+    repo: str,
+    tag: str,
+    branch: str = "main",
+    sha: str | None = None,
 ) -> str:
-    """A lightweight tag on the branch head; returns the tagged commit."""
+    """A lightweight tag on ``sha`` or the branch head; returns the commit."""
     base_url = f"{GITHUB_API_BASE}/repos/{repo}"
     async with httpx.AsyncClient() as client:
-        ref = await _request(
-            client, "GET", f"{base_url}/git/ref/heads/{branch}", token
-        )
-        sha = ref["object"]["sha"]
+        if sha is None:
+            ref = await _request(
+                client, "GET", f"{base_url}/git/ref/heads/{branch}", token
+            )
+            sha = ref["object"]["sha"]
         await _request(
             client,
             "POST",

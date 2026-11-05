@@ -21,6 +21,8 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment
+from app.models.environment import AppEnvironment
+from app.models.project import TargetCloud
 from app.models.release import ReleaseEvent
 from app.routers.deployments import (
     _app_type_of,
@@ -35,13 +37,22 @@ from app.routers.deployments import (
 from app.schemas.release import (
     AbortRequest,
     PromoteRequest,
+    ReleaseChoices,
     ReleaseEventRead,
+    ReleaseTagCreated,
+    ReleaseTagRequest,
     ReleaseView,
     SkipRequest,
 )
 from app.services import app_security_data as security_data
 from app.services import audit
-from app.services.clusters.state import cluster_states, project_cloud
+from app.services.agents import repo as repo_ops
+from app.services.clusters.state import (
+    cluster_states,
+    ensure_cluster_up,
+    project_cloud,
+)
+from app.services.environments import gitops
 from app.services.github_service import GitHubAppError, put_file_content
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import (
@@ -56,6 +67,7 @@ from app.services.release.source import (
     ReleaseSource,
     RolloutSnapshot,
 )
+from app.services.release.tags import release_choices
 from app.services.release.view import (
     ABORT_PATCH,
     RETRY_PATCH,
@@ -375,6 +387,79 @@ def retry_release(
         return RETRY_PATCH, "retry", False
 
     return _act(db, token, deployment_id, source, decide, None)
+
+
+async def _choices(
+    db: Session, deployment: Deployment
+) -> tuple[str, str, ReleaseChoices]:
+    """The app's GitHub token and repo, and the choices its tags give."""
+    try:
+        token = await gitops.token_for(deployment)
+        repo = gitops.repo_of(deployment)
+        tags = await repo_ops.list_tags(token, repo)
+        sha, message = await repo_ops.head_commit(token, repo)
+    except (gitops.GitOpsError, GitHubAppError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    staging = await run_in_threadpool(
+        db.get, AppEnvironment, (deployment.id, "staging")
+    )
+    staged = staging is not None and staging.state == "ready"
+    return (
+        token,
+        repo,
+        ReleaseChoices(
+            commit_sha=sha,
+            commit_message=message,
+            staged=staged,
+            choices=release_choices(tags, staged),
+        ),
+    )
+
+
+@router.get("/{deployment_id}/release/choices", response_model=ReleaseChoices)
+async def get_release_choices(
+    deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
+):
+    deployment = await run_in_threadpool(
+        _get_app_or_404, db, token, deployment_id, ProjectRole.MEMBER
+    )
+    return (await _choices(db, deployment))[2]
+
+
+@router.post(
+    "/{deployment_id}/release/tags",
+    status_code=201,
+    response_model=ReleaseTagCreated,
+)
+async def create_release_tag(
+    deployment_id: int,
+    payload: ReleaseTagRequest,
+    request: Request,
+    token: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    """Tag the head of main the user saw; CI builds the tag and deploys it."""
+    deployment = await run_in_threadpool(
+        _get_app_or_404, db, token, deployment_id, ProjectRole.MEMBER
+    )
+    await ensure_cluster_up(TargetCloud(gitops.target_cloud(deployment)))
+    gh_token, repo, current = await _choices(db, deployment)
+    if payload.tag not in {choice.tag for choice in current.choices}:
+        raise _conflict(
+            "This version is no longer offered, reload the choices."
+        )
+    if payload.sha != current.commit_sha:
+        raise _conflict("main moved, reload the choices.")
+    try:
+        sha = await repo_ops.create_tag(
+            gh_token, repo, payload.tag, sha=payload.sha
+        )
+    except GitHubAppError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    audit.note(request, tag=payload.tag, commit=sha)
+    return ReleaseTagCreated(
+        tag=payload.tag, sha=sha, runs_url=f"https://github.com/{repo}/actions"
+    )
 
 
 def _release_files(deployment: Deployment) -> list[str]:

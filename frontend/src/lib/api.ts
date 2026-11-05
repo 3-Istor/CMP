@@ -1093,6 +1093,17 @@ export const abortRelease = (deploymentId: number, reason: string | null) =>
     { method: "POST", body: JSON.stringify({ reason }) },
   );
 
+export const getReleaseChoices = (deploymentId: number) =>
+  request<import("@/types").ReleaseChoices>(
+    `/deployments/${deploymentId}/release/choices`,
+  );
+
+export const createReleaseTag = (deploymentId: number, tag: string, sha: string) =>
+  request<import("@/types").ReleaseTagCreated>(
+    `/deployments/${deploymentId}/release/tags`,
+    { method: "POST", body: JSON.stringify({ tag, sha }) },
+  );
+
 export const getReleaseSettings = (deploymentId: number) =>
   request<import("@/types").ReleaseSettingsRead>(
     `/deployments/${deploymentId}/release/settings`,
