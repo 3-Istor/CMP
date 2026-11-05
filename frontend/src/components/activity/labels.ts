@@ -143,6 +143,10 @@ export function describe(e: ActivityEvent, t: Translate): string {
       return t(
         d.enabled === false ? "events.protectionOff" : "events.protectionOn",
       );
+    case "project.customer_signup.update":
+      return t(
+        d.enabled === false ? "events.signupOff" : "events.signupOn",
+      );
     case "app.create":
       return t("events.appCreate", { app });
     case "app.delete":

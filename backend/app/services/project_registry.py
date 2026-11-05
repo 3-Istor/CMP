@@ -600,6 +600,48 @@ async def set_app_environments(
         ) from exc
 
 
+async def _is_on(project_name: str, field: str) -> bool:
+    existing = await read_record(project_name)
+    if existing is None:
+        return False
+    return (existing[0].get("spec") or {}).get(field) is True
+
+
+async def _set_on(
+    project_name: str, field: str, enabled: bool, label: str
+) -> None:
+    existing = await read_record(project_name)
+    if existing is None:
+        raise RecordNotFoundError(
+            f"Project '{project_name}' has no registry record."
+        )
+    record, sha = existing
+    spec = record.setdefault("spec", {})
+    if enabled:
+        spec[field] = True
+    else:
+        spec.pop(field, None)
+
+    buffer = StringIO()
+    _yaml.dump(record, buffer)
+    token = await _installation_token()
+    verb = "on" if enabled else "off"
+    try:
+        await put_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            record_path(project_name),
+            buffer.getvalue(),
+            message=f"feat(registry): turn {label} {verb} for {project_name} [skip ci]",
+            sha=sha,
+            branch=settings.CNP_REGISTRY_BRANCH,
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not update {label} of '{project_name}': {exc}"
+        ) from exc
+
+
 async def is_deletion_protected(project_name: str) -> bool:
     """
     Whether the project's record turns deletion protection on.
@@ -609,10 +651,7 @@ async def is_deletion_protected(project_name: str) -> bool:
     Raises:
         RegistryError: If the registry cannot be read.
     """
-    existing = await read_record(project_name)
-    if existing is None:
-        return False
-    return (existing[0].get("spec") or {}).get("deletionProtection") is True
+    return await _is_on(project_name, "deletionProtection")
 
 
 async def set_deletion_protection(project_name: str, enabled: bool) -> None:
@@ -625,36 +664,32 @@ async def set_deletion_protection(project_name: str, enabled: bool) -> None:
         RecordNotFoundError: The project has no registry record.
         RegistryError: The registry cannot be written.
     """
-    existing = await read_record(project_name)
-    if existing is None:
-        raise RecordNotFoundError(
-            f"Project '{project_name}' has no registry record."
-        )
-    record, sha = existing
-    spec = record.setdefault("spec", {})
-    if enabled:
-        spec["deletionProtection"] = True
-    else:
-        spec.pop("deletionProtection", None)
+    await _set_on(
+        project_name, "deletionProtection", enabled, "deletion protection"
+    )
 
-    buffer = StringIO()
-    _yaml.dump(record, buffer)
-    token = await _installation_token()
-    verb = "on" if enabled else "off"
-    try:
-        await put_file_content(
-            token,
-            settings.CNP_REGISTRY_REPO,
-            record_path(project_name),
-            buffer.getvalue(),
-            message=f"feat(registry): turn deletion protection {verb} for {project_name} [skip ci]",
-            sha=sha,
-            branch=settings.CNP_REGISTRY_BRANCH,
-        )
-    except GitHubAppError as exc:
-        raise RegistryError(
-            f"Could not update deletion protection of '{project_name}': {exc}"
-        ) from exc
+
+async def is_self_registration_on(project_name: str) -> bool:
+    """
+    Whether the project lets customers sign up (``spec.selfRegistration``).
+
+    Raises:
+        RegistryError: If the registry cannot be read.
+    """
+    return await _is_on(project_name, "selfRegistration")
+
+
+async def set_self_registration(project_name: str, enabled: bool) -> None:
+    """
+    Turn a project's customer sign-up on, or off by removing the field.
+
+    Raises:
+        RecordNotFoundError: The project has no registry record.
+        RegistryError: The registry cannot be written.
+    """
+    await _set_on(
+        project_name, "selfRegistration", enabled, "customer sign-up"
+    )
 
 
 async def set_project_staging(project_name: str, max_apps: int) -> None:

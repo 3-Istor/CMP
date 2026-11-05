@@ -982,6 +982,8 @@
       "agentsUpdate": "changed the AI assistant settings of the project",
       "protectionOn": "turned on deletion protection",
       "protectionOff": "turned off deletion protection",
+      "signupOn": "turned on customer sign-up",
+      "signupOff": "turned off customer sign-up",
       "agentConnect": "connected an AI assistant",
       "agentDisconnect": "disconnected an AI assistant",
       "monthClose": "closed a FinOps month",
@@ -1851,6 +1853,8 @@
     "newApp": "New app",
     "protectOn": "Turn on deletion protection",
     "protectOff": "Turn off deletion protection",
+    "customerSignupOn": "Turn on customer sign-up",
+    "customerSignupOff": "Turn off customer sign-up",
     "deleteProject": "Delete project…",
     "externalLink": "Opens in a new tab",
     "reasons": {
@@ -1868,7 +1872,9 @@
       "deleting": "Deletion of {name} started",
       "projectDeleting": "Deletion of project {name} started",
       "protectedOn": "Deletion protection turned on",
-      "protectedOff": "Deletion protection turned off"
+      "protectedOff": "Deletion protection turned off",
+      "customerSignupOn": "Customer sign-up turned on",
+      "customerSignupOff": "Customer sign-up turned off"
     },
     "errors": {
       "loadTemplates": "Failed to load templates",
@@ -1876,7 +1882,8 @@
       "deployStarted": "Deployment of {name} started",
       "wake": "Wake failed: {message}",
       "notAllowed": "Your role does not allow this action",
-      "protect": "Could not change deletion protection: {message}"
+      "protect": "Could not change deletion protection: {message}",
+      "customerSignup": "Could not change customer sign-up: {message}"
     }
   },
   "confirm": {

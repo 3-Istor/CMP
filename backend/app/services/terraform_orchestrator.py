@@ -17,7 +17,7 @@ import httpx
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
-from app.services import notifications
+from app.services import customer_identity, notifications
 from app.services.github_service import get_installation_token
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
@@ -295,6 +295,12 @@ def run_deployment(deployment_id: int) -> None:
             logger.info(f"Resources created: {deployment.resource_count}")
 
             db.commit()
+
+            # The OIDC client exists after apply, so grant its rights before
+            # the (long) URL wait. Only gitops apps have one. Swallows its own
+            # errors: the deployment already succeeded.
+            if deployment.template_id == "k3s-gitops-app":
+                customer_identity.apply_if_enabled(app_config["project_name"])
 
             # Step 5: Wait for app URL to become accessible
             logger.info("─" * 80)

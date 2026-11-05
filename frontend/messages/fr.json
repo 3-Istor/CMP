@@ -982,6 +982,8 @@
       "agentsUpdate": "a modifié les réglages des assistants IA du projet",
       "protectionOn": "a activé la protection contre la suppression",
       "protectionOff": "a désactivé la protection contre la suppression",
+      "signupOn": "a activé l'inscription des clients",
+      "signupOff": "a désactivé l'inscription des clients",
       "agentConnect": "a connecté un assistant IA",
       "agentDisconnect": "a déconnecté un assistant IA",
       "monthClose": "a clôturé un mois FinOps",
@@ -1851,6 +1853,8 @@
     "newApp": "Nouvelle app",
     "protectOn": "Activer la protection contre la suppression",
     "protectOff": "Désactiver la protection contre la suppression",
+    "customerSignupOn": "Activer l'inscription des clients",
+    "customerSignupOff": "Désactiver l'inscription des clients",
     "deleteProject": "Supprimer le projet…",
     "externalLink": "S'ouvre dans un nouvel onglet",
     "reasons": {
@@ -1868,7 +1872,9 @@
       "deleting": "Suppression de {name} lancée",
       "projectDeleting": "Suppression du projet {name} lancée",
       "protectedOn": "Protection contre la suppression activée",
-      "protectedOff": "Protection contre la suppression désactivée"
+      "protectedOff": "Protection contre la suppression désactivée",
+      "customerSignupOn": "Inscription des clients activée",
+      "customerSignupOff": "Inscription des clients désactivée"
     },
     "errors": {
       "loadTemplates": "Impossible de charger les modèles",
@@ -1876,7 +1882,8 @@
       "deployStarted": "Déploiement de {name} lancé",
       "wake": "Échec du réveil : {message}",
       "notAllowed": "Votre rôle ne permet pas cette action",
-      "protect": "Échec du changement de protection : {message}"
+      "protect": "Échec du changement de protection : {message}",
+      "customerSignup": "Échec du changement d'inscription des clients : {message}"
     }
   },
   "confirm": {

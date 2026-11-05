@@ -41,6 +41,10 @@ ACTIONS: dict[tuple[str, str], str] = {
         "PUT",
         "/api/projects/{project_name}/deletion-protection",
     ): "project.deletion_protection.update",
+    (
+        "PUT",
+        "/api/projects/{project_name}/customer-signup",
+    ): "project.customer_signup.update",
     ("POST", "/api/deployments/"): "app.create",
     ("DELETE", "/api/deployments/{deployment_id}"): "app.delete",
     ("PATCH", "/api/deployments/{deployment_id}/config"): "app.config.update",
@@ -172,6 +176,7 @@ NOTABLE = {
     "project.member.add",
     "project.member.remove",
     "project.deletion_protection.update",
+    "project.customer_signup.update",
     "app.delete",
     "app.exposure.update",
     "security.exception.approve",

@@ -531,6 +531,15 @@ export const setDeletionProtection = (project: string, enabled: boolean) =>
     body: JSON.stringify({ enabled }),
   });
 
+export const getCustomerSignup = (project: string) =>
+  request<{ enabled: boolean }>(`/projects/${project}/customer-signup`);
+
+export const setCustomerSignup = (project: string, enabled: boolean) =>
+  request<{ enabled: boolean }>(`/projects/${project}/customer-signup`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
+
 // ── FinOps ────────────────────────────────────────────────────────────────────
 
 function finopsQuery(params: Record<string, string | number | undefined>): string {

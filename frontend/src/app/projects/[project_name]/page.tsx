@@ -34,9 +34,11 @@ import {
   createDeployment,
   deleteProject,
   getCatalog,
+  getCustomerSignup,
   getDeletionProtection,
   getProjectLinks,
   isNotConnected,
+  setCustomerSignup,
   setDeletionProtection,
 } from "@/lib/api";
 import { hasScorecard, useScorecards } from "@/lib/scorecard";
@@ -51,6 +53,8 @@ import {
   ShieldCheck,
   ShieldOff,
   Trash2,
+  UserPlus,
+  UserX,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -119,6 +123,15 @@ export default function ProjectPage() {
       .then(({ enabled }) => setProtectedOn(enabled))
       .catch(() => setProtectedOn(null));
   }, [projectName, canDeleteProject]);
+
+  // null until read, like protectedOn.
+  const [signupOn, setSignupOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!canProtect) return;
+    getCustomerSignup(projectName)
+      .then(({ enabled }) => setSignupOn(enabled))
+      .catch(() => setSignupOn(null));
+  }, [projectName, canProtect]);
 
   // Catalog for deploy modal
   const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
@@ -213,6 +226,26 @@ export default function ProjectPage() {
       toast.error(ta("errors.protect", { message: errorMessage(err) })),
     );
 
+  const handleSignup = () =>
+    setCustomerSignup(projectName, !signupOn)
+      .then((res) => {
+        setSignupOn(res.enabled);
+        toast.success(
+          ta(
+            res.enabled
+              ? "toasts.customerSignupOn"
+              : "toasts.customerSignupOff",
+          ),
+        );
+      })
+      .catch((err) => {
+        toast.error(ta("errors.customerSignup", { message: errorMessage(err) }));
+        // The flag is saved even when Keycloak fails: show what is saved.
+        getCustomerSignup(projectName)
+          .then(({ enabled }) => setSignupOn(enabled))
+          .catch(() => {});
+      });
+
   return (
     <div className="min-h-screen">
       <main className="px-6 py-8 max-w-7xl mx-auto space-y-6">
@@ -254,24 +287,45 @@ export default function ProjectPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-[16rem]">
-                  {canProtect && protectedOn !== null && (
+                  {canProtect && (
                     <>
-                      <DropdownMenuItem
-                        className="gap-2"
-                        onClick={
-                          protectedOn
-                            ? () => setShowUnprotectDialog(true)
-                            : handleProtect
-                        }
-                      >
-                        {protectedOn ? (
-                          <ShieldOff className="h-4 w-4" aria-hidden />
-                        ) : (
-                          <ShieldCheck className="h-4 w-4" aria-hidden />
-                        )}
-                        {ta(protectedOn ? "protectOff" : "protectOn")}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
+                      {protectedOn !== null && (
+                        <DropdownMenuItem
+                          className="gap-2"
+                          onClick={
+                            protectedOn
+                              ? () => setShowUnprotectDialog(true)
+                              : handleProtect
+                          }
+                        >
+                          {protectedOn ? (
+                            <ShieldOff className="h-4 w-4" aria-hidden />
+                          ) : (
+                            <ShieldCheck className="h-4 w-4" aria-hidden />
+                          )}
+                          {ta(protectedOn ? "protectOff" : "protectOn")}
+                        </DropdownMenuItem>
+                      )}
+                      {signupOn !== null && (
+                        <DropdownMenuItem
+                          className="gap-2"
+                          onClick={handleSignup}
+                        >
+                          {signupOn ? (
+                            <UserX className="h-4 w-4" aria-hidden />
+                          ) : (
+                            <UserPlus className="h-4 w-4" aria-hidden />
+                          )}
+                          {ta(
+                            signupOn
+                              ? "customerSignupOff"
+                              : "customerSignupOn",
+                          )}
+                        </DropdownMenuItem>
+                      )}
+                      {(protectedOn !== null || signupOn !== null) && (
+                        <DropdownMenuSeparator />
+                      )}
                     </>
                   )}
                   <DropdownMenuItem
