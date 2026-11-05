@@ -21,7 +21,7 @@ from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, Promotion, VerificationRun
 from app.services import project_registry
-from app.services.environments import gitops, layout, registry
+from app.services.environments import gitops, layout, registry, staging_realm
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
 
@@ -53,16 +53,25 @@ def _executor(deployment: Deployment):
     )
 
 
+def realm_of(deployment: Deployment) -> str:
+    """
+    The realm the staging OIDC client lives in: the project's staging realm,
+    or the one a project running its own Keycloak configured.
+    """
+    config = json.loads(deployment.app_config or "{}")
+    return config.get("keycloak_realm_id") or staging_realm.realm_name(
+        deployment.project_id
+    )
+
+
 def _variables(deployment: Deployment) -> dict[str, Any]:
     config = json.loads(deployment.app_config or "{}")
-    variables = {
+    return {
         "app_name": deployment.name,
         "project_name": deployment.project_id,
         "target_cloud": config.get("target_cloud", "onprem"),
+        "keycloak_realm_id": realm_of(deployment),
     }
-    if config.get("keycloak_realm_id"):
-        variables["keycloak_realm_id"] = config["keycloak_realm_id"]
-    return variables
 
 
 def _set(
@@ -155,11 +164,36 @@ async def _enable(deployment_id: int, offhours: dict[str, Any]) -> None:
         deployment = db.get(Deployment, deployment_id)
         row = db.get(AppEnvironment, (deployment_id, STAGING))
         try:
+            variables = _variables(deployment)
+            if variables["keycloak_realm_id"] == staging_realm.realm_name(
+                deployment.project_id
+            ):
+                _set(db, row, "provisioning", "Creating the staging realm")
+                try:
+                    await asyncio.to_thread(
+                        staging_realm.ensure, deployment.project_id
+                    )
+                except Exception as exc:  # name the step in the row
+                    logger.exception(
+                        "creating the staging realm for deployment %s failed",
+                        deployment_id,
+                    )
+                    _set(
+                        db,
+                        row,
+                        "failed",
+                        f"Creating the staging realm failed: {exc}",
+                    )
+                    return
+                _set(
+                    db,
+                    row,
+                    "provisioning",
+                    "Creating the OIDC client, secrets and hostname",
+                )
             executor = _executor(deployment)
             await asyncio.to_thread(executor.init)
-            outputs = await asyncio.to_thread(
-                executor.apply, _variables(deployment)
-            )
+            outputs = await asyncio.to_thread(executor.apply, variables)
             row.hostname = outputs["hostname"]
             _set(
                 db,
@@ -217,6 +251,7 @@ async def _write_env_files(
                     offhours,
                     exposed=bool((values.get("ingress") or {}).get("enabled")),
                     has_auth="auth" in values,
+                    realm=realm_of(deployment),
                 )
             )
         return files

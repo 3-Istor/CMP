@@ -79,6 +79,7 @@ def staging_values(
     offhours: dict[str, Any],
     exposed: bool,
     has_auth: bool,
+    realm: str,
 ) -> dict[str, Any]:
     """
     The staging values file of one component, written when staging is turned on.
@@ -101,9 +102,10 @@ def staging_values(
         values["ingress"] = {
             "hostname": hostname,
             "oidc": {"clientID": oidc_client_id},
+            "realm": realm,
         }
     if has_auth:
-        values["auth"] = {"clientId": oidc_client_id}
+        values["auth"] = {"clientId": oidc_client_id, "realm": realm}
     return values
 
 

@@ -12,7 +12,13 @@ from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, VerificationRun
 from app.models.project import TargetCloud
-from app.services.environments import gitops, layout, observe, suites
+from app.services.environments import (
+    activation,
+    gitops,
+    layout,
+    observe,
+    suites,
+)
 from app.services.github_service import GitHubAppError, dispatch_workflow
 
 logger = logging.getLogger(__name__)
@@ -200,7 +206,13 @@ async def _execute(
             return suites.Outcome(
                 "error", f"{run.environment} has no public hostname to test."
             )
-        return await suites.run_public_smoke(target, project)
+        # Staging's SSO redirects to the realm of its client, not the project's.
+        realm = (
+            activation.realm_of(deployment)
+            if run.environment == "staging"
+            else project
+        )
+        return await suites.run_public_smoke(target, realm)
     if spec["kind"] == "smoke":
         gh = await gitops.token_for(deployment)
         base = await gitops.read_base(gh, gitops.repo_of(deployment), kind)
