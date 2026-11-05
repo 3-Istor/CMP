@@ -41,8 +41,8 @@ def test_ensure_applies_the_realm_module_and_returns_its_name():
     assert realm == "shop-staging"
     assert create.call_args.args == (
         Path("/t/staging-realm"),
-        "shop-staging-realm",
-        "cnp/projects/shop/staging-realm",
+        "shop-_staging-realm",
+        "cnp/projects/shop/_staging-realm",
     )
     executor.init.assert_called_once()
     executor.apply.assert_called_once_with({"project_name": "shop"})

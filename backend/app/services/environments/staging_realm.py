@@ -19,10 +19,12 @@ def _executor(project: str):
     module = get_repository().get_template_path("k3s-gitops-app")
     if module is None:
         raise RuntimeError("The k3s-gitops-app template is not available.")
+    # "_" cannot appear in an app name, so neither the state key nor the local
+    # state dir can collide with an app's.
     return create_executor(
         Path(module) / "staging-realm",
-        f"{project}-staging-realm",
-        f"cnp/projects/{project}/staging-realm",
+        f"{project}-_staging-realm",
+        f"cnp/projects/{project}/_staging-realm",
         log_file=Path("logs/projects") / f"{project}-staging-realm.log",
     )
 
