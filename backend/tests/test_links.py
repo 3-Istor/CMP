@@ -234,7 +234,7 @@ class TestProjectLinks:
     def test_keycloak_opens_the_admin_console_of_the_project_realm(
         self, session_factory, keycloak
     ):
-        client = _client(session_factory, "member")
+        client = _client(session_factory, "admin")
 
         link = _by_id(client.get("/api/projects/shop/links").json())[
             "keycloak"
@@ -247,7 +247,7 @@ class TestProjectLinks:
     def test_staging_realm_console_only_once_staging_is_ready(
         self, session_factory, keycloak
     ):
-        client = _client(session_factory, "member")
+        client = _client(session_factory, "admin")
         assert "keycloak_staging" not in _by_id(
             client.get("/api/projects/shop/links").json()
         )
@@ -275,7 +275,7 @@ class TestProjectLinks:
 
         body = client.get("/api/projects/shop/links").json()
 
-        assert "vault" not in _by_id(body)
+        assert not {"vault", "keycloak"} & set(_by_id(body))
 
     def test_member_keeps_the_observability_links(
         self, session_factory, keycloak

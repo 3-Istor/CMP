@@ -190,14 +190,14 @@ def project_links(
             min_role=ProjectRole.ADMIN,
         ),
     ]
-    # Sign-in uses the realm's local admin, whose credentials are in Vault.
+    # Project admins sign in with their platform account (project-admins carries realm-admin).
     result.append(
         Link(
             id="keycloak",
             label_key="links.keycloak",
             url=keycloak_console_url(project),
             group="admin",
-            min_role=ProjectRole.MEMBER,
+            min_role=ProjectRole.ADMIN,
         )
     )
     if has_staging:
@@ -207,7 +207,7 @@ def project_links(
                 label_key="links.keycloak_staging",
                 url=keycloak_console_url(f"{project}-staging"),
                 group="admin",
-                min_role=ProjectRole.MEMBER,
+                min_role=ProjectRole.ADMIN,
             )
         )
     if grafana_org is not None:
