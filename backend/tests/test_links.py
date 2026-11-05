@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from unittest import mock
 
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.environment import AppEnvironment
 from app.routers import links as links_router
 from app.services import keycloak_service
 from app.services import links as links_service
@@ -152,6 +154,7 @@ class TestProjectLinks:
             "vault",
             "grafana_org",
             "github_repo",
+            "keycloak",
         }
 
     def test_argocd_project_targets_the_project_applications(
@@ -228,12 +231,51 @@ class TestProjectLinks:
             "https://github.com/3-Istor/shop-web",
         ]
 
+    def test_keycloak_opens_the_admin_console_of_the_project_realm(
+        self, session_factory, keycloak
+    ):
+        client = _client(session_factory, "admin")
+
+        link = _by_id(client.get("/api/projects/shop/links").json())[
+            "keycloak"
+        ]
+
+        assert (
+            link["url"] == "https://admin-auth.3istor.com/admin/shop/console/"
+        )
+
+    def test_staging_realm_console_only_once_staging_is_ready(
+        self, session_factory, keycloak
+    ):
+        client = _client(session_factory, "admin")
+        assert "keycloak_staging" not in _by_id(
+            client.get("/api/projects/shop/links").json()
+        )
+        with session_factory() as db:
+            db.add(
+                AppEnvironment(
+                    deployment_id=1,
+                    name="staging",
+                    state="ready",
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+            db.commit()
+
+        link = _by_id(client.get("/api/projects/shop/links").json())[
+            "keycloak_staging"
+        ]
+
+        assert link["url"] == (
+            "https://admin-auth.3istor.com/admin/shop-staging/console/"
+        )
+
     def test_member_does_not_get_vault(self, session_factory, keycloak):
         client = _client(session_factory, "member")
 
         body = client.get("/api/projects/shop/links").json()
 
-        assert "vault" not in _by_id(body)
+        assert not {"vault", "keycloak"} & set(_by_id(body))
 
     def test_member_keeps_the_observability_links(
         self, session_factory, keycloak

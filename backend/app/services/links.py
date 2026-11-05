@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 ARGOCD_URL = "https://argocd.3istor.com"
 VAULT_URL = "https://vault.3istor.com"
+KEYCLOAK_ADMIN_URL = "https://admin-auth.3istor.com"
 DOMAIN = "3istor.com"
 APPLICATIONS_PATH = "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications"
 
@@ -43,6 +44,10 @@ class Link(BaseModel):
 
 def vault_project_url(project: str) -> str:
     return f"{VAULT_URL}/ui/vault/secrets/kvv2/kv/list/projects/{project}/"
+
+
+def keycloak_console_url(realm: str) -> str:
+    return f"{KEYCLOAK_ADMIN_URL}/admin/{realm}/console/"
 
 
 def vault_app_url(project: str, app: str) -> str:
@@ -153,6 +158,7 @@ def project_links(
     role: ProjectRole,
     deployments: list[Deployment],
     grafana_org: int | None,
+    has_staging: bool = False,
 ) -> list[Link]:
     result = [
         Link(
@@ -184,6 +190,26 @@ def project_links(
             min_role=ProjectRole.ADMIN,
         ),
     ]
+    # Project admins sign in with their platform account (project-admins carries realm-admin).
+    result.append(
+        Link(
+            id="keycloak",
+            label_key="links.keycloak",
+            url=keycloak_console_url(project),
+            group="admin",
+            min_role=ProjectRole.ADMIN,
+        )
+    )
+    if has_staging:
+        result.append(
+            Link(
+                id="keycloak_staging",
+                label_key="links.keycloak_staging",
+                url=keycloak_console_url(f"{project}-staging"),
+                group="admin",
+                min_role=ProjectRole.ADMIN,
+            )
+        )
     if grafana_org is not None:
         result.append(
             Link(
