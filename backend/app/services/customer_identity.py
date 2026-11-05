@@ -11,6 +11,7 @@ narrowest roles of that realm's ``realm-management`` client, never
 
 import time
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -59,24 +60,32 @@ def _token() -> str:
 
 
 def _admin(method: str, path: str, json: Any | None = None) -> Any:
-    response = requests.request(
-        method,
-        f"{settings.KEYCLOAK_URL}{path}",
-        json=json,
-        headers={"Authorization": f"Bearer {_token()}"},
-        timeout=10,
-    )
-    if response.status_code >= 400:
-        raise CustomerIdentityError(
-            response.status_code,
-            f"{method} {path}: {response.status_code} {response.text[:200]}",
+    try:
+        response = requests.request(
+            method,
+            f"{settings.KEYCLOAK_URL}{path}",
+            json=json,
+            headers={"Authorization": f"Bearer {_token()}"},
+            timeout=10,
         )
-    return response.json() if response.content else None
+        if response.status_code >= 400:
+            raise CustomerIdentityError(
+                response.status_code,
+                f"{method} {path}: {response.status_code} {response.text[:200]}",
+            )
+        # Also catches a non-JSON 2xx (JSONDecodeError is a RequestException).
+        return response.json() if response.content else None
+    except requests.RequestException as exc:
+        raise CustomerIdentityError(502, f"{method} {path}: {exc}") from exc
+
+
+def _base(realm: str) -> str:
+    return f"/admin/realms/{quote(realm, safe='')}"
 
 
 def _realm(name: str) -> dict | None:
     try:
-        return _admin("GET", f"/admin/realms/{name}")
+        return _admin("GET", _base(name))
     except CustomerIdentityError as exc:
         if exc.status == 404:
             return None
@@ -86,30 +95,41 @@ def _realm(name: str) -> dict | None:
 def _set_realm(name: str, current: dict, wanted: dict) -> None:
     changes = {k: v for k, v in wanted.items() if current.get(k) != v}
     if changes:
-        _admin("PUT", f"/admin/realms/{name}", changes)
+        _admin("PUT", _base(name), changes)
 
 
 def _default_users_group(realm: str) -> None:
+    base = _base(realm)
+
     def find() -> dict | None:
-        groups = _admin("GET", f"/admin/realms/{realm}/groups")
+        # By name: the plain listing is paged, and the group may fall off it.
+        groups = _admin(
+            "GET", f"{base}/groups?search={_USERS_GROUP}&exact=true"
+        )
         return next((g for g in groups if g["name"] == _USERS_GROUP), None)
 
     group = find()
     if group is None:
-        _admin("POST", f"/admin/realms/{realm}/groups", {"name": _USERS_GROUP})
+        _admin("POST", f"{base}/groups", {"name": _USERS_GROUP})
         group = find()
-    defaults = _admin("GET", f"/admin/realms/{realm}/default-groups")
+    defaults = _admin("GET", f"{base}/default-groups")
     if group["id"] not in {g["id"] for g in defaults}:
-        _admin("PUT", f"/admin/realms/{realm}/default-groups/{group['id']}")
+        _admin("PUT", f"{base}/default-groups/{group['id']}")
 
 
 def _grant_apps(realm: str, project: str) -> None:
-    base = f"/admin/realms/{realm}"
+    base = _base(realm)
     clients = _admin("GET", f"{base}/clients")
     apps = [c for c in clients if c["clientId"].startswith(f"cnp-{project}-")]
     if not apps:
         return
-    rm = next(c for c in clients if c["clientId"] == "realm-management")
+    rm = next(
+        (c for c in clients if c["clientId"] == "realm-management"), None
+    )
+    if rm is None:
+        raise CustomerIdentityError(
+            502, f"{realm}: no realm-management client"
+        )
     roles = {
         r["name"]: r for r in _admin("GET", f"{base}/clients/{rm['id']}/roles")
     }
@@ -117,7 +137,7 @@ def _grant_apps(realm: str, project: str) -> None:
         s["name"]: s["id"] for s in _admin("GET", f"{base}/client-scopes")
     }
     if not set(APP_ADMIN_ROLES) <= roles.keys() or _SCOPE not in scopes:
-        raise CustomerIdentityError(404, f"{realm}: roles or scope missing")
+        raise CustomerIdentityError(502, f"{realm}: roles or scope missing")
 
     for app in apps:
         path = f"{base}/clients/{app['id']}"
@@ -158,19 +178,19 @@ def apply(project: str, enabled: bool) -> None:
     realms = {project: _realm(project), staging: _realm(staging)}
     if realms[project] is None:
         raise CustomerIdentityError(404, f"Keycloak realm {project} not found")
+    live = {name: rep for name, rep in realms.items() if rep is not None}
 
-    on = {"organizationsEnabled": True} if enabled else {}
-    _set_realm(
-        project, realms[project], {"registrationAllowed": enabled, **on}
-    )
-    if realms[staging] is not None:
-        _set_realm(
-            staging, realms[staging], {"registrationAllowed": False, **on}
-        )
+    # Staging never takes sign-ups, and closing is always safe. Opening the
+    # project realm waits until the apps and the default group are ready.
+    for name, rep in live.items():
+        wanted = {"organizationsEnabled": True} if enabled else {}
+        if name != project or not enabled:
+            wanted["registrationAllowed"] = False
+        _set_realm(name, rep, wanted)
     if not enabled:
         return
 
     _default_users_group(project)
-    for name, realm in realms.items():
-        if realm is not None:
-            _grant_apps(name, project)
+    for name in live:
+        _grant_apps(name, project)
+    _set_realm(project, realms[project], {"registrationAllowed": True})

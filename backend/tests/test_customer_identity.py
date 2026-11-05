@@ -1,8 +1,10 @@
 import copy
 import re
 from unittest import mock
+from urllib.parse import parse_qs, quote, unquote
 
 import pytest
+import requests
 
 from app.services import customer_identity as ci
 from app.services.customer_identity import (
@@ -11,6 +13,8 @@ from app.services.customer_identity import (
 )
 
 KC_ROLES = (*APP_ADMIN_ROLES, "manage-realm", "view-realm", "realm-admin")
+# Keycloak lists at most this many groups unless asked for a name.
+GROUPS_PAGE = 100
 
 
 class FakeKeycloak:
@@ -52,8 +56,10 @@ class FakeKeycloak:
         }
 
     def __call__(self, method, path, json=None):
-        m = re.fullmatch(r"/admin/realms/([^/]+)(/.*)?", path)
-        realm, rest = m.group(1), m.group(2) or ""
+        m = re.fullmatch(r"/admin/realms/([^/?]+)(/[^?]*)?(\?.*)?", path)
+        realm, rest = unquote(m.group(1)), m.group(2) or ""
+        assert m.group(1) == quote(realm, safe=""), "realm name not quoted"
+        query = parse_qs((m.group(3) or "")[1:])
         if realm not in self.realms:
             raise CustomerIdentityError(404, f"{path}: no such realm")
         r = self.realms[realm]
@@ -75,7 +81,13 @@ class FakeKeycloak:
         if at("PUT"):
             r["rep"].update(json)
         elif at("GET", "groups"):
-            return [dict(g) for g in r["groups"]]
+            groups = r["groups"][:GROUPS_PAGE]
+            if "search" in query:
+                assert query["exact"] == ["true"], "substring match"
+                groups = [
+                    g for g in r["groups"] if g["name"] == query["search"][0]
+                ]
+            return [dict(g) for g in groups]
         elif at("POST", "groups"):
             r["groups"].append({"id": f"{realm}:g-{json['name']}", **json})
         elif at("GET", "default-groups"):
@@ -248,3 +260,98 @@ def test_admin_raises_on_http_errors(monkeypatch):
         with pytest.raises(CustomerIdentityError) as err:
             ci._admin("PUT", "/admin/realms/p", {})
     assert err.value.status == 403
+
+
+def test_a_group_in_a_large_realm_is_found_by_name(kc):
+    kc.realms["p"]["groups"] = [
+        {"id": f"p:g{i}", "name": f"team-{i}"} for i in range(GROUPS_PAGE + 5)
+    ]
+
+    ci.apply("p", True)
+    ci.apply("p", True)
+
+    groups = kc.realms["p"]["groups"]
+    assert [g["name"] for g in groups].count("users") == 1
+    assert kc.realms["p"]["default_groups"] == [groups[-1]["id"]]
+
+
+def test_sign_up_opens_last(kc):
+    ci.apply("p", True)
+
+    assert kc.writes[-1] == ("PUT", "/admin/realms/p")
+    assert ("POST", "/admin/realms/p/groups") in kc.writes[:-1]
+
+
+def test_sign_up_stays_closed_when_an_app_cannot_be_granted(kc):
+    kc.realms["p-staging"]["clients"] = [
+        c
+        for c in kc.realms["p-staging"]["clients"]
+        if c["clientId"] != "realm-management"
+    ]
+
+    with pytest.raises(CustomerIdentityError):
+        ci.apply("p", True)
+
+    assert kc.realms["p"]["rep"]["registrationAllowed"] is False
+
+
+def test_the_realm_name_is_quoted_in_the_path(kc):
+    kc.add_realm("a b", ["cnp-a b-web"])
+
+    ci.apply("a b", True)
+
+    assert kc.realms["a b"]["rep"]["registrationAllowed"] is True
+    assert kc.roles_of("a b", "cnp-a b-web") == set(APP_ADMIN_ROLES)
+
+
+@pytest.mark.parametrize("missing", ["client", "role", "scope"])
+def test_a_realm_without_what_the_apps_need_is_a_bad_gateway(kc, missing):
+    realm = kc.realms["p"]
+    if missing == "client":
+        realm["clients"] = [
+            c for c in realm["clients"] if c["clientId"] != "realm-management"
+        ]
+    elif missing == "role":
+        del realm["roles"]["manage-organizations"]
+    else:
+        realm["scopes"].clear()
+
+    with pytest.raises(CustomerIdentityError) as err:
+        ci.apply("p", True)
+
+    assert err.value.status == 502
+
+
+@pytest.fixture
+def no_token(monkeypatch):
+    monkeypatch.setattr(ci, "_token", lambda: "t")
+
+
+@pytest.mark.parametrize(
+    "failure", [requests.ConnectionError("down"), requests.Timeout("slow")]
+)
+def test_admin_wraps_network_errors(no_token, failure):
+    with mock.patch.object(ci.requests, "request", side_effect=failure):
+        with pytest.raises(CustomerIdentityError) as err:
+            ci._admin("GET", "/admin/realms/p")
+    assert err.value.status == 502
+
+
+def test_admin_wraps_a_login_that_cannot_connect(monkeypatch):
+    monkeypatch.setattr(ci, "_token_cache", None)
+    with mock.patch.object(
+        ci.requests, "post", side_effect=requests.ConnectionError("down")
+    ):
+        with pytest.raises(CustomerIdentityError) as err:
+            ci._admin("GET", "/admin/realms/p")
+    assert err.value.status == 502
+
+
+def test_admin_wraps_a_success_that_is_not_json(no_token):
+    response = requests.Response()
+    response.status_code = 200
+    response._content = b"<html>login</html>"
+    with mock.patch.object(ci.requests, "request", return_value=response):
+        with pytest.raises(CustomerIdentityError) as err:
+            ci._admin("GET", "/admin/realms/p")
+    assert err.value.status == 502
