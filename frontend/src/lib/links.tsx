@@ -9,6 +9,7 @@ import {
   BarChart3,
   ExternalLink,
   FileCode,
+  KeyRound,
   Play,
   Vault,
 } from "lucide-react";
@@ -20,6 +21,8 @@ const ICONS: Record<string, ComponentType<{ className?: string }>> = {
   status: Activity,
   offhours: AlarmClock,
   vault: Vault,
+  keycloak: KeyRound,
+  keycloak_staging: KeyRound,
   grafana_org: BarChart3,
   github_repo: Github,
   github_actions: Play,

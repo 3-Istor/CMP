@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
+from app.models.environment import AppEnvironment
 from app.services import alerts_grafana as grafana
 from app.services import links
 from app.services.authz import RequireGuest, assert_project_role, is_cnp_admin
@@ -44,7 +45,19 @@ async def get_project_links(
         )
         .all()
     )
-    return links.project_links(ctx.project_name, ctx.role, apps, org)
+    has_staging = (
+        db.query(AppEnvironment)
+        .filter(
+            AppEnvironment.deployment_id.in_([app.id for app in apps]),
+            AppEnvironment.name == "staging",
+            AppEnvironment.state == "ready",
+        )
+        .first()
+        is not None
+    )
+    return links.project_links(
+        ctx.project_name, ctx.role, apps, org, has_staging
+    )
 
 
 @deployments.get("/{deployment_id}/links", response_model=list[links.Link])

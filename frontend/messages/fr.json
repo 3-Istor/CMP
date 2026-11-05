@@ -1775,7 +1775,9 @@
     "vault": "Vault",
     "grafana_org": "Grafana",
     "github_repo": "Dépôt GitHub",
-    "github_actions": "GitHub Actions"
+    "github_actions": "GitHub Actions",
+    "keycloak": "Keycloak",
+    "keycloak_staging": "Keycloak (staging)"
   },
   "health": {
     "title": "Santé",
