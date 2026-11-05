@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from unittest import mock
 
 from app.models.project import TargetCloud
 from app.models.release import ReleaseEvent
 from app.services.kube_client import KubeUnavailableError
 from app.services.release import recorder
+from app.services.release.history import latest_event
 from tests.test_release_api import (  # noqa: F401
     FakeSource,
     _paused,
@@ -68,3 +70,27 @@ def test_record_all_keeps_recording_when_the_route_reconcile_fails(
 
     # Assert
     assert recorded == 1
+
+
+def test_a_rolling_row_does_not_disturb_the_canary_history(session_factory):
+    # Arrange
+    now = datetime.now(timezone.utc)
+    with session_factory() as db:
+        for revision, strategy in ((1, "canary"), (2, "rolling")):
+            db.add(
+                ReleaseEvent(
+                    deployment_id=7,
+                    revision=revision,
+                    strategy=strategy,
+                    started_at=now,
+                )
+            )
+        db.commit()
+
+        # Act
+        latest = latest_event(db, 7)
+
+    # Assert
+    assert latest.strategy == "canary"
+    assert latest.environment == "prod"
+    assert latest.component is None

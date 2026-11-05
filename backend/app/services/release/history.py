@@ -17,9 +17,13 @@ from app.services.release.view import ReleaseHint
 
 
 def latest_event(db: Session, deployment_id: int) -> ReleaseEvent | None:
+    # Rolling rows are not canary attempts: the canary sync must not see them.
     return (
         db.query(ReleaseEvent)
-        .filter(ReleaseEvent.deployment_id == deployment_id)
+        .filter(
+            ReleaseEvent.deployment_id == deployment_id,
+            ReleaseEvent.strategy != "rolling",
+        )
         .order_by(ReleaseEvent.id.desc())
         .first()
     )

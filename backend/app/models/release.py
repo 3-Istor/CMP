@@ -30,3 +30,8 @@ class ReleaseEvent(Base):
     reached_step: Mapped[int | None] = mapped_column(Integer)
     steps: Mapped[list | None] = mapped_column(JSON)
     actors: Mapped[list | None] = mapped_column(JSON)
+    # server_default backfills the rows written before the column existed.
+    environment: Mapped[str] = mapped_column(
+        String(16), default="prod", server_default="prod"
+    )
+    component: Mapped[str | None] = mapped_column(String(64))
