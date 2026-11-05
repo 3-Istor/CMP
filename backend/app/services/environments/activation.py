@@ -53,15 +53,24 @@ def _executor(deployment: Deployment):
     )
 
 
+def realm_of(deployment: Deployment) -> str:
+    """
+    The realm the staging OIDC client lives in: the project's staging realm,
+    or the one a project running its own Keycloak configured.
+    """
+    config = json.loads(deployment.app_config or "{}")
+    return config.get("keycloak_realm_id") or staging_realm.realm_name(
+        deployment.project_id
+    )
+
+
 def _variables(deployment: Deployment) -> dict[str, Any]:
     config = json.loads(deployment.app_config or "{}")
     return {
         "app_name": deployment.name,
         "project_name": deployment.project_id,
         "target_cloud": config.get("target_cloud", "onprem"),
-        # A project running its own Keycloak keeps the realm it configured.
-        "keycloak_realm_id": config.get("keycloak_realm_id")
-        or staging_realm.realm_name(deployment.project_id),
+        "keycloak_realm_id": realm_of(deployment),
     }
 
 
@@ -160,9 +169,22 @@ async def _enable(deployment_id: int, offhours: dict[str, Any]) -> None:
                 deployment.project_id
             ):
                 _set(db, row, "provisioning", "Creating the staging realm")
-                await asyncio.to_thread(
-                    staging_realm.ensure, deployment.project_id
-                )
+                try:
+                    await asyncio.to_thread(
+                        staging_realm.ensure, deployment.project_id
+                    )
+                except Exception as exc:  # name the step in the row
+                    logger.exception(
+                        "creating the staging realm for deployment %s failed",
+                        deployment_id,
+                    )
+                    _set(
+                        db,
+                        row,
+                        "failed",
+                        f"Creating the staging realm failed: {exc}",
+                    )
+                    return
                 _set(
                     db,
                     row,
@@ -229,7 +251,7 @@ async def _write_env_files(
                     offhours,
                     exposed=bool((values.get("ingress") or {}).get("enabled")),
                     has_auth="auth" in values,
-                    realm=_variables(deployment)["keycloak_realm_id"],
+                    realm=realm_of(deployment),
                 )
             )
         return files

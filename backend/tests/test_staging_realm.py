@@ -1,14 +1,19 @@
+import asyncio
 import logging
+from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from pydantic import ValidationError
 
+from app.models.environment import AppEnvironment
 from app.schemas.project import ProjectCreate
+from app.scripts import move_staging_realm
 from app.scripts.move_staging_realm import with_realm
 from app.services import project_bootstrap
 from app.services.environments import staging_realm
+from tests.test_environments import db  # noqa: F401
 from tests.test_project_status import (  # noqa: F401
     add_project,
     session_factory,
@@ -110,3 +115,28 @@ class TestMoveRealm:
 
         assert with_realm(values, "shop-staging") is False
         assert values == {"image": {"tag": "1"}}
+
+    @pytest.mark.parametrize("state", ["provisioning", "failed", None])
+    def test_nothing_moves_unless_staging_is_ready(
+        self, db, state
+    ):  # noqa: F811
+        if state is None:
+            db.delete(db.get(AppEnvironment, (7, "staging")))
+        else:
+            db.get(AppEnvironment, (7, "staging")).state = state
+        db.commit()
+        with (
+            mock.patch.object(
+                move_staging_realm, "SessionLocal", lambda: nullcontext(db)
+            ),
+            mock.patch.object(staging_realm, "ensure") as ensure,
+            mock.patch.object(
+                move_staging_realm.activation, "_executor"
+            ) as executor,
+            pytest.raises(SystemExit) as refused,
+        ):
+            asyncio.run(move_staging_realm.move(7))
+
+        assert "not ready" in str(refused.value)
+        ensure.assert_not_called()
+        executor.assert_not_called()

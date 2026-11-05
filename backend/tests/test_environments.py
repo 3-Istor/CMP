@@ -365,6 +365,28 @@ class TestStagingRealm:
         assert order == ["ensure", "apply"]
         assert applied["keycloak_realm_id"] == "shop-staging"
 
+    def test_a_failed_realm_creation_is_named_in_the_row(self, db):
+        executor = mock.Mock()
+        with (
+            mock.patch.object(
+                activation, "SessionLocal", lambda: nullcontext(db)
+            ),
+            mock.patch.object(activation, "_executor", return_value=executor),
+            mock.patch.object(
+                activation.staging_realm,
+                "ensure",
+                side_effect=RuntimeError("keycloak is down"),
+            ),
+        ):
+            asyncio.run(activation._enable(7, {}))
+
+        row = db.get(AppEnvironment, (7, "staging"))
+        assert (row.state, row.detail) == (
+            "failed",
+            "Creating the staging realm failed: keycloak is down",
+        )
+        executor.apply.assert_not_called()
+
     def test_a_project_with_its_own_keycloak_keeps_its_realm(self, db):
         deployment = db.get(Deployment, 7)
         deployment.app_config = json.dumps({"keycloak_realm_id": "acme"})
@@ -763,6 +785,29 @@ class TestCloudObservation:
             )
 
         woken.assert_called_once_with("shop-web-stg", TargetCloud.AWS)
+
+    @pytest.mark.parametrize(
+        "environment, realm", [("staging", "shop-staging"), ("prod", "shop")]
+    )
+    def test_a_public_smoke_logs_into_the_realm_of_its_environment(
+        self, db, environment, realm
+    ):
+        with mock.patch.object(
+            suites,
+            "run_public_smoke",
+            new=mock.AsyncMock(return_value=suites.Outcome("passed", "ok")),
+        ) as smoke:
+            asyncio.run(
+                runs._execute(
+                    db,
+                    self._cloud_app(db),
+                    mock.Mock(environment=environment),
+                    suites.SMOKE_SPEC,
+                    None,
+                )
+            )
+
+        assert smoke.call_args.args[1] == realm
 
     def test_a_metrics_suite_runs_on_a_cloud(self, db):
         run = mock.Mock(environment="staging")

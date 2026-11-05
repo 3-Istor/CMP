@@ -13,6 +13,7 @@ from typing import Any
 
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment
+from app.models.environment import AppEnvironment
 from app.services.environments import activation, gitops, layout, staging_realm
 
 
@@ -31,8 +32,11 @@ def with_realm(values: dict[str, Any], realm: str) -> bool:
 async def move(deployment_id: int) -> None:
     with SessionLocal() as db:
         deployment = db.get(Deployment, deployment_id)
+        row = db.get(AppEnvironment, (deployment_id, activation.STAGING))
     if deployment is None:
         raise SystemExit(f"No deployment {deployment_id}.")
+    if row is None or row.state != "ready":
+        raise SystemExit("Staging is not ready on this app: nothing to move.")
     variables = activation._variables(deployment)
     realm = staging_realm.realm_name(deployment.project_id)
     if variables["keycloak_realm_id"] != realm:
