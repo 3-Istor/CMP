@@ -113,12 +113,15 @@ def _status(
 
 
 def fields_diff(
-    staging: dict[str, Runtime], prod: dict[str, Runtime], asleep: bool
+    staging: dict[str, Runtime], prod: dict[str, Runtime]
 ) -> list[DiffField]:
     single = len(prod) == 1
     rows = []
     for component, right in prod.items():
-        left = staging.get(component, Runtime()).fields()
+        runtime = staging.get(component, Runtime())
+        # A component created after a wake keeps sleeping while others run.
+        sleeping = runtime.ready_replicas == "0/0"
+        left = runtime.fields()
         for name, b in right.fields().items():
             a = left[name]
             rows.append(
@@ -126,7 +129,7 @@ def fields_diff(
                     key=name if single else f"{component}.{name}",
                     staging=a,
                     prod=b,
-                    status="unknown" if asleep else _status(a, b),
+                    status="unknown" if sleeping else _status(a, b),
                 )
             )
     return rows
@@ -141,9 +144,8 @@ def compute(
         return EnvironmentDiff(
             staging_available=False, staging_asleep=False, fields=[]
         )
-    asleep = is_asleep(staging_runtime)
     return EnvironmentDiff(
         staging_available=True,
-        staging_asleep=asleep,
-        fields=fields_diff(staging_runtime, prod_runtime, asleep),
+        staging_asleep=is_asleep(staging_runtime),
+        fields=fields_diff(staging_runtime, prod_runtime),
     )

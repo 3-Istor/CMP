@@ -147,6 +147,25 @@ class TestFields:
         runtime["backend"] = diff.Runtime()
         assert diff.is_asleep(runtime) is False
 
+    def test_a_sleeping_component_is_never_claimed_to_differ(self):
+        staging = {
+            "frontend": diff.runtime_of([], [_replica_set(0)]),
+            "backend": _runtime("2.0.0", DIGEST_B),
+        }
+        prod = {
+            "frontend": _runtime("1.0.0", DIGEST_A),
+            "backend": _runtime("1.0.0", DIGEST_A),
+        }
+
+        result = diff.compute(True, staging, prod)
+
+        assert result.staging_asleep is False
+        assert {
+            f.status for f in result.fields if f.key.startswith("frontend.")
+        } == {"unknown"}
+        assert _field(result, "backend.imageTag").status == "differs"
+        assert _field(result, "backend.cpuRequest").status == "same"
+
     def test_no_component_is_not_asleep(self):
         assert diff.is_asleep({}) is False
 

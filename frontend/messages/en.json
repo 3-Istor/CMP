@@ -2622,6 +2622,7 @@
   "envDiff": {
     "title": "Differences between staging and production",
     "titleCount": "Differences between staging and production ({count})",
+    "titleAsleep": "Differences between staging and production (asleep)",
     "expand": "Expand",
     "collapse": "Collapse",
     "copy": "Copy",

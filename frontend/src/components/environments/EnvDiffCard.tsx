@@ -99,6 +99,13 @@ export function EnvDiffCard({ diff, error }: { diff: EnvDiff | null; error: unkn
   const t = useTranslations("envDiff") as unknown as Translate;
   const [open, setOpen] = useState(false);
   const count = diff?.fields.filter((f) => f.status === "differs").length ?? 0;
+  // "(0)" must only mean "compared, nothing differs": never when asleep or nothing was comparable.
+  const comparable = diff?.fields.some((f) => f.status !== "unknown");
+  const summary = diff?.stagingAsleep
+    ? t("titleAsleep")
+    : comparable
+      ? t("titleCount", { count })
+      : t("title");
   const identical = diff?.fields.every((f) => f.status === "same");
 
   return (
@@ -117,7 +124,7 @@ export function EnvDiffCard({ diff, error }: { diff: EnvDiff | null; error: unkn
                 className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-90")}
                 aria-hidden
               />
-              {t("titleCount", { count })}
+              {summary}
             </button>
           ) : (
             t("title")
