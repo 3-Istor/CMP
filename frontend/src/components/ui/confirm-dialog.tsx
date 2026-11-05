@@ -80,6 +80,7 @@ function ConfirmBody({
     setError(null);
     try {
       await onConfirm();
+      setPending(false);
       onBusyChange(false);
       onOpenChange(false);
     } catch (err) {

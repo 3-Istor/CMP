@@ -7,7 +7,7 @@ is to record for a rolling update.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.models.project import TargetCloud
 from app.models.release import ReleaseEvent
 from app.services.environments import gitops, layout, observe
 from app.services.kube_client import kube_get, kube_list
+from app.services.release.source import ROLLOUTS_API
 
 REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 # Set when a rollback reuses an old ReplicaSet under a new revision number.
@@ -25,6 +26,8 @@ OUTCOMES = {
     "ProgressDeadlineExceeded": "failed",
     "NewReplicaSetAvailable": "deployed",
 }
+# Two recorder passes: past this a backfilled row's end time is unknown.
+BACKFILL_GRACE = timedelta(seconds=60)
 
 
 @dataclass
@@ -103,6 +106,21 @@ def revisions_of(
     ]
 
 
+def _workloads_of_rollouts(namespace: str, cloud: TargetCloud) -> set[str]:
+    """
+    Deployments a Rollout takes over (workloadRef): the chart keeps them at 0
+    replicas, yet each release still adds a ReplicaSet to them.
+    """
+    rollouts = kube_list(
+        f"{ROLLOUTS_API}/namespaces/{namespace}/rollouts", cloud=cloud
+    )
+    return {
+        name
+        for r in rollouts
+        if (name := (r.get("spec", {}).get("workloadRef") or {}).get("name"))
+    }
+
+
 def read_rolling(
     deployment: Deployment, cloud: TargetCloud, environments: list[str]
 ) -> list[RollingRevision]:
@@ -115,7 +133,15 @@ def read_rolling(
     found = []
     for environment in environments:
         namespace = layout.namespace(project, app, environment)
+        canary = (
+            _workloads_of_rollouts(namespace, cloud)
+            if environment == "prod"
+            else set()  # staging always rolls
+        )
         for component in layout.components(gitops.app_type(deployment)):
+            fullname = layout.chart_fullname(project, app, component)
+            if fullname in canary:
+                continue
             selector = {
                 "labelSelector": "app.kubernetes.io/instance="
                 + layout.application(project, app, component, environment)
@@ -127,7 +153,7 @@ def read_rolling(
             )
             deployment_obj = kube_get(
                 f"/apis/apps/v1/namespaces/{namespace}/deployments/"
-                + layout.chart_fullname(project, app, component),
+                + fullname,
                 cloud=cloud,
             )
             found += revisions_of(
@@ -189,8 +215,12 @@ def sync_rolling(
             row.finished_at = now
             changes += 1
 
-    for key, r in seen.items():
+    # Oldest first, so that ids order the listing across environments.
+    for key, r in sorted(seen.items(), key=lambda item: item[1].started_at):
         if key not in known:
+            ended = (
+                r.outcome != "running" and now - r.started_at < BACKFILL_GRACE
+            )
             db.add(
                 ReleaseEvent(
                     deployment_id=deployment_id,
@@ -200,7 +230,7 @@ def sync_rolling(
                     image=r.image,
                     strategy="rolling",
                     started_at=r.started_at,
-                    finished_at=None if r.outcome == "running" else now,
+                    finished_at=now if ended else None,
                     outcome=r.outcome,
                     forced=False,
                     actors=[],

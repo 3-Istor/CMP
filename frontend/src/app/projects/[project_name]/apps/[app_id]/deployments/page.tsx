@@ -33,8 +33,11 @@ export default function AppDeploymentsPage() {
 
   const version = imageTag(rollingBack?.image);
   const rollBack = async () => {
+    // rollingBack is already null while the dialog closes; without an id this would be a normal promotion.
+    const id = rollingBack?.rollback_promotion_id;
+    if (id == null) return;
     // Same call as the promotion history; the backend refuses if a promotion runs or prod is already there.
-    await startPromotion(appId, { rollbackTo: rollingBack?.rollback_promotion_id });
+    await startPromotion(appId, { rollbackTo: id });
     toast.success(t("rollbackStarted", { version }));
     history.retry();
   };

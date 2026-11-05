@@ -46,8 +46,15 @@ def _deployment(reason):
     return {"status": {"conditions": [condition]}}
 
 
-def _revision(revision, outcome="deployed"):
-    return RollingRevision("prod", "app", revision, "img", STARTED, outcome)
+def _revision(revision, outcome="deployed", started_at=None, **kw):
+    return RollingRevision(
+        kw.get("environment", "prod"),
+        "app",
+        revision,
+        "img",
+        started_at or datetime.now(timezone.utc),
+        outcome,
+    )
 
 
 def _rows(factory):
@@ -230,7 +237,7 @@ def test_read_rolling_reads_each_environment_of_the_app():
 
     def fake_list(path, params=None, cloud=None):
         asked.append(("list", path, params, cloud))
-        return [_rs(1)]
+        return [] if path.endswith("/rollouts") else [_rs(1)]
 
     def fake_get(path, params=None, cloud=None):
         asked.append(("get", path, params, cloud))
@@ -247,7 +254,9 @@ def test_read_rolling_reads_each_environment_of_the_app():
 
     # Assert
     chart = "shop-web-app-cnp-generic-app"
+    rollouts = "/apis/argoproj.io/v1alpha1/namespaces/shop-web/rollouts"
     assert asked == [
+        ("list", rollouts, None, TargetCloud.AWS),
         (
             "list",
             "/apis/apps/v1/namespaces/shop-web/replicasets",
@@ -277,4 +286,111 @@ def test_read_rolling_reads_each_environment_of_the_app():
     assert [(r.environment, r.component, r.outcome) for r in found] == [
         ("prod", "app", "deployed"),
         ("staging", "app", "running"),
+    ]
+
+
+def _read_fullstack_canary(rollouts):
+    app = Deployment(
+        id=7,
+        name="web",
+        project_id="shop",
+        app_config='{"app_type": "fullstack"}',
+    )
+    read = []
+
+    def fake_list(path, params=None, cloud=None):
+        if path.endswith("/rollouts"):
+            return rollouts
+        read.append(path)
+        return [_rs(1)]
+
+    with (
+        mock.patch.object(rolling, "kube_list", fake_list),
+        mock.patch.object(rolling, "kube_get", lambda *a, **k: None),
+    ):
+        found = read_rolling(app, TargetCloud.AWS, ["prod", "staging"])
+    return found, read
+
+
+def test_a_deployment_a_rollout_references_is_not_read():
+    # Arrange: the chart keeps the frontend's Deployment as workloadRef
+    frontend = "shop-web-frontend-cnp-generic-app"
+    rollouts = [{"spec": {"workloadRef": {"name": frontend}}}]
+
+    # Act
+    found, _ = _read_fullstack_canary(rollouts)
+
+    # Assert: the unreferenced backend and both staging components still roll
+    assert [(r.environment, r.component) for r in found] == [
+        ("prod", "backend"),
+        ("staging", "frontend"),
+        ("staging", "backend"),
+    ]
+
+
+def test_staging_does_not_look_for_rollouts():
+    # Arrange: a Rollout in prod must not hide the staging Deployments
+    rollouts = [
+        {"spec": {"workloadRef": {"name": "shop-web-backend-cnp-generic-app"}}}
+    ]
+    asked = []
+
+    def fake_list(path, params=None, cloud=None):
+        asked.append(path)
+        return rollouts if path.endswith("/rollouts") else [_rs(1)]
+
+    app = Deployment(id=7, name="web", project_id="shop")
+
+    # Act
+    with (
+        mock.patch.object(rolling, "kube_list", fake_list),
+        mock.patch.object(rolling, "kube_get", lambda *a, **k: None),
+    ):
+        read_rolling(app, TargetCloud.AWS, ["staging"])
+
+    # Assert
+    assert not any(path.endswith("/rollouts") for path in asked)
+
+
+def test_the_backfill_inserts_rows_oldest_first(session_factory):
+    # Arrange: two environments, the newer environment listed first
+    now = datetime.now(timezone.utc)
+    revisions = [
+        _revision(
+            1, environment="staging", started_at=now - timedelta(seconds=5)
+        ),
+        _revision(
+            1, environment="prod", started_at=now - timedelta(seconds=20)
+        ),
+    ]
+
+    # Act
+    with session_factory() as db:
+        sync_rolling(db, 7, revisions)
+
+    # Assert: ids follow started_at, so the id-desc listing is chronological
+    with session_factory() as db:
+        rows = db.query(ReleaseEvent).order_by(ReleaseEvent.id).all()
+    assert [r.environment for r in rows] == ["prod", "staging"]
+
+
+def test_a_backfilled_row_with_an_old_start_has_no_end(session_factory):
+    # Arrange
+    now = datetime.now(timezone.utc)
+    revisions = [
+        _revision(1, started_at=now - timedelta(days=3)),
+        _revision(2, started_at=now - timedelta(seconds=10)),
+        _revision(3, "running", started_at=now - timedelta(days=1)),
+    ]
+
+    # Act
+    with session_factory() as db:
+        sync_rolling(db, 7, revisions)
+
+    # Assert: the end of an old one is unknown, a fresh one just ended
+    rows = _rows(session_factory)
+    assert [rows[n].finished_at is None for n in (1, 2, 3)] == [
+        True,
+        False,
+        True,
     ]

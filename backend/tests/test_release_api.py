@@ -359,6 +359,7 @@ def test_history_lists_the_attempts(session_factory, keycloak):
 
 
 DIGEST = "sha256:" + "a" * 64
+LIVE = "sha256:" + "b" * 64
 
 
 def _rolling_row(
@@ -421,9 +422,23 @@ class TestRollbackTarget:
             _with_staging(db)
             _promotion(db)  # older one with the same digest
             newest = _promotion(db)
+            _promotion(db, digest=LIVE)  # what prod runs now
             _rolling_row(db)
 
         assert _rollback_ids(session_factory) == [newest]
+
+    def test_the_version_prod_runs_offers_none(
+        self, session_factory, keycloak
+    ):
+        with session_factory() as db:
+            _with_staging(db)
+            _promotion(db)
+            _promotion(db, digest=LIVE)
+            _rolling_row(db)
+            _rolling_row(db, image=f"ghcr.io/3-istor/web:1.5.0@{LIVE}")
+
+        # Newest row first: the live one has no target, the older one has.
+        assert _rollback_ids(session_factory) == [None, 1]
 
     def test_a_staging_row_offers_none(self, session_factory, keycloak):
         with session_factory() as db:

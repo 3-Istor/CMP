@@ -55,7 +55,8 @@ def rollback_targets(
     Event id -> id of the prod promotion that can put that version back.
 
     Only apps with a staging have promotions; a rolled-back row keeps its
-    digest, so the newest matching promotion wins.
+    digest, so the newest matching promotion wins. What prod runs (the newest
+    promotion, prod only changes by promotion) offers none: it would 409.
     """
     if db.get(AppEnvironment, (deployment.id, "staging")) is None:
         return {}
@@ -69,11 +70,12 @@ def rollback_targets(
         .order_by(Promotion.id.desc())
         .all()
     )
+    live = {_digest(ref) for p in promotions[:1] for ref in p.digests.values()}
     by_digest: dict[str, int] = {}
     for promotion in promotions:
         for ref in promotion.digests.values():
             digest = _digest(ref)
-            if digest:
+            if digest and digest not in live:
                 by_digest.setdefault(digest, promotion.id)
     return {
         e.id: by_digest[digest]

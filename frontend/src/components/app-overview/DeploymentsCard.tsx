@@ -20,7 +20,7 @@ export function DeploymentsTable({
 }) {
   const t = useTranslations("appPage.deployments");
   const locale = useLocale();
-  const showComponent = events.some((e) => e.component);
+  const showComponent = new Set(events.map((e) => e.component)).size > 1;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
