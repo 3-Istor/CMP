@@ -2083,11 +2083,6 @@
       "milliseconds": "{value} ms",
       "withUnit": "{value} {unit}"
     },
-    "disabled": {
-      "title": "Release not enabled",
-      "rolling": "This application is updated with a rolling update: each new version replaces the pods directly. To ship it progressively, with a share of the traffic first, automatic error analysis and manual approval, switch the strategy to Canary in the settings below, or in the <code>release</code> section of the repository's values file.",
-      "synced": "Once the change is synced by Argo CD, the next version goes through the steps of the preset."
-    },
     "banner": {
       "canaryRejected": "Canary rejected automatically · {release}",
       "aborted": "{release} aborted",
@@ -2626,7 +2621,12 @@
   },
   "envDiff": {
     "title": "Differences between staging and production",
-    "description": "What each environment runs now, and the values it is deployed with.",
+    "titleCount": "Differences between staging and production ({count})",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "copy": "Copy",
+    "copied": "Copied",
+    "asleep": "Asleep",
     "loading": "Reading both environments",
     "loadFailed": "Unable to compare the environments: {message}",
     "stagingOff": "Staging is not turned on, there is nothing to compare.",
@@ -2639,11 +2639,8 @@
     },
     "differs": "Different",
     "same": "Identical",
-    "unknown": "unknown",
-    "absent": "not set",
     "fields": {
       "imageTag": "Image tag",
-      "imageDigest": "Image digest",
       "readyReplicas": "Ready replicas",
       "cpuRequest": "CPU request",
       "memoryRequest": "Memory request"
@@ -2653,8 +2650,6 @@
       "frontend": "Frontend",
       "backend": "Backend"
     },
-    "valuesTitle": "Values that differ",
-    "valuesHint": "Merged from the shared values file and the file of each environment. Secrets are never shown.",
     "confirm": {
       "title": "Promote to production?",
       "description": "Production will run the image that staging runs now. These are the differences between the two environments.",

@@ -143,6 +143,10 @@ class TestFields:
         assert result.staging_asleep is False
         assert _field(result, "backend.imageTag").status == "same"
 
+        # An unreadable component is not asleep either.
+        runtime["backend"] = diff.Runtime()
+        assert diff.is_asleep(runtime) is False
+
     def test_no_component_is_not_asleep(self):
         assert diff.is_asleep({}) is False
 

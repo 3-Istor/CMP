@@ -2083,11 +2083,6 @@
       "milliseconds": "{value} ms",
       "withUnit": "{value} {unit}"
     },
-    "disabled": {
-      "title": "Release non activée",
-      "rolling": "Cette application est mise à jour en rolling update : chaque nouvelle version remplace les pods directement. Pour la livrer progressivement, avec une part du trafic d'abord, une analyse automatique des erreurs et une validation manuelle, passez la stratégie en Canary dans les réglages ci-dessous, ou dans la section <code>release</code> du fichier values du dépôt.",
-      "synced": "Une fois le changement synchronisé par Argo CD, la version suivante passe par les étapes du préréglage."
-    },
     "banner": {
       "canaryRejected": "Canary rejeté automatiquement · {release}",
       "aborted": "{release} abandonnée",
@@ -2626,7 +2621,12 @@
   },
   "envDiff": {
     "title": "Différences entre staging et production",
-    "description": "Ce que chaque environnement exécute maintenant, et les valeurs avec lesquelles il est déployé.",
+    "titleCount": "Différences entre staging et production ({count})",
+    "expand": "Déplier",
+    "collapse": "Replier",
+    "copy": "Copier",
+    "copied": "Copié",
+    "asleep": "Endormi",
     "loading": "Lecture des deux environnements",
     "loadFailed": "Impossible de comparer les environnements : {message}",
     "stagingOff": "Staging n'est pas activé, il n'y a rien à comparer.",
@@ -2639,11 +2639,8 @@
     },
     "differs": "Différent",
     "same": "Identique",
-    "unknown": "inconnu",
-    "absent": "non défini",
     "fields": {
       "imageTag": "Tag de l'image",
-      "imageDigest": "Digest de l'image",
       "readyReplicas": "Réplicas prêts",
       "cpuRequest": "Requête CPU",
       "memoryRequest": "Requête mémoire"
@@ -2653,8 +2650,6 @@
       "frontend": "Frontend",
       "backend": "Backend"
     },
-    "valuesTitle": "Valeurs qui diffèrent",
-    "valuesHint": "Fusion du fichier de valeurs commun et du fichier de chaque environnement. Les secrets ne sont jamais affichés.",
     "confirm": {
       "title": "Promouvoir en production ?",
       "description": "La production exécutera l'image que staging exécute maintenant. Voici les différences entre les deux environnements.",

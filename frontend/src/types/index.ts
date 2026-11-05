@@ -1170,19 +1170,13 @@ export interface EnvDiffField {
   key: string;
   staging: string | null;
   prod: string | null;
-  differs: boolean;
-}
-
-export interface EnvDiffValue {
-  path: string;
-  staging: unknown;
-  prod: unknown;
+  status: "same" | "differs" | "unknown";
 }
 
 export interface EnvDiff {
   stagingAvailable: boolean;
+  stagingAsleep: boolean;
   fields: EnvDiffField[];
-  values: EnvDiffValue[];
 }
 
 export interface StagingOffhours {
