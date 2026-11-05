@@ -21,7 +21,7 @@ from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, Promotion, VerificationRun
 from app.services import project_registry
-from app.services.environments import gitops, layout, registry
+from app.services.environments import gitops, layout, registry, staging_realm
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
 
@@ -55,14 +55,14 @@ def _executor(deployment: Deployment):
 
 def _variables(deployment: Deployment) -> dict[str, Any]:
     config = json.loads(deployment.app_config or "{}")
-    variables = {
+    return {
         "app_name": deployment.name,
         "project_name": deployment.project_id,
         "target_cloud": config.get("target_cloud", "onprem"),
+        # A project running its own Keycloak keeps the realm it configured.
+        "keycloak_realm_id": config.get("keycloak_realm_id")
+        or staging_realm.realm_name(deployment.project_id),
     }
-    if config.get("keycloak_realm_id"):
-        variables["keycloak_realm_id"] = config["keycloak_realm_id"]
-    return variables
 
 
 def _set(
@@ -155,11 +155,23 @@ async def _enable(deployment_id: int, offhours: dict[str, Any]) -> None:
         deployment = db.get(Deployment, deployment_id)
         row = db.get(AppEnvironment, (deployment_id, STAGING))
         try:
+            variables = _variables(deployment)
+            if variables["keycloak_realm_id"] == staging_realm.realm_name(
+                deployment.project_id
+            ):
+                _set(db, row, "provisioning", "Creating the staging realm")
+                await asyncio.to_thread(
+                    staging_realm.ensure, deployment.project_id
+                )
+                _set(
+                    db,
+                    row,
+                    "provisioning",
+                    "Creating the OIDC client, secrets and hostname",
+                )
             executor = _executor(deployment)
             await asyncio.to_thread(executor.init)
-            outputs = await asyncio.to_thread(
-                executor.apply, _variables(deployment)
-            )
+            outputs = await asyncio.to_thread(executor.apply, variables)
             row.hostname = outputs["hostname"]
             _set(
                 db,
@@ -217,6 +229,7 @@ async def _write_env_files(
                     offhours,
                     exposed=bool((values.get("ingress") or {}).get("enabled")),
                     has_auth="auth" in values,
+                    realm=_variables(deployment)["keycloak_realm_id"],
                 )
             )
         return files

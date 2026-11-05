@@ -27,6 +27,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.models.project import ProjectStatus
 from app.services import metrics_isolation
+from app.services.environments import staging_realm
 from app.services.github_service import GitHubAppError, get_installation_token
 from app.services.project_status import delete_project_row, set_project_status
 from app.services.state_lock import StateLockedError, raise_if_state_locked
@@ -287,6 +288,20 @@ def run_project_teardown(
         ProjectStatus.DECOMMISSIONING,
         "Preparing the teardown module",
     )
+
+    # Before the bootstrap destroy, whose Vault mount and groups the realm
+    # module relies on. A failure is logged and left for a manual cleanup.
+    set_project_status(
+        project_name,
+        ProjectStatus.DECOMMISSIONING,
+        "Removing the staging realm",
+    )
+    try:
+        staging_realm.destroy(project_name)
+    except Exception:  # whatever broke must not block the teardown
+        logger.exception(
+            "Could not destroy the staging realm of '%s'", project_name
+        )
 
     try:
         module_path = _get_module_path()

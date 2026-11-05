@@ -4,7 +4,7 @@ Pydantic schemas for Projects API.
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.roles import ProjectRole
 from app.models.project import ProjectStatus, TargetCloud
@@ -73,6 +73,14 @@ class ProjectCreate(BaseModel):
             "public cloud."
         ),
     )
+
+    @field_validator("project_name")
+    @classmethod
+    def _not_a_staging_realm(cls, name: str) -> str:
+        # `<project>-staging` is the project's staging Keycloak realm.
+        if name.endswith("-staging"):
+            raise ValueError("Project names cannot end in -staging.")
+        return name
 
 
 class AddMemberRequest(BaseModel):

@@ -168,6 +168,8 @@ def stubbed_terraform(session_factory, tmp_path):
     ), mock.patch.object(
         project_bootstrap.settings, "GITHUB_INSTALLATION_ID", ""
     ), mock.patch.object(
+        project_bootstrap.staging_realm, "destroy"
+    ), mock.patch.object(
         project_bootstrap, "_terraform_init"
     ) as init, mock.patch.object(
         project_bootstrap, "_run"
