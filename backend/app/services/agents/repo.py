@@ -273,16 +273,48 @@ def next_version(current: str | None, bump: str) -> str:
     return f"v{major}.{minor}.{patch + 1}"
 
 
+async def list_tags(token: str, repo: str) -> list[str]:
+    async with httpx.AsyncClient() as client:
+        tags = await _request(
+            client,
+            "GET",
+            f"{GITHUB_API_BASE}/repos/{repo}/tags",
+            token,
+            # ponytail: first 100 tags, paginate if a repo outgrows it
+            params={"per_page": 100},
+        )
+    return [tag["name"] for tag in tags]
+
+
+async def head_commit(
+    token: str, repo: str, branch: str = "main"
+) -> tuple[str, str]:
+    """Sha and first message line of the branch head."""
+    async with httpx.AsyncClient() as client:
+        commit = await _request(
+            client,
+            "GET",
+            f"{GITHUB_API_BASE}/repos/{repo}/commits/{branch}",
+            token,
+        )
+    return commit["sha"], commit["commit"]["message"].splitlines()[0]
+
+
 async def create_tag(
-    token: str, repo: str, tag: str, branch: str = "main"
+    token: str,
+    repo: str,
+    tag: str,
+    branch: str = "main",
+    sha: str | None = None,
 ) -> str:
-    """A lightweight tag on the branch head; returns the tagged commit."""
+    """A lightweight tag on ``sha``, or on the branch head; returns the commit."""
     base_url = f"{GITHUB_API_BASE}/repos/{repo}"
     async with httpx.AsyncClient() as client:
-        ref = await _request(
-            client, "GET", f"{base_url}/git/ref/heads/{branch}", token
-        )
-        sha = ref["object"]["sha"]
+        if sha is None:
+            ref = await _request(
+                client, "GET", f"{base_url}/git/ref/heads/{branch}", token
+            )
+            sha = ref["object"]["sha"]
         await _request(
             client,
             "POST",
