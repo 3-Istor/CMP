@@ -1,30 +1,36 @@
 "use client";
 
 import { LogsView } from "@/components/activity/LogsView";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ScrollText } from "lucide-react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-export default function ProjectLogsPage() {
+function ProjectLogs() {
   const t = useTranslations("projects.logs");
   const params = useParams();
   const projectName = params.project_name as string;
+  const namespace = useSearchParams().get("namespace") ?? undefined;
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center gap-3 border-b px-6 py-3">
-        <Link
-          href={`/projects/${projectName}`}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" /> {projectName}
-        </Link>
-        <h1 className="text-base font-semibold">{t("title")}</h1>
-      </header>
-      <main className="p-4">
-        <LogsView project={projectName} fullPage />
+      <PageHeader
+        title={t("title")}
+        description={namespace ?? projectName}
+        icon={ScrollText}
+      />
+      <main className="px-6 py-4">
+        <LogsView project={projectName} namespace={namespace} fullPage />
       </main>
     </div>
+  );
+}
+
+export default function ProjectLogsPage() {
+  return (
+    <Suspense>
+      <ProjectLogs />
+    </Suspense>
   );
 }
