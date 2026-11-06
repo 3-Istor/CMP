@@ -861,6 +861,10 @@
       "developer": "Developer",
       "platform": "Platform",
       "core": "{count} required"
+    },
+    "guarantees": {
+      "isolation": "Isolated from other projects",
+      "privileged": "Privileged pods refused"
     }
   },
   "activity": {
@@ -1181,6 +1185,58 @@
     "page": {
       "title": "Alerts",
       "description": "Ready-made alerts for each project."
+    },
+    "catalog": {
+      "app_unavailable": {
+        "title": "Application unavailable",
+        "description": "Fewer ready replicas than requested for several minutes."
+      },
+      "restarts": {
+        "title": "Restart loop",
+        "description": "A container restarts several times within 15 minutes (CrashLoop).",
+        "params": {
+          "restarts": "Restarts in 15 min"
+        }
+      },
+      "oom_killed": {
+        "title": "Container killed for lack of memory",
+        "description": "A container restarted after an OOMKilled."
+      },
+      "memory_near_limit": {
+        "title": "Memory close to the limit",
+        "description": "A container uses almost all of its allowed memory: an OOMKilled is coming.",
+        "params": {
+          "percent": "Threshold"
+        }
+      },
+      "cpu_throttled": {
+        "title": "CPU throttled",
+        "description": "A container spends a large share of its time throttled by its CPU limit: it slows down.",
+        "params": {
+          "percent": "Share of time throttled"
+        }
+      },
+      "disk_almost_full": {
+        "title": "Volume almost full",
+        "description": "A persistent volume, database included, is almost full.",
+        "params": {
+          "percent": "Threshold"
+        }
+      },
+      "error_logs": {
+        "title": "Error spike in the logs",
+        "description": "Many error lines (error, fatal, panic, exception) within 5 minutes.",
+        "params": {
+          "lines": "Error lines in 5 min"
+        }
+      },
+      "log_volume": {
+        "title": "Unusual log volume",
+        "description": "An app writes a huge amount of logs within 10 minutes, often an error loop.",
+        "params": {
+          "lines": "Lines in 10 min"
+        }
+      }
     }
   },
   "account": {

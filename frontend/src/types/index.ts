@@ -653,7 +653,7 @@ export interface SecuritySummary {
   segments: SecuritySegment[];
   apps: SecurityAppSummary[];
   scans: SecurityScan[];
-  guarantees: { label: string; ok: boolean | null }[];
+  guarantees: { key?: string; label: string; ok: boolean | null }[];
 }
 
 export interface SecurityTrendPoint {

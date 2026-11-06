@@ -178,6 +178,8 @@ class AppSummary(BaseModel):
 
 
 class Guarantee(BaseModel):
+    # Stable id the frontend translates; label stays as the French fallback.
+    key: str
     label: str
     # None: not applicable to the project's cluster.
     ok: bool | None
@@ -287,6 +289,7 @@ def _guarantees(
     platform_open = {m.rule for m in items if m.audience.value == "platform"}
     return [
         Guarantee(
+            key="isolation",
             label="Isolé des autres projets",
             # Checked through Cilium, which only runs on-prem.
             ok=(
@@ -295,7 +298,7 @@ def _guarantees(
                 else None
             ),
         ),
-        Guarantee(label="Pods privilégiés refusés", ok=True),
+        Guarantee(key="privileged", label="Pods privilégiés refusés", ok=True),
     ]
 
 

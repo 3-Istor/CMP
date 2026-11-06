@@ -861,6 +861,10 @@
       "developer": "Développeur",
       "platform": "Plateforme",
       "core": "{count, plural, one {# obligatoire} other {# obligatoires}}"
+    },
+    "guarantees": {
+      "isolation": "Isolé des autres projets",
+      "privileged": "Pods privilégiés refusés"
     }
   },
   "activity": {
@@ -1181,6 +1185,58 @@
     "page": {
       "title": "Alertes",
       "description": "Les alertes prêtes à l'emploi de chaque projet."
+    },
+    "catalog": {
+      "app_unavailable": {
+        "title": "Application indisponible",
+        "description": "Moins de réplicas prêts que demandés pendant plusieurs minutes."
+      },
+      "restarts": {
+        "title": "Redémarrages en boucle",
+        "description": "Un conteneur redémarre plusieurs fois en 15 minutes (CrashLoop).",
+        "params": {
+          "restarts": "Redémarrages en 15 min"
+        }
+      },
+      "oom_killed": {
+        "title": "Conteneur tué par manque de mémoire",
+        "description": "Un conteneur a redémarré après un OOMKilled."
+      },
+      "memory_near_limit": {
+        "title": "Mémoire proche de la limite",
+        "description": "Un conteneur utilise presque toute sa mémoire autorisée : un OOMKilled approche.",
+        "params": {
+          "percent": "Seuil"
+        }
+      },
+      "cpu_throttled": {
+        "title": "CPU bridé",
+        "description": "Un conteneur passe une grande part du temps bridé par sa limite CPU : il ralentit.",
+        "params": {
+          "percent": "Part du temps bridé"
+        }
+      },
+      "disk_almost_full": {
+        "title": "Volume presque plein",
+        "description": "Un volume persistant, base de données comprise, est presque plein.",
+        "params": {
+          "percent": "Seuil"
+        }
+      },
+      "error_logs": {
+        "title": "Pic d'erreurs dans les logs",
+        "description": "Beaucoup de lignes d'erreur (error, fatal, panic, exception) en 5 minutes.",
+        "params": {
+          "lines": "Lignes d'erreur en 5 min"
+        }
+      },
+      "log_volume": {
+        "title": "Volume de logs anormal",
+        "description": "Une app écrit énormément de logs en 10 minutes, souvent une boucle d'erreur.",
+        "params": {
+          "lines": "Lignes en 10 min"
+        }
+      }
     }
   },
   "account": {

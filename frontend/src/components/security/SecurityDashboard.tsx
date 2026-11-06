@@ -368,7 +368,9 @@ export function SecurityDashboard({
                                 : "bg-red-600",
                           )}
                         />
-                        {g.label}
+                        {g.key && t.has(`guarantees.${g.key}`)
+                          ? t(`guarantees.${g.key}`)
+                          : g.label}
                         {g.ok === null && (
                           <span className="text-xs text-muted-foreground">
                             {t("dashboard.notApplicable")}
