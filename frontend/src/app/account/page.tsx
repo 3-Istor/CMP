@@ -1,25 +1,32 @@
 "use client";
 
-import { ArrowLeft, Camera, Loader2, Upload } from "lucide-react";
+import {
+  Camera,
+  Loader2,
+  Upload,
+  UserRound,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { GitHubLinkButton } from "@/components/account/GitHubLinkButton";
-import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
-import { ThemeCard } from "@/components/account/ThemeCard";
+import { PageBody, PageHeader } from "@/components/layout/PageHeader";
 import { ConnectedAssistants } from "@/components/agents/ConnectedAssistants";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -53,9 +60,7 @@ export default function AccountPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
   const { update } = useSession();
-  const tLanguage = useTranslations("account.language");
 
   const fetchUser = async () => {
     try {
@@ -182,26 +187,13 @@ export default function AccountPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b">
-        <div className="container mx-auto max-w-4xl px-6 py-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push("/")}
-            className="mb-2"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {t("page.back")}
-          </Button>
-          <h1 className="text-3xl font-bold">{t("page.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {t("page.subtitle")}
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title={t("page.title")}
+        description={t("page.subtitle")}
+        icon={UserRound}
+      />
 
-      <main className="container mx-auto max-w-4xl p-6">
+      <PageBody className="max-w-4xl">
         <div className="space-y-6">
           {/* Profile Card */}
           <Card>
@@ -379,24 +371,12 @@ export default function AccountPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{tLanguage("title")}</CardTitle>
-              <CardDescription>{tLanguage("description")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <LanguageSwitcher />
-            </CardContent>
-          </Card>
-
-          <ThemeCard />
-
           {/* GitHub Integration Card */}
           <GitHubLinkButton />
 
           <ConnectedAssistants />
         </div>
-      </main>
+      </PageBody>
     </div>
   );
 }

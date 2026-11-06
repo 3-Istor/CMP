@@ -24,7 +24,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   deleteDeployment,
@@ -41,16 +40,12 @@ import { intlLocale } from "@/components/finops/format";
 import { cn, appUrlOf } from "@/lib/utils";
 import type { ProjectLink } from "@/types";
 import {
-  BellRing,
   ExternalLink,
   FileCode,
   Globe,
-  History,
   Image as ImageIcon,
-  Layers,
   MoreHorizontal,
   Moon,
-  PackageCheck,
   RefreshCw,
   Rocket,
   ScrollText,
@@ -104,9 +99,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const canOperate = can("app.operate");
   const canViewLogs = can("app.viewLogs");
   const canViewConfig = can("app.viewConfig");
+  const canViewRelease = can("release.view");
   const canViewFinops = can("finops.view");
   const canViewObservability = can("app.viewObservability");
-  const canViewRelease = can("release.view");
 
   const isKubernetes = current.provider_type === "kubernetes";
   const isRunning = current.status === "running";
@@ -114,7 +109,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   const tf = useTranslations("appPage");
   const tFrame = useTranslations("apps.frame");
-  const tApps = useTranslations("apps");
   const locale = intlLocale(useLocale());
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const linksReady = isKubernetes && canViewLogs;
@@ -227,28 +221,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       visible: isKubernetes && canViewLogs,
     },
     {
-      key: "deployments",
-      segment: "deployments",
-      icon: PackageCheck,
-      visible: canViewLogs,
-    },
-    {
-      key: "release",
-      segment: "release",
+      key: "delivery",
+      segment: "delivery",
       icon: Rocket,
-      visible: isKubernetes && canViewRelease,
-    },
-    {
-      key: "environments",
-      segment: "environments",
-      icon: Layers,
-      visible: isKubernetes && canViewRelease,
-    },
-    {
-      key: "config",
-      segment: "config",
-      icon: Settings,
-      visible: isKubernetes && canViewConfig,
+      visible: canViewLogs || (isKubernetes && canViewRelease),
     },
     {
       key: "costs",
@@ -263,259 +239,254 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       visible: isKubernetes && canViewObservability,
     },
     {
-      key: "activity",
-      segment: "activity",
-      icon: History,
-      visible: isKubernetes && canViewObservability,
-    },
-    {
-      key: "alerts",
-      segment: "alerts",
-      icon: BellRing,
-      visible: isKubernetes && canViewObservability,
+      key: "settings",
+      segment: "settings",
+      icon: Settings,
+      visible: isKubernetes && canViewConfig,
     },
   ];
 
   return (
     <div className="min-h-screen">
-      <main className="px-6 py-8 max-w-5xl mx-auto space-y-6">
-        <nav aria-label={t("breadcrumb")} className="text-sm">
-          <ol className="flex items-center gap-1.5 text-muted-foreground">
-            <li>
-              <Link
-                href={`/projects/${encodeURIComponent(projectName)}`}
-                className="hover:text-foreground hover:underline"
-              >
-                {t("applications")}
-              </Link>
-            </li>
-            <li aria-hidden>/</li>
-            <li aria-current="page" className="font-medium text-foreground">
-              {current.name}
-            </li>
-          </ol>
-        </nav>
-
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <AppIcon
-              appId={current.id}
-              templateIcon={current.template_icon}
-              icon={current.icon}
-              className="h-9 w-9"
-            />
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold">{current.name}</h1>
-                <ScoreBadge card={scoreCard} />
-                <FavoriteToggle kind="app" id={current.id} />
-                {healthReady && (
-                  <HealthPill
-                    loading={healthLoading}
-                    status={health?.status ?? null}
-                  />
-                )}
-                {(inProgress || current.status === "failed") && (
-                  <span
-                    className={cn(
-                      "text-xs text-muted-foreground",
-                      current.status === "failed" && "text-destructive",
-                    )}
-                  >
-                    {tf(`deploymentStatus.${current.status}`)}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {current.created_via && (
-                  <Badge
-                    variant="outline"
-                    className="border-primary/40 text-primary"
-                    title={tFrame("aiCreated")}
-                  >
-                    {tFrame("via", { source: current.created_via })}
-                  </Badge>
-                )}
-                <Badge variant="outline" className="capitalize text-xs">
-                  {current.provider_type === "kubernetes"
-                    ? "Kubernetes"
-                    : tFrame("legacy")}
-                </Badge>
-                {current.k8s_namespace && (
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {tApps("namespace", { namespace: current.k8s_namespace })}
-                  </Badge>
-                )}
-              </div>
-              {isKubernetes && canViewLogs && appUrl && (
-                <a
-                  href={appUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                  aria-label={`${ta("openApp")}, ${ta("externalLink")}`}
+      <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto max-w-7xl px-6 pt-4">
+          <nav aria-label={t("breadcrumb")} className="text-xs">
+            <ol className="flex items-center gap-1.5 text-muted-foreground">
+              <li>
+                <Link
+                  href={`/projects/${encodeURIComponent(projectName)}`}
+                  className="hover:text-foreground hover:underline"
                 >
-                  <Globe className="h-3.5 w-3.5" aria-hidden />
-                  {appUrl.replace(/^https?:\/\//, "")}
-                  <ExternalLink className="h-3 w-3" aria-hidden />
-                </a>
+                  {t("applications")}
+                </Link>
+              </li>
+              <li aria-hidden>/</li>
+              <li aria-current="page" className="text-foreground">
+                {current.name}
+              </li>
+            </ol>
+          </nav>
+
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <AppIcon
+                appId={current.id}
+                templateIcon={current.template_icon}
+                icon={current.icon}
+                className="h-10 w-10 shrink-0"
+              />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="truncate text-xl font-semibold tracking-tight">
+                    {current.name}
+                  </h1>
+                  {healthReady && (
+                    <HealthPill
+                      loading={healthLoading}
+                      status={health?.status ?? null}
+                    />
+                  )}
+                  {(inProgress || current.status === "failed") && (
+                    <span
+                      className={cn(
+                        "text-xs text-muted-foreground",
+                        current.status === "failed" && "text-destructive",
+                      )}
+                    >
+                      {tf(`deploymentStatus.${current.status}`)}
+                    </span>
+                  )}
+                  <ScoreBadge card={scoreCard} />
+                  <FavoriteToggle kind="app" id={current.id} />
+                </div>
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                  {isKubernetes && canViewLogs && appUrl && (
+                    <a
+                      href={appUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      aria-label={`${ta("openApp")}, ${ta("externalLink")}`}
+                    >
+                      <Globe className="h-3 w-3" aria-hidden />
+                      {appUrl.replace(/^https?:\/\//, "")}
+                      <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  )}
+                  <span>{current.template_name || current.template_id}</span>
+                  {current.k8s_namespace && (
+                    <span className="font-mono">{current.k8s_namespace}</span>
+                  )}
+                  <span>
+                    {tFrame("deployedOn", {
+                      date: new Date(current.created_at).toLocaleDateString(
+                        locale,
+                        { day: "numeric", month: "short", year: "numeric" },
+                      ),
+                    })}
+                  </span>
+                  {current.created_via && (
+                    <Badge
+                      variant="outline"
+                      className="border-primary/40 px-1.5 py-0 text-[11px] text-primary"
+                      title={tFrame("aiCreated")}
+                    >
+                      {tFrame("via", { source: current.created_via })}
+                    </Badge>
+                  )}
+                  {!isKubernetes && (
+                    <Badge variant="outline" className="px-1.5 py-0 text-[11px]">
+                      {tFrame("legacy")}
+                    </Badge>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {linksReady && <ToolsMenu links={links} />}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
+                title={ta("refresh")}
+                aria-label={ta("refresh")}
+              >
+                <RefreshCw aria-hidden />
+              </Button>
+              {(canOperate || canViewConfig || canDelete || canEditIcon) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      title={ta("more")}
+                      aria-label={ta("more")}
+                    >
+                      <MoreHorizontal aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[15rem]">
+                    {canOperate && isKubernetes && (
+                      <>
+                        {power?.asleep ? (
+                          <DropdownMenuItem
+                            className="gap-2"
+                            disabled={powerReason() !== null}
+                            onClick={handleWake}
+                          >
+                            <Sun className="h-4 w-4" aria-hidden />
+                            <MenuText
+                              label={ta("wake")}
+                              reason={powerReason()}
+                            />
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            className="gap-2"
+                            disabled={powerReason() !== null}
+                            onClick={() => setConfirming("sleep")}
+                          >
+                            <Moon className="h-4 w-4" aria-hidden />
+                            <MenuText
+                              label={ta("sleep")}
+                              reason={powerReason()}
+                            />
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          className="gap-2"
+                          disabled={restartReason() !== null}
+                          onClick={() => setConfirming("restart")}
+                        >
+                          <RotateCw className="h-4 w-4" aria-hidden />
+                          <MenuText
+                            label={ta("restart")}
+                            reason={restartReason()}
+                          />
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {canEditIcon && (
+                      <DropdownMenuItem
+                        className="gap-2"
+                        onClick={() => setIconOpen(true)}
+                      >
+                        <ImageIcon className="h-4 w-4" aria-hidden />
+                        {tIcon("menu")}
+                      </DropdownMenuItem>
+                    )}
+                    {isKubernetes && canViewConfig && (
+                      <DropdownMenuItem asChild className="gap-2">
+                        <Link href={`${base}/settings`}>
+                          <Settings className="h-4 w-4" aria-hidden />
+                          {ta("settings")}
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {canDelete && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
+                          disabled={
+                            protectedOn ||
+                            ["deleting", "deleted"].includes(current.status)
+                          }
+                          onClick={() => setConfirming("delete")}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                          <MenuText
+                            label={ta("deleteApp")}
+                            reason={protectedOn ? ta("reasons.protected") : null}
+                          />
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {current.template_name || current.template_id} ·{" "}
-                {tFrame("deployedOn", {
-                  date: new Date(current.created_at).toLocaleDateString(locale, {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  }),
-                })}
-              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {linksReady && <ToolsMenu links={links} />}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleRefresh}
-              title={ta("refresh")}
-              aria-label={ta("refresh")}
-            >
-              <RefreshCw aria-hidden />
-            </Button>
-            {(canOperate || canViewConfig || canDelete || canEditIcon) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    title={ta("more")}
-                    aria-label={ta("more")}
+          <nav
+            aria-label={t("label")}
+            className="-mb-px mt-3 flex gap-1 overflow-x-auto [scrollbar-width:none]"
+          >
+            {tabs
+              .filter((tab) => tab.visible)
+              .map((tab) => {
+                const active = activeSegment === tab.segment;
+                const Icon = tab.icon;
+                return (
+                  <Link
+                    key={tab.key}
+                    href={tab.segment ? `${base}/${tab.segment}` : base}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                      active
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+                    )}
                   >
-                    <MoreHorizontal aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[15rem]">
-                  {canOperate && isKubernetes && (
-                    <>
-                      {power?.asleep ? (
-                        <DropdownMenuItem
-                          className="gap-2"
-                          disabled={powerReason() !== null}
-                          onClick={handleWake}
-                        >
-                          <Sun className="h-4 w-4" aria-hidden />
-                          <MenuText
-                            label={ta("wake")}
-                            reason={powerReason()}
-                          />
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem
-                          className="gap-2"
-                          disabled={powerReason() !== null}
-                          onClick={() => setConfirming("sleep")}
-                        >
-                          <Moon className="h-4 w-4" aria-hidden />
-                          <MenuText
-                            label={ta("sleep")}
-                            reason={powerReason()}
-                          />
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        className="gap-2"
-                        disabled={restartReason() !== null}
-                        onClick={() => setConfirming("restart")}
-                      >
-                        <RotateCw className="h-4 w-4" aria-hidden />
-                        <MenuText
-                          label={ta("restart")}
-                          reason={restartReason()}
-                        />
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {canEditIcon && (
-                    <DropdownMenuItem
-                      className="gap-2"
-                      onClick={() => setIconOpen(true)}
-                    >
-                      <ImageIcon className="h-4 w-4" aria-hidden />
-                      {tIcon("menu")}
-                    </DropdownMenuItem>
-                  )}
-                  {isKubernetes && canViewConfig && (
-                    <DropdownMenuItem asChild className="gap-2">
-                      <Link href={`${base}/config`}>
-                        <Settings className="h-4 w-4" aria-hidden />
-                        {ta("settings")}
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                  {canDelete && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
-                        disabled={
-                          protectedOn ||
-                          ["deleting", "deleted"].includes(current.status)
-                        }
-                        onClick={() => setConfirming("delete")}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden />
-                        <MenuText
-                          label={ta("deleteApp")}
-                          reason={protectedOn ? ta("reasons.protected") : null}
-                        />
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+                    <Icon className="h-4 w-4" aria-hidden />
+                    {t(tab.key)}
+                  </Link>
+                );
+              })}
+          </nav>
         </div>
+      </header>
 
-        {isKubernetes && canViewObservability && (
+      <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+        {isKubernetes && canViewObservability && activeSegment !== "security" && (
           <SecurityAlert
             project={projectName}
             app={current.name}
             onOpen={() => router.push(`${base}/security`)}
           />
         )}
-
-        <Separator />
-
-        <nav
-          aria-label={t("label")}
-          className="flex flex-wrap items-center gap-1 rounded-lg bg-muted p-[3px]"
-        >
-          {tabs
-            .filter((tab) => tab.visible)
-            .map((tab) => {
-              const active = activeSegment === tab.segment;
-              const Icon = tab.icon;
-              return (
-                <Link
-                  key={tab.key}
-                  href={tab.segment ? `${base}/${tab.segment}` : base}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                  {t(tab.key)}
-                </Link>
-              );
-            })}
-        </nav>
 
         <div className="space-y-6">{children}</div>
       </main>

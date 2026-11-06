@@ -188,9 +188,6 @@
     }
   },
   "apps": {
-    "home": {
-      "allDeployments": "All my deployments"
-    },
     "nav": {
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
@@ -204,7 +201,9 @@
       "activity": "Activity",
       "alerts": "Alerts",
       "logs": "Logs",
-      "deployments": "Deployments"
+      "deployments": "Deployments",
+      "delivery": "Delivery",
+      "settings": "Settings"
     },
     "status": {
       "pending": "Queued",
@@ -253,7 +252,57 @@
       "saveFailed": "Failed to save: {message}",
       "notRunning": "Configuration will be available once the application is <strong>running</strong>.",
       "searchPlaceholder": "Search for an option…",
-      "searchCount": "{count, plural, one {# result} other {# results}}"
+      "searchCount": "{count, plural, one {# result} other {# results}}",
+      "fields": {
+        "replicaCount": "Replicas",
+        "image": "Image",
+        "repository": "Repository",
+        "tag": "Tag",
+        "service": "Service",
+        "enabled": "Enabled",
+        "type": "Type",
+        "ports": "Ports",
+        "name": "Name",
+        "port": "Port",
+        "targetPort": "Container port",
+        "secrets": "Vault secrets",
+        "vaultPath": "Vault path",
+        "vaultRole": "Vault role",
+        "imagePullSecrets": "Image pull secrets",
+        "projectName": "Project",
+        "appName": "Application",
+        "routes": "Routes",
+        "auth": "Sign-in (SSO)",
+        "realm": "Keycloak realm",
+        "vault": "Vault",
+        "path": "Path",
+        "role": "Role",
+        "ingress": "Public address",
+        "hostname": "Hostname",
+        "ssoProtected": "Protected by SSO",
+        "tunnel": "Cloudflare tunnel",
+        "perRelease": "One address per release",
+        "gateway": "Gateway",
+        "namespace": "Namespace",
+        "clientId": "Client ID",
+        "db": "Database",
+        "storage": "Storage size",
+        "storageClass": "Storage class",
+        "release": "Release",
+        "strategy": "Strategy",
+        "preset": "Preset",
+        "smoke": "Smoke test",
+        "resources": "Resources",
+        "requests": "Reserved",
+        "limits": "Limits",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "monitoring": "Metrics",
+        "offhours": "Sleep outside working hours",
+        "sleepAt": "Sleep at",
+        "wakeAt": "Wake at",
+        "timezone": "Time zone"
+      }
     },
     "data": {
       "title": "Exposure and data",
@@ -862,6 +911,10 @@
       "developer": "Developer",
       "platform": "Platform",
       "core": "{count} required"
+    },
+    "guarantees": {
+      "isolation": "Isolated from other projects",
+      "privileged": "Privileged pods refused"
     }
   },
   "activity": {
@@ -1182,13 +1235,61 @@
     "page": {
       "title": "Alerts",
       "description": "Ready-made alerts for each project."
+    },
+    "catalog": {
+      "app_unavailable": {
+        "title": "Application unavailable",
+        "description": "Fewer ready replicas than requested for several minutes."
+      },
+      "restarts": {
+        "title": "Restart loop",
+        "description": "A container restarts several times within 15 minutes (CrashLoop).",
+        "params": {
+          "restarts": "Restarts in 15 min"
+        }
+      },
+      "oom_killed": {
+        "title": "Container killed for lack of memory",
+        "description": "A container restarted after an OOMKilled."
+      },
+      "memory_near_limit": {
+        "title": "Memory close to the limit",
+        "description": "A container uses almost all of its allowed memory: an OOMKilled is coming.",
+        "params": {
+          "percent": "Threshold"
+        }
+      },
+      "cpu_throttled": {
+        "title": "CPU throttled",
+        "description": "A container spends a large share of its time throttled by its CPU limit: it slows down.",
+        "params": {
+          "percent": "Share of time throttled"
+        }
+      },
+      "disk_almost_full": {
+        "title": "Volume almost full",
+        "description": "A persistent volume, database included, is almost full.",
+        "params": {
+          "percent": "Threshold"
+        }
+      },
+      "error_logs": {
+        "title": "Error spike in the logs",
+        "description": "Many error lines (error, fatal, panic, exception) within 5 minutes.",
+        "params": {
+          "lines": "Error lines in 5 min"
+        }
+      },
+      "log_volume": {
+        "title": "Unusual log volume",
+        "description": "An app writes a huge amount of logs within 10 minutes, often an error loop.",
+        "params": {
+          "lines": "Lines in 10 min"
+        }
+      }
     }
   },
   "account": {
-    "language": {
-      "title": "Language",
-      "description": "Interface language. Your choice is saved to your account and follows you across browsers."
-    },
     "page": {
       "back": "Back to dashboard",
       "title": "Account settings",
@@ -1246,13 +1347,6 @@
       "idRequired": "Enter an installation ID",
       "idSaved": "Installation ID saved",
       "idSaveFailed": "Failed to save the ID. Check it and try again."
-    },
-    "theme": {
-      "title": "Appearance",
-      "description": "By default, the theme follows the browser. The choice is kept on this browser.",
-      "system": "Browser",
-      "light": "Light",
-      "dark": "Dark"
     }
   },
   "common": {
@@ -1307,7 +1401,10 @@
       "failed": "Failed",
       "deleting": "Deleting",
       "deleted": "Deleted"
-    }
+    },
+    "appFilter": "Application",
+    "allApps": "All applications",
+    "settings": "Settings"
   },
   "catalog": {
     "iconAlt": "{name} icon",
@@ -1338,86 +1435,6 @@
       "vmWeb": "2× AWS t3.micro, stateless web layer (ASG + ALB)",
       "cancel": "Cancel",
       "deploying": "Deploying…"
-    }
-  },
-  "dashboard": {
-    "deleteDenied": "Only project admins can delete an application",
-    "deletionStarted": "Deletion started",
-    "deleteFailed": "Deletion failed: {error}",
-    "emptyTitle": "No deployments yet",
-    "emptyText": "Deploy an app from the catalogue to get started.",
-    "health": {
-      "checking": "Checking…",
-      "healthy": "Healthy",
-      "degraded": "Degraded",
-      "down": "Down",
-      "unknown": "Unknown",
-      "asleep": "Asleep",
-      "not_connected": "Not connected"
-    },
-    "progress": {
-      "queued": "Queued",
-      "deploying": "Deploying",
-      "deleting": "Deleting",
-      "deleted": "Deleted",
-      "failed": "Failed"
-    },
-    "states": {
-      "up": "Up",
-      "down": "Down",
-      "starting": "Starting",
-      "unknown": "Unknown"
-    },
-    "instanceHealth": {
-      "healthy": "healthy",
-      "unhealthy": "unhealthy"
-    },
-    "infra": {
-      "title": "Infrastructure health",
-      "errorTitle": "Infrastructure health: error",
-      "hypervisors": "OpenStack hypervisors",
-      "noHypervisors": "No hypervisors found"
-    },
-    "card": {
-      "quickActions": "Quick actions",
-      "openApp": "Open application",
-      "openRepo": "Open GitHub repository",
-      "viewArgocd": "View in ArgoCD",
-      "manageSecrets": "Manage secrets",
-      "namespace": "Namespace:",
-      "outputs": "Outputs:",
-      "healthDetails": "Health details",
-      "delete": "Delete",
-      "confirmTitle": "Delete deployment?",
-      "confirmSureTitle": "Are you absolutely sure?",
-      "confirmText": "This will destroy all cloud resources of “{name}” with Terraform. This cannot be undone.",
-      "confirmSureText": "All {count} resources of “{name}” will be permanently destroyed. Click confirm to continue.",
-      "confirmSureUnknownText": "All resources of “{name}” will be permanently destroyed. Click confirm to continue.",
-      "cancel": "Cancel",
-      "yesDelete": "Yes, delete",
-      "confirmDestroy": "Confirm and destroy everything"
-    },
-    "healthPanel": {
-      "title": "Health details: {name}",
-      "description": "Real-time health status from cloud APIs",
-      "fetchFailed": "Failed to fetch health data",
-      "overall": "Overall status",
-      "overallHealthy": "All components are operational",
-      "overallDegraded": "Some components are unhealthy",
-      "overallDown": "No healthy component",
-      "overallUnknown": "Unable to determine",
-      "awsLayer": "AWS frontend layer",
-      "asgName": "ASG name",
-      "desiredCapacity": "Desired capacity",
-      "health": "Health",
-      "counts": "{healthy} / {total} healthy",
-      "instances": "Instances ({count}):",
-      "noInstances": "No instances found",
-      "openstackLayer": "OpenStack layer",
-      "servers": "Servers ({count}):",
-      "noServers": "No servers found",
-      "noComponents": "No infrastructure components found",
-      "noComponentsHelp": "This deployment may not have been created yet or uses a different architecture"
     }
   },
   "agents": {
@@ -2074,7 +2091,9 @@
       "ready": "Active",
       "failed": "Failed",
       "removing": "Being removed"
-    }
+    },
+    "stagingOffHint": "Staging is off: each release goes straight to production.",
+    "stagingOffAction": "Turn on staging"
   },
   "release": {
     "name": {
@@ -2412,28 +2431,6 @@
       "open": "Open logs",
       "emptyRecent": "No log lines in the last hour",
       "region": "Application logs",
-      "level": "Level",
-      "allLevels": "All levels",
-      "component": "Component",
-      "allComponents": "All components",
-      "window": "Time window",
-      "windows": {
-        "15m": "15 minutes",
-        "1h": "1 hour",
-        "24h": "24 hours"
-      },
-      "search": "Search",
-      "searchPlaceholder": "Filter text",
-      "pause": "Pause",
-      "resume": "Resume",
-      "live": "Live, refreshing every 3 s",
-      "paused": "Paused",
-      "lineCount": "{count, plural, =0 {no lines} one {# line} other {# lines}}",
-      "emptyFiltered": "No line matches these filters.",
-      "restricted": "Members only",
-      "loadFailed": "Could not load the logs.",
-      "retry": "Retry",
-      "stale": "Logs not refreshed, the last read failed.",
       "levels": {
         "error": "ERROR",
         "warn": "WARN",
@@ -2501,11 +2498,45 @@
       "planning": "Planning",
       "deploying": "Deploying",
       "deleting": "Deleting",
-      "failed": "Deployment failed"
+      "failed": "Deployment failed",
+      "running": "Running"
     },
     "legacy": {
       "outputs": "Terraform outputs",
       "noOutputs": "No outputs yet."
+    },
+    "delivery": {
+      "pipeline": "Environments",
+      "pipelineHint": "What runs in staging and in production, and the promotion between them.",
+      "rollout": "Current release",
+      "rolloutHint": "The rollout in progress, its steps and its traffic split.",
+      "history": "History",
+      "historyHint": "Every deployment, with its console and a rollback to any earlier version."
+    },
+    "settings": {
+      "toc": "Settings sections",
+      "sections": {
+        "general": {
+          "title": "General",
+          "description": "Icon, who can reach the app and what data it handles."
+        },
+        "secrets": {
+          "title": "Secrets",
+          "description": "The secrets the app expects. Names only, never values."
+        },
+        "delivery": {
+          "title": "Delivery",
+          "description": "Release strategy, staging and its sleep schedule, promotion rules."
+        },
+        "security": {
+          "title": "Security",
+          "description": "When the CI blocks a build, and where new issues are sent."
+        },
+        "advanced": {
+          "title": "Advanced",
+          "description": "Every value of deploy/values.yaml. Saving commits to main and Argo CD syncs."
+        }
+      }
     }
   },
   "appIcon": {
@@ -2716,6 +2747,60 @@
       "fix_restarts": "Check the logs",
       "add_readme": "Add a README",
       "expand_readme": "Expand the README"
+    }
+  },
+  "projectSettings": {
+    "title": "Project settings",
+    "adminsOnly": "Only project admins can change these settings.",
+    "access": {
+      "title": "Access and protection",
+      "description": "Who can join the project's apps, and whether the project can be deleted.",
+      "protection": "Deletion protection",
+      "protectionHint": "The project and its apps cannot be deleted, from the CMP or from the cluster, until this is turned off.",
+      "signup": "Customer sign-up",
+      "signupHint": "People can create their own account in the project's realm and land in its default group."
+    },
+    "security": {
+      "title": "Security",
+      "description": "The CI policy applied to every app, and where new security issues are sent."
+    },
+    "danger": {
+      "title": "Danger zone",
+      "description": "Actions that cannot be undone.",
+      "delete": "Delete the project",
+      "deleteHint": "Removes the project with its Vault secrets, Grafana org, Keycloak realm and Argo CD project."
+    }
+  },
+  "overview": {
+    "recentApps": "Recently updated applications",
+    "allApps": "All {count} applications",
+    "allProjects": "All projects",
+    "searchProjects": "Search a project",
+    "searchApps": "Search an application",
+    "appsTitle": "Applications",
+    "appsSubtitle": "Every application of the projects you belong to.",
+    "allProjectsOption": "All projects",
+    "apps": {
+      "name": "Application",
+      "project": "Project",
+      "state": "State",
+      "url": "Address",
+      "empty": "No application yet.",
+      "openApp": "Open {name}, new tab"
+    },
+    "stats": {
+      "apps": "Applications",
+      "appsValue": "{running} / {total}",
+      "appsOk": "running, none failed",
+      "appsFailed": "{count, plural, one {# failed deployment} other {# failed deployments}}",
+      "security": "Security actions",
+      "securityHint": "to do across your projects",
+      "securityCore": "{count, plural, one {# mandatory} other {# mandatory}}",
+      "costs": "Cost this month",
+      "costsForecast": "forecast {amount} at month end",
+      "platform": "Platform",
+      "nodesValue": "{up} / {total} nodes",
+      "cloudsHint": "{count, plural, =0 {public clouds off} one {# public cloud on} other {# public clouds on}}"
     }
   }
 }

@@ -246,7 +246,7 @@ export default async function WelcomePage({
               </div>
             ))}
           </dl>
-          <p className="mt-3 text-[11px] text-muted-foreground/70">
+          <p className="mt-3 text-[11px] text-muted-foreground">
             {t("stats.illustrative")}
           </p>
           <AgentLiveStats />

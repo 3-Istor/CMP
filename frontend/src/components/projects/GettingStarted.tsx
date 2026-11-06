@@ -145,7 +145,7 @@ export function GettingStarted() {
   const hrefs: Record<StepId, string> = {
     repo: firstAppHref,
     deployed: firstAppHref,
-    release: apps[0] ? `${firstAppHref}/release` : projectHref,
+    release: apps[0] ? `${firstAppHref}/delivery` : projectHref,
     member: `${projectHref}/members`,
     budget: `/finops/budgets?project=${encodedProject}`,
   };

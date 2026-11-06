@@ -165,11 +165,13 @@ export function SecurityDashboard({
   app = null,
   view = "developer",
   fullPageLink = false,
+  showSettings = true,
 }: {
   project: string;
   app?: string | null;
   view?: SecurityView;
   fullPageLink?: boolean;
+  showSettings?: boolean;
 }) {
   const { data, error, refresh } = useSecurityData(project, app, view);
   const [tab, setTab] = useState<SecurityTab>("overview");
@@ -341,11 +343,11 @@ export function SecurityDashboard({
                   <NewMajorChart points={trend} />
                 </CardContent>
               </Card>
-              {app && view === "developer" && (
+              {showSettings && app && view === "developer" && (
                 <AppSettingsCard project={project} app={app} canAdmin={canAdmin} />
               )}
-              {!app && role.cnp_admin && <ProjectPolicyCard project={project} />}
-              {view === "developer" && (
+              {showSettings && !app && role.cnp_admin && <ProjectPolicyCard project={project} />}
+              {showSettings && view === "developer" && (
                 <AlertsCard project={project} app={app} canAdmin={canAdmin} />
               )}
               {view === "developer" && (
@@ -366,7 +368,9 @@ export function SecurityDashboard({
                                 : "bg-red-600",
                           )}
                         />
-                        {g.label}
+                        {g.key && t.has(`guarantees.${g.key}`)
+                          ? t(`guarantees.${g.key}`)
+                          : g.label}
                         {g.ok === null && (
                           <span className="text-xs text-muted-foreground">
                             {t("dashboard.notApplicable")}

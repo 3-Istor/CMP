@@ -266,9 +266,13 @@ function Activity({ event }: { event: ReleaseEvent | undefined }) {
 export function ReleaseTab({
   deploymentId,
   projectName,
+  showSettings = true,
+  showHistory = true,
 }: {
   deploymentId: number;
   projectName: string;
+  showSettings?: boolean;
+  showHistory?: boolean;
 }) {
   const t = useTranslations("release");
   const locale = intlLocale(useLocale());
@@ -355,10 +359,10 @@ export function ReleaseTab({
             <NewReleaseButton deploymentId={deploymentId} />
           </div>
         )}
-        {canReadSettings && (
+        {showSettings && canReadSettings && (
           <ReleaseSettingsCard deploymentId={deploymentId} inProgress={false} />
         )}
-        {events.length > 0 && (
+        {showHistory && events.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">{t("history.title")}</CardTitle>
@@ -614,10 +618,11 @@ export function ReleaseTab({
         </div>
       </div>
 
-      {canReadSettings && (
+      {showSettings && canReadSettings && (
         <ReleaseSettingsCard deploymentId={deploymentId} inProgress={inProgress} />
       )}
 
+      {showHistory && (
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">{t("history.title")}</CardTitle>
@@ -630,6 +635,7 @@ export function ReleaseTab({
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

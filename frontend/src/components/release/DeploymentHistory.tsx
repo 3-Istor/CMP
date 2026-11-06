@@ -25,7 +25,7 @@ const ENVIRONMENTS = ["staging", "prod"] as const;
 const SELECT_CLASS =
   "h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-export default function AppDeploymentsPage() {
+export function DeploymentHistory() {
   const { appId, deployment } = useAppContext();
   const { can } = useProjectContext();
   const t = useTranslations("appPage.deployments");

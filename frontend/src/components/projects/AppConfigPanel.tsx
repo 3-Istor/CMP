@@ -77,9 +77,10 @@ function ConfigField({
     depth = 0,
     readOnly = false,
 }: FieldProps) {
+    const tf = useTranslations("apps.config.fields");
     const leafKey = keyPath.split(".").pop()!;
     const fieldType = guessFieldType(leafKey, value);
-    const label = humanLabel(leafKey);
+    const label = tf.has(leafKey) ? tf(leafKey) : humanLabel(leafKey);
 
     if (fieldType === "object") {
         const obj = value as Record<string, unknown>;
@@ -342,7 +343,7 @@ export function AppConfigPanel({ deploymentId, readOnly = false }: Props) {
                 ) : error ? (
                     <div className="rounded-lg border border-destructive bg-destructive/5 p-4 text-sm text-destructive space-y-2">
                         <p className="font-medium">{t("loadFailed")}</p>
-                        <p className="text-xs opacity-80">{error}</p>
+                        <p className="text-xs">{error}</p>
                         <Button variant="outline" size="sm" onClick={fetchConfig}>
                             <RefreshCw className="mr-2 h-3.5 w-3.5" />
                             {tc("retry")}

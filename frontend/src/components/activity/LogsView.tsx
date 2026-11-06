@@ -441,7 +441,7 @@ export function LogsView({
             </Button>
             {!fullPage && (
               <Link
-                href={`/projects/${project}/logs`}
+                href={`/projects/${encodeURIComponent(project)}/logs${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ""}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 title={t("logs.openNewTab")}

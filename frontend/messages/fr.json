@@ -188,9 +188,6 @@
     }
   },
   "apps": {
-    "home": {
-      "allDeployments": "Tous mes déploiements"
-    },
     "nav": {
       "label": "Sections de l'application",
       "breadcrumb": "Fil d'Ariane",
@@ -204,7 +201,9 @@
       "activity": "Activité",
       "alerts": "Alertes",
       "logs": "Logs",
-      "deployments": "Déploiements"
+      "deployments": "Déploiements",
+      "delivery": "Livraison",
+      "settings": "Paramètres"
     },
     "status": {
       "pending": "En attente",
@@ -253,7 +252,57 @@
       "saveFailed": "Échec de l'enregistrement : {message}",
       "notRunning": "La configuration sera disponible une fois l'application <strong>en cours</strong>.",
       "searchPlaceholder": "Rechercher une option…",
-      "searchCount": "{count, plural, one {# résultat} other {# résultats}}"
+      "searchCount": "{count, plural, one {# résultat} other {# résultats}}",
+      "fields": {
+        "replicaCount": "Réplicas",
+        "image": "Image",
+        "repository": "Dépôt",
+        "tag": "Tag",
+        "service": "Service",
+        "enabled": "Activé",
+        "type": "Type",
+        "ports": "Ports",
+        "name": "Nom",
+        "port": "Port",
+        "targetPort": "Port du conteneur",
+        "secrets": "Secrets Vault",
+        "vaultPath": "Chemin Vault",
+        "vaultRole": "Rôle Vault",
+        "imagePullSecrets": "Secrets de pull d'image",
+        "projectName": "Projet",
+        "appName": "Application",
+        "routes": "Routes",
+        "auth": "Connexion (SSO)",
+        "realm": "Realm Keycloak",
+        "vault": "Vault",
+        "path": "Chemin",
+        "role": "Rôle",
+        "ingress": "Adresse publique",
+        "hostname": "Nom d'hôte",
+        "ssoProtected": "Protégé par le SSO",
+        "tunnel": "Tunnel Cloudflare",
+        "perRelease": "Une adresse par release",
+        "gateway": "Passerelle",
+        "namespace": "Namespace",
+        "clientId": "Client ID",
+        "db": "Base de données",
+        "storage": "Taille du stockage",
+        "storageClass": "Classe de stockage",
+        "release": "Release",
+        "strategy": "Stratégie",
+        "preset": "Préréglage",
+        "smoke": "Test de fumée",
+        "resources": "Ressources",
+        "requests": "Réservé",
+        "limits": "Limites",
+        "cpu": "CPU",
+        "memory": "Mémoire",
+        "monitoring": "Métriques",
+        "offhours": "Veille hors heures ouvrées",
+        "sleepAt": "Veille à",
+        "wakeAt": "Réveil à",
+        "timezone": "Fuseau horaire"
+      }
     },
     "data": {
       "title": "Exposition et données",
@@ -862,6 +911,10 @@
       "developer": "Développeur",
       "platform": "Plateforme",
       "core": "{count, plural, one {# obligatoire} other {# obligatoires}}"
+    },
+    "guarantees": {
+      "isolation": "Isolé des autres projets",
+      "privileged": "Pods privilégiés refusés"
     }
   },
   "activity": {
@@ -1182,13 +1235,61 @@
     "page": {
       "title": "Alertes",
       "description": "Les alertes prêtes à l'emploi de chaque projet."
+    },
+    "catalog": {
+      "app_unavailable": {
+        "title": "Application indisponible",
+        "description": "Moins de réplicas prêts que demandés pendant plusieurs minutes."
+      },
+      "restarts": {
+        "title": "Redémarrages en boucle",
+        "description": "Un conteneur redémarre plusieurs fois en 15 minutes (CrashLoop).",
+        "params": {
+          "restarts": "Redémarrages en 15 min"
+        }
+      },
+      "oom_killed": {
+        "title": "Conteneur tué par manque de mémoire",
+        "description": "Un conteneur a redémarré après un OOMKilled."
+      },
+      "memory_near_limit": {
+        "title": "Mémoire proche de la limite",
+        "description": "Un conteneur utilise presque toute sa mémoire autorisée : un OOMKilled approche.",
+        "params": {
+          "percent": "Seuil"
+        }
+      },
+      "cpu_throttled": {
+        "title": "CPU bridé",
+        "description": "Un conteneur passe une grande part du temps bridé par sa limite CPU : il ralentit.",
+        "params": {
+          "percent": "Part du temps bridé"
+        }
+      },
+      "disk_almost_full": {
+        "title": "Volume presque plein",
+        "description": "Un volume persistant, base de données comprise, est presque plein.",
+        "params": {
+          "percent": "Seuil"
+        }
+      },
+      "error_logs": {
+        "title": "Pic d'erreurs dans les logs",
+        "description": "Beaucoup de lignes d'erreur (error, fatal, panic, exception) en 5 minutes.",
+        "params": {
+          "lines": "Lignes d'erreur en 5 min"
+        }
+      },
+      "log_volume": {
+        "title": "Volume de logs anormal",
+        "description": "Une app écrit énormément de logs en 10 minutes, souvent une boucle d'erreur.",
+        "params": {
+          "lines": "Lignes en 10 min"
+        }
+      }
     }
   },
   "account": {
-    "language": {
-      "title": "Langue",
-      "description": "Langue de l'interface. Le choix est enregistré sur votre compte et suivi sur tous vos navigateurs."
-    },
     "page": {
       "back": "Retour au tableau de bord",
       "title": "Paramètres du compte",
@@ -1246,13 +1347,6 @@
       "idRequired": "Saisissez un identifiant d'installation",
       "idSaved": "Identifiant d'installation enregistré",
       "idSaveFailed": "Échec de l'enregistrement de l'identifiant. Vérifiez-le et réessayez."
-    },
-    "theme": {
-      "title": "Apparence",
-      "description": "Par défaut, le thème suit celui du navigateur. Choix gardé sur ce navigateur.",
-      "system": "Navigateur",
-      "light": "Clair",
-      "dark": "Sombre"
     }
   },
   "common": {
@@ -1307,7 +1401,10 @@
       "failed": "Échec",
       "deleting": "Suppression",
       "deleted": "Supprimée"
-    }
+    },
+    "appFilter": "Application",
+    "allApps": "Toutes les applications",
+    "settings": "Paramètres"
   },
   "catalog": {
     "iconAlt": "Icône de {name}",
@@ -1338,86 +1435,6 @@
       "vmWeb": "2× AWS t3.micro, couche web sans état (ASG + ALB)",
       "cancel": "Annuler",
       "deploying": "Déploiement…"
-    }
-  },
-  "dashboard": {
-    "deleteDenied": "Seuls les admins de projet peuvent supprimer une application",
-    "deletionStarted": "Suppression lancée",
-    "deleteFailed": "Échec de la suppression : {error}",
-    "emptyTitle": "Aucun déploiement pour l'instant",
-    "emptyText": "Déployez une application depuis le catalogue pour commencer.",
-    "health": {
-      "checking": "Vérification…",
-      "healthy": "Sain",
-      "degraded": "Dégradé",
-      "down": "Hors service",
-      "unknown": "Inconnu",
-      "asleep": "Endormie",
-      "not_connected": "Non connecté"
-    },
-    "progress": {
-      "queued": "En file d'attente",
-      "deploying": "Déploiement",
-      "deleting": "Suppression",
-      "deleted": "Supprimé",
-      "failed": "Échec"
-    },
-    "states": {
-      "up": "En ligne",
-      "down": "Hors ligne",
-      "starting": "Démarrage",
-      "unknown": "Inconnu"
-    },
-    "instanceHealth": {
-      "healthy": "sain",
-      "unhealthy": "défaillant"
-    },
-    "infra": {
-      "title": "Santé de l'infrastructure",
-      "errorTitle": "Santé de l'infrastructure : erreur",
-      "hypervisors": "Hyperviseurs OpenStack",
-      "noHypervisors": "Aucun hyperviseur trouvé"
-    },
-    "card": {
-      "quickActions": "Actions rapides",
-      "openApp": "Ouvrir l'application",
-      "openRepo": "Ouvrir le dépôt GitHub",
-      "viewArgocd": "Voir dans ArgoCD",
-      "manageSecrets": "Gérer les secrets",
-      "namespace": "Namespace :",
-      "outputs": "Sorties :",
-      "healthDetails": "Détails de santé",
-      "delete": "Supprimer",
-      "confirmTitle": "Supprimer le déploiement ?",
-      "confirmSureTitle": "Êtes-vous absolument certain ?",
-      "confirmText": "Cette action détruit toutes les ressources cloud de «{name}» avec Terraform. Elle est irréversible.",
-      "confirmSureText": "Toutes les ressources ({count}) de «{name}» seront détruites définitivement. Cliquez sur confirmer pour continuer.",
-      "confirmSureUnknownText": "Toutes les ressources de «{name}» seront détruites définitivement. Cliquez sur confirmer pour continuer.",
-      "cancel": "Annuler",
-      "yesDelete": "Oui, supprimer",
-      "confirmDestroy": "Confirmer et tout détruire"
-    },
-    "healthPanel": {
-      "title": "Détails de santé : {name}",
-      "description": "État de santé en temps réel, issu des API cloud",
-      "fetchFailed": "Échec de la récupération des données de santé",
-      "overall": "État général",
-      "overallHealthy": "Tous les composants sont opérationnels",
-      "overallDegraded": "Certains composants sont défaillants",
-      "overallDown": "Aucun composant sain",
-      "overallUnknown": "Impossible à déterminer",
-      "awsLayer": "Couche frontale AWS",
-      "asgName": "Nom de l'ASG",
-      "desiredCapacity": "Capacité souhaitée",
-      "health": "Santé",
-      "counts": "{healthy} / {total} sains",
-      "instances": "Instances ({count}) :",
-      "noInstances": "Aucune instance trouvée",
-      "openstackLayer": "Couche OpenStack",
-      "servers": "Serveurs ({count}) :",
-      "noServers": "Aucun serveur trouvé",
-      "noComponents": "Aucun composant d'infrastructure trouvé",
-      "noComponentsHelp": "Ce déploiement n'a peut-être pas encore été créé, ou utilise une autre architecture."
     }
   },
   "agents": {
@@ -2074,7 +2091,9 @@
       "ready": "Actif",
       "failed": "En échec",
       "removing": "Suppression en cours"
-    }
+    },
+    "stagingOffHint": "Le staging est désactivé : chaque release part directement en production.",
+    "stagingOffAction": "Activer le staging"
   },
   "release": {
     "name": {
@@ -2412,28 +2431,6 @@
       "open": "Ouvrir les logs",
       "emptyRecent": "Aucune ligne de log sur la dernière heure",
       "region": "Logs de l'application",
-      "level": "Niveau",
-      "allLevels": "Tous les niveaux",
-      "component": "Composant",
-      "allComponents": "Tous les composants",
-      "window": "Période",
-      "windows": {
-        "15m": "15 minutes",
-        "1h": "1 heure",
-        "24h": "24 heures"
-      },
-      "search": "Recherche",
-      "searchPlaceholder": "Filtrer le texte",
-      "pause": "Mettre en pause",
-      "resume": "Reprendre",
-      "live": "En direct, actualisation toutes les 3 s",
-      "paused": "En pause",
-      "lineCount": "{count, plural, =0 {aucune ligne} one {# ligne} other {# lignes}}",
-      "emptyFiltered": "Aucune ligne ne correspond à ces filtres.",
-      "restricted": "Réservé aux membres",
-      "loadFailed": "Impossible de charger les logs.",
-      "retry": "Réessayer",
-      "stale": "Logs non actualisés, la dernière lecture a échoué.",
       "levels": {
         "error": "ERREUR",
         "warn": "AVERT.",
@@ -2501,11 +2498,45 @@
       "planning": "Planification",
       "deploying": "Déploiement en cours",
       "deleting": "Suppression en cours",
-      "failed": "Échec du déploiement"
+      "failed": "Échec du déploiement",
+      "running": "En ligne"
     },
     "legacy": {
       "outputs": "Sorties Terraform",
       "noOutputs": "Aucune sortie pour le moment."
+    },
+    "delivery": {
+      "pipeline": "Environnements",
+      "pipelineHint": "Ce qui tourne en staging et en production, et la promotion entre les deux.",
+      "rollout": "Release en cours",
+      "rolloutHint": "Le déploiement en cours, ses étapes et la répartition du trafic.",
+      "history": "Historique",
+      "historyHint": "Chaque déploiement, avec sa console et un retour à n'importe quelle version précédente."
+    },
+    "settings": {
+      "toc": "Sections des paramètres",
+      "sections": {
+        "general": {
+          "title": "Général",
+          "description": "Icône, qui peut ouvrir l'app et quelles données elle traite."
+        },
+        "secrets": {
+          "title": "Secrets",
+          "description": "Les secrets attendus par l'app. Les noms seulement, jamais les valeurs."
+        },
+        "delivery": {
+          "title": "Livraison",
+          "description": "Stratégie de release, staging et sa mise en veille, règles de promotion."
+        },
+        "security": {
+          "title": "Sécurité",
+          "description": "Quand la CI bloque un build, et où partent les nouveaux problèmes."
+        },
+        "advanced": {
+          "title": "Avancé",
+          "description": "Toutes les valeurs de deploy/values.yaml. Enregistrer commite sur main et Argo CD synchronise."
+        }
+      }
     }
   },
   "appIcon": {
@@ -2716,6 +2747,60 @@
       "fix_restarts": "Consulter les logs",
       "add_readme": "Ajouter un README",
       "expand_readme": "Étoffer le README"
+    }
+  },
+  "projectSettings": {
+    "title": "Paramètres du projet",
+    "adminsOnly": "Seuls les admins du projet peuvent modifier ces paramètres.",
+    "access": {
+      "title": "Accès et protection",
+      "description": "Qui peut rejoindre les apps du projet, et si le projet peut être supprimé.",
+      "protection": "Protection contre la suppression",
+      "protectionHint": "Le projet et ses apps ne peuvent pas être supprimés, ni depuis le CMP ni depuis le cluster, tant qu'elle est active.",
+      "signup": "Inscription des clients",
+      "signupHint": "Les visiteurs peuvent créer leur compte dans le realm du projet et rejoignent son groupe par défaut."
+    },
+    "security": {
+      "title": "Sécurité",
+      "description": "La politique CI appliquée à chaque app, et où partent les nouveaux problèmes de sécurité."
+    },
+    "danger": {
+      "title": "Zone de danger",
+      "description": "Des actions sans retour possible.",
+      "delete": "Supprimer le projet",
+      "deleteHint": "Supprime le projet avec ses secrets Vault, son org Grafana, son realm Keycloak et son projet Argo CD."
+    }
+  },
+  "overview": {
+    "recentApps": "Applications modifiées récemment",
+    "allApps": "Les {count} applications",
+    "allProjects": "Tous les projets",
+    "searchProjects": "Chercher un projet",
+    "searchApps": "Chercher une application",
+    "appsTitle": "Applications",
+    "appsSubtitle": "Toutes les applications des projets dont tu fais partie.",
+    "allProjectsOption": "Tous les projets",
+    "apps": {
+      "name": "Application",
+      "project": "Projet",
+      "state": "État",
+      "url": "Adresse",
+      "empty": "Aucune application pour l'instant.",
+      "openApp": "Ouvrir {name}, nouvel onglet"
+    },
+    "stats": {
+      "apps": "Applications",
+      "appsValue": "{running} / {total}",
+      "appsOk": "en ligne, aucun échec",
+      "appsFailed": "{count, plural, one {# déploiement en échec} other {# déploiements en échec}}",
+      "security": "Actions de sécurité",
+      "securityHint": "à traiter sur tes projets",
+      "securityCore": "{count, plural, one {# obligatoire} other {# obligatoires}}",
+      "costs": "Coût du mois",
+      "costsForecast": "prévision {amount} en fin de mois",
+      "platform": "Plateforme",
+      "nodesValue": "{up} / {total} nœuds",
+      "cloudsHint": "{count, plural, =0 {clouds publics éteints} one {# cloud public allumé} other {# clouds publics allumés}}"
     }
   }
 }

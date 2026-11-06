@@ -115,7 +115,7 @@ export function DeploymentsCard({
       title={t("recent")}
       action={
         canOpen ? (
-          <OpenDashboardButton href={`${base}/deployments`} label={t("open")} />
+          <OpenDashboardButton href={`${base}/delivery`} label={t("open")} />
         ) : undefined
       }
       state={{

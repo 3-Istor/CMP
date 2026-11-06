@@ -42,6 +42,7 @@ function AlertRow({
   onSave: (enabled: boolean, params: Record<string, number>) => Promise<void>;
 }) {
   const t = useTranslations("alerts");
+  const tc = useTranslations("alerts.catalog");
   const [values, setValues] = useState<Record<string, number>>(
     Object.fromEntries(alert.params.map((p) => [p.key, p.value])),
   );
@@ -57,6 +58,12 @@ function AlertRow({
     }
   };
 
+  const title = tc.has(`${alert.id}.title`) ? tc(`${alert.id}.title`) : alert.title;
+  const description = tc.has(`${alert.id}.description`)
+    ? tc(`${alert.id}.description`)
+    : alert.description;
+  const paramLabel = (key: string, fallback: string) =>
+    tc.has(`${alert.id}.params.${key}`) ? tc(`${alert.id}.params.${key}`) : fallback;
   const state =
     alert.state && alert.state in STATE_CLASS
       ? { label: t(`state.${alert.state}`), className: STATE_CLASS[alert.state] }
@@ -70,7 +77,7 @@ function AlertRow({
     >
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{alert.title}</span>
+          <span className="font-medium">{title}</span>
           <Badge variant="outline" className="text-xs">
             {t(`severity.${alert.severity === "critical" ? "critical" : "warning"}`)}
           </Badge>
@@ -80,12 +87,12 @@ function AlertRow({
             </Badge>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">{alert.description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
         {alert.params.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 pt-1">
             {alert.params.map((p) => (
               <label key={p.key} className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">{p.label}</span>
+                <span className="text-muted-foreground">{paramLabel(p.key, p.label)}</span>
                 <Input
                   type="number"
                   min={p.minimum}
@@ -126,7 +133,7 @@ function AlertRow({
           checked={alert.enabled}
           disabled={!canEdit || saving}
           onCheckedChange={(v) => save(v)}
-          aria-label={t("enable", { title: alert.title })}
+          aria-label={t("enable", { title })}
         />
       </div>
     </div>

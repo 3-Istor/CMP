@@ -19,6 +19,7 @@ export default function AppSecurityPage() {
         project={projectName}
         app={deployment.name}
         fullPageLink
+        showSettings={false}
       />
     </AppSection>
   );

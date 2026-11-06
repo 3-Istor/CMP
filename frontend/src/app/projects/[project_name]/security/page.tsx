@@ -12,7 +12,11 @@ export default function ProjectSecurityPage() {
   const { projectName } = useProjectContext();
   return (
     <ProjectSection title={t("security")} capability="app.viewObservability">
-      <SecurityDashboard project={projectName} fullPageLink />
+      <SecurityDashboard
+        project={projectName}
+        fullPageLink
+        showSettings={false}
+      />
     </ProjectSection>
   );
 }

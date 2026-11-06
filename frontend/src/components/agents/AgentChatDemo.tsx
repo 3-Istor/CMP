@@ -141,7 +141,7 @@ export function AgentChatDemo() {
           </ol>
         </div>
       </div>
-      <p className="mt-2 text-center text-[11px] text-muted-foreground/70">
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">
         {t("note")}
       </p>
     </div>
@@ -169,7 +169,7 @@ function ChatLine({ line }: { line: Line }) {
       <p className="inline-flex items-center gap-2 rounded-md border border-border px-2.5 py-1 font-mono text-xs text-muted-foreground">
         <Check className="h-3.5 w-3.5 text-primary" />
         {line.name}
-        <span className="text-muted-foreground/70">
+        <span className="text-muted-foreground">
           · {t(`detail.${line.detail}`, { count: line.count ?? 0 })}
         </span>
       </p>
