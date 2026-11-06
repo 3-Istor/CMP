@@ -144,6 +144,7 @@ class Merged:
     first_seen: datetime
     last_seen: datetime
     resolved_at: datetime | None
+    i18n: str = ""
     finding_ids: list[int] = field(default_factory=list)
     exception: SecurityException | None = None
 
@@ -222,6 +223,7 @@ def merged_findings(
             location=lead.location,
             link=lead.link,
             raw=lead.raw,
+            i18n=lead.i18n or "",
             sources=sorted({r.source for r in rows}),
             first_seen=min(r.first_seen for r in rows),
             last_seen=max(r.last_seen for r in rows),

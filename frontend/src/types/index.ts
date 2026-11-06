@@ -606,6 +606,12 @@ export interface SecurityFinding {
   location: string;
   link: string | null;
   raw: string;
+  i18n?: Partial<
+    Record<
+      "title" | "detail" | "fix" | "location",
+      { key: string; params: Record<string, string> }
+    >
+  > | null;
   sources: string[];
   first_seen: string;
   last_seen: string;

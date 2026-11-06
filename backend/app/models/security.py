@@ -38,6 +38,7 @@ class SecurityFinding(Base):
     location: Mapped[str] = mapped_column(Text, default="")
     link: Mapped[str | None] = mapped_column(String(512))
     raw: Mapped[str] = mapped_column(Text, default="")
+    i18n: Mapped[str] = mapped_column(Text, default="")
     first_seen: Mapped[datetime] = mapped_column(DateTime)
     last_seen: Mapped[datetime] = mapped_column(DateTime)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)

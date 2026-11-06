@@ -6,6 +6,7 @@ tested without a cluster. Wording is written for a developer who does not
 know Kubernetes: what is wrong, and what to change.
 """
 
+import json
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -42,6 +43,17 @@ def app_for_namespace(apps: list[AppRef], namespace: str) -> AppRef | None:
     return next((a for a in apps if a.namespace == namespace), None)
 
 
+def _msg(key: str, **params: object) -> dict:
+    return {"key": key, "params": {k: str(v) for k, v in params.items()}}
+
+
+def _i18n(**fields: dict | None) -> str:
+    return json.dumps(
+        {name: value for name, value in fields.items() if value},
+        ensure_ascii=False,
+    )
+
+
 # ── Kyverno ──────────────────────────────────────────────────────────────────
 
 
@@ -53,6 +65,7 @@ class KyvernoRule:
     category: Category
     title: str
     fix: str
+    msg: str
 
 
 # Matched on the policy message: the policies report no rule name. Only
@@ -69,6 +82,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             "Le conteneur tourne en root",
             "Ajoute un utilisateur non root à la fin du Dockerfile, "
             "par exemple `USER 10001`.",
+            "run_as_root",
         ),
     ),
     (
@@ -81,6 +95,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             "Le conteneur tourne en root",
             "Ajoute un utilisateur non root à la fin du Dockerfile, "
             "par exemple `USER 10001`.",
+            "run_as_root",
         ),
     ),
     (
@@ -92,6 +107,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             Category.CONTAINER,
             "Capabilities Linux non retirées",
             "Ajouter `capabilities.drop: [ALL]` au securityContext du chart.",
+            "capabilities",
         ),
     ),
     (
@@ -103,6 +119,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             Category.CONTAINER,
             "Escalade de privilèges autorisée",
             "Poser `allowPrivilegeEscalation: false` dans le chart.",
+            "privilege_escalation",
         ),
     ),
     (
@@ -114,6 +131,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             Category.CONTAINER,
             "Profil seccomp absent",
             "Poser `seccompProfile.type: RuntimeDefault` dans le chart.",
+            "seccomp",
         ),
     ),
     (
@@ -125,6 +143,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             Category.CONTAINER,
             "Image déployée en :latest",
             "Déployer l'image par tag de version ou par digest.",
+            "image_latest",
         ),
     ),
     (
@@ -136,6 +155,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             Category.CONTAINER,
             "Image déployée sans tag",
             "Déployer l'image par tag de version ou par digest.",
+            "image_untagged",
         ),
     ),
     (
@@ -148,6 +168,7 @@ _KYVERNO_RULES: list[tuple[str, KyvernoRule]] = [
             "Requests et limits absentes",
             "Poser des requests CPU et mémoire et une limite mémoire "
             "égale à la demande dans le chart.",
+            "resources",
         ),
     ),
 ]
@@ -159,6 +180,7 @@ _KYVERNO_OTHER = KyvernoRule(
     Category.CONTAINER,
     "Réglage de sécurité du pod non conforme",
     "Voir le message Kyverno et corriger le chart.",
+    "other",
 )
 
 
@@ -221,6 +243,11 @@ def kyverno_drafts(
                 fix=rule.fix,
                 location=", ".join(pods),
                 raw="\n".join(sorted(entry["messages"])),
+                i18n=_i18n(
+                    title=_msg(f"kyverno.{rule.msg}.title"),
+                    detail=_msg("kyverno.pods", count=len(pods)),
+                    fix=_msg(f"kyverno.{rule.msg}.fix"),
+                ),
             )
         )
     return drafts
@@ -266,10 +293,15 @@ def _vulnerability_draft(
             f"Mets à jour l'image de base du Dockerfile : "
             f"{package} est corrigé en {fixed}."
         )
+        fix_msg = _msg("vuln.fixBase", package=package, fixed=fixed)
     elif fixed:
         fix = f"Passe {package} de {installed} à {fixed}."
+        fix_msg = _msg(
+            "vuln.fixBump", package=package, installed=installed, fixed=fixed
+        )
     else:
         fix = "Aucun correctif publié pour l'instant."
+        fix_msg = _msg("vuln.noFix")
     return Draft(
         fingerprint=fingerprint(project, app, vuln_id, package, installed),
         app=app,
@@ -283,6 +315,12 @@ def _vulnerability_draft(
         fix=fix,
         location=location,
         link=link or f"https://avd.aquasec.com/nvd/{vuln_id.lower()}",
+        i18n=_i18n(
+            title=_msg(
+                "vuln.title", id=vuln_id, package=package, installed=installed
+            ),
+            fix=fix_msg,
+        ),
     )
 
 
@@ -367,6 +405,14 @@ def trivy_operator_drafts(
                     "un secret se passe par Vault, jamais dans l'image."
                 ),
                 location=location,
+                i18n=_i18n(
+                    title=_msg(
+                        "imageSecret.title",
+                        name=secret.get("title", rule_id),
+                    ),
+                    detail=_msg("imageSecret.detail", target=target),
+                    fix=_msg("imageSecret.fix"),
+                ),
             )
             drafts[draft.fingerprint] = draft
     return list(drafts.values())
@@ -437,6 +483,27 @@ def _dockerfile_draft(
         fix=fix,
         location=f"{target} ligne {line}" if line else target,
         link=misconfig.get("url") or run_url,
+        i18n=_i18n(
+            title=(
+                _msg(f"dockerfile.{rule_id}.title")
+                if rule_id in _DOCKERFILE_RULES
+                else None
+            ),
+            fix=(
+                _msg(f"dockerfile.{rule_id}.fix")
+                if rule_id in _DOCKERFILE_RULES
+                else (
+                    None
+                    if misconfig.get("resolution")
+                    else _msg("dockerfile.seeRule")
+                )
+            ),
+            location=(
+                _msg("location.line", target=target, line=line)
+                if line
+                else None
+            ),
+        ),
     )
 
 
@@ -479,6 +546,24 @@ def ci_drafts(project: str, app: AppRef, report: dict) -> list[Draft]:
             ),
             location=f"{leak.get('file')} ligne {leak.get('line')}",
             link=run_url,
+            i18n=_i18n(
+                title=_msg("leak.title"),
+                detail=(
+                    _msg(
+                        "leak.detailCommit",
+                        rule=leak.get("rule_id"),
+                        commit=str(leak.get("commit"))[:7],
+                    )
+                    if leak.get("commit")
+                    else _msg("leak.detail", rule=leak.get("rule_id"))
+                ),
+                fix=_msg("leak.fix"),
+                location=_msg(
+                    "location.line",
+                    target=leak.get("file"),
+                    line=leak.get("line"),
+                ),
+            ),
         )
         drafts[draft.fingerprint] = draft
 
@@ -524,6 +609,7 @@ def _backup_draft(
     title: str,
     detail: str,
     fix: str,
+    detail_params: dict[str, object] | None = None,
 ) -> Draft:
     return Draft(
         fingerprint=fingerprint(project, app.name, "backup", cluster),
@@ -537,6 +623,11 @@ def _backup_draft(
         detail=detail,
         fix=fix,
         location=cluster,
+        i18n=_i18n(
+            title=_msg(f"backup.{rule}.title"),
+            detail=_msg(f"backup.{rule}.detail", **(detail_params or {})),
+            fix=_msg(f"backup.{rule}.fix"),
+        ),
     )
 
 
@@ -600,6 +691,7 @@ def backup_drafts(
                     f"Archivage en échec : {archiving.get('message', '')}",
                     "Contacte l'équipe plateforme : le stockage des "
                     "sauvegardes ne répond pas.",
+                    {"message": archiving.get("message", "")},
                 )
             )
             continue
@@ -634,6 +726,7 @@ def backup_drafts(
                     f"Dernière sauvegarde réussie : {last:%Y-%m-%d %H:%M} UTC",
                     "Lance une sauvegarde manuelle pour voir l'erreur, ou "
                     "contacte l'équipe plateforme.",
+                    {"date": f"{last:%Y-%m-%d %H:%M}"},
                 )
             )
     return drafts
@@ -673,6 +766,11 @@ def exposure_drafts(
                 if public
                 else "Choisis un des réglages proposés dans Accès et exposition."
             ),
+            i18n=_i18n(
+                title=_msg(f"exposure.{preset}.title"),
+                detail=_msg(f"exposure.{preset}.detail"),
+                fix=_msg(f"exposure.{preset}.fix"),
+            ),
         )
     ]
 
@@ -692,6 +790,11 @@ def isolation_drafts(project: str, policy: dict | None) -> list[Draft]:
             title="Projet non isolé des autres",
             detail=f"La policy cnp-project-{project}-ingress est absente.",
             fix="Vérifier le rendu de cnp-project-base pour ce projet.",
+            i18n=_i18n(
+                title=_msg("isolation.title"),
+                detail=_msg("isolation.detail", project=project),
+                fix=_msg("isolation.fix"),
+            ),
         )
     ]
 
@@ -716,6 +819,11 @@ def repository_drafts(
                 title="Workflow de sécurité absent du repo",
                 detail="Plus aucun scan des secrets ni des dépendances ne tourne.",
                 fix="Restaure .github/workflows/security.yml depuis le modèle.",
+                i18n=_i18n(
+                    title=_msg("workflowMissing.title"),
+                    detail=_msg("workflowMissing.detail"),
+                    fix=_msg("workflowMissing.fix"),
+                ),
             )
         )
     if locked_drift:
@@ -731,6 +839,11 @@ def repository_drafts(
                 title="Réglage imposé par l'admin modifié dans le repo",
                 detail="deploy/security.yaml ne suit plus la politique du projet.",
                 fix="Remets la valeur imposée, ou demande à l'admin du projet de lever le verrou.",
+                i18n=_i18n(
+                    title=_msg("lockedDrift.title"),
+                    detail=_msg("lockedDrift.detail"),
+                    fix=_msg("lockedDrift.fix"),
+                ),
             )
         )
     return drafts

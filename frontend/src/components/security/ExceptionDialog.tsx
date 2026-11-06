@@ -1,5 +1,7 @@
 "use client";
 
+import { useFindingText } from "./findingText";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -57,6 +59,7 @@ export function ExceptionDialog({
   onDone: () => void;
 }) {
   const t = useTranslations("security");
+  const text = useFindingText();
   const statuses = finding ? statusesFor(finding) : [];
   const [status, setStatus] = useState<Status>(statuses[0] ?? "false_positive");
   const [justification, setJustification] = useState(
@@ -98,7 +101,7 @@ export function ExceptionDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("exception.title")}</DialogTitle>
-          <DialogDescription>{finding.title}</DialogDescription>
+          <DialogDescription>{text(finding, "title")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
