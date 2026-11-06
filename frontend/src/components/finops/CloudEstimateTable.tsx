@@ -33,7 +33,7 @@ export function CloudEstimateTable({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" tabIndex={0}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">

@@ -108,8 +108,7 @@ export function RecommendationCard({
           </div>
           <div className="text-right">
             <p
-              className="text-lg font-semibold tabular-nums"
-              style={{ color: "#10B981" }}
+              className="text-lg font-semibold tabular-nums text-emerald-700 dark:text-emerald-400"
             >
               {formatEUR(rec.monthly_saving_eur, "EUR", locale)}
               <span className="text-xs font-normal text-muted-foreground">

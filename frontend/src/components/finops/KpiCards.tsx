@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
   Budget,
@@ -153,8 +155,7 @@ export function KpiCards({
             </span>
             {trend !== null && (
               <span
-                className="flex items-center gap-0.5 text-xs font-medium"
-                style={{ color: trendUp ? "#EF4444" : "#10B981" }}
+                className={cn("flex items-center gap-0.5 text-xs font-medium", trendUp ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400")}
               >
                 {trendUp ? (
                   <ArrowUpRight className="h-3 w-3" />
@@ -253,8 +254,7 @@ export function KpiCards({
         </CardHeader>
         <CardContent className="space-y-2">
           <span
-            className="text-2xl font-semibold tabular-nums"
-            style={{ color: "#10B981" }}
+            className="text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400"
           >
             {money(summary.potential_savings_eur)}
             <span className="text-sm font-normal text-muted-foreground">
@@ -284,8 +284,7 @@ export function KpiCards({
           </CardHeader>
           <CardContent className="space-y-2">
             <span
-              className="text-2xl font-semibold tabular-nums"
-              style={{ color: "#10B981" }}
+              className="text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400"
             >
               {formatEUR(savings.realized_eur, summary.currency, locale)}
             </span>

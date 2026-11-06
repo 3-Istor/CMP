@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 import { Badge } from "@/components/ui/badge";
 import type { AppCostRow } from "@/types";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
@@ -18,8 +20,7 @@ function Trend({ pct }: { pct: number | null }) {
   const up = pct >= 0;
   return (
     <span
-      className="flex items-center gap-0.5 tabular-nums"
-      style={{ color: up ? "#EF4444" : "#10B981" }}
+      className={cn("flex items-center gap-0.5 tabular-nums", up ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400")}
     >
       {up ? (
         <ArrowUpRight className="h-3 w-3" />
@@ -45,7 +46,7 @@ export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0}>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
