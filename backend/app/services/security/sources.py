@@ -44,7 +44,14 @@ def app_for_namespace(apps: list[AppRef], namespace: str) -> AppRef | None:
 
 
 def _msg(key: str, **params: object) -> dict:
-    return {"key": key, "params": {k: str(v) for k, v in params.items()}}
+    # Numbers stay numbers so ICU plurals compare them as such.
+    return {
+        "key": key,
+        "params": {
+            k: v if isinstance(v, (int, float)) else str(v)
+            for k, v in params.items()
+        },
+    }
 
 
 def _i18n(**fields: dict | None) -> str:

@@ -609,7 +609,7 @@ export interface SecurityFinding {
   i18n?: Partial<
     Record<
       "title" | "detail" | "fix" | "location",
-      { key: string; params: Record<string, string> }
+      { key: string; params: Record<string, string | number> }
     >
   > | null;
   sources: string[];
