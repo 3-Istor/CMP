@@ -24,10 +24,12 @@ CONFIDENCE = 0.8
 # misleadingly tight band: daily spread is floored at this share of the mean.
 LOW_HISTORY_REL_SD = 0.25
 # A new app or a resize moves the daily level for good: when the last week
-# differs from the whole history by more than this share, only that week is
-# kept, so the forecast follows the new level instead of a 28-day average.
+# differs from the whole history by more than this share, only the days since
+# the shift are kept, so the forecast follows the new level instead of a
+# 28-day average.
 LEVEL_SHIFT_DAYS = 7
 LEVEL_SHIFT_REL = 0.3
+LEVEL_SHIFT_MIN_RUN = 2
 
 # One-sided 90 % quantile of Student's t (two-sided 80 % interval).
 _T90 = {
@@ -118,7 +120,24 @@ def forecast_month(
         if history_mean > 0 and (
             abs(recent_mean - history_mean) / history_mean > LEVEL_SHIFT_REL
         ):
-            history = recent
+            # Keep the days since the shift: the trailing run that stays
+            # close to the last complete day. A shift mid-week would
+            # otherwise still mix the old level into a 7-day mean.
+            days = sorted(history)
+            latest = history[days[-1]]
+            run = []
+            for d in reversed(days):
+                if (
+                    latest
+                    and abs(history[d] - latest) / latest > LEVEL_SHIFT_REL
+                ):
+                    break
+                run.append(d)
+            history = (
+                {d: history[d] for d in run}
+                if len(run) >= LEVEL_SHIFT_MIN_RUN
+                else recent
+            )
     n_hist = len(history)
     cumulative: list[tuple[date, float]] = []
     running = 0.0
