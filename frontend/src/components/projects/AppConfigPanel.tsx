@@ -77,9 +77,10 @@ function ConfigField({
     depth = 0,
     readOnly = false,
 }: FieldProps) {
+    const tf = useTranslations("apps.config.fields");
     const leafKey = keyPath.split(".").pop()!;
     const fieldType = guessFieldType(leafKey, value);
-    const label = humanLabel(leafKey);
+    const label = tf.has(leafKey) ? tf(leafKey) : humanLabel(leafKey);
 
     if (fieldType === "object") {
         const obj = value as Record<string, unknown>;
