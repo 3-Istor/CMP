@@ -114,7 +114,7 @@ export function ProjectCard({ project, onRetried }: Props) {
                                       ? "outline"
                                       : "secondary"
                             }
-                            className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
+                            className={`shrink-0 ${isOwner ? "bg-amber-400 hover:bg-amber-400 text-amber-950" : ""}`}
                         >
                             <RoleIcon className="mr-1 h-3 w-3" />
                             {t(`roles.${project.role}`)}

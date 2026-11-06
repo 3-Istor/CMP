@@ -41,7 +41,7 @@ export function FavoriteToggle(props: Props) {
       onClick={onClick}
       className={cn(
         "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        pressed && "text-amber-500 hover:text-amber-500",
+        pressed && "text-amber-700 dark:text-amber-500 hover:text-amber-500",
         props.className,
       )}
     >

@@ -1,5 +1,9 @@
 "use client";
 
+import { BellRing } from "lucide-react";
+
+import { PageBody, PageHeader } from "@/components/layout/PageHeader";
+
 import { AlertsPanel } from "@/components/alerting/AlertsPanel";
 import { useProjects } from "@/lib/hooks";
 import { useTranslations } from "next-intl";
@@ -19,35 +23,38 @@ function AlertsInner() {
   const selected = searchParams.get("project") ?? projects[0]?.name ?? "";
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">{t("title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("description")}</p>
-        </div>
-        <select
-          aria-label={tc("project")}
-          className={SELECT}
-          value={selected}
-          onChange={(e) =>
-            router.replace(
-              `${pathname}?project=${encodeURIComponent(e.target.value)}`,
-            )
-          }
-        >
-          {projects.map((p) => (
-            <option key={p.name} value={p.name}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="min-h-screen">
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        icon={BellRing}
+        actions={
+            <select
+              aria-label={tc("project")}
+              className={SELECT}
+              value={selected}
+              onChange={(e) =>
+                router.replace(
+                  `${pathname}?project=${encodeURIComponent(e.target.value)}`,
+                )
+              }
+            >
+              {projects.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+        }
+      />
+      <PageBody>
       {selected ? (
         <AlertsPanel key={selected} project={selected} />
       ) : (
         <p className="text-sm text-muted-foreground">{tc("noProjects")}</p>
       )}
-    </main>
+      </PageBody>
+    </div>
   );
 }
 

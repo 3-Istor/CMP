@@ -109,7 +109,7 @@ function StepIcon({ status }: { status: PromotionStep["status"] }) {
     return <CheckCircle2 className="h-4 w-4 text-green-600" />;
   if (status === "failed") return <XCircle className="h-4 w-4 text-red-600" />;
   if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-sky-600" />;
-  if (status === "waiting") return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+  if (status === "waiting") return <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-500" />;
   return <Circle className="h-4 w-4 text-muted-foreground" />;
 }
 

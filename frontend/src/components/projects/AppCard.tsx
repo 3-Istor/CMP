@@ -41,7 +41,7 @@ const STATUS_PROGRESS: Record<Deployment["status"], number> = {
 
 function StatusIcon({ status }: { status: Deployment["status"] }) {
   if (status === "running")
-    return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+    return <CheckCircle2 className="h-4 w-4 text-green-700 dark:text-green-500" />;
   if (status === "failed" || status === "deleted")
     return <XCircle className="h-4 w-4 text-destructive" />;
   if (ACTIVE_STATUSES.has(status))

@@ -1,5 +1,7 @@
 "use client";
 
+import { PageBody, PageHeader } from "@/components/layout/PageHeader";
+
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { errorMessage } from "@/components/activity/labels";
@@ -28,7 +30,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NotConnected } from "@/components/clusters/NotConnected";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   createDeployment,
@@ -248,103 +249,98 @@ export default function ProjectPage() {
 
   return (
     <div className="min-h-screen">
-      <main className="px-6 py-8 max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/10 p-2.5">
-              <FolderKanban className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold capitalize">{projectName}</h1>
-              <p className="text-sm text-muted-foreground">
-                {role
-                  ? t("kubernetesRole", { role: tRoles(`roles.${role}`) })
-                  : t("kubernetes")}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              {t("appCount", { count: apps.length })}
-            </Badge>
-            {canViewObservability && <ToolsMenu links={links} />}
-            {canDeploy && (
-              <Button size="sm" onClick={handleOpenCatalog}>
-                <Plus aria-hidden />
-                {ta("newApp")}
-              </Button>
-            )}
-            {canDeleteProject && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    title={ta("more")}
-                    aria-label={ta("more")}
-                  >
-                    <MoreHorizontal aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[16rem]">
-                  {canProtect && (
-                    <>
-                      {protectedOn !== null && (
-                        <DropdownMenuItem
-                          className="gap-2"
-                          onClick={
-                            protectedOn
-                              ? () => setShowUnprotectDialog(true)
-                              : handleProtect
-                          }
-                        >
-                          {protectedOn ? (
-                            <ShieldOff className="h-4 w-4" aria-hidden />
-                          ) : (
-                            <ShieldCheck className="h-4 w-4" aria-hidden />
-                          )}
-                          {ta(protectedOn ? "protectOff" : "protectOn")}
-                        </DropdownMenuItem>
-                      )}
-                      {signupOn !== null && (
-                        <DropdownMenuItem
-                          className="gap-2"
-                          onClick={handleSignup}
-                        >
-                          {signupOn ? (
-                            <UserX className="h-4 w-4" aria-hidden />
-                          ) : (
-                            <UserPlus className="h-4 w-4" aria-hidden />
-                          )}
-                          {ta(
-                            signupOn
-                              ? "customerSignupOff"
-                              : "customerSignupOn",
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      {(protectedOn !== null || signupOn !== null) && (
-                        <DropdownMenuSeparator />
-                      )}
-                    </>
-                  )}
-                  <DropdownMenuItem
-                    className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
-                    disabled={protectedOn === true}
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden />
-                    <MenuText
-                      label={ta("deleteProject")}
-                      reason={protectedOn ? ta("reasons.protected") : null}
-                    />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        </div>
-
+      <PageHeader
+        title={<span className="capitalize">{projectName}</span>}
+        description={
+          role
+            ? t("kubernetesRole", { role: tRoles(`roles.${role}`) })
+            : t("kubernetes")
+        }
+        icon={FolderKanban}
+        actions={
+          <>
+              <Badge variant="outline" className="font-mono text-xs">
+                {t("appCount", { count: apps.length })}
+              </Badge>
+              {canViewObservability && <ToolsMenu links={links} />}
+              {canDeploy && (
+                <Button size="sm" onClick={handleOpenCatalog}>
+                  <Plus aria-hidden />
+                  {ta("newApp")}
+                </Button>
+              )}
+              {canDeleteProject && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      title={ta("more")}
+                      aria-label={ta("more")}
+                    >
+                      <MoreHorizontal aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[16rem]">
+                    {canProtect && (
+                      <>
+                        {protectedOn !== null && (
+                          <DropdownMenuItem
+                            className="gap-2"
+                            onClick={
+                              protectedOn
+                                ? () => setShowUnprotectDialog(true)
+                                : handleProtect
+                            }
+                          >
+                            {protectedOn ? (
+                              <ShieldOff className="h-4 w-4" aria-hidden />
+                            ) : (
+                              <ShieldCheck className="h-4 w-4" aria-hidden />
+                            )}
+                            {ta(protectedOn ? "protectOff" : "protectOn")}
+                          </DropdownMenuItem>
+                        )}
+                        {signupOn !== null && (
+                          <DropdownMenuItem
+                            className="gap-2"
+                            onClick={handleSignup}
+                          >
+                            {signupOn ? (
+                              <UserX className="h-4 w-4" aria-hidden />
+                            ) : (
+                              <UserPlus className="h-4 w-4" aria-hidden />
+                            )}
+                            {ta(
+                              signupOn
+                                ? "customerSignupOff"
+                                : "customerSignupOn",
+                            )}
+                          </DropdownMenuItem>
+                        )}
+                        {(protectedOn !== null || signupOn !== null) && (
+                          <DropdownMenuSeparator />
+                        )}
+                      </>
+                    )}
+                    <DropdownMenuItem
+                      className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
+                      disabled={protectedOn === true}
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden />
+                      <MenuText
+                        label={ta("deleteProject")}
+                        reason={protectedOn ? ta("reasons.protected") : null}
+                      />
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+          </>
+        }
+      />
+      <PageBody>
         {canViewObservability && (
           <SecurityAlert
             project={projectName}
@@ -353,8 +349,6 @@ export default function ProjectPage() {
             }
           />
         )}
-
-        <Separator />
 
         <div className="space-y-6">
           <div className="flex items-center justify-between gap-4">
@@ -436,7 +430,7 @@ export default function ProjectPage() {
           ) : appsError ? (
             <div className="rounded-xl border border-destructive bg-destructive/5 p-6 text-destructive space-y-2">
               <p className="font-medium">{t("appsLoadFailed")}</p>
-              <p className="text-sm opacity-80">{appsError}</p>
+              <p className="text-sm">{appsError}</p>
               <Button variant="outline" size="sm" onClick={refreshApps}>
                 {tCommon("retry")}
               </Button>
@@ -491,7 +485,7 @@ export default function ProjectPage() {
 
           <GettingStarted />
         </div>
-      </main>
+      </PageBody>
 
       {/* ── Deploy modal ── */}
       <DeployModal

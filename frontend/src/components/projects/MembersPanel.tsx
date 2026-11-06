@@ -298,7 +298,7 @@ export function MembersPanel({ projectName, canManage = false }: Props) {
         ) : error ? (
           <div className="rounded-lg border border-destructive bg-destructive/5 p-4 text-sm text-destructive">
             <p className="font-medium">{t("loadFailed")}</p>
-            <p className="text-xs mt-1 opacity-80">{error}</p>
+            <p className="text-xs mt-1">{error}</p>
             <Button
               variant="outline"
               size="sm"
@@ -386,7 +386,7 @@ function MemberRow({
                     ? "outline"
                     : "secondary"
               }
-              className={`shrink-0 ${isOwner ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}`}
+              className={`shrink-0 ${isOwner ? "bg-amber-400 hover:bg-amber-400 text-amber-950" : ""}`}
             >
               <RoleIcon className="mr-1 h-3 w-3" />
               {tr(`roles.${member.role}`)}

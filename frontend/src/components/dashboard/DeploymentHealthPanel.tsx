@@ -37,17 +37,17 @@ export function DeploymentHealthPanel({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "healthy":
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+        return <CheckCircle2 className="h-5 w-5 text-green-700 dark:text-green-500" />;
       case "degraded":
-        return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+        return <AlertTriangle className="h-5 w-5 text-yellow-700 dark:text-yellow-500" />;
       case "down":
-        return <XCircle className="h-5 w-5 text-red-500" />;
+        return <XCircle className="h-5 w-5 text-red-700 dark:text-red-500" />;
       case "asleep":
         return <Moon className="h-5 w-5 text-indigo-400" />;
       case "not_connected":
-        return <PlugZap className="h-5 w-5 text-gray-400" />;
+        return <PlugZap className="h-5 w-5 text-muted-foreground" />;
       default:
-        return <AlertTriangle className="h-5 w-5 text-gray-400" />;
+        return <AlertTriangle className="h-5 w-5 text-muted-foreground" />;
     }
   };
 

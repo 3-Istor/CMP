@@ -1,5 +1,7 @@
 "use client";
 
+import { PageBody, PageHeader } from "@/components/layout/PageHeader";
+
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
@@ -163,13 +165,13 @@ export function ProjectSection({
   capability?: Capability;
   children: React.ReactNode;
 }) {
-  const { can, roleLoading } = useProjectContext();
+  const { can, roleLoading, projectName } = useProjectContext();
   const allowed = !capability || can(capability);
 
   return (
     <div className="min-h-screen">
-      <main className="px-6 py-8 max-w-7xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold">{title}</h1>
+      <PageHeader title={title} description={projectName} />
+      <PageBody>
         {roleLoading && !allowed ? (
           <Skeleton className="h-48 w-full rounded-xl" />
         ) : allowed ? (
@@ -177,7 +179,7 @@ export function ProjectSection({
         ) : (
           <NotAllowed />
         )}
-      </main>
+      </PageBody>
     </div>
   );
 }

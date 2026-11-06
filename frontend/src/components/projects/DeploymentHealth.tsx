@@ -40,7 +40,7 @@ const STATE_STYLE: Record<
   down: { Icon: XCircle, color: "text-red-600 dark:text-red-400" },
   asleep: { Icon: Moon, color: "text-blue-600 dark:text-blue-400" },
   not_connected: { Icon: CloudOff, color: "text-slate-600 dark:text-slate-400" },
-  unknown: { Icon: HelpCircle, color: "text-gray-500 dark:text-gray-400" },
+  unknown: { Icon: HelpCircle, color: "text-muted-foreground dark:text-gray-400" },
 };
 
 function stateStyle(state: string) {
@@ -130,7 +130,7 @@ export function DeploymentHealth({ deploymentId }: Props) {
           {health ? (
             <StateIcon state={health.status} />
           ) : (
-            <HelpCircle className="h-5 w-5 text-gray-500" aria-hidden="true" />
+            <HelpCircle className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
           )}
           {t("title")}
           {health && (

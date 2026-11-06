@@ -102,9 +102,9 @@ export function GlobalInfraHealth() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       {hv.state === "up" ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
+                        <CheckCircle2 className="h-3 w-3 text-green-700 dark:text-green-500" />
                       ) : (
-                        <XCircle className="h-3 w-3 text-red-500" />
+                        <XCircle className="h-3 w-3 text-red-700 dark:text-red-500" />
                       )}
                       <Badge
                         variant={hv.state === "up" ? "default" : "destructive"}
