@@ -40,16 +40,12 @@ import { intlLocale } from "@/components/finops/format";
 import { cn, appUrlOf } from "@/lib/utils";
 import type { ProjectLink } from "@/types";
 import {
-  BellRing,
   ExternalLink,
   FileCode,
   Globe,
-  History,
   Image as ImageIcon,
-  Layers,
   MoreHorizontal,
   Moon,
-  PackageCheck,
   RefreshCw,
   Rocket,
   ScrollText,
@@ -105,7 +101,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const canViewConfig = can("app.viewConfig");
   const canViewFinops = can("finops.view");
   const canViewObservability = can("app.viewObservability");
-  const canViewRelease = can("release.view");
 
   const isKubernetes = current.provider_type === "kubernetes";
   const isRunning = current.status === "running";
@@ -225,28 +220,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       visible: isKubernetes && canViewLogs,
     },
     {
-      key: "deployments",
-      segment: "deployments",
-      icon: PackageCheck,
-      visible: canViewLogs,
-    },
-    {
-      key: "release",
-      segment: "release",
+      key: "delivery",
+      segment: "delivery",
       icon: Rocket,
-      visible: isKubernetes && canViewRelease,
-    },
-    {
-      key: "environments",
-      segment: "environments",
-      icon: Layers,
-      visible: isKubernetes && canViewRelease,
-    },
-    {
-      key: "config",
-      segment: "config",
-      icon: Settings,
-      visible: isKubernetes && canViewConfig,
+      visible: canViewLogs,
     },
     {
       key: "costs",
@@ -261,16 +238,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       visible: isKubernetes && canViewObservability,
     },
     {
-      key: "activity",
-      segment: "activity",
-      icon: History,
-      visible: isKubernetes && canViewObservability,
-    },
-    {
-      key: "alerts",
-      segment: "alerts",
-      icon: BellRing,
-      visible: isKubernetes && canViewObservability,
+      key: "settings",
+      segment: "settings",
+      icon: Settings,
+      visible: isKubernetes && canViewConfig,
     },
   ];
 
@@ -446,7 +417,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                     )}
                     {isKubernetes && canViewConfig && (
                       <DropdownMenuItem asChild className="gap-2">
-                        <Link href={`${base}/config`}>
+                        <Link href={`${base}/settings`}>
                           <Settings className="h-4 w-4" aria-hidden />
                           {ta("settings")}
                         </Link>
@@ -508,7 +479,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
-        {isKubernetes && canViewObservability && (
+        {isKubernetes && canViewObservability && activeSegment !== "security" && (
           <SecurityAlert
             project={projectName}
             app={current.name}

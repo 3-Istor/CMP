@@ -204,7 +204,9 @@
       "activity": "Activity",
       "alerts": "Alerts",
       "logs": "Logs",
-      "deployments": "Deployments"
+      "deployments": "Deployments",
+      "delivery": "Delivery",
+      "settings": "Settings"
     },
     "status": {
       "pending": "Queued",
@@ -1307,7 +1309,9 @@
       "failed": "Failed",
       "deleting": "Deleting",
       "deleted": "Deleted"
-    }
+    },
+    "appFilter": "Application",
+    "allApps": "All applications"
   },
   "catalog": {
     "iconAlt": "{name} icon",
@@ -2074,7 +2078,9 @@
       "ready": "Active",
       "failed": "Failed",
       "removing": "Being removed"
-    }
+    },
+    "stagingOffHint": "Staging is off: each release goes straight to production.",
+    "stagingOffAction": "Turn on staging"
   },
   "release": {
     "name": {
@@ -2484,6 +2490,39 @@
     "legacy": {
       "outputs": "Terraform outputs",
       "noOutputs": "No outputs yet."
+    },
+    "delivery": {
+      "pipeline": "Environments",
+      "pipelineHint": "What runs in staging and in production, and the promotion between them.",
+      "rollout": "Current release",
+      "rolloutHint": "The rollout in progress, its steps and its traffic split.",
+      "history": "History",
+      "historyHint": "Every deployment, with its console and a rollback to any earlier version."
+    },
+    "settings": {
+      "toc": "Settings sections",
+      "sections": {
+        "general": {
+          "title": "General",
+          "description": "Icon, who can reach the app and what data it handles."
+        },
+        "secrets": {
+          "title": "Secrets",
+          "description": "The secrets the app expects. Names only, never values."
+        },
+        "delivery": {
+          "title": "Delivery",
+          "description": "Release strategy, staging and its sleep schedule, promotion rules."
+        },
+        "security": {
+          "title": "Security",
+          "description": "When the CI blocks a build, and where new issues are sent."
+        },
+        "advanced": {
+          "title": "Advanced",
+          "description": "Every value of deploy/values.yaml. Saving commits to main and Argo CD syncs."
+        }
+      }
     }
   },
   "appIcon": {

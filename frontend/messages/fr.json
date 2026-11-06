@@ -204,7 +204,9 @@
       "activity": "Activité",
       "alerts": "Alertes",
       "logs": "Logs",
-      "deployments": "Déploiements"
+      "deployments": "Déploiements",
+      "delivery": "Livraison",
+      "settings": "Paramètres"
     },
     "status": {
       "pending": "En attente",
@@ -1307,7 +1309,9 @@
       "failed": "Échec",
       "deleting": "Suppression",
       "deleted": "Supprimée"
-    }
+    },
+    "appFilter": "Application",
+    "allApps": "Toutes les applications"
   },
   "catalog": {
     "iconAlt": "Icône de {name}",
@@ -2074,7 +2078,9 @@
       "ready": "Actif",
       "failed": "En échec",
       "removing": "Suppression en cours"
-    }
+    },
+    "stagingOffHint": "Le staging est désactivé : chaque release part directement en production.",
+    "stagingOffAction": "Activer le staging"
   },
   "release": {
     "name": {
@@ -2484,6 +2490,39 @@
     "legacy": {
       "outputs": "Sorties Terraform",
       "noOutputs": "Aucune sortie pour le moment."
+    },
+    "delivery": {
+      "pipeline": "Environnements",
+      "pipelineHint": "Ce qui tourne en staging et en production, et la promotion entre les deux.",
+      "rollout": "Release en cours",
+      "rolloutHint": "Le déploiement en cours, ses étapes et la répartition du trafic.",
+      "history": "Historique",
+      "historyHint": "Chaque déploiement, avec sa console et un retour à n'importe quelle version précédente."
+    },
+    "settings": {
+      "toc": "Sections des paramètres",
+      "sections": {
+        "general": {
+          "title": "Général",
+          "description": "Icône, qui peut ouvrir l'app et quelles données elle traite."
+        },
+        "secrets": {
+          "title": "Secrets",
+          "description": "Les secrets attendus par l'app. Les noms seulement, jamais les valeurs."
+        },
+        "delivery": {
+          "title": "Livraison",
+          "description": "Stratégie de release, staging et sa mise en veille, règles de promotion."
+        },
+        "security": {
+          "title": "Sécurité",
+          "description": "Quand la CI bloque un build, et où partent les nouveaux problèmes."
+        },
+        "advanced": {
+          "title": "Avancé",
+          "description": "Toutes les valeurs de deploy/values.yaml. Enregistrer commite sur main et Argo CD synchronise."
+        }
+      }
     }
   },
   "appIcon": {

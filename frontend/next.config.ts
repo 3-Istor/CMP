@@ -34,6 +34,22 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    const app = "/projects/:project/apps/:app";
+    return [
+      ...["release", "environments", "deployments"].map((tab) => ({
+        source: `${app}/${tab}`,
+        destination: `${app}/delivery`,
+        permanent: false,
+      })),
+      { source: `${app}/config`, destination: `${app}/settings`, permanent: false },
+      ...["activity", "alerts"].map((tab) => ({
+        source: `${app}/${tab}`,
+        destination: `/projects/:project/${tab}?app=:app`,
+        permanent: false,
+      })),
+    ];
+  },
   async rewrites() {
     const apiUrl =
       process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";

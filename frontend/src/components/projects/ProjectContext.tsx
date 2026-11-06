@@ -159,10 +159,12 @@ export function NotAllowed() {
 export function ProjectSection({
   title,
   capability,
+  actions,
   children,
 }: {
   title: string;
   capability?: Capability;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { can, roleLoading, projectName } = useProjectContext();
@@ -170,7 +172,7 @@ export function ProjectSection({
 
   return (
     <div className="min-h-screen">
-      <PageHeader title={title} description={projectName} />
+      <PageHeader title={title} description={projectName} actions={actions} />
       <PageBody>
         {roleLoading && !allowed ? (
           <Skeleton className="h-48 w-full rounded-xl" />

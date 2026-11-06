@@ -2,7 +2,7 @@
 
 import { intlLocale } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ import type {
 } from "@/types";
 import { AlertTriangle, ArrowRight, CheckCircle2, Circle, Loader2, Play, XCircle } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage, formatDateTime, TONE } from "../release/format";
@@ -376,7 +377,15 @@ function HistoryCard({
   );
 }
 
-export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
+export function EnvironmentsTab({
+  deploymentId,
+  mode = "all",
+  settingsHref,
+}: {
+  deploymentId: number;
+  mode?: "all" | "delivery" | "settings";
+  settingsHref?: string;
+}) {
   const t = useTranslations("environments");
   const td = useTranslations("envDiff");
   const [diff, setDiff] = useState<EnvDiff | null>(null);
@@ -449,9 +458,51 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
     }
   };
 
+  const stagingReady = view.staging?.state === "ready";
+  const stagingSettings = (
+    <StagingSettingsCard
+      deploymentId={deploymentId}
+      staging={view.staging}
+      canAdminister={view.canAdminister}
+      onChanged={refresh}
+    />
+  );
+  const policySettings = stagingReady && (
+    <PromotionPolicyCard
+      // The view is polled: remount only when the saved policy changes,
+      // so an edit in progress is not overwritten every few seconds.
+      key={view.policy.updatedAt ?? "default"}
+      deploymentId={deploymentId}
+      policy={view.policy}
+      canAdminister={view.canAdminister}
+      onSaved={refresh}
+    />
+  );
+
+  if (mode === "settings") {
+    return (
+      <div className="space-y-6">
+        {stagingSettings}
+        {policySettings}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <EnvDiffCard diff={diff} error={diffError} />
+      {(mode === "all" || stagingReady) && <EnvDiffCard diff={diff} error={diffError} />}
+      {mode === "delivery" && !stagingReady && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm">
+            <span className="text-muted-foreground">{t("stagingOffHint")}</span>
+            {settingsHref && (
+              <Link href={settingsHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                {t("stagingOffAction")}
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {view.staging?.state === "ready" && staging && prod && (
         <Card>
@@ -537,25 +588,12 @@ export function EnvironmentsTab({ deploymentId }: { deploymentId: number }) {
         />
       )}
 
-      <StagingSettingsCard
-        deploymentId={deploymentId}
-        staging={view.staging}
-        canAdminister={view.canAdminister}
-        onChanged={refresh}
-      />
+      {mode === "all" && stagingSettings}
 
-      {view.staging?.state === "ready" && (
+      {stagingReady && (
         <>
           <RunsCard deploymentId={deploymentId} view={view} runs={runs} onChanged={refresh} />
-          <PromotionPolicyCard
-            // The view is polled: remount only when the saved policy changes,
-            // so an edit in progress is not overwritten every few seconds.
-            key={view.policy.updatedAt ?? "default"}
-            deploymentId={deploymentId}
-            policy={view.policy}
-            canAdminister={view.canAdminister}
-            onSaved={refresh}
-          />
+          {mode === "all" && policySettings}
           <HistoryCard deploymentId={deploymentId} view={view} promotions={promotions} onChanged={refresh} />
         </>
       )}
