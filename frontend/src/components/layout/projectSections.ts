@@ -2,6 +2,7 @@ import type { Capability } from "@/lib/permissions";
 import {
   BellRing,
   Bot,
+  Settings,
   History,
   LayoutDashboard,
   Shield,
@@ -17,7 +18,8 @@ export type ProjectSectionKey =
   | "security"
   | "activity"
   | "alerts"
-  | "assistants";
+  | "assistants"
+  | "settings";
 
 export interface ProjectSectionEntry {
   key: ProjectSectionKey;
@@ -59,6 +61,12 @@ export const PROJECT_SECTIONS: Record<ProjectSectionKey, ProjectSectionEntry> = 
     capability: "app.viewObservability",
   },
   assistants: { key: "assistants", segment: "assistants", icon: Bot },
+  settings: {
+    key: "settings",
+    segment: "settings",
+    icon: Settings,
+    capability: "app.viewObservability",
+  },
 };
 
 export function projectHref(projectName: string, segment = ""): string {

@@ -4,69 +4,42 @@ import { PageBody, PageHeader } from "@/components/layout/PageHeader";
 
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
-import { errorMessage } from "@/components/activity/labels";
 import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
-import { MenuText } from "@/components/projects/MenuText";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { NotConnected } from "@/components/clusters/NotConnected";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   createDeployment,
-  deleteProject,
   getCatalog,
-  getCustomerSignup,
-  getDeletionProtection,
   getProjectLinks,
   isNotConnected,
-  setCustomerSignup,
-  setDeletionProtection,
 } from "@/lib/api";
 import { hasScorecard, useScorecards } from "@/lib/scorecard";
 import type { CatalogTemplate, ProjectLink } from "@/types";
 import {
   FolderKanban,
   Loader2,
-  MoreHorizontal,
   Plus,
   Rocket,
   RefreshCw,
-  ShieldCheck,
-  ShieldOff,
-  Trash2,
-  UserPlus,
-  UserX,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 export default function ProjectPage() {
   const router = useRouter();
   const ta = useTranslations("actions");
-  const tc = useTranslations("confirm");
   const t = useTranslations("projects.page");
   const tRoles = useTranslations("projects");
   const tCommon = useTranslations("common");
@@ -82,8 +55,6 @@ export default function ProjectPage() {
     hasActiveDeployments,
   } = useProjectContext();
 
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showUnprotectDialog, setShowUnprotectDialog] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "score">("name");
   const scores = useScorecards(
     apps.filter(hasScorecard).map((app) => app.id),
@@ -104,8 +75,6 @@ export default function ProjectPage() {
   // so action buttons stay absent instead of flashing into view and then
   // disappearing.
   const canDeploy = can("app.deploy");
-  const canDeleteProject = can("project.delete");
-  const canProtect = can("project.protect");
   const canViewObservability = can("app.viewObservability");
 
   const [links, setLinks] = useState<ProjectLink[]>([]);
@@ -115,24 +84,6 @@ export default function ProjectPage() {
       .then(setLinks)
       .catch(() => setLinks([]));
   }, [projectName, canViewObservability]);
-
-  // null until read: the toggle stays hidden rather than offer the wrong action.
-  const [protectedOn, setProtectedOn] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!canDeleteProject) return;
-    getDeletionProtection(projectName)
-      .then(({ enabled }) => setProtectedOn(enabled))
-      .catch(() => setProtectedOn(null));
-  }, [projectName, canDeleteProject]);
-
-  // null until read, like protectedOn.
-  const [signupOn, setSignupOn] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!canProtect) return;
-    getCustomerSignup(projectName)
-      .then(({ enabled }) => setSignupOn(enabled))
-      .catch(() => setSignupOn(null));
-  }, [projectName, canProtect]);
 
   // Catalog for deploy modal
   const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
@@ -206,47 +157,6 @@ export default function ProjectPage() {
     }
   };
 
-  const handleDeleteProject = async () => {
-    if (!canDeleteProject) throw new Error(ta("errors.notAllowed"));
-    await deleteProject(projectName);
-    toast.success(ta("toasts.projectDeleting", { name: projectName }));
-    router.push("/");
-  };
-
-  const changeProtection = async (enabled: boolean) => {
-    if (!canProtect) throw new Error(ta("errors.notAllowed"));
-    const res = await setDeletionProtection(projectName, enabled);
-    setProtectedOn(res.enabled);
-    toast.success(
-      ta(res.enabled ? "toasts.protectedOn" : "toasts.protectedOff"),
-    );
-  };
-
-  const handleProtect = () =>
-    changeProtection(true).catch((err) =>
-      toast.error(ta("errors.protect", { message: errorMessage(err) })),
-    );
-
-  const handleSignup = () =>
-    setCustomerSignup(projectName, !signupOn)
-      .then((res) => {
-        setSignupOn(res.enabled);
-        toast.success(
-          ta(
-            res.enabled
-              ? "toasts.customerSignupOn"
-              : "toasts.customerSignupOff",
-          ),
-        );
-      })
-      .catch((err) => {
-        toast.error(ta("errors.customerSignup", { message: errorMessage(err) }));
-        // The flag is saved even when Keycloak fails: show what is saved.
-        getCustomerSignup(projectName)
-          .then(({ enabled }) => setSignupOn(enabled))
-          .catch(() => {});
-      });
-
   return (
     <div className="min-h-screen">
       <PageHeader
@@ -268,74 +178,6 @@ export default function ProjectPage() {
                   <Plus aria-hidden />
                   {ta("newApp")}
                 </Button>
-              )}
-              {canDeleteProject && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      title={ta("more")}
-                      aria-label={ta("more")}
-                    >
-                      <MoreHorizontal aria-hidden />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-[16rem]">
-                    {canProtect && (
-                      <>
-                        {protectedOn !== null && (
-                          <DropdownMenuItem
-                            className="gap-2"
-                            onClick={
-                              protectedOn
-                                ? () => setShowUnprotectDialog(true)
-                                : handleProtect
-                            }
-                          >
-                            {protectedOn ? (
-                              <ShieldOff className="h-4 w-4" aria-hidden />
-                            ) : (
-                              <ShieldCheck className="h-4 w-4" aria-hidden />
-                            )}
-                            {ta(protectedOn ? "protectOff" : "protectOn")}
-                          </DropdownMenuItem>
-                        )}
-                        {signupOn !== null && (
-                          <DropdownMenuItem
-                            className="gap-2"
-                            onClick={handleSignup}
-                          >
-                            {signupOn ? (
-                              <UserX className="h-4 w-4" aria-hidden />
-                            ) : (
-                              <UserPlus className="h-4 w-4" aria-hidden />
-                            )}
-                            {ta(
-                              signupOn
-                                ? "customerSignupOff"
-                                : "customerSignupOn",
-                            )}
-                          </DropdownMenuItem>
-                        )}
-                        {(protectedOn !== null || signupOn !== null) && (
-                          <DropdownMenuSeparator />
-                        )}
-                      </>
-                    )}
-                    <DropdownMenuItem
-                      className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
-                      disabled={protectedOn === true}
-                      onClick={() => setShowDeleteDialog(true)}
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden />
-                      <MenuText
-                        label={ta("deleteProject")}
-                        reason={protectedOn ? ta("reasons.protected") : null}
-                      />
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               )}
           </>
         }
@@ -495,68 +337,6 @@ export default function ProjectPage() {
         loading={deploying}
       />
 
-      <ConfirmDialog
-        open={showDeleteDialog && apps.length === 0}
-        onOpenChange={setShowDeleteDialog}
-        level={2}
-        destructive
-        title={tc("deleteProject.title", { name: projectName })}
-        description={tc("deleteProject.description")}
-        consequences={[
-          tc("deleteProject.consequences.apps"),
-          tc("deleteProject.consequences.vault"),
-          tc("deleteProject.consequences.grafana"),
-          tc("deleteProject.consequences.keycloak"),
-          tc("deleteProject.consequences.argocd"),
-        ]}
-        expectedName={projectName}
-        confirmLabel={tc("deleteProject.confirm")}
-        onConfirm={handleDeleteProject}
-      />
-
-      <ConfirmDialog
-        open={showUnprotectDialog}
-        onOpenChange={setShowUnprotectDialog}
-        level={1}
-        title={tc("unprotect.title", { name: projectName })}
-        description={tc("unprotect.description")}
-        confirmLabel={tc("unprotect.confirm")}
-        onConfirm={() => changeProtection(false)}
-      />
-
-      <Dialog
-        open={showDeleteDialog && apps.length > 0}
-        onOpenChange={setShowDeleteDialog}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {tc("projectHasApps.title", { name: projectName })}
-            </DialogTitle>
-            <DialogDescription>
-              {tc("projectHasApps.description", { count: apps.length })}
-            </DialogDescription>
-          </DialogHeader>
-          <ul className="space-y-1 text-sm">
-            {apps.map((app) => (
-              <li key={app.id}>
-                <Link
-                  href={`/projects/${encodeURIComponent(projectName)}/apps/${app.id}`}
-                  className="font-medium text-primary hover:underline"
-                  aria-label={tc("projectHasApps.open", { name: app.name })}
-                >
-                  {app.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-              {tc("close")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

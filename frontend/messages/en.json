@@ -1311,7 +1311,8 @@
       "deleted": "Deleted"
     },
     "appFilter": "Application",
-    "allApps": "All applications"
+    "allApps": "All applications",
+    "settings": "Settings"
   },
   "catalog": {
     "iconAlt": "{name} icon",
@@ -2733,6 +2734,28 @@
       "fix_restarts": "Check the logs",
       "add_readme": "Add a README",
       "expand_readme": "Expand the README"
+    }
+  },
+  "projectSettings": {
+    "title": "Project settings",
+    "adminsOnly": "Only project admins can change these settings.",
+    "access": {
+      "title": "Access and protection",
+      "description": "Who can join the project's apps, and whether the project can be deleted.",
+      "protection": "Deletion protection",
+      "protectionHint": "The project and its apps cannot be deleted, from the CMP or from the cluster, until this is turned off.",
+      "signup": "Customer sign-up",
+      "signupHint": "People can create their own account in the project's realm and land in its default group."
+    },
+    "security": {
+      "title": "Security",
+      "description": "The CI policy applied to every app, and where new security issues are sent."
+    },
+    "danger": {
+      "title": "Danger zone",
+      "description": "Actions that cannot be undone.",
+      "delete": "Delete the project",
+      "deleteHint": "Removes the project with its Vault secrets, Grafana org, Keycloak realm and Argo CD project."
     }
   }
 }

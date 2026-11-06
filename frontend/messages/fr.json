@@ -1311,7 +1311,8 @@
       "deleted": "Supprimée"
     },
     "appFilter": "Application",
-    "allApps": "Toutes les applications"
+    "allApps": "Toutes les applications",
+    "settings": "Paramètres"
   },
   "catalog": {
     "iconAlt": "Icône de {name}",
@@ -2733,6 +2734,28 @@
       "fix_restarts": "Consulter les logs",
       "add_readme": "Ajouter un README",
       "expand_readme": "Étoffer le README"
+    }
+  },
+  "projectSettings": {
+    "title": "Paramètres du projet",
+    "adminsOnly": "Seuls les admins du projet peuvent modifier ces paramètres.",
+    "access": {
+      "title": "Accès et protection",
+      "description": "Qui peut rejoindre les apps du projet, et si le projet peut être supprimé.",
+      "protection": "Protection contre la suppression",
+      "protectionHint": "Le projet et ses apps ne peuvent pas être supprimés, ni depuis le CMP ni depuis le cluster, tant qu'elle est active.",
+      "signup": "Inscription des clients",
+      "signupHint": "Les visiteurs peuvent créer leur compte dans le realm du projet et rejoignent son groupe par défaut."
+    },
+    "security": {
+      "title": "Sécurité",
+      "description": "La politique CI appliquée à chaque app, et où partent les nouveaux problèmes de sécurité."
+    },
+    "danger": {
+      "title": "Zone de danger",
+      "description": "Des actions sans retour possible.",
+      "delete": "Supprimer le projet",
+      "deleteHint": "Supprime le projet avec ses secrets Vault, son org Grafana, son realm Keycloak et son projet Argo CD."
     }
   }
 }
