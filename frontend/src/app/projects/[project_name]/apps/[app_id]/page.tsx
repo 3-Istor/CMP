@@ -60,7 +60,12 @@ export default function AppOverviewPage() {
 
       <ComponentsCard appId={appId} links={links.data ?? []} />
 
-      <LogsCard appId={appId} base={base} allowed={canViewLogs} />
+      <LogsCard
+        project={projectName}
+        namespace={current.k8s_namespace ?? `${projectName}-${current.name}`}
+        base={base}
+        allowed={canViewLogs}
+      />
 
       <DeploymentsCard appId={appId} base={base} canOpen={canViewLogs} />
 

@@ -109,6 +109,8 @@ export interface ProjectMember {
   email: string;
   first_name: string;
   last_name: string;
+  /** Profile picture URL, set when the person uploaded one in the CMP. */
+  picture?: string | null;
   role: ProjectRole;
 }
 
@@ -1257,14 +1259,6 @@ export interface AppMetrics {
 }
 
 export type AppLogLevel = "error" | "warn" | "info" | "debug";
-
-export interface AppLogLine {
-  time: string;
-  component: string | null;
-  pod: string;
-  level: AppLogLevel | null;
-  line: string;
-}
 
 export interface AppEvent {
   time: string;

@@ -3,6 +3,7 @@
 import { AssistantCard } from "@/components/agents/AssistantCard";
 import { AppsTable } from "@/components/dashboard/AppsTable";
 import { HomeStats } from "@/components/dashboard/HomeStats";
+import { InfraPanel } from "@/components/dashboard/InfraPanel";
 import { FavoritesSection } from "@/components/favorites/FavoritesSection";
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
@@ -103,6 +104,7 @@ export default function Home() {
           </section>
           <aside className="space-y-6">
             <AssistantCard />
+            <InfraPanel />
           </aside>
         </div>
 

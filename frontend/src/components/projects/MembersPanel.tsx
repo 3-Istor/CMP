@@ -1,5 +1,7 @@
 "use client";
 
+import { Avatar } from "@/components/ui/avatar";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -364,13 +366,16 @@ function MemberRow({
   return (
     <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          <span className="text-sm font-semibold text-primary">
-            {member.first_name?.[0]?.toUpperCase() ||
-              member.username[0]?.toUpperCase() ||
-              "?"}
-          </span>
-        </div>
+        <Avatar
+          className="h-9 w-9"
+          src={member.picture}
+          alt=""
+          fallback={
+            member.first_name && member.last_name
+              ? `${member.first_name} ${member.last_name}`
+              : member.username
+          }
+        />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium truncate">

@@ -303,20 +303,6 @@ export const getAppMetrics = (deploymentId: number, window = "24h") =>
     `/deployments/${deploymentId}/metrics?window=${window}`,
   );
 
-export const getAppLogs = (
-  deploymentId: number,
-  opts: {
-    limit?: number;
-    since?: string;
-    level?: string;
-    component?: string;
-    q?: string;
-  } = {},
-) =>
-  request<import("@/types").AppLogLine[]>(
-    `/deployments/${deploymentId}/logs${finopsQuery(opts)}`,
-  );
-
 export const getAppEvents = (deploymentId: number, limit = 10) =>
   request<import("@/types").AppEvent[]>(
     `/deployments/${deploymentId}/events?limit=${limit}`,
