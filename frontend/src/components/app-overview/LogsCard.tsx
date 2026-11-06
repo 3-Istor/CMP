@@ -1,56 +1,33 @@
 "use client";
 
+import { LogsView } from "@/components/activity/LogsView";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OpenDashboardButton } from "@/components/ui/open-dashboard-button";
-import { getAppLogs } from "@/lib/api";
-import { useCardData } from "@/lib/useCardData";
 import { useTranslations } from "next-intl";
-import { LogList } from "./LogList";
-import { OverviewCard } from "./OverviewCard";
 
+/** The overview's live tail: the logs tab's viewer, without its filters. */
 export function LogsCard({
-  appId,
+  project,
+  namespace,
   base,
   allowed,
 }: {
-  appId: number;
+  project: string;
+  namespace: string;
   base: string;
   allowed: boolean;
 }) {
   const t = useTranslations("appPage.logs");
-  const logs = useCardData(
-    `logs-${appId}`,
-    () => getAppLogs(appId, { limit: 20, since: "1h" }),
-    { intervalMs: 30_000, enabled: allowed },
-  );
-  const lines = logs.data ? [...logs.data].reverse() : [];
+  if (!allowed) return null;
   return (
-    <OverviewCard
-      title={t("recent")}
-      action={
-        allowed ? (
-          <OpenDashboardButton href={`${base}/logs`} label={t("open")} />
-        ) : undefined
-      }
-      state={{
-        loading: logs.loading,
-        error: logs.error,
-        forbidden: !allowed || logs.forbidden,
-        stale: logs.stale,
-        updatedAt: logs.updatedAt,
-        hasData: logs.data !== null,
-        empty: logs.data !== null && logs.data.length === 0,
-        retry: logs.retry,
-      }}
-      emptyText={t("emptyRecent")}
-      skeletonClassName="h-64 w-full"
-    >
-      <div
-        tabIndex={0}
-        aria-label={t("region")}
-        className="max-h-64 min-h-64 space-y-0.5 overflow-y-auto"
-      >
-        <LogList lines={lines} />
-      </div>
-    </OverviewCard>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardTitle className="text-sm">{t("recent")}</CardTitle>
+        <OpenDashboardButton href={`${base}/logs`} label={t("open")} />
+      </CardHeader>
+      <CardContent>
+        <LogsView project={project} namespace={namespace} compact />
+      </CardContent>
+    </Card>
   );
 }

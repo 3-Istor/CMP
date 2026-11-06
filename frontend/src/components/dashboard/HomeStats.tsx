@@ -1,12 +1,8 @@
 "use client";
 
 import { formatEUR, intlLocale } from "@/components/finops/format";
-import {
-  useFinopsOverview,
-  useGlobalHealth,
-  useSecurityOverview,
-} from "@/lib/hooks";
-import type { Deployment } from "@/types";
+import { useFinopsOverview, useSecurityOverview } from "@/lib/hooks";
+import type { Deployment, GlobalHealthResponse } from "@/types";
 import { Boxes, Cloud, Shield, Wallet } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { StatTile } from "./StatTile";
@@ -14,15 +10,16 @@ import { StatTile } from "./StatTile";
 export function HomeStats({
   apps,
   loading,
+  health,
 }: {
   apps: Deployment[];
   loading: boolean;
+  health: GlobalHealthResponse | null;
 }) {
   const t = useTranslations("overview.stats");
   const locale = intlLocale(useLocale());
   const security = useSecurityOverview();
   const { data: finops, loading: finopsLoading } = useFinopsOverview();
-  const { health } = useGlobalHealth(60_000);
 
   const running = apps.filter((a) => a.status === "running").length;
   const failed = apps.filter((a) => a.status === "failed").length;

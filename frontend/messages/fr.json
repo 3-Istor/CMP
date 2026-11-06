@@ -1123,7 +1123,7 @@
       "follow": "Suivre",
       "showStream": "Afficher ce flux",
       "hideStream": "Masquer ce flux",
-      "showContext": "Voir le contexte",
+      "showContext": "Voir la minute autour de cette ligne",
       "contextBanner": "Contexte : une minute avant et après la ligne choisie, même conteneur.",
       "backToResults": "Retour aux résultats",
       "noLines": "Aucune ligne pour ces filtres."
@@ -2429,14 +2429,7 @@
     "logs": {
       "recent": "Logs récents",
       "open": "Ouvrir les logs",
-      "emptyRecent": "Aucune ligne de log sur la dernière heure",
-      "region": "Logs de l'application",
-      "levels": {
-        "error": "ERREUR",
-        "warn": "AVERT.",
-        "info": "INFO",
-        "debug": "DEBUG"
-      }
+      "region": "Logs de l'application"
     },
     "deployments": {
       "recent": "Derniers déploiements",
@@ -2801,6 +2794,16 @@
       "platform": "Plateforme",
       "nodesValue": "{up} / {total} nœuds",
       "cloudsHint": "{count, plural, =0 {clouds publics éteints} one {# cloud public allumé} other {# clouds publics allumés}}"
+    },
+    "infra": {
+      "title": "Infrastructure",
+      "unavailable": "État de l'infrastructure indisponible.",
+      "states": {
+        "up": "en ligne",
+        "down": "éteint",
+        "starting": "démarrage",
+        "unknown": "inconnu"
+      }
     }
   },
   "securityFindings": {

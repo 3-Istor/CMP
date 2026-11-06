@@ -55,7 +55,7 @@ export function VolumeCard({
 }) {
   const t = useTranslations("activity");
   const locale = useLocale();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [hours, setHours] = useState(24);
   const [volume, setVolume] = useState<LogVolume | null>(null);
 

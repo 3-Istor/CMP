@@ -579,6 +579,10 @@ def list_project_members(project_name: str) -> list[dict]:
                 "email": u.get("email", ""),
                 "first_name": u.get("firstName", ""),
                 "last_name": u.get("lastName", ""),
+                # Set by the CMP's profile picture upload (account router).
+                "picture": (
+                    (u.get("attributes") or {}).get("picture") or [None]
+                )[0],
                 "role": role.value,
             }
             for u in response.json()

@@ -8,8 +8,10 @@ import { cn } from "@/lib/utils";
 import type { LogFilters, LogLine, LogTargets } from "@/types";
 import {
   AlertTriangle,
+  ArrowLeft,
   Download,
   ExternalLink,
+  ListTree,
   Maximize2,
   Minimize2,
   Pause,
@@ -30,6 +32,7 @@ import { severityOf, TOKEN_CLASS, tokenize } from "./logHighlight";
 const LIVE_MS = 3000;
 const CONTEXT_MS = 60_000;
 const MAX_LINES = 3000;
+const COMPACT_LINES = 50;
 
 const PERIODS: { value: string; label: string; ms: number }[] = [
   { value: "15m", label: "15 minutes", ms: 15 * 60_000 },
@@ -140,11 +143,14 @@ export function LogsView({
   project,
   namespace,
   fullPage = false,
+  compact = false,
 }: {
   project: string;
   /** Pins the view to one app's namespace (the app page). */
   namespace?: string;
   fullPage?: boolean;
+  /** The last lines only, live, without filters: the app overview card. */
+  compact?: boolean;
 }) {
   const [targets, setTargets] = useState<LogTargets | null>(null);
   const [filters, setFilters] = useState<LogFilters>({
@@ -153,7 +159,7 @@ export function LogsView({
   const [searchInput, setSearchInput] = useState("");
   const [period, setPeriod] = useState("1h");
   const [lines, setLines] = useState<LogLine[] | null>(null);
-  const [live, setLive] = useState(false);
+  const [live, setLive] = useState(compact);
   const [wrap, setWrap] = useState(true);
   const [showTime, setShowTime] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
@@ -171,8 +177,9 @@ export function LogsView({
   const locale = useLocale();
 
   useEffect(() => {
+    if (compact) return;
     getLogTargets(project).then(setTargets, (e) => setError(e));
-  }, [project]);
+  }, [project, compact]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -182,7 +189,7 @@ export function LogsView({
       const result = await getProjectLogs(project, {
         ...filters,
         since: new Date(Date.now() - ms).toISOString(),
-        limit: 1000,
+        limit: compact ? COMPACT_LINES : 1000,
       });
       // The API answers newest first; a terminal reads oldest first.
       setLines([...result].reverse());
@@ -194,7 +201,7 @@ export function LogsView({
     } finally {
       setLoading(false);
     }
-  }, [project, filters, period]);
+  }, [project, filters, period, compact]);
 
   useEffect(() => {
     load();
@@ -203,6 +210,7 @@ export function LogsView({
   useEffect(() => {
     if (!live) return;
     const timer = setInterval(async () => {
+      if (document.hidden) return;
       try {
         const since =
           newest.current ?? new Date(Date.now() - LIVE_MS).toISOString();
@@ -215,16 +223,20 @@ export function LogsView({
         setLines((current) => {
           const seen = new Set((current ?? []).map(key));
           const added = [...fresh].reverse().filter((l) => !seen.has(key(l)));
-          return [...(current ?? []), ...added].slice(-MAX_LINES);
+          return [...(current ?? []), ...added].slice(
+            -(compact ? COMPACT_LINES : MAX_LINES),
+          );
         });
         newest.current = fresh[0].time;
+        setError(null);
       } catch (e) {
         setError(e);
-        setLive(false);
+        // The compact card has no Follow button: it keeps retrying instead.
+        if (!compact) setLive(false);
       }
     }, LIVE_MS);
     return () => clearInterval(timer);
-  }, [live, project, filters]);
+  }, [live, project, filters, compact]);
 
   // Follow the end like a terminal, unless the reader scrolled up.
   useEffect(() => {
@@ -233,12 +245,17 @@ export function LogsView({
   }, [lines, context]);
 
   useEffect(() => {
-    if (!fullscreen) return;
-    const onKey = (e: KeyboardEvent) =>
-      e.key === "Escape" && setFullscreen(false);
+    if (!fullscreen && !context) return;
+    // Escape leaves the context view first, then fullscreen.
+    const onKey = (e: KeyboardEvent) => {
+      // A select or menu closing on Escape handles the key itself.
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (context) setContext(null);
+      else setFullscreen(false);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen]);
+  }, [fullscreen, context]);
 
   const showContext = async (anchor: LogLine) => {
     const at = new Date(anchor.time).getTime();
@@ -306,6 +323,7 @@ export function LogsView({
         fullPage && !fullscreen && "h-[calc(100vh-8rem)]",
       )}
     >
+      {!compact && (
       <FilterBar
         selects={
           <>
@@ -479,11 +497,9 @@ export function LogsView({
           </>
         }
       />
+      )}
 
-      {!fullscreen && <VolumeCard project={project} namespace={namespace} />}
-      {!fullscreen && <NetworkPanel project={project} />}
-
-      {streams.length > 1 && (
+      {!compact && streams.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           {streams.map(([s, count]) => (
             <button
@@ -513,10 +529,14 @@ export function LogsView({
         ))}
 
       {context && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
           <span>{t("logs.contextBanner")}</span>
-          <Button variant="ghost" size="sm" onClick={() => setContext(null)}>
+          <Button variant="outline" size="sm" onClick={() => setContext(null)}>
+            <ArrowLeft className="mr-1.5 h-4 w-4" />
             {t("logs.backToResults")}
+            <kbd className="ml-2 rounded border px-1 font-mono text-[10px] text-muted-foreground">
+              Esc
+            </kbd>
           </Button>
         </div>
       )}
@@ -530,7 +550,7 @@ export function LogsView({
         }}
         className={cn(
           "overflow-auto rounded-xl border bg-zinc-50 py-1 font-mono text-xs leading-5 dark:bg-zinc-950",
-          expanded ? "min-h-0 flex-1" : "h-[36rem]",
+          expanded ? "min-h-0 flex-1" : compact ? "h-64" : "h-[36rem]",
         )}
       >
         {source === null ? (
@@ -547,10 +567,8 @@ export function LogsView({
             return (
               <div
                 key={key(l)}
-                onClick={() => !context && showContext(l)}
-                title={context ? undefined : t("logs.showContext")}
                 className={cn(
-                  "flex cursor-pointer gap-3 border-l-2 border-transparent px-3 hover:bg-muted/60",
+                  "group flex gap-3 border-l-2 border-transparent px-3 hover:bg-muted/60",
                   first && i > 0 && "mt-1 border-t border-t-border/70 pt-1",
                   severity === "error" && "border-l-red-500 bg-red-500/5",
                   severity === "warn" && "border-l-amber-500",
@@ -582,11 +600,32 @@ export function LogsView({
                 >
                   <Colourised text={l.line} term={filters.search} />
                 </span>
+                {!context && !compact && (
+                  // An explicit button: a click anywhere on the line used to
+                  // switch views, which selecting text triggered by mistake.
+                  <button
+                    type="button"
+                    onClick={() => showContext(l)}
+                    title={t("logs.showContext")}
+                    aria-label={t("logs.showContext")}
+                    tabIndex={-1}
+                    className="shrink-0 self-start rounded px-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100 [@media(hover:none)]:opacity-60"
+                  >
+                    <ListTree className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             );
           })
         )}
       </div>
+
+      {!compact && !fullscreen && (
+        <>
+          <VolumeCard project={project} namespace={namespace} />
+          <NetworkPanel project={project} />
+        </>
+      )}
     </div>
   );
 }
