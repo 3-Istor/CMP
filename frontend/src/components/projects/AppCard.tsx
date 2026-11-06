@@ -1,5 +1,7 @@
 "use client";
 
+import { appUrlOf } from "@/lib/utils";
+
 import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { intlLocale } from "@/components/finops/format";
@@ -131,9 +133,13 @@ export function AppCard({ app, projectName }: Props) {
             </div>
           )}
 
-          {/* ── Static step message for non-active states ── */}
-          {!isActive && app.step_message && (
-            <p className="text-xs text-muted-foreground line-clamp-1">
+          {app.status === "running" && appUrlOf(app.terraform_outputs) && (
+            <p className="truncate text-xs text-primary">
+              {appUrlOf(app.terraform_outputs)!.replace(/^https:\/\//, "")}
+            </p>
+          )}
+          {app.status === "failed" && app.step_message && (
+            <p className="text-xs text-destructive line-clamp-2">
               {app.step_message}
             </p>
           )}
