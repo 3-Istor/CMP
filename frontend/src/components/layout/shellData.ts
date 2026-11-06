@@ -45,16 +45,17 @@ export const HOME_PAGE: PageEntry = {
 export const WORK_PAGES: PageEntry[] = [
   {
     key: "projects",
-    href: "/#projects",
+    href: "/projects",
     icon: FolderKanban,
     isActive: (pathname) =>
       pathname.startsWith("/projects") && !pathname.includes("/apps/"),
   },
   {
     key: "apps",
-    href: "/#applications",
+    href: "/apps",
     icon: Boxes,
-    isActive: (pathname) => pathname.includes("/apps/"),
+    isActive: (pathname) =>
+      pathname === "/apps" || pathname.includes("/apps/"),
   },
 ];
 

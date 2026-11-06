@@ -188,9 +188,6 @@
     }
   },
   "apps": {
-    "home": {
-      "allDeployments": "Tous mes déploiements"
-    },
     "nav": {
       "label": "Sections de l'application",
       "breadcrumb": "Fil d'Ariane",
@@ -1187,10 +1184,6 @@
     }
   },
   "account": {
-    "language": {
-      "title": "Langue",
-      "description": "Langue de l'interface. Le choix est enregistré sur votre compte et suivi sur tous vos navigateurs."
-    },
     "page": {
       "back": "Retour au tableau de bord",
       "title": "Paramètres du compte",
@@ -1248,13 +1241,6 @@
       "idRequired": "Saisissez un identifiant d'installation",
       "idSaved": "Identifiant d'installation enregistré",
       "idSaveFailed": "Échec de l'enregistrement de l'identifiant. Vérifiez-le et réessayez."
-    },
-    "theme": {
-      "title": "Apparence",
-      "description": "Par défaut, le thème suit celui du navigateur. Choix gardé sur ce navigateur.",
-      "system": "Navigateur",
-      "light": "Clair",
-      "dark": "Sombre"
     }
   },
   "common": {
@@ -1343,86 +1329,6 @@
       "vmWeb": "2× AWS t3.micro, couche web sans état (ASG + ALB)",
       "cancel": "Annuler",
       "deploying": "Déploiement…"
-    }
-  },
-  "dashboard": {
-    "deleteDenied": "Seuls les admins de projet peuvent supprimer une application",
-    "deletionStarted": "Suppression lancée",
-    "deleteFailed": "Échec de la suppression : {error}",
-    "emptyTitle": "Aucun déploiement pour l'instant",
-    "emptyText": "Déployez une application depuis le catalogue pour commencer.",
-    "health": {
-      "checking": "Vérification…",
-      "healthy": "Sain",
-      "degraded": "Dégradé",
-      "down": "Hors service",
-      "unknown": "Inconnu",
-      "asleep": "Endormie",
-      "not_connected": "Non connecté"
-    },
-    "progress": {
-      "queued": "En file d'attente",
-      "deploying": "Déploiement",
-      "deleting": "Suppression",
-      "deleted": "Supprimé",
-      "failed": "Échec"
-    },
-    "states": {
-      "up": "En ligne",
-      "down": "Hors ligne",
-      "starting": "Démarrage",
-      "unknown": "Inconnu"
-    },
-    "instanceHealth": {
-      "healthy": "sain",
-      "unhealthy": "défaillant"
-    },
-    "infra": {
-      "title": "Santé de l'infrastructure",
-      "errorTitle": "Santé de l'infrastructure : erreur",
-      "hypervisors": "Hyperviseurs OpenStack",
-      "noHypervisors": "Aucun hyperviseur trouvé"
-    },
-    "card": {
-      "quickActions": "Actions rapides",
-      "openApp": "Ouvrir l'application",
-      "openRepo": "Ouvrir le dépôt GitHub",
-      "viewArgocd": "Voir dans ArgoCD",
-      "manageSecrets": "Gérer les secrets",
-      "namespace": "Namespace :",
-      "outputs": "Sorties :",
-      "healthDetails": "Détails de santé",
-      "delete": "Supprimer",
-      "confirmTitle": "Supprimer le déploiement ?",
-      "confirmSureTitle": "Êtes-vous absolument certain ?",
-      "confirmText": "Cette action détruit toutes les ressources cloud de «{name}» avec Terraform. Elle est irréversible.",
-      "confirmSureText": "Toutes les ressources ({count}) de «{name}» seront détruites définitivement. Cliquez sur confirmer pour continuer.",
-      "confirmSureUnknownText": "Toutes les ressources de «{name}» seront détruites définitivement. Cliquez sur confirmer pour continuer.",
-      "cancel": "Annuler",
-      "yesDelete": "Oui, supprimer",
-      "confirmDestroy": "Confirmer et tout détruire"
-    },
-    "healthPanel": {
-      "title": "Détails de santé : {name}",
-      "description": "État de santé en temps réel, issu des API cloud",
-      "fetchFailed": "Échec de la récupération des données de santé",
-      "overall": "État général",
-      "overallHealthy": "Tous les composants sont opérationnels",
-      "overallDegraded": "Certains composants sont défaillants",
-      "overallDown": "Aucun composant sain",
-      "overallUnknown": "Impossible à déterminer",
-      "awsLayer": "Couche frontale AWS",
-      "asgName": "Nom de l'ASG",
-      "desiredCapacity": "Capacité souhaitée",
-      "health": "Santé",
-      "counts": "{healthy} / {total} sains",
-      "instances": "Instances ({count}) :",
-      "noInstances": "Aucune instance trouvée",
-      "openstackLayer": "Couche OpenStack",
-      "servers": "Serveurs ({count}) :",
-      "noServers": "Aucun serveur trouvé",
-      "noComponents": "Aucun composant d'infrastructure trouvé",
-      "noComponentsHelp": "Ce déploiement n'a peut-être pas encore été créé, ou utilise une autre architecture."
     }
   },
   "agents": {
@@ -2756,6 +2662,38 @@
       "description": "Des actions sans retour possible.",
       "delete": "Supprimer le projet",
       "deleteHint": "Supprime le projet avec ses secrets Vault, son org Grafana, son realm Keycloak et son projet Argo CD."
+    }
+  },
+  "overview": {
+    "recentApps": "Applications modifiées récemment",
+    "allApps": "Les {count} applications",
+    "allProjects": "Tous les projets",
+    "searchProjects": "Chercher un projet",
+    "searchApps": "Chercher une application",
+    "appsTitle": "Applications",
+    "appsSubtitle": "Toutes les applications des projets dont tu fais partie.",
+    "allProjectsOption": "Tous les projets",
+    "apps": {
+      "name": "Application",
+      "project": "Projet",
+      "state": "État",
+      "url": "Adresse",
+      "empty": "Aucune application pour l'instant.",
+      "openApp": "Ouvrir {name}, nouvel onglet"
+    },
+    "stats": {
+      "apps": "Applications",
+      "appsValue": "{running} / {total}",
+      "appsOk": "en ligne, aucun échec",
+      "appsFailed": "{count, plural, one {# déploiement en échec} other {# déploiements en échec}}",
+      "security": "Actions de sécurité",
+      "securityHint": "à traiter sur tes projets",
+      "securityCore": "{count, plural, one {# obligatoire} other {# obligatoires}}",
+      "costs": "Coût du mois",
+      "costsForecast": "prévision {amount} en fin de mois",
+      "platform": "Plateforme",
+      "nodesValue": "{up} / {total} nœuds",
+      "cloudsHint": "{count, plural, =0 {clouds publics éteints} one {# cloud public allumé} other {# clouds publics allumés}}"
     }
   }
 }

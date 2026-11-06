@@ -188,9 +188,6 @@
     }
   },
   "apps": {
-    "home": {
-      "allDeployments": "All my deployments"
-    },
     "nav": {
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
@@ -1187,10 +1184,6 @@
     }
   },
   "account": {
-    "language": {
-      "title": "Language",
-      "description": "Interface language. Your choice is saved to your account and follows you across browsers."
-    },
     "page": {
       "back": "Back to dashboard",
       "title": "Account settings",
@@ -1248,13 +1241,6 @@
       "idRequired": "Enter an installation ID",
       "idSaved": "Installation ID saved",
       "idSaveFailed": "Failed to save the ID. Check it and try again."
-    },
-    "theme": {
-      "title": "Appearance",
-      "description": "By default, the theme follows the browser. The choice is kept on this browser.",
-      "system": "Browser",
-      "light": "Light",
-      "dark": "Dark"
     }
   },
   "common": {
@@ -1343,86 +1329,6 @@
       "vmWeb": "2× AWS t3.micro, stateless web layer (ASG + ALB)",
       "cancel": "Cancel",
       "deploying": "Deploying…"
-    }
-  },
-  "dashboard": {
-    "deleteDenied": "Only project admins can delete an application",
-    "deletionStarted": "Deletion started",
-    "deleteFailed": "Deletion failed: {error}",
-    "emptyTitle": "No deployments yet",
-    "emptyText": "Deploy an app from the catalogue to get started.",
-    "health": {
-      "checking": "Checking…",
-      "healthy": "Healthy",
-      "degraded": "Degraded",
-      "down": "Down",
-      "unknown": "Unknown",
-      "asleep": "Asleep",
-      "not_connected": "Not connected"
-    },
-    "progress": {
-      "queued": "Queued",
-      "deploying": "Deploying",
-      "deleting": "Deleting",
-      "deleted": "Deleted",
-      "failed": "Failed"
-    },
-    "states": {
-      "up": "Up",
-      "down": "Down",
-      "starting": "Starting",
-      "unknown": "Unknown"
-    },
-    "instanceHealth": {
-      "healthy": "healthy",
-      "unhealthy": "unhealthy"
-    },
-    "infra": {
-      "title": "Infrastructure health",
-      "errorTitle": "Infrastructure health: error",
-      "hypervisors": "OpenStack hypervisors",
-      "noHypervisors": "No hypervisors found"
-    },
-    "card": {
-      "quickActions": "Quick actions",
-      "openApp": "Open application",
-      "openRepo": "Open GitHub repository",
-      "viewArgocd": "View in ArgoCD",
-      "manageSecrets": "Manage secrets",
-      "namespace": "Namespace:",
-      "outputs": "Outputs:",
-      "healthDetails": "Health details",
-      "delete": "Delete",
-      "confirmTitle": "Delete deployment?",
-      "confirmSureTitle": "Are you absolutely sure?",
-      "confirmText": "This will destroy all cloud resources of “{name}” with Terraform. This cannot be undone.",
-      "confirmSureText": "All {count} resources of “{name}” will be permanently destroyed. Click confirm to continue.",
-      "confirmSureUnknownText": "All resources of “{name}” will be permanently destroyed. Click confirm to continue.",
-      "cancel": "Cancel",
-      "yesDelete": "Yes, delete",
-      "confirmDestroy": "Confirm and destroy everything"
-    },
-    "healthPanel": {
-      "title": "Health details: {name}",
-      "description": "Real-time health status from cloud APIs",
-      "fetchFailed": "Failed to fetch health data",
-      "overall": "Overall status",
-      "overallHealthy": "All components are operational",
-      "overallDegraded": "Some components are unhealthy",
-      "overallDown": "No healthy component",
-      "overallUnknown": "Unable to determine",
-      "awsLayer": "AWS frontend layer",
-      "asgName": "ASG name",
-      "desiredCapacity": "Desired capacity",
-      "health": "Health",
-      "counts": "{healthy} / {total} healthy",
-      "instances": "Instances ({count}):",
-      "noInstances": "No instances found",
-      "openstackLayer": "OpenStack layer",
-      "servers": "Servers ({count}):",
-      "noServers": "No servers found",
-      "noComponents": "No infrastructure components found",
-      "noComponentsHelp": "This deployment may not have been created yet or uses a different architecture"
     }
   },
   "agents": {
@@ -2756,6 +2662,38 @@
       "description": "Actions that cannot be undone.",
       "delete": "Delete the project",
       "deleteHint": "Removes the project with its Vault secrets, Grafana org, Keycloak realm and Argo CD project."
+    }
+  },
+  "overview": {
+    "recentApps": "Recently updated applications",
+    "allApps": "All {count} applications",
+    "allProjects": "All projects",
+    "searchProjects": "Search a project",
+    "searchApps": "Search an application",
+    "appsTitle": "Applications",
+    "appsSubtitle": "Every application of the projects you belong to.",
+    "allProjectsOption": "All projects",
+    "apps": {
+      "name": "Application",
+      "project": "Project",
+      "state": "State",
+      "url": "Address",
+      "empty": "No application yet.",
+      "openApp": "Open {name}, new tab"
+    },
+    "stats": {
+      "apps": "Applications",
+      "appsValue": "{running} / {total}",
+      "appsOk": "running, none failed",
+      "appsFailed": "{count, plural, one {# failed deployment} other {# failed deployments}}",
+      "security": "Security actions",
+      "securityHint": "to do across your projects",
+      "securityCore": "{count, plural, one {# mandatory} other {# mandatory}}",
+      "costs": "Cost this month",
+      "costsForecast": "forecast {amount} at month end",
+      "platform": "Platform",
+      "nodesValue": "{up} / {total} nodes",
+      "cloudsHint": "{count, plural, =0 {public clouds off} one {# public cloud on} other {# public clouds on}}"
     }
   }
 }
