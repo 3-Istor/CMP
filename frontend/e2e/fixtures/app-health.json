@@ -1,0 +1,28 @@
+{
+  "deployment_name": "demo-app",
+  "status": "healthy",
+  "aws_frontend": null,
+  "openstack_backend": null,
+  "components": [
+    {
+      "name": "frontend",
+      "state": "healthy",
+      "ready": 2,
+      "desired": 2,
+      "restarts_15m": 0,
+      "argocd_sync": "Synced",
+      "argocd_health": "Healthy",
+      "reason": null
+    },
+    {
+      "name": "backend",
+      "state": "degraded",
+      "ready": 1,
+      "desired": 2,
+      "restarts_15m": 3,
+      "argocd_sync": "Synced",
+      "argocd_health": "Progressing",
+      "reason": null
+    }
+  ]
+}

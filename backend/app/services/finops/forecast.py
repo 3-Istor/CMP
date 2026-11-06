@@ -23,6 +23,11 @@ CONFIDENCE = 0.8
 # Below MIN_HISTORY_DAYS a handful of near-identical days would give a
 # misleadingly tight band: daily spread is floored at this share of the mean.
 LOW_HISTORY_REL_SD = 0.25
+# A new app or a resize moves the daily level for good: when the last week
+# differs from the whole history by more than this share, only that week is
+# kept, so the forecast follows the new level instead of a 28-day average.
+LEVEL_SHIFT_DAYS = 7
+LEVEL_SHIFT_REL = 0.3
 
 # One-sided 90 % quantile of Student's t (two-sided 80 % interval).
 _T90 = {
@@ -106,6 +111,14 @@ def forecast_month(
         if last_day
         else {}
     )
+    if len(history) > LEVEL_SHIFT_DAYS:
+        recent = dict(sorted(history.items())[-LEVEL_SHIFT_DAYS:])
+        history_mean = sum(history.values()) / len(history)
+        recent_mean = sum(recent.values()) / len(recent)
+        if history_mean > 0 and (
+            abs(recent_mean - history_mean) / history_mean > LEVEL_SHIFT_REL
+        ):
+            history = recent
     n_hist = len(history)
     cumulative: list[tuple[date, float]] = []
     running = 0.0

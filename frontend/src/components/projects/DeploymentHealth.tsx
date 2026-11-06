@@ -35,11 +35,11 @@ const STATE_STYLE: Record<
   AppHealthStatus,
   { Icon: typeof CheckCircle2; color: string }
 > = {
-  healthy: { Icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
-  degraded: { Icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400" },
-  down: { Icon: XCircle, color: "text-red-600 dark:text-red-400" },
-  asleep: { Icon: Moon, color: "text-blue-600 dark:text-blue-400" },
-  not_connected: { Icon: CloudOff, color: "text-slate-600 dark:text-slate-400" },
+  healthy: { Icon: CheckCircle2, color: "text-green-700 dark:text-green-400" },
+  degraded: { Icon: AlertTriangle, color: "text-orange-700 dark:text-orange-400" },
+  down: { Icon: XCircle, color: "text-red-700 dark:text-red-400" },
+  asleep: { Icon: Moon, color: "text-blue-700 dark:text-blue-300" },
+  not_connected: { Icon: CloudOff, color: "text-slate-700 dark:text-slate-300" },
   unknown: { Icon: HelpCircle, color: "text-muted-foreground dark:text-gray-400" },
 };
 
@@ -105,11 +105,35 @@ function ComponentRow({ component }: { component: ComponentHealth }) {
   );
 }
 
-export function badgeVariant(state: string) {
-  if (state === "healthy") return "default" as const;
-  if (state === "degraded" || state === "asleep" || state === "not_connected")
-    return "secondary" as const;
-  return "destructive" as const;
+// Soft tint plus a darker text of the same hue: a coloured label on a filled
+// primary badge (green on blue) failed contrast and read badly.
+const STATE_TINT: Record<AppHealthStatus, string> = {
+  healthy: "border-green-600/30 bg-green-500/10",
+  degraded: "border-orange-600/30 bg-orange-500/10",
+  down: "border-red-600/30 bg-red-500/10",
+  asleep: "border-blue-600/30 bg-blue-500/10",
+  not_connected: "border-border bg-muted",
+  unknown: "border-border bg-muted",
+};
+
+export function HealthBadge({
+  state,
+  className,
+  role,
+}: {
+  state: string;
+  className?: string;
+  role?: string;
+}) {
+  const tint = STATE_TINT[state as AppHealthStatus] ?? STATE_TINT.unknown;
+  return (
+    <span
+      role={role}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${tint} ${className ?? ""}`}
+    >
+      <StateLabel state={state} />
+    </span>
+  );
 }
 
 /**
@@ -134,9 +158,7 @@ export function DeploymentHealth({ deploymentId }: Props) {
           )}
           {t("title")}
           {health && (
-            <Badge variant={badgeVariant(health.status)} className="text-xs">
-              <StateLabel state={health.status} />
-            </Badge>
+            <HealthBadge state={health.status} />
           )}
         </CardTitle>
         <div className="flex items-center gap-1">
@@ -197,9 +219,7 @@ export function DeploymentHealth({ deploymentId }: Props) {
                     </p>
                   </div>
                 </div>
-                <Badge variant={badgeVariant(health.status)} className="text-sm">
-                  <StateLabel state={health.status} />
-                </Badge>
+                <HealthBadge state={health.status} className="text-sm" />
               </div>
 
               {components.length > 0 && (

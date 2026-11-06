@@ -1,8 +1,7 @@
 "use client";
 
 import { AppIcon } from "@/components/app-icon/AppIcon";
-import { badgeVariant, StateLabel } from "@/components/projects/DeploymentHealth";
-import { Badge } from "@/components/ui/badge";
+import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppHealth } from "@/lib/hooks";
 import { appUrlOf, cn } from "@/lib/utils";
@@ -34,9 +33,7 @@ function AppState({ app }: { app: Deployment }) {
   if (loading && !health) return <Skeleton className="h-5 w-16 rounded-full" />;
   const state = health?.status ?? "unknown";
   return (
-    <Badge variant={badgeVariant(state)} className="gap-1">
-      <StateLabel state={state} />
-    </Badge>
+    <HealthBadge state={state} />
   );
 }
 
