@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useGlobalHealth } from "@/lib/hooks";
+import type { GlobalHealthResponse } from "@/types";
 import { cn } from "@/lib/utils";
 import { Server } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -43,9 +43,14 @@ function Row({
 }
 
 /** The nodes and public clouds behind the platform: the old home card, compact. */
-export function InfraPanel() {
+export function InfraPanel({
+  health,
+  loading,
+}: {
+  health: GlobalHealthResponse | null;
+  loading: boolean;
+}) {
   const t = useTranslations("overview.infra");
-  const { health, loading } = useGlobalHealth(30_000);
 
   return (
     <Card>

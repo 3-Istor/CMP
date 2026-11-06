@@ -32,6 +32,7 @@ import { severityOf, TOKEN_CLASS, tokenize } from "./logHighlight";
 const LIVE_MS = 3000;
 const CONTEXT_MS = 60_000;
 const MAX_LINES = 3000;
+const COMPACT_LINES = 50;
 
 const PERIODS: { value: string; label: string; ms: number }[] = [
   { value: "15m", label: "15 minutes", ms: 15 * 60_000 },
@@ -176,8 +177,9 @@ export function LogsView({
   const locale = useLocale();
 
   useEffect(() => {
+    if (compact) return;
     getLogTargets(project).then(setTargets, (e) => setError(e));
-  }, [project]);
+  }, [project, compact]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -187,7 +189,7 @@ export function LogsView({
       const result = await getProjectLogs(project, {
         ...filters,
         since: new Date(Date.now() - ms).toISOString(),
-        limit: compact ? 50 : 1000,
+        limit: compact ? COMPACT_LINES : 1000,
       });
       // The API answers newest first; a terminal reads oldest first.
       setLines([...result].reverse());
@@ -208,6 +210,7 @@ export function LogsView({
   useEffect(() => {
     if (!live) return;
     const timer = setInterval(async () => {
+      if (document.hidden) return;
       try {
         const since =
           newest.current ?? new Date(Date.now() - LIVE_MS).toISOString();
@@ -220,16 +223,20 @@ export function LogsView({
         setLines((current) => {
           const seen = new Set((current ?? []).map(key));
           const added = [...fresh].reverse().filter((l) => !seen.has(key(l)));
-          return [...(current ?? []), ...added].slice(-MAX_LINES);
+          return [...(current ?? []), ...added].slice(
+            -(compact ? COMPACT_LINES : MAX_LINES),
+          );
         });
         newest.current = fresh[0].time;
+        setError(null);
       } catch (e) {
         setError(e);
-        setLive(false);
+        // The compact card has no Follow button: it keeps retrying instead.
+        if (!compact) setLive(false);
       }
     }, LIVE_MS);
     return () => clearInterval(timer);
-  }, [live, project, filters]);
+  }, [live, project, filters, compact]);
 
   // Follow the end like a terminal, unless the reader scrolled up.
   useEffect(() => {
@@ -241,7 +248,8 @@ export function LogsView({
     if (!fullscreen && !context) return;
     // Escape leaves the context view first, then fullscreen.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      // A select or menu closing on Escape handles the key itself.
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       if (context) setContext(null);
       else setFullscreen(false);
     };
@@ -600,7 +608,8 @@ export function LogsView({
                     onClick={() => showContext(l)}
                     title={t("logs.showContext")}
                     aria-label={t("logs.showContext")}
-                    className="shrink-0 self-start rounded px-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    tabIndex={-1}
+                    className="shrink-0 self-start rounded px-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100 [@media(hover:none)]:opacity-60"
                   >
                     <ListTree className="h-3.5 w-3.5" />
                   </button>

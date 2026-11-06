@@ -10,7 +10,7 @@ import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectsGrid } from "@/components/projects/ProjectsGrid";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useDeploymentsList } from "@/lib/hooks";
+import { useDeploymentsList, useGlobalHealth } from "@/lib/hooks";
 import { useProjectsLive } from "@/lib/useProjectsLive";
 import { ArrowRight, FolderPlus } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -55,6 +55,7 @@ export default function Home() {
   const { projects, loading: loadingProjects, refresh: refreshProjects } =
     useProjectsLive();
   const { deployments, loading: loadingApps } = useDeploymentsList(5000, 30000);
+  const { health, loading: loadingHealth } = useGlobalHealth(30_000);
   const apps = deployments
     .filter((d) => d.status !== "deleted" && d.project_id !== null)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
@@ -89,7 +90,7 @@ export default function Home() {
         }
       />
       <PageBody className="space-y-8">
-        <HomeStats apps={apps} loading={loadingApps} />
+        <HomeStats apps={apps} loading={loadingApps} health={health} />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <section>
@@ -104,7 +105,7 @@ export default function Home() {
           </section>
           <aside className="space-y-6">
             <AssistantCard />
-            <InfraPanel />
+            <InfraPanel health={health} loading={loadingHealth} />
           </aside>
         </div>
 

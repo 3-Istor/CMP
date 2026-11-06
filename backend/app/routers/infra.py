@@ -6,6 +6,8 @@ Provides real-time health monitoring endpoints for:
 - Application-specific resources (per deployment)
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,7 @@ from app.core.database import get_db
 from app.models.deployment import Deployment, ProviderType
 from app.services import monitoring_service
 from app.services.app_health import get_kubernetes_app_health
+from app.services.authz import is_cnp_admin
 from app.services.clusters.state import cluster_states
 from app.services.keycloak_service import get_current_user
 from app.services.monitoring_service import (
@@ -20,6 +23,8 @@ from app.services.monitoring_service import (
     ClusterStatus,
     GlobalHealthResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/infra",
@@ -29,7 +34,9 @@ router = APIRouter(
 
 
 @router.get("/health", response_model=GlobalHealthResponse)
-async def get_global_infrastructure_health():
+async def get_global_infrastructure_health(
+    token_payload: dict = Depends(get_current_user),
+):
     """
     Get health status of the global infrastructure: OpenStack hypervisors
     and the public clusters (EKS/GKE) state as seen by Argo CD.
@@ -37,14 +44,21 @@ async def get_global_infrastructure_health():
     try:
         health = await monitoring_service.get_global_health()
     except Exception as exc:
+        logger.warning("Infrastructure health failed: %s", exc)
         raise HTTPException(
             status_code=503,
-            detail=f"Failed to retrieve infrastructure health: {str(exc)}",
+            detail="Failed to retrieve infrastructure health.",
         ) from exc
     health.clusters = [
         ClusterStatus(cloud=cloud.value, state=state)
         for cloud, state in (await cluster_states()).items()
     ]
+    # Every signed-in user sees the home page; node addresses are for admins.
+    if not is_cnp_admin(token_payload):
+        health.openstack_hypervisors = [
+            hv.model_copy(update={"ip": None})
+            for hv in health.openstack_hypervisors
+        ]
     return health
 
 
