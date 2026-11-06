@@ -124,6 +124,21 @@ def test_today_partial_data_is_not_used_as_history():
     assert forecast_month(daily, REF)["projected_eur"] == 30.0
 
 
+def test_level_shift_follows_the_last_week():
+    # Arrange
+    ref = date(2026, 11, 20)
+    daily = {date(2026, 10, 23) + timedelta(days=i): 0.02 for i in range(21)}
+    daily.update(
+        {date(2026, 11, 13) + timedelta(days=i): 0.18 for i in range(7)}
+    )
+
+    # Act
+    result = forecast_month(daily, ref)
+
+    # Assert
+    assert result["daily"][0]["eur"] == pytest.approx(0.18)
+
+
 def test_eighty_percent_interval_covers_about_eighty_percent_of_outcomes():
     rng = random.Random(42)
     month_end = date(2026, 11, 30)

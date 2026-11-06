@@ -1,6 +1,6 @@
 "use client";
 
-import { appUrlOf } from "@/lib/utils";
+import { appUrlOf, cn } from "@/lib/utils";
 
 import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 import { AppIcon } from "@/components/app-icon/AppIcon";
@@ -55,7 +55,7 @@ const STATUS_VARIANT: Record<
   Deployment["status"],
   "default" | "secondary" | "destructive" | "outline"
 > = {
-  running: "default",
+  running: "outline",
   degraded: "secondary",
   pending: "outline",
   initializing: "outline",
@@ -104,7 +104,11 @@ export function AppCard({ app, projectName }: Props) {
               <ScoreBadge card={card} />
               <Badge
                 variant={STATUS_VARIANT[app.status]}
-                className="capitalize gap-1"
+                className={cn(
+                  "capitalize gap-1",
+                  app.status === "running" &&
+                    "border-green-600/30 bg-green-500/10 text-green-700 dark:text-green-400",
+                )}
               >
                 <StatusIcon status={app.status} />
                 {t(`status.${app.status}`)}

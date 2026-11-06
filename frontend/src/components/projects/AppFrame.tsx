@@ -12,7 +12,7 @@ import {
 import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
-import { badgeVariant, StateLabel } from "@/components/projects/DeploymentHealth";
+import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { MenuText } from "@/components/projects/MenuText";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { Button } from "@/components/ui/button";
@@ -545,9 +545,7 @@ function HealthPill({
   if (loading) return <Skeleton className="h-6 w-20 rounded-full" />;
   const state = status ?? "unknown";
   return (
-    <Badge variant={badgeVariant(state)} className="gap-1" role="status">
-      <StateLabel state={state} />
-    </Badge>
+    <HealthBadge state={state} role="status" />
   );
 }
 

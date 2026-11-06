@@ -20,7 +20,6 @@ import {
   YAxis,
 } from "recharts";
 import {
-  RESOURCES as ALL_RESOURCES,
   RESOURCE_META,
   axisTickFormatter,
   formatEUR,
@@ -37,6 +36,10 @@ type PartialDay = {
   partial: number;
   hour: number;
   projected: number;
+};
+
+type StackedRow = TimelineRow & {
+  stack?: Partial<Record<FinopsResource, [number, number]>>;
 };
 
 type TimelineRow = Partial<CostSeriesPoint> & {
@@ -58,12 +61,12 @@ function findPartialDay(
   if (!today) return null;
   const forecastToday = forecast?.daily.find((d) => d.date === clock.date);
   const previousDay = data.findLast((p) => p.date < clock.date);
-  // Ingestion runs hourly: before 3 h the partial total is too thin to extrapolate.
-  const extrapolated =
-    clock.hour >= 3 || !previousDay
-      ? (today.total * 24) / Math.max(clock.hour, 1)
-      : previousDay.total;
-  const projected = forecastToday?.eur ?? extrapolated;
+  // Ingestion runs hourly: from 3 h today's own costs are the best guess;
+  // before that, the forecast, then the previous day, stand in.
+  const projected =
+    clock.hour >= 3
+      ? (today.total * 24) / clock.hour
+      : (forecastToday?.eur ?? previousDay?.total ?? today.total);
   return {
     date: clock.date,
     partial: today.total,
@@ -77,7 +80,9 @@ function CostTooltip({
   payload,
   label,
   granularity,
+  resources,
 }: {
+  resources: { key: FinopsResource; name: string; color: string }[];
   active?: boolean;
   payload?: Array<{
     name: string;
@@ -98,10 +103,10 @@ function CostTooltip({
     granularity === "monthly" &&
     !!label &&
     label.slice(0, 7) === parisClock(new Date()).date.slice(0, 7);
-  const costs = payload.filter((p) =>
-    ALL_RESOURCES.includes(p.dataKey as FinopsResource),
-  );
-  const total = costs.reduce((s, p) => s + (p.value ?? 0), 0);
+  const costs = resources
+    .filter((r) => row?.[r.key] !== undefined)
+    .map((r) => ({ name: r.name, color: r.color, value: row![r.key] as number }));
+  const total = costs.reduce((s, p) => s + p.value, 0);
   return (
     <div className="max-w-xs rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
       <p className="mb-1 font-medium">
@@ -268,6 +273,23 @@ export function CostTimeline({
     () => buildRows(data, forecast, anomalies, partialDay),
     [data, forecast, anomalies, partialDay],
   );
+  const stackedRows: StackedRow[] = rows.map((row) => {
+    if (row.total === undefined) return row;
+    let low = 0;
+    const stack: StackedRow["stack"] = {};
+    for (const r of RESOURCES) {
+      if (isHidden(r)) continue;
+      const high = low + ((row[r] as number | undefined) ?? 0);
+      stack[r] = [low, high];
+      low = high;
+    }
+    return { ...row, stack };
+  });
+  const tooltipResources = RESOURCES.filter((r) => !isHidden(r)).map((r) => ({
+    key: r,
+    name: t(`resources.${r}`),
+    color: RESOURCE_META[r].color,
+  }));
   const axisMax = Math.max(
     0,
     ...rows.flatMap((r) => [
@@ -285,7 +307,7 @@ export function CostTimeline({
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
-            data={rows}
+            data={stackedRows}
             margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
           >
             <defs>
@@ -331,15 +353,21 @@ export function CostTimeline({
               tickFormatter={axisTickFormatter(axisMax, " €", locale)}
             />
             <Tooltip
-              content={<CostTooltip granularity={granularity} />}
+              content={
+                <CostTooltip
+                  granularity={granularity}
+                  resources={tooltipResources}
+                />
+              }
             />
             {RESOURCES.map((r) => (
               <Area
                 key={r}
                 type="monotone"
-                dataKey={r}
+                // A precomputed [low, high] range, not stackId: Recharts stacks a
+                // missing value as 0, which drew a cliff after the last real day.
+                dataKey={(row: StackedRow) => row.stack?.[r]}
                 name={t(`resources.${r}`)}
-                stackId="cost"
                 stroke={RESOURCE_META[r].color}
                 fill={`url(#grad-${r})`}
                 strokeWidth={2}
