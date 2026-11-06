@@ -139,6 +139,21 @@ def test_level_shift_follows_the_last_week():
     assert result["daily"][0]["eur"] == pytest.approx(0.18)
 
 
+def test_level_shift_mid_week_uses_the_days_since_the_shift():
+    # Arrange
+    ref = date(2026, 11, 20)
+    daily = {date(2026, 10, 23) + timedelta(days=i): 0.02 for i in range(25)}
+    daily.update(
+        {date(2026, 11, 17) + timedelta(days=i): 0.18 for i in range(3)}
+    )
+
+    # Act
+    result = forecast_month(daily, ref)
+
+    # Assert
+    assert result["daily"][0]["eur"] == pytest.approx(0.18)
+
+
 def test_eighty_percent_interval_covers_about_eighty_percent_of_outcomes():
     rng = random.Random(42)
     month_end = date(2026, 11, 30)
