@@ -36,7 +36,9 @@ export default function AppDeliveryPage() {
   const settingsHref = `/projects/${encodeURIComponent(projectName)}/apps/${appId}/settings#delivery`;
 
   return (
-    <AppSection allowed={can("app.viewLogs")}>
+    <AppSection
+      allowed={can("app.viewLogs") || (isKubernetes && can("release.view"))}
+    >
       <div className="space-y-10">
         {isKubernetes && can("release.view") && (
           <>
@@ -57,9 +59,11 @@ export default function AppDeliveryPage() {
             </Section>
           </>
         )}
-        <Section title={t("history")} description={t("historyHint")}>
-          <DeploymentHistory />
-        </Section>
+        {can("app.viewLogs") && (
+          <Section title={t("history")} description={t("historyHint")}>
+            <DeploymentHistory />
+          </Section>
+        )}
       </div>
     </AppSection>
   );

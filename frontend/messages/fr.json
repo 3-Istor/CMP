@@ -2498,7 +2498,8 @@
       "planning": "Planification",
       "deploying": "Déploiement en cours",
       "deleting": "Suppression en cours",
-      "failed": "Échec du déploiement"
+      "failed": "Échec du déploiement",
+      "running": "En ligne"
     },
     "legacy": {
       "outputs": "Sorties Terraform",

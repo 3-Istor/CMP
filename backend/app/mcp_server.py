@@ -803,7 +803,7 @@ async def request_secret(
         "tell_the_user": f"Open this page and add {name} ({purpose}) under "
         "the app's secrets. Do not paste it in this conversation.",
         "link": f"{PUBLIC_URL}/projects/{app['project_id']}/apps/{app_id}"
-        "?tab=config",
+        "/settings#secrets",
     }
 
 

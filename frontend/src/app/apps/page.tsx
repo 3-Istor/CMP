@@ -17,7 +17,7 @@ export default function AppsPage() {
   const { deployments, loading } = useDeploymentsList(5000, 30000);
   const [query, setQuery] = useState("");
   const [project, setProject] = useState("");
-  const apps = deployments.filter((d) => d.status !== "deleted");
+  const apps = deployments.filter((d) => d.status !== "deleted" && d.project_id !== null);
   const projects = [...new Set(apps.map((a) => a.project_id).filter(Boolean))] as string[];
   const q = query.trim().toLowerCase();
   const shown = apps

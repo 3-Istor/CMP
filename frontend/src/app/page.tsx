@@ -15,7 +15,7 @@ import { ArrowRight, FolderPlus } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const HOME_APPS = 6;
 
@@ -55,7 +55,7 @@ export default function Home() {
     useProjectsLive();
   const { deployments, loading: loadingApps } = useDeploymentsList(5000, 30000);
   const apps = deployments
-    .filter((d) => d.status !== "deleted")
+    .filter((d) => d.status !== "deleted" && d.project_id !== null)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 
   const firstName =
@@ -63,17 +63,23 @@ export default function Home() {
     session?.user?.name?.split(" ")[0] ||
     session?.user?.email?.split("@")[0] ||
     t("fallbackName");
-  const today = new Date().toLocaleDateString(locale, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  // Computed in the browser: the server runs in UTC and would print another day near midnight.
+  const [today, setToday] = useState("");
+  useEffect(() => {
+    setToday(
+      new Date().toLocaleDateString(locale, {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      }),
+    );
+  }, [locale]);
 
   return (
     <div className="min-h-screen">
       <PageHeader
         title={t("greeting", { name: firstName })}
-        description={<span className="first-letter:uppercase">{today}</span>}
+        description={today ? <span className="first-letter:uppercase">{today}</span> : undefined}
         actions={
           <Button size="sm" onClick={() => setCreateProjectOpen(true)}>
             <FolderPlus aria-hidden />

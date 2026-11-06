@@ -163,6 +163,17 @@ export default function AppSettingsPage() {
     );
   }, [projectName]);
 
+
+  const allowed =
+    deployment.provider_type === "kubernetes" && can("app.viewConfig");
+  const visibleSections = SECTIONS.filter(
+    (id) =>
+      (id !== "secrets" || isRunning) &&
+      (id !== "delivery" || can("release.view")) &&
+      (id !== "security" || can("app.viewObservability")),
+  );
+  const sectionsKey = visibleSections.join();
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -171,23 +182,16 @@ export default function AppSettingsPage() {
       },
       { rootMargin: "-160px 0px -60% 0px" },
     );
-    SECTIONS.forEach((id) => {
+    sectionsKey.split(",").forEach((id) => {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, [isRunning]);
+  }, [allowed, sectionsKey]);
 
-  const visibleSections = SECTIONS.filter(
-    (id) =>
-      (id !== "delivery" || can("release.view")) &&
-      (id !== "security" || can("app.viewObservability")),
-  );
 
   return (
-    <AppSection
-      allowed={deployment.provider_type === "kubernetes" && can("app.viewConfig")}
-    >
+    <AppSection allowed={allowed}>
       <div className="grid gap-8 lg:grid-cols-[200px_minmax(0,1fr)]">
         <nav
           aria-label={ts("toc")}

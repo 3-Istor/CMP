@@ -99,6 +99,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const canOperate = can("app.operate");
   const canViewLogs = can("app.viewLogs");
   const canViewConfig = can("app.viewConfig");
+  const canViewRelease = can("release.view");
   const canViewFinops = can("finops.view");
   const canViewObservability = can("app.viewObservability");
 
@@ -223,7 +224,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       key: "delivery",
       segment: "delivery",
       icon: Rocket,
-      visible: canViewLogs,
+      visible: canViewLogs || (isKubernetes && canViewRelease),
     },
     {
       key: "costs",

@@ -2498,7 +2498,8 @@
       "planning": "Planning",
       "deploying": "Deploying",
       "deleting": "Deleting",
-      "failed": "Deployment failed"
+      "failed": "Deployment failed",
+      "running": "Running"
     },
     "legacy": {
       "outputs": "Terraform outputs",
