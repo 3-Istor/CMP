@@ -2802,5 +2802,134 @@
       "nodesValue": "{up} / {total} nodes",
       "cloudsHint": "{count, plural, =0 {public clouds off} one {# public cloud on} other {# public clouds on}}"
     }
+  },
+  "securityFindings": {
+    "kyverno": {
+      "pods": "{count, plural, one {# pod affected} other {# pods affected}}",
+      "run_as_root": {
+        "title": "The container runs as root",
+        "fix": "Add a non-root user at the end of the Dockerfile, for example `USER 10001`."
+      },
+      "capabilities": {
+        "title": "Linux capabilities not dropped",
+        "fix": "Add `capabilities.drop: [ALL]` to the chart's securityContext."
+      },
+      "privilege_escalation": {
+        "title": "Privilege escalation allowed",
+        "fix": "Set `allowPrivilegeEscalation: false` in the chart."
+      },
+      "seccomp": {
+        "title": "No seccomp profile",
+        "fix": "Set `seccompProfile.type: RuntimeDefault` in the chart."
+      },
+      "image_latest": {
+        "title": "Image deployed as :latest",
+        "fix": "Deploy the image by version tag or by digest."
+      },
+      "image_untagged": {
+        "title": "Image deployed without a tag",
+        "fix": "Deploy the image by version tag or by digest."
+      },
+      "resources": {
+        "title": "No requests or limits",
+        "fix": "Set CPU and memory requests and a memory limit equal to the request in the chart."
+      },
+      "other": {
+        "title": "Pod security setting not compliant",
+        "fix": "Read the Kyverno message and fix the chart."
+      }
+    },
+    "vuln": {
+      "title": "{id} in {package} {installed}",
+      "fixBase": "Update the Dockerfile base image: {package} is fixed in {fixed}.",
+      "fixBump": "Upgrade {package} from {installed} to {fixed}.",
+      "noFix": "No fix published yet."
+    },
+    "imageSecret": {
+      "title": "Secret baked into the image: {name}",
+      "detail": "File {target} of the image",
+      "fix": "Rotate this secret, then remove the file from the image: secrets go through Vault, never into the image."
+    },
+    "dockerfile": {
+      "seeRule": "See the rule details.",
+      "DS-0001": {
+        "title": "Base image on :latest",
+        "fix": "Pin the base image version in `FROM`, for example `python:3.13-slim`."
+      },
+      "DS-0002": {
+        "title": "The image runs as root",
+        "fix": "Add a non-root user at the end of the Dockerfile, for example `USER 10001`."
+      },
+      "DS-0004": {
+        "title": "SSH port 22 exposed",
+        "fix": "Remove `EXPOSE 22`: nobody gets into a container over SSH."
+      },
+      "DS-0005": {
+        "title": "ADD used instead of COPY",
+        "fix": "Replace `ADD` with `COPY`, unless you extract an archive."
+      },
+      "DS-0026": {
+        "title": "No HEALTHCHECK",
+        "fix": "Add a `HEALTHCHECK` to the Dockerfile."
+      }
+    },
+    "location": {
+      "line": "{target} line {line}"
+    },
+    "leak": {
+      "title": "Secret committed to the repo",
+      "detail": "Rule {rule}",
+      "detailCommit": "Rule {rule} · commit {commit}",
+      "fix": "Rotate this secret right away, then remove it from the code. Deleting it from history is not enough: it may have been copied."
+    },
+    "backup": {
+      "backup-disabled": {
+        "title": "Database without backups",
+        "detail": "A deletion or a mistake would be permanent.",
+        "fix": "Turn on backups in Data › Backups."
+      },
+      "backup-failing": {
+        "title": "Backups on but failing",
+        "detail": "Archiving fails: {message}",
+        "fix": "Contact the platform team: the backup storage does not answer."
+      },
+      "backup-missing": {
+        "title": "Backups on but never succeeded",
+        "detail": "No successful backup since they were turned on.",
+        "fix": "Run a manual backup to see the error, or contact the platform team."
+      },
+      "backup-stale": {
+        "title": "Backups late",
+        "detail": "Last successful backup: {date} UTC",
+        "fix": "Run a manual backup to see the error, or contact the platform team."
+      }
+    },
+    "exposure": {
+      "public": {
+        "title": "Public app, reachable without signing in",
+        "detail": "Anyone on the Internet can open it.",
+        "fix": "If that is not intended, restrict it to project members. Otherwise, ignore this alert and say it is intended."
+      },
+      "custom": {
+        "title": "Exposure set by hand in the code",
+        "detail": "The CMP does not recognise this setting: check who can reach the app.",
+        "fix": "Pick one of the settings offered in Access and exposure."
+      }
+    },
+    "isolation": {
+      "title": "Project not isolated from the others",
+      "detail": "The cnp-project-{project}-ingress policy is missing.",
+      "fix": "Check how cnp-project-base renders for this project."
+    },
+    "workflowMissing": {
+      "title": "Security workflow missing from the repo",
+      "detail": "No secret or dependency scan runs any more.",
+      "fix": "Restore .github/workflows/security.yml from the template."
+    },
+    "lockedDrift": {
+      "title": "Admin-locked setting changed in the repo",
+      "detail": "deploy/security.yaml no longer follows the project policy.",
+      "fix": "Put the locked value back, or ask the project admin to lift the lock."
+    }
   }
 }

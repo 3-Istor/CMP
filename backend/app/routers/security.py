@@ -142,6 +142,8 @@ class FindingRead(BaseModel):
     location: str
     link: str | None
     raw: str
+    # {field: {key, params}} for the frontend's translations.
+    i18n: dict | None = None
     sources: list[str]
     first_seen: datetime
     last_seen: datetime
@@ -259,6 +261,7 @@ def _finding_read(
         location=m.location,
         link=m.link,
         raw=m.raw,
+        i18n=json.loads(m.i18n) if m.i18n else None,
         sources=m.sources,
         first_seen=m.first_seen,
         last_seen=m.last_seen,

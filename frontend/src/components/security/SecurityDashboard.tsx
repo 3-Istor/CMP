@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ExceptionDialog } from "./ExceptionDialog";
 import { ExceptionsList } from "./ExceptionsList";
 import { FindingCard } from "./FindingCard";
+import { useFindingText } from "./findingText";
 import { AlertsCard } from "./AlertsCard";
 import { BackupsCard } from "./BackupsCard";
 import { CATEGORY_TAB, errorMessage, TABS, type SecurityTab } from "./labels";
@@ -102,9 +103,11 @@ function CoreBanner({
   onShow: (finding: SecurityFinding) => void;
 }) {
   const t = useTranslations("security");
+  const text = useFindingText();
   const core = findings.filter((f) => f.tier === "core" && !f.exception);
   if (core.length === 0) return null;
   const first = core[0];
+  const title = text(first, "title");
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3">
       <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
@@ -113,8 +116,8 @@ function CoreBanner({
         <span className="font-normal text-muted-foreground">
           {" "}
           · {first.app
-            ? t("banner.inApp", { title: first.title, app: first.app })
-            : first.title}
+            ? t("banner.inApp", { title, app: first.app })
+            : title}
         </span>
       </p>
       <button

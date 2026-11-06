@@ -1,5 +1,7 @@
 "use client";
 
+import { useFindingText } from "./findingText";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requestSecurityBackup } from "@/lib/api";
@@ -38,6 +40,7 @@ export function FindingCard({
   onIgnore?: (finding: SecurityFinding) => void;
 }) {
   const t = useTranslations("security");
+  const text = useFindingText();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -66,13 +69,13 @@ export function FindingCard({
           {t(`tiers.${finding.tier}`)}
         </Badge>
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="font-medium leading-tight">{finding.title}</p>
+          <p className="font-medium leading-tight">{text(finding, "title")}</p>
           <p className="text-xs text-muted-foreground">
-            {[finding.app ?? t("common.project"), finding.location]
+            {[finding.app ?? t("common.project"), text(finding, "location")]
               .filter(Boolean)
               .join(" · ")}
           </p>
-          {finding.fix && <p className="text-sm">{finding.fix}</p>}
+          {finding.fix && <p className="text-sm">{text(finding, "fix")}</p>}
           {pending && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
               {t("finding.pending", { author: finding.exception?.author ?? "" })}
@@ -137,7 +140,7 @@ export function FindingCard({
           </button>
           {open && (
             <div className="space-y-2 pb-2 pt-1 text-xs">
-              {finding.detail && <p>{finding.detail}</p>}
+              {finding.detail && <p>{text(finding, "detail")}</p>}
               {finding.raw && (
                 <pre className="whitespace-pre-wrap rounded bg-muted p-2 font-mono text-[11px] text-muted-foreground">
                   {finding.raw}

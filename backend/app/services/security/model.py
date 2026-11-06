@@ -97,6 +97,9 @@ class Draft(BaseModel):
     location: str = ""
     link: str | None = None
     raw: str = ""
+    # JSON {field: {"key", "params"}} the frontend translates; the French
+    # text above stays as the fallback for keys it does not know.
+    i18n: str = ""
 
 
 def fingerprint(*parts: object) -> str:

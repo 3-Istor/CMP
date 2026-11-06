@@ -2802,5 +2802,134 @@
       "nodesValue": "{up} / {total} nœuds",
       "cloudsHint": "{count, plural, =0 {clouds publics éteints} one {# cloud public allumé} other {# clouds publics allumés}}"
     }
+  },
+  "securityFindings": {
+    "kyverno": {
+      "pods": "{count} pod(s) concerné(s)",
+      "run_as_root": {
+        "title": "Le conteneur tourne en root",
+        "fix": "Ajoute un utilisateur non root à la fin du Dockerfile, par exemple `USER 10001`."
+      },
+      "capabilities": {
+        "title": "Capabilities Linux non retirées",
+        "fix": "Ajouter `capabilities.drop: [ALL]` au securityContext du chart."
+      },
+      "privilege_escalation": {
+        "title": "Escalade de privilèges autorisée",
+        "fix": "Poser `allowPrivilegeEscalation: false` dans le chart."
+      },
+      "seccomp": {
+        "title": "Profil seccomp absent",
+        "fix": "Poser `seccompProfile.type: RuntimeDefault` dans le chart."
+      },
+      "image_latest": {
+        "title": "Image déployée en :latest",
+        "fix": "Déployer l'image par tag de version ou par digest."
+      },
+      "image_untagged": {
+        "title": "Image déployée sans tag",
+        "fix": "Déployer l'image par tag de version ou par digest."
+      },
+      "resources": {
+        "title": "Requests et limits absentes",
+        "fix": "Poser des requests CPU et mémoire et une limite mémoire égale à la demande dans le chart."
+      },
+      "other": {
+        "title": "Réglage de sécurité du pod non conforme",
+        "fix": "Voir le message Kyverno et corriger le chart."
+      }
+    },
+    "vuln": {
+      "title": "{id} dans {package} {installed}",
+      "fixBase": "Mets à jour l'image de base du Dockerfile : {package} est corrigé en {fixed}.",
+      "fixBump": "Passe {package} de {installed} à {fixed}.",
+      "noFix": "Aucun correctif publié pour l'instant."
+    },
+    "imageSecret": {
+      "title": "Secret embarqué dans l'image : {name}",
+      "detail": "Fichier {target} de l'image",
+      "fix": "Change ce secret, puis retire le fichier de l'image : un secret se passe par Vault, jamais dans l'image."
+    },
+    "dockerfile": {
+      "seeRule": "Voir le détail de la règle.",
+      "DS-0001": {
+        "title": "Image de base en :latest",
+        "fix": "Fixe la version de l'image de base dans le `FROM`, par exemple `python:3.13-slim`."
+      },
+      "DS-0002": {
+        "title": "L'image tourne en root",
+        "fix": "Ajoute un utilisateur non root à la fin du Dockerfile, par exemple `USER 10001`."
+      },
+      "DS-0004": {
+        "title": "Port SSH 22 exposé",
+        "fix": "Retire `EXPOSE 22` : on n'entre pas dans un conteneur en SSH."
+      },
+      "DS-0005": {
+        "title": "ADD utilisé à la place de COPY",
+        "fix": "Remplace `ADD` par `COPY`, sauf pour extraire une archive."
+      },
+      "DS-0026": {
+        "title": "Pas de HEALTHCHECK",
+        "fix": "Ajoute un `HEALTHCHECK` au Dockerfile."
+      }
+    },
+    "location": {
+      "line": "{target} ligne {line}"
+    },
+    "leak": {
+      "title": "Secret commité dans le repo",
+      "detail": "Règle {rule}",
+      "detailCommit": "Règle {rule} · commit {commit}",
+      "fix": "Change ce secret tout de suite, puis retire-le du code. Le supprimer de l'historique ne suffit pas : il a pu être copié."
+    },
+    "backup": {
+      "backup-disabled": {
+        "title": "Base sans sauvegarde",
+        "detail": "Une suppression ou une erreur serait définitive.",
+        "fix": "Active la sauvegarde dans Données › Sauvegardes."
+      },
+      "backup-failing": {
+        "title": "Sauvegarde activée mais en échec",
+        "detail": "Archivage en échec : {message}",
+        "fix": "Contacte l'équipe plateforme : le stockage des sauvegardes ne répond pas."
+      },
+      "backup-missing": {
+        "title": "Sauvegarde activée mais jamais réussie",
+        "detail": "Aucune sauvegarde réussie depuis l'activation.",
+        "fix": "Lance une sauvegarde manuelle pour voir l'erreur, ou contacte l'équipe plateforme."
+      },
+      "backup-stale": {
+        "title": "Sauvegarde en retard",
+        "detail": "Dernière sauvegarde réussie : {date} UTC",
+        "fix": "Lance une sauvegarde manuelle pour voir l'erreur, ou contacte l'équipe plateforme."
+      }
+    },
+    "exposure": {
+      "public": {
+        "title": "App publique, accessible sans connexion",
+        "detail": "N'importe qui sur Internet peut l'ouvrir.",
+        "fix": "Si ce n'est pas voulu, réserve-la aux membres du projet. Sinon, ignore cette alerte en indiquant que c'est voulu."
+      },
+      "custom": {
+        "title": "Exposition réglée à la main dans le code",
+        "detail": "La CMP ne reconnaît pas ce réglage : vérifie qui y a accès.",
+        "fix": "Choisis un des réglages proposés dans Accès et exposition."
+      }
+    },
+    "isolation": {
+      "title": "Projet non isolé des autres",
+      "detail": "La policy cnp-project-{project}-ingress est absente.",
+      "fix": "Vérifier le rendu de cnp-project-base pour ce projet."
+    },
+    "workflowMissing": {
+      "title": "Workflow de sécurité absent du repo",
+      "detail": "Plus aucun scan des secrets ni des dépendances ne tourne.",
+      "fix": "Restaure .github/workflows/security.yml depuis le modèle."
+    },
+    "lockedDrift": {
+      "title": "Réglage imposé par l'admin modifié dans le repo",
+      "detail": "deploy/security.yaml ne suit plus la politique du projet.",
+      "fix": "Remets la valeur imposée, ou demande à l'admin du projet de lever le verrou."
+    }
   }
 }
