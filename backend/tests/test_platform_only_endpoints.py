@@ -61,7 +61,7 @@ class TestRequireProjectMember:
         ):
             role = authz.require_project_member(MEMBER, "shop", True)
 
-        assert role == "owner"
+        assert role == "admin"
 
     def test_refuses_a_member_where_admin_is_required(self, session_factory):
         with mock.patch.object(

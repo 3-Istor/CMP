@@ -22,7 +22,11 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
-from app.services.authz import is_cnp_admin, require_project_member
+from app.services.authz import (
+    is_cnp_admin,
+    project_role_or_none,
+    require_project_member,
+)
 from app.services.clusters.state import project_cloud
 from app.services.github_service import (
     FileNotInRepoError,
@@ -727,9 +731,7 @@ async def get_my_role(
     role = (
         "admin"
         if admin
-        else await run_in_threadpool(
-            get_project_role, token.get("sub", ""), project
-        )
+        else await run_in_threadpool(project_role_or_none, token, project)
     )
     return {"role": role, "cnp_admin": admin, "username": _username(token)}
 

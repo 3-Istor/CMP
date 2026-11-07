@@ -662,10 +662,12 @@ def decode_platform_token(token: str) -> dict:
             # the client is checked through azp below instead.
             options={"verify_aud": False},
         )
-        if claims.get("azp") not in allowed_clients():
-            raise jwt.InvalidTokenError(
-                f"issued to client {claims.get('azp')!r}, not to the portal"
-            )
+        # typ tells an access token from an ID token of the same client.
+        if (
+            claims.get("azp") not in allowed_clients()
+            or claims.get("typ") != "Bearer"
+        ):
+            raise jwt.InvalidTokenError("not an access token of the portal")
         return claims
     except jwt.PyJWKClientConnectionError as exc:
         logger.error("Could not fetch Keycloak signing keys: %s", exc)

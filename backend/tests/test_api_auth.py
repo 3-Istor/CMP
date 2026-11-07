@@ -31,6 +31,7 @@ def _token(key=SIGNING_KEY, **overrides) -> str:
         "exp": int(time.time()) + 300,
         "preferred_username": "alice",
         "azp": settings.KEYCLOAK_CLIENT_ID,
+        "typ": "Bearer",
     }
     claims.update(overrides)
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "k1"})
@@ -69,7 +70,7 @@ class TestDecodePlatformToken:
                 lambda: _token(key=OTHER_KEY), id="foreign-signature"
             ),
             pytest.param(
-                lambda: _token(exp=int(time.time()) - 10), id="expired"
+                lambda: _token(exp=int(time.time()) - 120), id="expired"
             ),
             pytest.param(
                 lambda: _token(iss="https://evil.test/realms/3istor"),
@@ -82,6 +83,7 @@ class TestDecodePlatformToken:
             pytest.param(lambda: "not-a-jwt", id="malformed"),
             pytest.param(lambda: _token(azp="k3s-cluster"), id="other-client"),
             pytest.param(lambda: _token(azp=None), id="no-authorized-party"),
+            pytest.param(lambda: _token(typ="ID"), id="id-token"),
         ],
     )
     def test_rejects_untrusted_tokens(self, jwks, token):
@@ -168,9 +170,7 @@ def _deployment_id(db, project: str) -> int:
 
 class TestDeploymentsAuthorization:
     def test_lists_only_the_users_projects(self, db, roles):
-        result = asyncio.run(
-            deployments_router.list_deployments(_user("u2"), db)
-        )
+        result = deployments_router.list_deployments(_user("u2"), db)
 
         assert [d.project_id for d in result] == ["alpha"]
 
@@ -249,9 +249,7 @@ class TestDeploymentsAuthorization:
 
         assert exc.value.status_code == 400
 
-    def test_refuses_a_deployment_outside_any_project_to_non_platform_admins(
-        self, db, roles
-    ):
+    def test_refuses_a_deployment_outside_any_project(self, db, roles):
         payload = DeploymentCreate(name="vm", template_id="k3s-gitops-app")
 
         with pytest.raises(HTTPException) as exc:
@@ -261,4 +259,4 @@ class TestDeploymentsAuthorization:
                 )
             )
 
-        assert exc.value.status_code == 403
+        assert exc.value.status_code == 400

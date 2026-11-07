@@ -180,14 +180,33 @@ def require_project_member(
 ) -> str:
     """
     :func:`assert_project_role` for routers without a db session, member
-    minimum (admin when *require_admin*). Returns the role's value.
+    minimum (admin when *require_admin*). Returns "admin" or "member": the
+    owner is reported as "admin", the routers using this compare strings.
 
     Guests are refused: the routers using this (security, activity, alerts)
     expose logs and findings, which guests do not get.
     """
     minimum = ProjectRole.ADMIN if require_admin else ProjectRole.MEMBER
     with SessionLocal() as db:
-        return assert_project_role(db, token, project_name, minimum).role.value
+        role = assert_project_role(db, token, project_name, minimum).role
+    return ProjectRole.ADMIN.value if role is ProjectRole.OWNER else role.value
+
+
+def project_role_or_none(token: dict, project_name: str) -> str | None:
+    """
+    The caller's role on *project_name* as the UI shows it ("admin" for the
+    owner too, "member", "guest"), or None without any standing.
+    """
+    with SessionLocal() as db:
+        try:
+            role = assert_project_role(
+                db, token, project_name, ProjectRole.GUEST
+            ).role
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_403_FORBIDDEN:
+                return None
+            raise
+    return ProjectRole.ADMIN.value if role is ProjectRole.OWNER else role.value
 
 
 # Built once, at import time, see require_project_role's docstring.
