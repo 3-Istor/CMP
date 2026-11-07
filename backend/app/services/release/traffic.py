@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.services import keycloak_admin
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +91,8 @@ def session_for(deployment_id: int) -> TrafficSession | None:
 
 async def _admin_token(client: httpx.AsyncClient) -> str:
     response = await client.post(
-        f"{settings.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
-        data={
-            "grant_type": "password",
-            "client_id": "admin-cli",
-            "username": settings.KEYCLOAK_ADMIN_USERNAME,
-            "password": settings.KEYCLOAK_ADMIN_PASSWORD,
-        },
+        keycloak_admin.master_token_url(),
+        data=keycloak_admin.master_token_form(),
     )
     response.raise_for_status()
     return response.json()["access_token"]

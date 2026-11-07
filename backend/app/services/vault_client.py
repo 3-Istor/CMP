@@ -1,10 +1,12 @@
 """Minimal Vault KV v2 client, with the CMP's own token."""
 
+import asyncio
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
+from app.services import vault_auth
 
 REQUEST_TIMEOUT = 10.0
 
@@ -14,9 +16,17 @@ class VaultError(Exception):
 
 
 def _url(mount: str, path: str) -> str:
-    if not settings.VAULT_URL or not settings.VAULT_TOKEN:
+    if not vault_auth.is_configured():
         raise VaultError("Vault is not configured on the CMP.")
     return f"{settings.VAULT_URL}/v1/{mount}/data/{path}"
+
+
+async def _headers() -> dict[str, str]:
+    try:
+        token = await asyncio.to_thread(vault_auth.token)
+    except vault_auth.VaultAuthError as exc:
+        raise VaultError(str(exc)) from exc
+    return {"X-Vault-Token": token}
 
 
 async def read_kv(mount: str, path: str) -> dict[str, Any]:
@@ -25,7 +35,7 @@ async def read_kv(mount: str, path: str) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.get(
                 _url(mount, path),
-                headers={"X-Vault-Token": settings.VAULT_TOKEN},
+                headers=await _headers(),
             )
     except httpx.HTTPError as exc:
         raise VaultError(f"Vault unreachable: {exc}") from exc
@@ -41,7 +51,7 @@ async def write_kv(mount: str, path: str, data: dict[str, Any]) -> None:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.post(
                 _url(mount, path),
-                headers={"X-Vault-Token": settings.VAULT_TOKEN},
+                headers=await _headers(),
                 json={"data": data},
             )
     except httpx.HTTPError as exc:
@@ -65,7 +75,7 @@ async def read_key_names(mount: str, path: str) -> list[str]:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.get(
                 _url(mount, path),
-                headers={"X-Vault-Token": settings.VAULT_TOKEN},
+                headers=await _headers(),
             )
         if response.status_code == 404:
             names = []

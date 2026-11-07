@@ -75,12 +75,24 @@ class Settings(BaseSettings):
     # Comma separated, so a client switch can accept both for a while.
     # Empty means KEYCLOAK_CLIENT_ID alone.
     KEYCLOAK_ALLOWED_CLIENTS: str = ""
-    # Admin credentials used by Terraform k3s-project-bootstrap module
+    # Master realm identity for realm provisioning and Terraform. The
+    # confidential client wins when both are set; the admin user is the
+    # legacy fallback.
+    KEYCLOAK_PROVISIONER_CLIENT_ID: str = ""
+    KEYCLOAK_PROVISIONER_CLIENT_SECRET: str = ""
     KEYCLOAK_ADMIN_USERNAME: str = ""
     KEYCLOAK_ADMIN_PASSWORD: str = ""
 
     # Vault (for secret management in Terraform modules)
     VAULT_URL: str = ""
+    # "kubernetes" logs in with the pod's ServiceAccount; anything else uses
+    # the static VAULT_TOKEN.
+    VAULT_AUTH: str = ""
+    VAULT_KUBERNETES_MOUNT: str = "kubernetes"
+    VAULT_KUBERNETES_ROLE: str = "cmp-backend"
+    VAULT_KUBERNETES_JWT_PATH: str = (
+        "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    )
     VAULT_TOKEN: str = ""
 
     # Cloudflare (for dynamic DNS in Terraform templates)

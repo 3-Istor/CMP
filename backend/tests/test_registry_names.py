@@ -171,3 +171,45 @@ def test_a_prod_only_app_reserves_its_staging_name():
     errors = check_app("foo", app("web"), [record("foo-web", app("stg"))])
 
     assert any("namespace 'foo-web-stg'" in error for error in errors)
+
+
+VAULT_ROLE_CASES = [
+    (
+        "prod role equals a platform role",
+        "cert",
+        "manager",
+        "cert-manager-role",
+    ),
+    ("prod role equals the CMP's VSO role", "arcl", "cmp", "arcl-cmp-role"),
+    (
+        "prod role equals a role also on the cloud mounts",
+        "vault-secrets",
+        "operator",
+        "vault-secrets-operator-role",
+    ),
+    (
+        "prod role equals another project's system role",
+        "project",
+        "shop-system",
+        "project-shop-system-role",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "description,project,app_name,role",
+    VAULT_ROLE_CASES,
+    ids=[c[0] for c in VAULT_ROLE_CASES],
+)
+def test_check_app_rejects_an_app_whose_vault_role_is_reserved(
+    description, project, app_name, role
+):
+    errors = check_app(project, app(app_name), [record(project)])
+
+    assert any(f"Vault role '{role}'" in error for error in errors)
+
+
+def test_check_app_accepts_an_app_whose_vault_roles_are_free():
+    errors = check_app("shop", app("web"), [record("shop")])
+
+    assert errors == []
