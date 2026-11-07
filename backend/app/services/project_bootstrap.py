@@ -113,12 +113,14 @@ def _get_module_path() -> Path:
 def _failure_message(action: str, step: str, exc: Exception) -> str:
     """User-facing reason a bootstrap or teardown stopped.
 
-    Only a held state lock is spelled out: it is the one failure the user can
-    fix by waiting. Anything else stays in the backend logs, where the full
+    Only a held state lock (the user can wait) and a failed Vault login (the
+    CMP's own identity, never a secret) are spelled out. Anything else stays in the backend logs, where the full
     Terraform output may carry values that do not belong in the UI.
     """
     if isinstance(exc, StateLockedError):
         return str(exc)
+    if isinstance(exc, vault_auth.VaultAuthError):
+        return f"{action} failed {step}: {exc}"
     return f"{action} failed {step}. See the backend logs for details."
 
 

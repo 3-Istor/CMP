@@ -14,6 +14,7 @@ from app.services import project_bootstrap, project_status
 from app.services.authz import assert_project_role
 from app.services.project_bootstrap import _failure_message
 from app.services.state_lock import StateLockedError, StateLockInfo
+from app.services.vault_auth import VaultAuthError
 
 
 @pytest.fixture
@@ -226,6 +227,39 @@ def test_bootstrap_fails_with_generic_message_on_other_errors(
     row = read_project(session_factory, "demo")
     assert row.status == ProjectStatus.FAILED
     assert "secret" not in row.step_message
+
+
+@pytest.mark.parametrize("step", ["init", "apply"])
+def test_bootstrap_fails_with_the_vault_login_error(
+    session_factory, stubbed_terraform, step
+):
+    add_project(session_factory, "demo", status=ProjectStatus.PROVISIONING)
+    init, run = stubbed_terraform
+    failing = init if step == "init" else run
+    failing.side_effect = VaultAuthError(
+        "Vault Kubernetes login as role 'cmp-backend' failed (403)"
+    )
+
+    succeeded = project_bootstrap.run_project_bootstrap("demo", "aws")
+
+    row = read_project(session_factory, "demo")
+    assert succeeded is False
+    assert row.status == ProjectStatus.FAILED
+    assert "Vault Kubernetes login as role 'cmp-backend'" in row.step_message
+
+
+def test_teardown_fails_with_the_vault_login_error(
+    session_factory, stubbed_terraform
+):
+    add_project(session_factory, "demo", status=ProjectStatus.DECOMMISSIONING)
+    _, run = stubbed_terraform
+    run.side_effect = VaultAuthError("cannot read the ServiceAccount token")
+
+    project_bootstrap.run_project_teardown("demo", "aws")
+
+    row = read_project(session_factory, "demo")
+    assert row.status == ProjectStatus.DECOMMISSION_FAILED
+    assert "cannot read the ServiceAccount token" in row.step_message
 
 
 def test_teardown_removes_the_project_row_when_destroy_succeeds(

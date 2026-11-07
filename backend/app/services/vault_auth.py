@@ -7,6 +7,7 @@ renews it before it expires. Otherwise the static ``VAULT_TOKEN`` is used, as
 before.
 """
 
+import logging
 import threading
 import time
 from pathlib import Path
@@ -14,6 +15,8 @@ from pathlib import Path
 import requests
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 10
 # Renewed once less than this share of the lease is left.
@@ -23,8 +26,8 @@ RENEW_FRACTION = 1 / 3
 TERRAFORM_MIN_TTL = 45 * 60
 
 
-class VaultAuthError(Exception):
-    pass
+class VaultAuthError(RuntimeError):
+    """The CMP could not get a Vault token. Never carries a token."""
 
 
 class _Lease:
@@ -67,7 +70,23 @@ def token(min_ttl: float = 0) -> str:
                 _lease.expires_at = now + duration
                 return _lease.token
         _lease = _login(now)
+        if _lease.ttl < min_ttl:
+            raise VaultAuthError(
+                f"Vault role '{settings.VAULT_KUBERNETES_ROLE}' issues "
+                f"{int(_lease.ttl)}s tokens, {int(min_ttl)}s are needed"
+            )
         return _lease.token
+
+
+def describe() -> str:
+    if not settings.VAULT_URL:
+        return "not configured"
+    if uses_kubernetes():
+        return (
+            f"kubernetes auth, role '{settings.VAULT_KUBERNETES_ROLE}' "
+            f"on mount '{settings.VAULT_KUBERNETES_MOUNT}'"
+        )
+    return "static VAULT_TOKEN" if settings.VAULT_TOKEN else "no token"
 
 
 def reset() -> None:
@@ -114,6 +133,14 @@ def _login(now: float) -> _Lease:
     ttl = float(auth.get("lease_duration") or 0)
     if not auth.get("client_token") or ttl <= 0:
         raise VaultAuthError("Vault Kubernetes login returned no token")
+    if ttl < TERRAFORM_MIN_TTL:
+        logger.warning(
+            "Vault role '%s' issues %ds tokens: Terraform runs need %ds and "
+            "will fail",
+            settings.VAULT_KUBERNETES_ROLE,
+            ttl,
+            TERRAFORM_MIN_TTL,
+        )
     return _Lease(auth["client_token"], ttl, now + ttl)
 
 

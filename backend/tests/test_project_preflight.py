@@ -130,10 +130,21 @@ def test_find_leftovers_fails_when_a_service_cannot_be_queried(http):
         find_leftovers("test-p")
 
 
-def test_find_leftovers_counts_a_realm_the_provisioner_cannot_see(http):
+def test_find_leftovers_counts_a_realm_the_provisioner_cannot_see(
+    http, configured
+):
+    configured.KEYCLOAK_PROVISIONER_CLIENT_ID = "cmp-provisioner"
+    configured.KEYCLOAK_PROVISIONER_CLIENT_SECRET = "s3cret"
     http.get.side_effect = route(realm_exists="forbidden")
 
     assert find_leftovers("test-p") == ["Keycloak realm 'test-p'"]
+
+
+def test_find_leftovers_fails_on_a_forbidden_realm_with_the_admin_user(http):
+    http.get.side_effect = route(realm_exists="forbidden")
+
+    with pytest.raises(PreflightUnavailableError):
+        find_leftovers("test-p")
 
 
 def test_find_leftovers_logs_in_with_the_provisioner_client(http, configured):

@@ -215,3 +215,20 @@ def test_terraform_env_passes_the_static_token_without_kubernetes_auth(
 
     assert "TERRAFORM_VAULT_SKIP_CHILD_TOKEN" not in env
     assert env["TF_VAR_vault_token"] == "legacy"
+
+
+def test_terraform_env_refuses_a_role_whose_tokens_are_too_short(post):
+    post.return_value = login_response(ttl=600)
+
+    with pytest.raises(VaultAuthError):
+        vault_auth.terraform_env()
+
+
+def test_token_accepts_a_short_lived_token_for_api_calls(post):
+    post.return_value = login_response(ttl=600)
+
+    assert vault_auth.token() == "s.login"
+
+
+def test_vault_auth_error_is_a_runtime_error():
+    assert issubclass(VaultAuthError, RuntimeError)

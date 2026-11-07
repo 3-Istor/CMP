@@ -22,6 +22,17 @@ def is_configured() -> bool:
     )
 
 
+def describe() -> str:
+    if uses_provisioner():
+        return (
+            f"client '{settings.KEYCLOAK_PROVISIONER_CLIENT_ID}' "
+            "(client credentials)"
+        )
+    if is_configured():
+        return f"admin user '{settings.KEYCLOAK_ADMIN_USERNAME}' (admin-cli)"
+    return "not configured"
+
+
 def master_token_url() -> str:
     return (
         f"{settings.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"

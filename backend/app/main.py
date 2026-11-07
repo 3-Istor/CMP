@@ -37,7 +37,7 @@ from app.routers import (
     security_alerts,
     security_databases,
 )
-from app.services import health_poller
+from app.services import health_poller, keycloak_admin, vault_auth
 from app.services.activity_collector import activity_collector_loop
 from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
@@ -230,6 +230,10 @@ def custom_openapi():
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     logger.info("Starting application lifecycle...")
+    logger.info("Vault identity: %s", vault_auth.describe())
+    logger.info(
+        "Keycloak master realm identity: %s", keycloak_admin.describe()
+    )
 
     # Startup: Initialize template repository (this clones the repo)
     logger.info("Initializing template repository...")
