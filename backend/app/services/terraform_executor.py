@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
+from app.services import keycloak_admin, vault_auth
 from app.services.state_lock import raise_if_state_locked
 
 logger = logging.getLogger(__name__)
@@ -161,17 +162,7 @@ class TerraformExecutor:
                 settings.GRAFANA_ADMIN_PASSWORD
             )
 
-        # Pass Keycloak credentials to Terraform (for k3s-gitops-app template)
-        if settings.KEYCLOAK_ADMIN_USERNAME:
-            env["TF_VAR_keycloak_admin_username"] = (
-                settings.KEYCLOAK_ADMIN_USERNAME
-            )
-        if settings.KEYCLOAK_ADMIN_PASSWORD:
-            env["TF_VAR_keycloak_admin_password"] = (
-                settings.KEYCLOAK_ADMIN_PASSWORD
-            )
-        if settings.KEYCLOAK_URL:
-            env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
+        env.update(keycloak_admin.terraform_env())
 
         # Kubernetes configuration: Try to use kubeconfig if it exists
         # In-cluster deployments should mount ServiceAccount credentials and leave this unset
@@ -185,11 +176,7 @@ class TerraformExecutor:
                 "No kubeconfig found, Kubernetes provider will use in-cluster config"
             )
 
-        # Pass Vault credentials to Terraform (for k3s-gitops-app template)
-        if settings.VAULT_URL:
-            env["TF_VAR_vault_url"] = settings.VAULT_URL
-        if settings.VAULT_TOKEN:
-            env["TF_VAR_vault_token"] = settings.VAULT_TOKEN
+        env.update(vault_auth.terraform_env())
 
         # Pass GitHub Registry credentials to Terraform (for image pull secrets)
         if settings.GITHUB_REGISTRY_TOKEN:

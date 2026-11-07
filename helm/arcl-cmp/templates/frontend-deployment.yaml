@@ -26,6 +26,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "arcl-cmp.serviceAccountName" . }}
+      # The ServiceAccount token logs the backend in to Vault (role
+      # cmp-backend); the frontend never calls the Kubernetes API.
+      automountServiceAccountToken: false
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

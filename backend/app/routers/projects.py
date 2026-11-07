@@ -38,7 +38,12 @@ from app.schemas.project import (
     ProjectCreateResponse,
     ProjectRead,
 )
-from app.services import customer_identity, notifications
+from app.services import (
+    customer_identity,
+    keycloak_admin,
+    notifications,
+    vault_auth,
+)
 from app.services.authz import (
     RequireAdmin,
     RequireGuest,
@@ -304,8 +309,9 @@ async def create_project(
     - ArgoCD AppProject
 
     Required settings (from .env):
-    - KEYCLOAK_URL, KEYCLOAK_ADMIN_USERNAME, KEYCLOAK_ADMIN_PASSWORD
-    - VAULT_URL, VAULT_TOKEN
+    - KEYCLOAK_URL, KEYCLOAK_PROVISIONER_CLIENT_ID and _SECRET (or the
+      legacy KEYCLOAK_ADMIN_USERNAME and KEYCLOAK_ADMIN_PASSWORD)
+    - VAULT_URL, VAULT_AUTH=kubernetes (or the legacy VAULT_TOKEN)
     - GITHUB_INSTALLATION_ID, GITHUB_APP_PRIVATE_KEY
     - DISCORD_WEBHOOK_URL
     """
@@ -313,14 +319,15 @@ async def create_project(
     missing = []
     if not settings.KEYCLOAK_URL:
         missing.append("KEYCLOAK_URL")
-    if not settings.KEYCLOAK_ADMIN_USERNAME:
-        missing.append("KEYCLOAK_ADMIN_USERNAME")
-    if not settings.KEYCLOAK_ADMIN_PASSWORD:
-        missing.append("KEYCLOAK_ADMIN_PASSWORD")
+    if not keycloak_admin.is_configured():
+        missing.append(
+            "KEYCLOAK_PROVISIONER_CLIENT_ID/SECRET or "
+            "KEYCLOAK_ADMIN_USERNAME/PASSWORD"
+        )
     if not settings.VAULT_URL:
         missing.append("VAULT_URL")
-    if not settings.VAULT_TOKEN:
-        missing.append("VAULT_TOKEN")
+    elif not vault_auth.is_configured():
+        missing.append("VAULT_AUTH=kubernetes or VAULT_TOKEN")
     if not settings.GITHUB_INSTALLATION_ID:
         missing.append("GITHUB_INSTALLATION_ID")
     if not settings.GITHUB_APP_PRIVATE_KEY:

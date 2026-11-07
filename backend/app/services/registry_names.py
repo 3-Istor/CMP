@@ -16,7 +16,49 @@ HOSTNAME_DOMAIN = "3istor.com"
 # suffix. Must match the cnp-apps ApplicationSet and cnp-project-base.
 ENVIRONMENT_SUFFIX = {"prod": "", "staging": "-stg"}
 
+# Kubernetes auth roles of the platform, on the mounts app roles share
+# (K3s/terraform/roles.tf). App roles are named "<project>-<app>-role" with no
+# project prefix: a matching app would overwrite the platform role.
+PLATFORM_VAULT_ROLES = frozenset(
+    {
+        "3istor-sessions-role",
+        "arcl-cmp-role",
+        "argocd-role",
+        "cert-manager-role",
+        "cloudflared-role",
+        "cmp-backend",
+        "demo-app-role",
+        "keycloak-role",
+        "linmap-bot-role",
+        "mepa-role",
+        "n8n-role",
+        "observability-role",
+        "offhours-guard-role",
+        "qcm-role",
+        "roadmap-role",
+        "rook-ceph-role",
+        "status-role",
+        "vault-secrets-operator-role",
+        "wireguard-role",
+    }
+)
+
 DerivedName = tuple[str, str, str]
+
+
+def app_vault_roles(project: str, app_name: str) -> list[str]:
+    """Must match the role names of app-templates k3s-gitops-app."""
+    return [
+        f"{project}-{app_name}-role",
+        f"{project}-{app_name}-staging-role",
+    ]
+
+
+def _is_reserved_vault_role(role: str) -> bool:
+    # project-<p>-system-role belongs to project-bootstrap of project <p>.
+    return role in PLATFORM_VAULT_ROLES or (
+        role.startswith("project-") and role.endswith("-system-role")
+    )
 
 
 def project_names(project: str) -> list[DerivedName]:
@@ -102,6 +144,12 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             f"app 'system' is reserved: namespace '{project}-system' "
             "belongs to the project itself"
         )
+    for role in app_vault_roles(project, app_name):
+        if _is_reserved_vault_role(role):
+            errors.append(
+                f"app '{app_name}' gives Vault role '{role}', which is "
+                "reserved by the platform"
+            )
     namespace = f"{project}-{app_name}"
     staging = f"{namespace}{ENVIRONMENT_SUFFIX['staging']}"
     if len(staging) > MAX_LABEL_LENGTH:

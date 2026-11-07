@@ -12,6 +12,7 @@ import logging
 import requests
 
 from app.core.config import settings
+from app.services import keycloak_admin, vault_auth
 from app.services.registry_names import HOSTNAME_DOMAIN
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def find_leftovers(project_name: str) -> list[str]:
         leftovers += _cloudflare_leftovers(project_name)
         leftovers += _keycloak_leftovers(project_name)
         leftovers += _vault_leftovers(project_name)
-    except requests.RequestException as exc:
+    except (requests.RequestException, vault_auth.VaultAuthError) as exc:
         raise PreflightUnavailableError(
             f"Could not check for leftovers of '{project_name}': {exc}"
         ) from exc
@@ -76,14 +77,9 @@ def _cloudflare_leftovers(project_name: str) -> list[str]:
 
 def _keycloak_admin_token() -> str:
     response = requests.post(
-        f"{settings.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
+        keycloak_admin.master_token_url(),
         headers=_HEADERS,
-        data={
-            "grant_type": "password",
-            "client_id": "admin-cli",
-            "username": settings.KEYCLOAK_ADMIN_USERNAME,
-            "password": settings.KEYCLOAK_ADMIN_PASSWORD,
-        },
+        data=keycloak_admin.master_token_form(),
         timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
@@ -101,8 +97,12 @@ def _keycloak_leftovers(project_name: str) -> list[str]:
     realm = requests.get(
         f"{admin}/{project_name}", headers=headers, timeout=REQUEST_TIMEOUT
     )
+    # With the provisioner client, 403 means the realm exists but was created
+    # by another admin, so the client holds no role on it.
+    hidden = realm.status_code == 403 and keycloak_admin.uses_provisioner()
     if realm.status_code != 404:
-        realm.raise_for_status()
+        if not hidden:
+            realm.raise_for_status()
         found.append(f"Keycloak realm '{project_name}'")
 
     client_id = f"broker-{project_name}"
@@ -137,7 +137,7 @@ def _keycloak_leftovers(project_name: str) -> list[str]:
 def _vault_leftovers(project_name: str) -> list[str]:
     response = requests.get(
         f"{settings.VAULT_URL}/v1/sys/mounts",
-        headers={**_HEADERS, "X-Vault-Token": settings.VAULT_TOKEN},
+        headers={**_HEADERS, "X-Vault-Token": vault_auth.token()},
         timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()

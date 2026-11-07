@@ -18,7 +18,7 @@ from urllib.parse import quote
 import requests
 
 from app.core.config import settings
-from app.services import project_registry
+from app.services import keycloak_admin, project_registry
 
 logger = logging.getLogger(__name__)
 
@@ -46,13 +46,8 @@ def _token() -> str:
     if _token_cache and now < _token_cache[1]:
         return _token_cache[0]
     response = requests.post(
-        f"{settings.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
-        data={
-            "grant_type": "password",
-            "client_id": "admin-cli",
-            "username": settings.KEYCLOAK_ADMIN_USERNAME,
-            "password": settings.KEYCLOAK_ADMIN_PASSWORD,
-        },
+        keycloak_admin.master_token_url(),
+        data=keycloak_admin.master_token_form(),
         timeout=10,
     )
     if response.status_code >= 400:

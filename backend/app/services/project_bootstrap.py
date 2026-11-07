@@ -11,8 +11,9 @@ This module creates the Day-0 infrastructure for a new Project:
 The Terraform module is expected to be located in the cloned templates repository.
 
 Terraform variables injected:
-  project_name, target_cloud, keycloak_url, keycloak_admin_username,
-  keycloak_admin_password, vault_url, vault_token,
+  project_name, target_cloud, keycloak_url, keycloak_client_id and
+  keycloak_client_secret (or the legacy keycloak_admin_username and
+  keycloak_admin_password), vault_url, vault_token,
   github_token, discord_webhook_url
 """
 
@@ -26,7 +27,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.models.project import ProjectStatus
-from app.services import metrics_isolation
+from app.services import keycloak_admin, metrics_isolation, vault_auth
 from app.services.environments import staging_realm
 from app.services.github_service import GitHubAppError, get_installation_token
 from app.services.project_status import delete_project_row, set_project_status
@@ -112,12 +113,14 @@ def _get_module_path() -> Path:
 def _failure_message(action: str, step: str, exc: Exception) -> str:
     """User-facing reason a bootstrap or teardown stopped.
 
-    Only a held state lock is spelled out: it is the one failure the user can
-    fix by waiting. Anything else stays in the backend logs, where the full
+    Only a held state lock (the user can wait) and a failed Vault login (the
+    CMP's own identity, never a secret) are spelled out. Anything else stays in the backend logs, where the full
     Terraform output may carry values that do not belong in the UI.
     """
     if isinstance(exc, StateLockedError):
         return str(exc)
+    if isinstance(exc, vault_auth.VaultAuthError):
+        return f"{action} failed {step}: {exc}"
     return f"{action} failed {step}. See the backend logs for details."
 
 
@@ -525,25 +528,8 @@ def _run(
         )
         env["AWS_DEFAULT_REGION"] = settings.TF_BACKEND_AWS_REGION
 
-    # ── Vault ─────────────────────────────────────────────────────────────
-    if settings.VAULT_URL:
-        env["TF_VAR_vault_url"] = settings.VAULT_URL
-        env["VAULT_ADDR"] = settings.VAULT_URL
-    if settings.VAULT_TOKEN:
-        env["TF_VAR_vault_token"] = settings.VAULT_TOKEN
-        env["VAULT_TOKEN"] = settings.VAULT_TOKEN
-
-    # ── Keycloak ──────────────────────────────────────────────────────────
-    if settings.KEYCLOAK_URL:
-        env["TF_VAR_keycloak_url"] = settings.KEYCLOAK_URL
-    if settings.KEYCLOAK_ADMIN_USERNAME:
-        env["TF_VAR_keycloak_admin_username"] = (
-            settings.KEYCLOAK_ADMIN_USERNAME
-        )
-    if settings.KEYCLOAK_ADMIN_PASSWORD:
-        env["TF_VAR_keycloak_admin_password"] = (
-            settings.KEYCLOAK_ADMIN_PASSWORD
-        )
+    env.update(vault_auth.terraform_env())
+    env.update(keycloak_admin.terraform_env())
 
     # ── Cloudflare ────────────────────────────────────────────────────────
     if settings.CLOUDFLARE_API_TOKEN:

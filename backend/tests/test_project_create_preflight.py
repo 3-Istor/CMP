@@ -11,6 +11,7 @@ from app.core.database import Base
 from app.models.project import Project, ProjectStatus, TargetCloud
 from app.routers import projects as projects_router
 from app.schemas.project import ProjectCreate
+from app.services import keycloak_admin, vault_auth
 from app.services.project_registry import (
     NameCollisionError,
     ProtectedRecordError,
@@ -33,6 +34,8 @@ def db():
 def seams():
     with (
         mock.patch.object(projects_router, "settings") as settings,
+        mock.patch.object(keycloak_admin, "settings", settings),
+        mock.patch.object(vault_auth, "settings", settings),
         mock.patch.object(projects_router, "find_leftovers") as leftovers,
         mock.patch.object(
             projects_router, "ensure_project_names_free", new=mock.AsyncMock()
