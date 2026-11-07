@@ -537,6 +537,23 @@ def project_guests_supported(project_name: str) -> bool:
     return _find_group_by_name(group_name, admin_token) is not None
 
 
+def list_group_usernames(group_name: str) -> set[str]:
+    """Usernames of a top-level realm group; empty when the group is absent."""
+    admin_token = _get_admin_token()
+    group = _find_group_by_name(group_name, admin_token)
+    if not group:
+        return set()
+    response = requests.get(
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+        f"/groups/{group['id']}/members",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        params={"max": 500},
+        timeout=10,
+    )
+    response.raise_for_status()
+    return {u["username"] for u in response.json() if u.get("username")}
+
+
 def list_project_members(project_name: str) -> list[dict]:
     """
     List every member of a project, across all role groups.

@@ -341,6 +341,77 @@ async def sync_all_project_orgs() -> None:
         await sync_project_org(project_name, owner_username)
 
 
+# Org 1 holds the platform dashboards and reads every namespace's metrics:
+# only platform admins (infra, Admin) and the auditor (Viewer) belong there.
+# Everyone else keeps their org 1 membership with no role ("None"): Grafana
+# needs each user in an org, and new logins land there with no role too.
+PLATFORM_ORG_ID = 1
+PLATFORM_SYNC_INTERVAL_SECONDS = 600
+
+
+async def sync_platform_org() -> None:
+    """Align org 1 roles with the Keycloak platform groups. Never raises."""
+    from app.services.authz import AUDITOR_GROUP, PLATFORM_ADMIN_GROUP
+    from app.services.keycloak_service import list_group_usernames
+
+    try:
+        admins = await asyncio.to_thread(
+            list_group_usernames, PLATFORM_ADMIN_GROUP
+        )
+        auditors = await asyncio.to_thread(list_group_usernames, AUDITOR_GROUP)
+    except Exception as exc:
+        logger.warning(f"Grafana platform org sync skipped: {exc}")
+        return
+    wanted = {u: "Viewer" for u in auditors} | {u: "Admin" for u in admins}
+
+    client = _get_http_client()
+    base = f"{GRAFANA_BASE_URL}/api/orgs/{PLATFORM_ORG_ID}/users"
+    try:
+        response = await client.get(base)
+        response.raise_for_status()
+        current = {u["login"]: u for u in response.json()}
+    except Exception as exc:
+        logger.warning(f"Grafana platform org sync skipped: {exc}")
+        return
+
+    for login, user in current.items():
+        # The local admin runs this sync; it is not a Keycloak user.
+        if login == GRAFANA_ADMIN_USERNAME:
+            continue
+        role = wanted.get(login, "None")
+        if user.get("role") == role:
+            continue
+        try:
+            (
+                await client.patch(
+                    f"{base}/{user['userId']}", json={"role": role}
+                )
+            ).raise_for_status()
+            logger.info(f"Grafana org 1: '{login}' set to {role}")
+        except Exception as exc:
+            logger.warning(f"Grafana org 1: '{login}' not updated: {exc}")
+
+    # Wanted users who never logged in to Grafana have no account yet; the
+    # next sync after their first login places them.
+    for login, role in wanted.items():
+        if login in current:
+            continue
+        try:
+            response = await client.post(
+                base, json={"loginOrEmail": login, "role": role}
+            )
+            if response.status_code not in (200, 404):
+                response.raise_for_status()
+        except Exception as exc:
+            logger.warning(f"Grafana org 1: '{login}' not added: {exc}")
+
+
+async def platform_org_sync_loop() -> None:
+    while True:
+        await sync_platform_org()
+        await asyncio.sleep(PLATFORM_SYNC_INTERVAL_SECONDS)
+
+
 async def remove_user_from_project_org(
     project_name: str, username: str
 ) -> bool:
