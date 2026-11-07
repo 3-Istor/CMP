@@ -45,7 +45,12 @@ interface Data {
   findings: SecurityFinding[];
   trend: SecurityTrendPoint[];
   exceptions: SecurityException[];
-  role: { role: "admin" | "member" | null; cnp_admin: boolean; username: string };
+  role: {
+    role: "admin" | "member" | "guest" | null;
+    cnp_admin: boolean;
+    auditor?: boolean;
+    username: string;
+  };
 }
 
 async function fetchSecurityData(
@@ -478,6 +483,7 @@ export function SecurityDashboard({
         <ExceptionsList
           exceptions={exceptions}
           canAdmin={canAdmin}
+          canReview={role.cnp_admin || role.auditor === true}
           username={role.username}
           onChanged={refresh}
         />

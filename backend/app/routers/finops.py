@@ -7,10 +7,11 @@ the ingested cost store); budgets, alert history and recommendation decisions
 are persisted here.
 
 Access control (spec matrix):
-  * **Admin CNP** (``FINOPS_ADMIN_USERS``), sees every project's costs.
-  * **Finance** (``cnp-finance`` group, ``FINOPS_FINANCE_USERS``), reads and
-    exports every project's costs, savings and budgets, and nothing else:
-    no recommendation, no budget edit, nothing outside ``/api/finops``.
+  * **Platform admin** (Keycloak group ``infra``), everything.
+  * **FinOps** (group ``finops``), reads and exports every project's costs,
+    savings and budgets, closes the month, and nothing else: no
+    recommendation, no budget edit.
+  * **Auditor** (group ``security-auditor``), reads what FinOps reads.
   * **Any role on a project, guests included**, sees that project's costs.
   * **Project admins/owner**, the only roles allowed to act on a
     recommendation (applying one commits to GitOps and changes running
@@ -76,8 +77,9 @@ from app.schemas.finops import (
 )
 from app.services.authz import (
     assert_project_role,
+    is_auditor,
     is_cnp_admin,
-    is_cnp_finance,
+    is_finops,
 )
 from app.services.finops import anomalies, estimate, platform, reconciliation
 from app.services.finops.forecast import forecast_for_apps
@@ -126,8 +128,13 @@ def _user_project_names(token: dict) -> list[str]:
 
 
 def _sees_all(token: dict) -> bool:
-    """Admin CNP or finance: allowed to read every project's figures."""
-    return is_cnp_admin(token) or is_cnp_finance(token)
+    """Platform admin, FinOps or auditor: reads every project's figures."""
+    return is_cnp_admin(token) or is_finops(token) or is_auditor(token)
+
+
+def _acts_on_finance(token: dict) -> bool:
+    """Platform admin or FinOps: month close and cost centres."""
+    return is_cnp_admin(token) or is_finops(token)
 
 
 def _require_project_role(
@@ -146,7 +153,7 @@ def _require_project_role(
     """
     if is_cnp_admin(token):
         return
-    if minimum == ProjectRole.GUEST and is_cnp_finance(token):
+    if minimum == ProjectRole.GUEST and _sees_all(token):
         return
     assert_project_role(db, token, project, minimum)
 
@@ -276,7 +283,7 @@ def _cost_specs(provider, deployments, token: dict, project, app=None):
         project is None
         and app is None
         and hasattr(provider, "specs_all")
-        and (is_cnp_admin(token) or is_cnp_finance(token))
+        and _sees_all(token)
     ):
         return provider.specs_all(deployments)
     return provider.specs(deployments)
@@ -617,7 +624,11 @@ def get_meta(
     role = (
         "admin"
         if is_cnp_admin(token)
-        else "finance" if is_cnp_finance(token) else "member"
+        else (
+            "finance"
+            if is_finops(token)
+            else "auditor" if is_auditor(token) else "member"
+        )
     )
     sources: list[SourceMeta] = []
     for source in db.scalars(select(CostLineItem.x_source).distinct()).all():
@@ -783,8 +794,10 @@ def get_reconciliation(
     period: Annotated[str, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = "",
 ):
     """Invoice vs allocated cost of a cloud month, with the untagged top."""
-    if not is_cnp_admin(token):
-        raise HTTPException(status_code=403, detail="CNP admin only")
+    if not _sees_all(token):
+        raise HTTPException(
+            status_code=403, detail="Platform admin, FinOps or auditor only"
+        )
     period = period or date.today().strftime("%Y-%m")
     return {
         **reconciliation.reconcile(db, provider, period),

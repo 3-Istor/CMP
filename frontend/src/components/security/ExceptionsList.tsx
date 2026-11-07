@@ -19,11 +19,14 @@ function date(iso: string, locale: string): string {
 export function ExceptionsList({
   exceptions,
   canAdmin,
+  canReview,
   username,
   onChanged,
 }: {
   exceptions: SecurityException[];
   canAdmin: boolean;
+  /** Platform admin or auditor: may also accept a critical finding. */
+  canReview: boolean;
   username: string;
   onChanged: () => void;
 }) {
@@ -89,7 +92,9 @@ export function ExceptionsList({
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
-              {e.pending_approval && canAdmin && e.author !== username && (
+              {e.pending_approval &&
+                e.author !== username &&
+                (canReview || (canAdmin && !e.critical)) && (
                 <Button
                   size="sm"
                   disabled={busy === e.id}

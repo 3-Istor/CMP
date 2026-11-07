@@ -26,7 +26,11 @@ from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
-from app.services.authz import assert_project_role, is_cnp_admin
+from app.services.authz import (
+    assert_project_role,
+    is_cnp_admin,
+    reads_every_project,
+)
 from app.services.catalog_service import get_template_by_id
 from app.services.clusters.state import ensure_cluster_up
 from app.services.deletion_protection import assert_deletable
@@ -144,12 +148,13 @@ def list_deployments(
     Return the caller's non-deleted deployments.
 
     Scoped to the projects the caller belongs to, including as a guest, who
-    is allowed to see which applications exist. Platform admins see them all.
+    is allowed to see which applications exist. Platform admins, the auditor
+    and FinOps see them all.
     """
     query = db.query(Deployment).filter(
         Deployment.status != DeploymentStatus.DELETED
     )
-    if not is_cnp_admin(token):
+    if not reads_every_project(token):
         query = query.filter(
             Deployment.project_id.in_(_user_project_names(db, token))
         )

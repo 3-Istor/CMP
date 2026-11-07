@@ -26,7 +26,7 @@ from app.services.finops.provider import RealCostProvider
 from app.services.keycloak_service import get_current_user
 
 REF = date(2026, 11, 10)
-ADMIN = {"preferred_username": "root"}
+ADMIN = {"preferred_username": "root", "groups": ["infra"]}
 MEMBER = {"preferred_username": "mem"}
 SLOTS = 5
 
@@ -46,8 +46,6 @@ def factory():
 def _settings(monkeypatch):
     monkeypatch.setattr(settings, "FINOPS_PLATFORM_APP_SLOTS", SLOTS)
     monkeypatch.setattr(settings, "FINOPS_PROVIDER", "real")
-    monkeypatch.setattr(settings, "FINOPS_ADMIN_USERS", "root")
-    monkeypatch.setattr(settings, "FINOPS_FINANCE_USERS", "")
     monkeypatch.setattr(router, "_user_project_names", lambda token: ["qcm"])
     monkeypatch.setattr(
         router, "assert_project_role", lambda *_args, **_kw: None

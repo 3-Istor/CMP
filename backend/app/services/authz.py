@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.core.roles import ProjectRole, at_least
+from app.core.roles import ProjectRole, at_least, rank
 from app.models.project import Project
 from app.services import keycloak_service
 from app.services.keycloak_service import (
@@ -94,7 +94,12 @@ def _resolve_role(
     # Through keycloak_service.get_project_role so every router (and every
     # test double) resolves group roles the same way.
     role = keycloak_service.get_project_role(user_id, project_name)
-    return user_id, username, ProjectRole(role) if role else None
+    group_role = ProjectRole(role) if role else None
+    platform_role = platform_project_role(token)
+    if platform_role is not None:
+        if group_role is None or rank(platform_role) > rank(group_role):
+            return user_id, username, platform_role
+    return user_id, username, group_role
 
 
 def assert_project_role(
@@ -224,34 +229,61 @@ RequireOwner = Annotated[
 ]
 
 
+# Platform identities of the access matrix (cnp-docs model.yaml): Keycloak
+# groups, read from the token's ``groups`` claim. Keycloak is the only source:
+# no username list, no realm role. A removal applies when the token expires.
+PLATFORM_ADMIN_GROUP = "infra"
+AUDITOR_GROUP = "security-auditor"
+FINOPS_GROUP = "finops"
+
+
+def _groups(token: dict) -> set[str]:
+    # Keycloak prefixes group paths with "/" when full_path is on.
+    return {str(g).lstrip("/") for g in token.get("groups") or []}
+
+
+def platform_roles(token: dict) -> list[str]:
+    """The caller's platform identities, for the UI."""
+    groups = _groups(token)
+    return [
+        g
+        for g in (PLATFORM_ADMIN_GROUP, AUDITOR_GROUP, FINOPS_GROUP)
+        if g in groups
+    ]
+
+
 def is_cnp_admin(token: dict) -> bool:
-    """Global CNP admin: configured username (FINOPS_ADMIN_USERS) or a ``cnp-admin`` realm role."""
-    admins = {
-        u.strip().lower()
-        for u in settings.FINOPS_ADMIN_USERS.split(",")
-        if u.strip()
-    }
-    username = token.get("preferred_username") or token.get("sub", "")
-    if username.lower() in admins:
-        return True
-    roles = (token.get("realm_access") or {}).get("roles", [])
-    return "cnp-admin" in roles
+    """Platform admin, infra and portal alike: the ``infra`` group."""
+    return PLATFORM_ADMIN_GROUP in _groups(token)
 
 
-def is_cnp_finance(token: dict) -> bool:
+def is_auditor(token: dict) -> bool:
+    """Reads every project except logs and secrets, approves critical CVE exceptions."""
+    return AUDITOR_GROUP in _groups(token)
+
+
+def is_finops(token: dict) -> bool:
+    """Every project's costs, exports and month close."""
+    return FINOPS_GROUP in _groups(token)
+
+
+def reads_every_project(token: dict) -> bool:
+    """Sees every project and app, read only unless platform admin."""
+    return is_cnp_admin(token) or is_auditor(token) or is_finops(token)
+
+
+def reads_platform_security(token: dict) -> bool:
+    """Security findings and activity of every project."""
+    return is_cnp_admin(token) or is_auditor(token)
+
+
+def platform_project_role(token: dict) -> ProjectRole | None:
     """
-    Finance role: ``cnp-finance`` in the token's groups (with or without the
-    leading slash Keycloak adds to group paths) or realm roles, or a username
-    listed in FINOPS_FINANCE_USERS. It widens FinOps reads, nothing else.
+    The role a platform identity holds on a project it is not a member of:
+    admin for a platform admin, guest (read) for the auditor and FinOps.
     """
-    finance = {
-        u.strip().lower()
-        for u in settings.FINOPS_FINANCE_USERS.split(",")
-        if u.strip()
-    }
-    username = token.get("preferred_username") or token.get("sub", "")
-    if username.lower() in finance:
-        return True
-    groups = {str(g).lstrip("/") for g in token.get("groups") or []}
-    roles = (token.get("realm_access") or {}).get("roles", [])
-    return "cnp-finance" in groups or "cnp-finance" in roles
+    if is_cnp_admin(token):
+        return ProjectRole.ADMIN
+    if is_auditor(token) or is_finops(token):
+        return ProjectRole.GUEST
+    return None

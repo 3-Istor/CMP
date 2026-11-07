@@ -23,8 +23,10 @@ from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
 from app.services.authz import (
+    is_auditor,
     is_cnp_admin,
     project_role_or_none,
+    reads_platform_security,
     require_project_member,
 )
 from app.services.clusters.state import project_cloud
@@ -75,12 +77,16 @@ def _username(token: dict) -> str:
     return token.get("preferred_username") or token.get("sub", "")
 
 
-async def _require_member(token: dict, project: str, view: View) -> None:
-    if is_cnp_admin(token):
+async def _require_member(
+    token: dict, project: str, view: View, write: bool = False
+) -> None:
+    """Members of the project; the auditor reads every project, never writes."""
+    if is_cnp_admin(token) or (not write and is_auditor(token)):
         return
     if view == "platform":
         raise HTTPException(
-            status_code=403, detail="The platform view is for CNP admins."
+            status_code=403,
+            detail="The platform view is for platform admins and auditors.",
         )
     await run_in_threadpool(require_project_member, token, project)
 
@@ -127,6 +133,8 @@ class ExceptionRead(BaseModel):
     revoked_by: str | None
     revoked_at: datetime | None
     pending_approval: bool = False
+    # A core finding is a fixable critical: only the auditor accepts it.
+    critical: bool = False
 
 
 class FindingRead(BaseModel):
@@ -241,6 +249,7 @@ def _exception_read(e: SecurityException, tier: Tier | None) -> ExceptionRead:
         revoked_by=e.revoked_by,
         revoked_at=e.revoked_at,
         pending_approval=pending,
+        critical=tier is Tier.CORE,
     )
 
 
@@ -374,7 +383,7 @@ async def get_overview(
     token: CurrentUser, db: Session = Depends(get_db)
 ) -> list[ProjectOverview]:
     """Grade of every project the caller can see, for lists and badges."""
-    if is_cnp_admin(token):
+    if reads_platform_security(token):
         projects = sorted(
             {
                 d.project_id
@@ -502,7 +511,7 @@ async def request_scan(
     payload: ScanRequest, token: CurrentUser, db: Session = Depends(get_db)
 ) -> ScanRead:
     """Start a scan now; its result arrives through the collector."""
-    await _require_member(token, payload.project, "developer")
+    await _require_member(token, payload.project, "developer", write=True)
     deployment = _app_deployment(db, payload.project, payload.app)
     source = Source(payload.source)
     state = store.scan_state(db, payload.project, payload.app, source)
@@ -603,7 +612,7 @@ async def create_exception(
     token: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ExceptionRead:
-    await _require_member(token, payload.project, "developer")
+    await _require_member(token, payload.project, "developer", write=True)
     today = utcnow().date()
     finding = next(
         (
@@ -649,6 +658,15 @@ async def create_exception(
     return _exception_read(row, finding.tier)
 
 
+def _exception_tier(db: Session, row: SecurityException) -> Tier | None:
+    for finding in store.merged_findings(
+        db, row.project, utcnow().date(), row.app, include_resolved=True
+    ):
+        if finding.fingerprint == row.fingerprint:
+            return finding.tier
+    return None
+
+
 def _exception_or_404(db: Session, exception_id: int) -> SecurityException:
     row = db.get(SecurityException, exception_id)
     if row is None:
@@ -689,13 +707,22 @@ async def approve_exception(
     exception_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> ExceptionRead:
     row = _exception_or_404(db, exception_id)
-    await _require_admin(token, row.project)
     approver = _username(token)
     if approver == row.author:
         raise HTTPException(
             status_code=403,
             detail="Un autre admin du projet que l'auteur doit valider.",
         )
+    reviewer = is_cnp_admin(token) or is_auditor(token)
+    if not reviewer:
+        # A core finding is a fixable critical: only the auditor or a platform
+        # admin may accept it; project admins approve the rest.
+        if _exception_tier(db, row) is Tier.CORE:
+            raise HTTPException(
+                status_code=403,
+                detail="Une exception critique est validée par l'audit sécurité.",
+            )
+        await _require_admin(token, row.project)
     if row.revoked_at is not None:
         raise HTTPException(status_code=409, detail="Exception réactivée.")
     row.approved_by, row.approved_at = approver, utcnow()
@@ -714,7 +741,7 @@ async def revoke_exception(
 ) -> ExceptionRead:
     """Reactivate the alert."""
     row = _exception_or_404(db, exception_id)
-    await _require_member(token, row.project, "developer")
+    await _require_member(token, row.project, "developer", write=True)
     if row.revoked_at is None:
         row.revoked_by, row.revoked_at = _username(token), utcnow()
         db.commit()
@@ -733,7 +760,12 @@ async def get_my_role(
         if admin
         else await run_in_threadpool(project_role_or_none, token, project)
     )
-    return {"role": role, "cnp_admin": admin, "username": _username(token)}
+    return {
+        "role": role,
+        "cnp_admin": admin,
+        "auditor": is_auditor(token),
+        "username": _username(token),
+    }
 
 
 # ── Settings and project policy ──────────────────────────────────────────────

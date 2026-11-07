@@ -17,12 +17,14 @@ from app.core.database import get_db
 from app.models.finops import CostCenter, ProjectBudget
 from app.models.project import Project
 from app.routers.finops import (
+    _acts_on_finance,
     _require_project_role,
     _sees_all,
     _user_project_names,
     _username,
 )
 from app.schemas.finops import CostCenterRow, CostCentersWrite, MonthCloseRead
+from app.services.authz import is_cnp_admin
 from app.services.finops import finance, reconciliation
 from app.services.keycloak_service import get_current_user
 
@@ -37,10 +39,20 @@ XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def _require_finance(token: dict) -> None:
+    """Reads: platform admin, FinOps, auditor."""
     if not _sees_all(token):
         raise HTTPException(
             status_code=403,
-            detail="Réservé à la finance et aux admins CNP.",
+            detail="Réservé à FinOps, à l'audit et aux admins de la plateforme.",
+        )
+
+
+def _require_finance_write(token: dict) -> None:
+    """Month close and cost centres: platform admin or FinOps."""
+    if not _acts_on_finance(token):
+        raise HTTPException(
+            status_code=403,
+            detail="Réservé à FinOps et aux admins de la plateforme.",
         )
 
 
@@ -116,7 +128,12 @@ def close_period(
     db: Session = Depends(get_db),
 ):
     """Freeze a month: later revisions of its lines become adjustments."""
-    _require_finance(token)
+    _require_finance_write(token)
+    if force and not is_cnp_admin(token):
+        raise HTTPException(
+            status_code=403,
+            detail="Forcer une clôture est réservé aux admins de la plateforme.",
+        )
     try:
         return finance.close_month(db, period, _username(token), force)
     except finance.CloseRefused as exc:
@@ -154,7 +171,7 @@ def put_cost_centers(
     payload: CostCentersWrite, token: Token, db: Session = Depends(get_db)
 ):
     """Set project to cost center mappings; an empty cost center removes one."""
-    _require_finance(token)
+    _require_finance_write(token)
     known = set(db.scalars(select(Project.project_name)))
     existing = finance.cost_centers(db)
     for row in payload.centers:
