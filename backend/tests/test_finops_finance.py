@@ -460,9 +460,15 @@ def test_closes_lists_the_closed_months(api, factory):
         upsert(db, [_line()])
     api(ADMIN).post("/api/finops/close/2026-09")
 
-    body = api(MEMBER).get("/api/finops/closes").json()
+    body = api(FINANCE).get("/api/finops/closes").json()
 
     assert [c["billing_period"] for c in body] == ["2026-09"]
+
+
+def test_closes_are_hidden_from_project_members(api):
+    response = api(MEMBER).get("/api/finops/closes")
+
+    assert response.status_code == 403
 
 
 def test_month_close_and_cost_centers_are_journaled():

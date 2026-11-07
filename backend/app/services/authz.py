@@ -37,7 +37,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.roles import ProjectRole, at_least
 from app.models.project import Project
 from app.services import keycloak_service
@@ -173,6 +173,21 @@ def require_project_role(
         return assert_project_role(db, token_payload, project_name, minimum)
 
     return _dep
+
+
+def require_project_member(
+    token: dict, project_name: str, require_admin: bool = False
+) -> str:
+    """
+    :func:`assert_project_role` for routers without a db session, member
+    minimum (admin when *require_admin*). Returns the role's value.
+
+    Guests are refused: the routers using this (security, activity, alerts)
+    expose logs and findings, which guests do not get.
+    """
+    minimum = ProjectRole.ADMIN if require_admin else ProjectRole.MEMBER
+    with SessionLocal() as db:
+        return assert_project_role(db, token, project_name, minimum).role.value
 
 
 # Built once, at import time, see require_project_role's docstring.

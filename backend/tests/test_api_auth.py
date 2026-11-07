@@ -30,6 +30,7 @@ def _token(key=SIGNING_KEY, **overrides) -> str:
         "iss": ISSUER,
         "exp": int(time.time()) + 300,
         "preferred_username": "alice",
+        "azp": settings.KEYCLOAK_CLIENT_ID,
     }
     claims.update(overrides)
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "k1"})
@@ -79,6 +80,8 @@ class TestDecodePlatformToken:
                 id="alg-none",
             ),
             pytest.param(lambda: "not-a-jwt", id="malformed"),
+            pytest.param(lambda: _token(azp="k3s-cluster"), id="other-client"),
+            pytest.param(lambda: _token(azp=None), id="no-authorized-party"),
         ],
     )
     def test_rejects_untrusted_tokens(self, jwks, token):
@@ -86,6 +89,16 @@ class TestDecodePlatformToken:
             keycloak_service.decode_platform_token(token())
 
         assert exc.value.status_code == 401
+
+    def test_accepts_every_client_listed_during_a_switch(self, jwks):
+        with mock.patch.object(
+            settings, "KEYCLOAK_ALLOWED_CLIENTS", "3-istor-openid, cnp-portal"
+        ):
+            claims = keycloak_service.decode_platform_token(
+                _token(azp="cnp-portal")
+            )
+
+        assert claims["azp"] == "cnp-portal"
 
     def test_reports_unavailable_when_signing_keys_cannot_be_fetched(self):
         with mock.patch.object(

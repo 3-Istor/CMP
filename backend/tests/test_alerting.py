@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.core.database import get_db
 from app.models.alerting import AlertSetting
 from app.routers import alerting as alerting_router
-from app.services import alerts_grafana, keycloak_service
+from app.services import alerts_grafana, authz, keycloak_service
 from app.services.alerts_catalog import BY_ID, namespace_matcher
 from app.services.keycloak_service import get_current_user
 from tests.test_app_security_data import (  # noqa: F401
@@ -45,6 +45,7 @@ def make(session_factory):
             "preferred_username": "alice",
         }
         patches = [
+            mock.patch.object(authz, "SessionLocal", session_factory),
             mock.patch.object(alerting_router, "grafana", grafana),
             mock.patch.object(
                 keycloak_service, "get_project_role", lambda u, p: role

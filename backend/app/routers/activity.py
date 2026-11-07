@@ -29,11 +29,8 @@ from app.core.database import get_db
 from app.models.audit import ActivityCursor, ActivityRecord, AuditEvent
 from app.services import activity_sources as sources
 from app.services.audit import NOTABLE
-from app.services.authz import is_cnp_admin
-from app.services.keycloak_service import (
-    get_current_user,
-    require_project_role,
-)
+from app.services.authz import is_cnp_admin, require_project_member
+from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError, kube_get
 
 router = APIRouter(prefix="/activity", tags=["Activity"])
@@ -161,7 +158,7 @@ async def _role(token: dict, project: str | None) -> str:
             status_code=403,
             detail="Only platform admins can read activity across projects.",
         )
-    return await run_in_threadpool(require_project_role, token, project)
+    return await run_in_threadpool(require_project_member, token, project)
 
 
 def _identities(token: dict) -> set[str]:

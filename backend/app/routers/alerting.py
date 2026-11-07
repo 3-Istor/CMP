@@ -18,12 +18,9 @@ from app.models.deployment import Deployment
 from app.services import alerts_grafana as grafana
 from app.services.activity_sources import PROJECT_NAME, namespace_projects
 from app.services.alerts_catalog import BY_ID, CATALOG, AlertTemplate
-from app.services.authz import is_cnp_admin
+from app.services.authz import is_cnp_admin, require_project_member
 from app.services.grafana_service import GRAFANA_BASE_URL
-from app.services.keycloak_service import (
-    get_current_user,
-    require_project_role,
-)
+from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
 from app.services.security import alerts as targets_store
 
@@ -71,7 +68,7 @@ async def _role(token: dict, project: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid project name.")
     if is_cnp_admin(token):
         return "admin"
-    return await run_in_threadpool(require_project_role, token, project)
+    return await run_in_threadpool(require_project_member, token, project)
 
 
 def _check_app(db: Session, project: str, app: str | None) -> None:
