@@ -30,7 +30,7 @@ function SecurityInner() {
   useEffect(() => {
     if (!project) return;
     getSecurityRole(project)
-      .then((r) => setIsCnpAdmin(r.cnp_admin))
+      .then((r) => setIsCnpAdmin(r.cnp_admin || r.auditor === true))
       .catch(() => setIsCnpAdmin(false));
   }, [project]);
 

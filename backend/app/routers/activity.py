@@ -29,7 +29,7 @@ from app.core.database import get_db
 from app.models.audit import ActivityCursor, ActivityRecord, AuditEvent
 from app.services import activity_sources as sources
 from app.services.audit import NOTABLE
-from app.services.authz import is_cnp_admin, require_project_member
+from app.services.authz import is_auditor, is_cnp_admin, require_project_member
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError, kube_get
 
@@ -147,16 +147,21 @@ class LogTargets(BaseModel):
 # ── Access ───────────────────────────────────────────────────────────────────
 
 
-async def _role(token: dict, project: str | None) -> str:
-    """ "platform", "admin" or "member"; 403 for anyone else."""
+async def _role(
+    token: dict, project: str | None, app_logs: bool = False
+) -> str:
+    """
+    "platform", "admin" or "member"; 403 for anyone else. The auditor reads
+    every project's activity, but application logs only as a project member.
+    """
     if project is not None and not sources.PROJECT_NAME.match(project):
         raise HTTPException(status_code=400, detail="Invalid project name.")
-    if is_cnp_admin(token):
+    if is_cnp_admin(token) or (is_auditor(token) and not app_logs):
         return "platform"
     if not project:
         raise HTTPException(
             status_code=403,
-            detail="Only platform admins can read activity across projects.",
+            detail="Only platform admins and auditors can read activity across projects.",
         )
     return await run_in_threadpool(require_project_member, token, project)
 
@@ -636,7 +641,7 @@ async def project_logs(
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
 ) -> list[LogLine]:
     """The project's pod logs, newest first; every member may read them."""
-    await _role(token, project)
+    await _role(token, project, app_logs=True)
     if search and "`" in search:
         raise HTTPException(
             status_code=400, detail="Backticks are not allowed."
@@ -664,7 +669,7 @@ async def project_logs(
 @router.get("/logs/targets", response_model=LogTargets)
 async def log_targets(token: CurrentUser, project: str) -> LogTargets:
     """Namespaces, pods and containers with logs in the last 24 hours."""
-    await _role(token, project)
+    await _role(token, project, app_logs=True)
     start, end = _window(None, None, days=1)
     try:
         namespaces, pods, containers = await asyncio.gather(

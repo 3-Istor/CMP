@@ -213,7 +213,12 @@ export const getSecurityExceptions = (project: string, app?: string | null) =>
   );
 
 export const getSecurityRole = (project: string) =>
-  request<{ role: "admin" | "member" | null; cnp_admin: boolean; username: string }>(
+  request<{
+    role: "admin" | "member" | "guest" | null;
+    cnp_admin: boolean;
+    auditor?: boolean;
+    username: string;
+  }>(
     `/security/me?${securityQuery({ project })}`,
   );
 

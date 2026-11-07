@@ -44,7 +44,9 @@ export default function FinopsLayout({
     exact: false,
   };
   const tabs =
-    role === "admin" || role === "finance" ? [...TABS, FINANCE_TAB] : TABS;
+    role === "admin" || role === "finance" || role === "auditor"
+      ? [...TABS, FINANCE_TAB]
+      : TABS;
 
   return (
     <div className="min-h-screen">

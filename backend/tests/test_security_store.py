@@ -138,6 +138,7 @@ def _exception(db, status="not_affected", approved=False, expires=None):
         author="alice",
         approved_by="bob" if approved else None,
         approved_at=NOW if approved else None,
+        approved_by_reviewer=approved,
     )
     db.add(row)
     db.commit()

@@ -118,7 +118,9 @@ export default function FinopsFinancePage() {
       rows.map((r) => (r.project_name === project ? { ...r, [field]: value } : r)),
     );
 
-  if (role && role !== "admin" && role !== "finance") {
+  // The auditor reads the finance tab; closing and editing are FinOps' and admins'.
+  const canAct = role === "admin" || role === "finance";
+  if (role && !canAct && role !== "auditor") {
     return (
       <div className="flex items-center gap-2 rounded-lg border px-4 py-3 text-sm text-muted-foreground">
         <Lock className="h-4 w-4" />
@@ -225,7 +227,7 @@ export default function FinopsFinancePage() {
           ) : !confirming ? (
             <Button
               variant="outline"
-              disabled={!period || busy !== null}
+              disabled={!canAct || !period || busy !== null}
               onClick={() => setConfirming(true)}
             >
               <Lock className="h-4 w-4" /> {t("finance.closeMonth")}
@@ -240,7 +242,7 @@ export default function FinopsFinancePage() {
               )}
               <div className="flex gap-2">
                 <Button
-                  disabled={busy !== null}
+                  disabled={busy !== null || (needsForce !== null && role !== "admin")}
                   onClick={() => close(needsForce !== null)}
                 >
                   {busy === "close" && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -344,7 +346,10 @@ export default function FinopsFinancePage() {
               </tbody>
             </table>
           </div>
-          <Button disabled={busy !== null || draft.length === 0} onClick={saveCenters}>
+          <Button
+            disabled={!canAct || busy !== null || draft.length === 0}
+            onClick={saveCenters}
+          >
             {busy === "centers" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (

@@ -120,15 +120,15 @@ class TestProfileLocale:
 
 class TestProfileAdminFlag:
     @pytest.mark.parametrize(
-        ("roles", "expected"), [(["cnp-admin"], True), ([], False)]
+        ("groups", "expected"), [(["infra"], True), (["member"], False)]
     )
     def test_profile_reports_the_platform_admin_role(
-        self, db, roles, expected
+        self, db, groups, expected
     ):
         claims = {
             **_claims(),
             "email": "a@example.com",
-            "realm_access": {"roles": roles},
+            "groups": groups,
         }
 
         with mock.patch.object(

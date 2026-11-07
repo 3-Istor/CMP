@@ -27,13 +27,14 @@ from app.models.project import Project
 from app.routers import finops as router
 from app.routers import finops_finance
 from app.services.audit import match_action
-from app.services.authz import is_cnp_finance
+from app.services.authz import is_auditor, is_cnp_admin, is_finops
 from app.services.finops import finance, monthly_report
 from app.services.finops.ingest.store import CostLine, upsert
 from app.services.keycloak_service import get_current_user
 
-ADMIN = {"preferred_username": "root"}
-FINANCE = {"preferred_username": "fin", "groups": ["/cnp-finance"]}
+ADMIN = {"preferred_username": "root", "groups": ["infra"]}
+FINANCE = {"preferred_username": "fin", "groups": ["/finops"]}
+AUDITOR = {"preferred_username": "aud", "groups": ["security-auditor"]}
 MEMBER = {"preferred_username": "mem"}
 
 
@@ -50,8 +51,6 @@ def factory():
 
 @pytest.fixture(autouse=True)
 def _roles(monkeypatch):
-    monkeypatch.setattr(settings, "FINOPS_ADMIN_USERS", "root")
-    monkeypatch.setattr(settings, "FINOPS_FINANCE_USERS", "")
 
     def only_qcm(_db, _token, project, _minimum):
         if project != "qcm":
@@ -159,24 +158,45 @@ def seeded(factory):
 
 
 @pytest.mark.parametrize(
-    "token",
+    "check, group",
     [
-        {"groups": ["cnp-finance"]},
-        {"groups": ["/cnp-finance"]},
-        {"realm_access": {"roles": ["cnp-finance"]}},
-        {"preferred_username": "Fin"},
+        (is_cnp_admin, "infra"),
+        (is_finops, "finops"),
+        (is_auditor, "security-auditor"),
     ],
 )
-def test_is_cnp_finance_accepts_group_role_or_listed_user(token, monkeypatch):
-    monkeypatch.setattr(settings, "FINOPS_FINANCE_USERS", "fin, bob")
-
-    assert is_cnp_finance(token) is True
+def test_platform_identity_comes_from_its_keycloak_group(check, group):
+    assert check({"groups": [f"/{group}"]}) is True
 
 
-def test_is_cnp_finance_rejects_other_groups():
-    assert (
-        is_cnp_finance({"groups": ["/cnp-finance-x", "/qcm-admins"]}) is False
+@pytest.mark.parametrize(
+    "token",
+    [
+        {"groups": ["/finops-x", "/qcm-admins"]},
+        {"realm_access": {"roles": ["cnp-admin", "finops"]}},
+        {"preferred_username": "hugo.guillet"},
+    ],
+)
+def test_platform_identity_ignores_roles_names_and_lookalike_groups(token):
+    assert (is_cnp_admin(token), is_finops(token), is_auditor(token)) == (
+        False,
+        False,
+        False,
     )
+
+
+def test_auditor_reads_closes_but_cannot_close_a_month(api, factory):
+    with factory() as db:
+        upsert(db, [_line()])
+
+    assert api(AUDITOR).get("/api/finops/closes").status_code == 200
+    assert api(AUDITOR).post("/api/finops/close/2026-09").status_code == 403
+
+
+def test_only_a_platform_admin_forces_a_close(api):
+    response = api(FINANCE).post("/api/finops/close/2026-09?force=true")
+
+    assert response.status_code == 403
 
 
 def test_meta_reports_the_callers_role(api):
@@ -435,9 +455,9 @@ def test_close_with_force_accepts_non_final_invoice_lines(api, factory):
     with factory() as db:
         upsert(db, [_line(x_pricing_basis="invoice", x_is_final=False)])
 
-    response = api(FINANCE).post("/api/finops/close/2026-09?force=true")
+    response = api(ADMIN).post("/api/finops/close/2026-09?force=true")
 
-    assert response.json()["closed_by"] == "fin"
+    assert response.json()["closed_by"] == "root"
 
 
 def test_close_ignores_non_final_lines_that_are_not_invoices(api, factory):

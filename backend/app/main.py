@@ -45,7 +45,10 @@ from app.services.clusters.state import not_connected_response
 from app.services.environments.loop import environment_loop
 from app.services.finops import alert_poller, monthly_report
 from app.services.finops.ingest import finops_ingest_loop
-from app.services.grafana_service import sync_all_project_orgs
+from app.services.grafana_service import (
+    platform_org_sync_loop,
+    sync_all_project_orgs,
+)
 from app.services.kube_client import ClusterNotConnectedError
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
@@ -285,6 +288,7 @@ async def lifespan(app: FastAPI):
     environment_task = asyncio.create_task(environment_loop())
     # Runs once, after startup: Grafana being down only logs.
     grafana_sync_task = asyncio.create_task(sync_all_project_orgs())
+    grafana_platform_task = asyncio.create_task(platform_org_sync_loop())
 
     # Last, so it only gets the paths no router claimed: /mcp, the OAuth
     # endpoints (/authorize, /token, /register, /revoke) and their
@@ -310,6 +314,7 @@ async def lifespan(app: FastAPI):
     release_recorder_task.cancel()
     environment_task.cancel()
     grafana_sync_task.cancel()
+    grafana_platform_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
@@ -319,6 +324,7 @@ async def lifespan(app: FastAPI):
         release_recorder_task,
         environment_task,
         grafana_sync_task,
+        grafana_platform_task,
     ):
         try:
             await task

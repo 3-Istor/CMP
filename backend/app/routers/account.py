@@ -20,7 +20,7 @@ from app.schemas.account import (
     UserPreferences,
     UserProfile,
 )
-from app.services.authz import is_cnp_admin
+from app.services.authz import is_cnp_admin, platform_roles
 from app.services.keycloak_service import _get_admin_token, get_current_user
 
 logger = logging.getLogger(__name__)
@@ -217,6 +217,7 @@ def get_user_profile(
         github_installation_id=github_installation_id,
         locale=_stored_locale(db, _preference_key(token_payload)),
         cnp_admin=is_cnp_admin(token_payload),
+        platform_roles=platform_roles(token_payload),
     )
 
 

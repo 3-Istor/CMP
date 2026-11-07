@@ -20,6 +20,8 @@ class UserProfile(BaseModel):
     github_installation_id: str | None = None
     locale: Locale | None = None
     cnp_admin: bool = False
+    # Platform identities: infra, security-auditor, finops (Keycloak groups).
+    platform_roles: list[str] = []
 
 
 class PictureUploadResponse(BaseModel):

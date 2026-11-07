@@ -1,12 +1,14 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -91,6 +93,11 @@ class SecurityException(Base):
     )
     approved_by: Mapped[str | None] = mapped_column(String(255))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Set when the auditor or a platform admin approved: only such an
+    # approval covers a critical (core) finding.
+    approved_by_reviewer: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     revoked_by: Mapped[str | None] = mapped_column(String(255))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
     commit_sha: Mapped[str | None] = mapped_column(String(64))

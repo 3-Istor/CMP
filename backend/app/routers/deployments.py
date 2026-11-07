@@ -26,7 +26,12 @@ from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
-from app.services.authz import assert_project_role, is_cnp_admin
+from app.services.authz import (
+    assert_project_role,
+    is_auditor,
+    is_cnp_admin,
+    reads_platform_security,
+)
 from app.services.catalog_service import get_template_by_id
 from app.services.clusters.state import ensure_cluster_up
 from app.services.deletion_protection import assert_deletable
@@ -144,16 +149,32 @@ def list_deployments(
     Return the caller's non-deleted deployments.
 
     Scoped to the projects the caller belongs to, including as a guest, who
-    is allowed to see which applications exist. Platform admins see them all.
+    is allowed to see which applications exist. Platform admins and the
+    auditor see them all.
     """
     query = db.query(Deployment).filter(
         Deployment.status != DeploymentStatus.DELETED
     )
-    if not is_cnp_admin(token):
+    if not reads_platform_security(token):
         query = query.filter(
             Deployment.project_id.in_(_user_project_names(db, token))
         )
-    return query.all()
+        return query.all()
+    rows = query.all()
+    if is_cnp_admin(token):
+        return rows
+    # The auditor lists every app but reads outputs only where it is a member.
+    own = set(_user_project_names(db, token))
+    return [
+        (
+            row
+            if row.project_id in own
+            else DeploymentRead.model_validate(row).model_copy(
+                update={"terraform_outputs": None}
+            )
+        )
+        for row in rows
+    ]
 
 
 @router.post("/", response_model=DeploymentRead, status_code=202)
@@ -285,6 +306,12 @@ async def get_deployment_outputs(
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
 
     if not deployment.terraform_outputs:
+        return {}
+    if (
+        is_auditor(token)
+        and not is_cnp_admin(token)
+        and deployment.project_id not in set(_user_project_names(db, token))
+    ):
         return {}
 
     try:

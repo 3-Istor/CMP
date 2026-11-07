@@ -307,6 +307,8 @@ export interface UserProfile {
   github_installation_id?: string | null; // Phase 3: GitHub App integration
   locale?: "fr" | "en" | null;
   cnp_admin?: boolean;
+  /** Keycloak platform groups: infra, security-auditor, finops. */
+  platform_roles?: string[];
 }
 
 export interface GitHubStatus {
@@ -510,7 +512,7 @@ export interface FinopsSourceMeta {
 export interface FinopsMeta {
   provider: "simulated" | "real";
   sources: FinopsSourceMeta[];
-  role?: "admin" | "finance" | "member";
+  role?: "admin" | "finance" | "auditor" | "member";
 }
 
 export interface FinopsCostCenter {
@@ -593,6 +595,7 @@ export interface SecurityException {
   revoked_by: string | null;
   revoked_at: string | null;
   pending_approval: boolean;
+  critical?: boolean;
 }
 
 export interface SecurityFinding {

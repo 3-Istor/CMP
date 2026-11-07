@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.roles import ProjectRole
+from app.core.roles import ProjectRole, rank
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, ProjectStatus, TargetCloud
 from app.schemas.deployment import DeploymentRead
@@ -45,6 +45,7 @@ from app.services.authz import (
     RequireMember,
     assert_project_role,
     is_cnp_admin,
+    platform_project_role,
 )
 from app.services.clusters.state import (
     PUBLIC_CLOUDS,
@@ -232,6 +233,15 @@ def list_projects(
     )
     for row in owned:
         by_name.setdefault(row.project_name, {"name": row.project_name})
+
+    # Platform identities see every project, with the role they hold on it.
+    platform_role = platform_project_role(token_payload)
+    if platform_role is not None:
+        for (name,) in db.query(Project.project_name).all():
+            entry = by_name.setdefault(name, {"name": name})
+            current = entry.get("role")
+            if current is None or rank(platform_role) > rank(current):
+                entry["role"] = platform_role.value
 
     rows = {
         row.project_name: row

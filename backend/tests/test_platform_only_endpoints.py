@@ -15,7 +15,7 @@ from app.services import authz, keycloak_service
 ADMIN = {
     "sub": "a1",
     "preferred_username": "root",
-    "realm_access": {"roles": ["cnp-admin"]},
+    "groups": ["infra"],
 }
 MEMBER = {"sub": "m1", "preferred_username": "dev"}
 
@@ -71,5 +71,43 @@ class TestRequireProjectMember:
                 authz.require_project_member(
                     {"sub": "x", "preferred_username": "other"}, "shop", True
                 )
+
+        assert exc.value.status_code == 403
+
+
+class TestPlatformIdentitiesOnProjects:
+    @pytest.mark.parametrize(
+        ("groups", "expected"),
+        [
+            (["infra"], "admin"),
+            (["security-auditor"], "guest"),
+            (["finops"], None),
+            (["member"], None),
+        ],
+    )
+    def test_role_on_a_project_the_caller_is_not_a_member_of(
+        self, session_factory, groups, expected
+    ):
+        token = {"sub": "x", "preferred_username": "other", "groups": groups}
+
+        with mock.patch.object(
+            keycloak_service, "get_project_role", lambda u, p: None
+        ):
+            role = authz.project_role_or_none(token, "shop")
+
+        assert role == expected
+
+    def test_auditor_cannot_act_as_a_member(self, session_factory):
+        token = {
+            "sub": "x",
+            "preferred_username": "aud",
+            "groups": ["security-auditor"],
+        }
+
+        with mock.patch.object(
+            keycloak_service, "get_project_role", lambda u, p: None
+        ):
+            with pytest.raises(HTTPException) as exc:
+                authz.require_project_member(token, "shop")
 
         assert exc.value.status_code == 403
