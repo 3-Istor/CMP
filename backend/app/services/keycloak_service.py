@@ -538,7 +538,10 @@ def project_guests_supported(project_name: str) -> bool:
 
 
 def list_group_usernames(group_name: str) -> set[str]:
-    """Usernames of a top-level realm group; empty when the group is absent."""
+    """
+    Usernames and emails of a top-level realm group's members (Grafana logs
+    people in by email); empty when the group is absent.
+    """
     admin_token = _get_admin_token()
     group = _find_group_by_name(group_name, admin_token)
     if not group:
@@ -551,7 +554,12 @@ def list_group_usernames(group_name: str) -> set[str]:
         timeout=10,
     )
     response.raise_for_status()
-    return {u["username"] for u in response.json() if u.get("username")}
+    return {
+        name
+        for u in response.json()
+        for name in (u.get("username"), u.get("email"))
+        if name
+    }
 
 
 def list_project_members(project_name: str) -> list[dict]:

@@ -6,14 +6,40 @@ import httpx
 from app.services import grafana_service, keycloak_service
 
 ORG_USERS = [
-    {"login": "admin", "userId": 1, "role": "Admin"},
-    {"login": "brian.perret", "userId": 2, "role": "Viewer"},
-    {"login": "joe.bejjani", "userId": 3, "role": "Viewer"},
-    {"login": "demo-auditor", "userId": 4, "role": "Viewer"},
+    {
+        "login": "admin",
+        "email": "admin@localhost",
+        "userId": 1,
+        "role": "Admin",
+    },
+    {
+        "login": "brian.perret@epita.fr",
+        "email": "brian.perret@epita.fr",
+        "userId": 2,
+        "role": "Viewer",
+    },
+    {
+        "login": "joe.bejjani@epita.fr",
+        "email": "joe.bejjani@epita.fr",
+        "userId": 3,
+        "role": "Viewer",
+    },
+    {
+        "login": "demo-auditor@3istor.com",
+        "email": "demo-auditor@3istor.com",
+        "userId": 4,
+        "role": "Viewer",
+    },
 ]
+# list_group_usernames returns each member's username and email.
 GROUPS = {
-    "infra": {"brian.perret", "hugo.guillet"},
-    "security-auditor": {"demo-auditor"},
+    "infra": {
+        "brian.perret",
+        "brian.perret@epita.fr",
+        "hugo.guillet",
+        "hugo.guillet@epita.fr",
+    },
+    "security-auditor": {"demo-auditor", "demo-auditor@3istor.com"},
 }
 
 
@@ -59,4 +85,6 @@ def test_adds_a_platform_admin_missing_from_the_org():
     calls = _run(ORG_USERS)
 
     posts = [body for method, _, body in calls if method == "POST"]
-    assert posts == [b'{"loginOrEmail":"hugo.guillet","role":"Admin"}']
+    assert posts == [
+        b'{"loginOrEmail":"hugo.guillet@epita.fr","role":"Admin"}'
+    ]
