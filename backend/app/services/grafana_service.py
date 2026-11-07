@@ -378,7 +378,7 @@ async def sync_platform_org() -> None:
         # The local admin runs this sync; it is not a Keycloak user.
         if login == GRAFANA_ADMIN_USERNAME:
             continue
-        role = wanted.get(login, "None")
+        role = wanted.get(login) or wanted.get(user.get("email", ""), "None")
         if user.get("role") == role:
             continue
         try:
@@ -393,8 +393,10 @@ async def sync_platform_org() -> None:
 
     # Wanted users who never logged in to Grafana have no account yet; the
     # next sync after their first login places them.
+    present = set(current) | {u.get("email") for u in current.values()}
     for login, role in wanted.items():
-        if login in current:
+        # Each person is wanted under both username and email; one is enough.
+        if login in present or "@" not in login:
             continue
         try:
             response = await client.post(
