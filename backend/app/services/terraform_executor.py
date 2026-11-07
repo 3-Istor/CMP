@@ -510,10 +510,16 @@ provider "openstack" {{
             result = self._run_command(["terraform", "output", "-json"])
             outputs_raw = json.loads(result.stdout)
 
-            # Terraform outputs are in format: {"key": {"value": "actual_value"}}
+            # Terraform outputs are in format: {"key": {"value": "actual_value"}}.
+            # Sensitive ones (a DB connection string) are never stored: guests
+            # read the outputs of every app of their project.
             outputs = {}
             for key, data in outputs_raw.items():
-                outputs[key] = data.get("value")
+                outputs[key] = (
+                    "(sensitive)"
+                    if data.get("sensitive")
+                    else data.get("value")
+                )
 
             return outputs
         except Exception as exc:

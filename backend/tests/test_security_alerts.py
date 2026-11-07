@@ -145,6 +145,7 @@ def test_an_ignored_finding_is_not_notified(db):
             author="alice",
             approved_by="bob",
             approved_at=NOW,
+            approved_by_reviewer=True,
         )
     )
     db.commit()

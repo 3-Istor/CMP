@@ -167,8 +167,11 @@ def exception_applies(
     """
     if exception.revoked_at is not None or exception.expires_on < today:
         return False
-    needs_approval = tier is Tier.CORE or exception.status == "accepted_risk"
-    return exception.approved_at is not None or not needs_approval
+    if tier is Tier.CORE:
+        return exception.approved_by_reviewer
+    if exception.status == "accepted_risk":
+        return exception.approved_at is not None
+    return True
 
 
 def active_exceptions(

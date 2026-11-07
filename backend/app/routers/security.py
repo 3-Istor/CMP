@@ -715,17 +715,18 @@ async def approve_exception(
         )
     reviewer = is_cnp_admin(token) or is_auditor(token)
     if not reviewer:
+        await _require_admin(token, row.project)
         # A core finding is a fixable critical: only the auditor or a platform
-        # admin may accept it; project admins approve the rest.
-        if _exception_tier(db, row) is Tier.CORE:
+        # admin may accept it. An unknown tier is treated as critical.
+        if _exception_tier(db, row) in (Tier.CORE, None):
             raise HTTPException(
                 status_code=403,
                 detail="Une exception critique est validée par l'audit sécurité.",
             )
-        await _require_admin(token, row.project)
     if row.revoked_at is not None:
         raise HTTPException(status_code=409, detail="Exception réactivée.")
     row.approved_by, row.approved_at = approver, utcnow()
+    row.approved_by_reviewer = reviewer
     db.commit()
     row.commit_sha = (
         await _sync_exceptions_file(db, row.project, row.app, approver)

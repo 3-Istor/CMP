@@ -81,7 +81,7 @@ class TestPlatformIdentitiesOnProjects:
         [
             (["infra"], "admin"),
             (["security-auditor"], "guest"),
-            (["finops"], "guest"),
+            (["finops"], None),
             (["member"], None),
         ],
     )

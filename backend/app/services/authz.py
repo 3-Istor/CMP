@@ -267,11 +267,6 @@ def is_finops(token: dict) -> bool:
     return FINOPS_GROUP in _groups(token)
 
 
-def reads_every_project(token: dict) -> bool:
-    """Sees every project and app, read only unless platform admin."""
-    return is_cnp_admin(token) or is_auditor(token) or is_finops(token)
-
-
 def reads_platform_security(token: dict) -> bool:
     """Security findings and activity of every project."""
     return is_cnp_admin(token) or is_auditor(token)
@@ -280,10 +275,11 @@ def reads_platform_security(token: dict) -> bool:
 def platform_project_role(token: dict) -> ProjectRole | None:
     """
     The role a platform identity holds on a project it is not a member of:
-    admin for a platform admin, guest (read) for the auditor and FinOps.
+    admin for a platform admin, guest (read) for the auditor. FinOps has
+    none: it reads costs through the FinOps routes only.
     """
     if is_cnp_admin(token):
         return ProjectRole.ADMIN
-    if is_auditor(token) or is_finops(token):
+    if is_auditor(token):
         return ProjectRole.GUEST
     return None
