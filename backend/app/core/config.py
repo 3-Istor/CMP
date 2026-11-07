@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     KEYCLOAK_REALM: str = "3istor"
     KEYCLOAK_CLIENT_ID: str = "3-istor-openid"
     KEYCLOAK_CLIENT_SECRET: str = ""
+    # Clients whose access tokens the API accepts (the token's ``azp``).
+    # Comma separated, so a client switch can accept both for a while.
+    # Empty means KEYCLOAK_CLIENT_ID alone.
+    KEYCLOAK_ALLOWED_CLIENTS: str = ""
     # Admin credentials used by Terraform k3s-project-bootstrap module
     KEYCLOAK_ADMIN_USERNAME: str = ""
     KEYCLOAK_ADMIN_PASSWORD: str = ""

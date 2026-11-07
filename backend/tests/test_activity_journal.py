@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.models.audit import AuditEvent
 from app.routers import activity as activity_router
 from app.routers import deployments as deployments_router
-from app.services import audit, keycloak_service
+from app.services import audit, authz, keycloak_service
 from app.services.keycloak_service import get_current_user
 from tests.test_app_security_data import (  # noqa: F401
     BACKEND_YAML,
@@ -46,6 +46,7 @@ def build(session_factory):
         }
         patches = [
             mock.patch.object(audit, "SessionLocal", session_factory),
+            mock.patch.object(authz, "SessionLocal", session_factory),
             mock.patch.object(
                 audit,
                 "decode_platform_token",

@@ -22,7 +22,11 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
-from app.services.authz import is_cnp_admin
+from app.services.authz import (
+    is_cnp_admin,
+    project_role_or_none,
+    require_project_member,
+)
 from app.services.clusters.state import project_cloud
 from app.services.github_service import (
     FileNotInRepoError,
@@ -33,11 +37,7 @@ from app.services.github_service import (
     get_installation_token,
     put_file_content,
 )
-from app.services.keycloak_service import (
-    get_current_user,
-    get_project_role,
-    require_project_role,
-)
+from app.services.keycloak_service import get_current_user, get_project_role
 from app.services.kube_client import (
     KubeUnavailableError,
     kube_delete_collection,
@@ -82,13 +82,13 @@ async def _require_member(token: dict, project: str, view: View) -> None:
         raise HTTPException(
             status_code=403, detail="The platform view is for CNP admins."
         )
-    await run_in_threadpool(require_project_role, token, project)
+    await run_in_threadpool(require_project_member, token, project)
 
 
 async def _require_admin(token: dict, project: str) -> None:
     if is_cnp_admin(token):
         return
-    await run_in_threadpool(require_project_role, token, project, True)
+    await run_in_threadpool(require_project_member, token, project, True)
 
 
 def _app_deployment(db: Session, project: str, app: str) -> Deployment:
@@ -731,9 +731,7 @@ async def get_my_role(
     role = (
         "admin"
         if admin
-        else await run_in_threadpool(
-            get_project_role, token.get("sub", ""), project
-        )
+        else await run_in_threadpool(project_role_or_none, token, project)
     )
     return {"role": role, "cnp_admin": admin, "username": _username(token)}
 

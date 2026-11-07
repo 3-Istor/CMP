@@ -616,6 +616,16 @@ def list_project_members(project_name: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+def allowed_clients() -> set[str]:
+    """The Keycloak clients whose tokens the API accepts."""
+    configured = {
+        c.strip()
+        for c in settings.KEYCLOAK_ALLOWED_CLIENTS.split(",")
+        if c.strip()
+    }
+    return configured or {settings.KEYCLOAK_CLIENT_ID}
+
+
 def decode_platform_token(token: str) -> dict:
     """
     Verify a bearer JWT against the realm's signing keys (signature, expiry,
@@ -642,15 +652,23 @@ def decode_platform_token(token: str) -> dict:
         return claims
     try:
         signing_key = _jwks_client.get_signing_key_from_jwt(token)
-        return jwt.decode(
+        claims = jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
             issuer=_ISSUER,
             leeway=30,
-            # Keycloak access tokens carry aud="account", not the client id.
+            # Keycloak access tokens carry aud="account", not the client id:
+            # the client is checked through azp below instead.
             options={"verify_aud": False},
         )
+        # typ tells an access token from an ID token of the same client.
+        if (
+            claims.get("azp") not in allowed_clients()
+            or claims.get("typ") != "Bearer"
+        ):
+            raise jwt.InvalidTokenError("not an access token of the portal")
+        return claims
     except jwt.PyJWKClientConnectionError as exc:
         logger.error("Could not fetch Keycloak signing keys: %s", exc)
         raise HTTPException(
@@ -701,28 +719,3 @@ def get_project_role(user_id: str, project_name: str) -> str | None:
             detail="Failed to verify project access.",
         ) from exc
     return role.value if role else None
-
-
-def require_project_role(
-    token_payload: dict, project_name: str, require_admin: bool = False
-) -> str:
-    """
-    Raise 403 unless the token's user is a member or above (or admin, when
-    required) of the project; return the role.
-
-    Guests are refused: the routers using this (security, activity, alerts)
-    expose logs and findings, which guests do not get.
-    """
-    user_id = token_payload.get("sub", "")
-    role = get_project_role(user_id, project_name) if user_id else None
-    minimum = ProjectRole.ADMIN if require_admin else ProjectRole.MEMBER
-    if rank(role) < rank(minimum):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"Access denied: admin role required for project '{project_name}'."
-                if require_admin
-                else f"Access denied: member role required for project '{project_name}'."
-            ),
-        )
-    return role

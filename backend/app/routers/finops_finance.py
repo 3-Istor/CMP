@@ -125,7 +125,7 @@ def close_period(
 
 @router.get("/closes", response_model=list[MonthCloseRead])
 def list_closes(token: Token, db: Session = Depends(get_db)):
-    del token
+    _require_finance(token)
     return finance.closed_months(db)
 
 

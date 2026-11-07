@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.routers import activity as activity_router
 from app.services import activity_collector as collector
 from app.services import activity_sources as src
-from app.services import keycloak_service
+from app.services import authz, keycloak_service
 from app.services.keycloak_service import get_current_user
 from tests.test_app_security_data import session_factory  # noqa: F401
 
@@ -248,6 +248,11 @@ def client_for(session_factory):
         )
         patch.start()
         started.append(patch)
+        owner_lookup = mock.patch.object(
+            authz, "SessionLocal", session_factory
+        )
+        owner_lookup.start()
+        started.append(owner_lookup)
         return TestClient(app)
 
     yield make

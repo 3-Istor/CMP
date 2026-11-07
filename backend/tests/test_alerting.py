@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.core.database import get_db
 from app.models.alerting import AlertSetting
 from app.routers import alerting as alerting_router
-from app.services import alerts_grafana, keycloak_service
+from app.services import alerts_grafana, authz, keycloak_service
 from app.services.alerts_catalog import BY_ID, namespace_matcher
 from app.services.keycloak_service import get_current_user
 from tests.test_app_security_data import (  # noqa: F401
@@ -45,6 +45,7 @@ def make(session_factory):
             "preferred_username": "alice",
         }
         patches = [
+            mock.patch.object(authz, "SessionLocal", session_factory),
             mock.patch.object(alerting_router, "grafana", grafana),
             mock.patch.object(
                 keycloak_service, "get_project_role", lambda u, p: role
@@ -164,3 +165,16 @@ def test_every_catalogue_expression_ends_with_its_threshold():
     ns = namespace_matcher(["demo-shop"])
     for template in BY_ID.values():
         assert " > " in template.expr(ns, template.defaults())
+
+
+def test_project_owner_can_switch_alerts(make, session_factory):
+    from app.models.project import Project
+
+    with session_factory() as db:
+        db.add(Project(project_name="demo", owner_username="alice"))
+        db.commit()
+    client, _ = make(None)
+
+    response = client.get("/api/alerting", params={"project": "demo"})
+
+    assert response.json()["can_edit"] is True
