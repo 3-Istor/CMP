@@ -402,11 +402,9 @@ def test_publishing_over_a_protected_record_is_refused():
     put_file.assert_not_called()
 
 
-def test_publishing_over_an_unprotected_record_still_overwrites():
+def test_publishing_over_an_existing_record_leaves_it_untouched():
     put_file = mock.AsyncMock()
 
     publish("  deletionProtection: false\n", put_file)
 
-    put_file.assert_awaited_once()
-    assert put_file.call_args.kwargs["sha"] == "sha1"
-    assert "deletionProtection" not in put_file.call_args.args[3]
+    put_file.assert_not_called()

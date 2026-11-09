@@ -11,7 +11,7 @@ from app.core.database import Base
 from app.models.project import Project, ProjectStatus, TargetCloud
 from app.routers import projects as projects_router
 from app.schemas.project import ProjectCreate
-from app.services import keycloak_admin, vault_auth
+from app.services import keycloak_admin, keycloak_service, vault_auth
 from app.services.project_registry import (
     NameCollisionError,
     ProtectedRecordError,
@@ -53,14 +53,34 @@ def seams():
         )
 
 
-def create(db, name="test-p", cloud="onprem"):
+def create(db, name="test-p", cloud="onprem", user="alice", tasks=None):
     return asyncio.run(
         projects_router.create_project(
             ProjectCreate(project_name=name, target_cloud=cloud),
-            BackgroundTasks(),
-            {"sub": "u1", "preferred_username": "alice"},
+            BackgroundTasks() if tasks is None else tasks,
+            {"sub": f"id-{user}", "preferred_username": user},
             db,
         )
+    )
+
+
+def seed(
+    db, owner="bob", state=ProjectStatus.FAILED, cloud=TargetCloud.ONPREM
+):
+    db.add(
+        Project(
+            project_name="test-p",
+            owner_username=owner,
+            target_cloud=cloud,
+            status=state,
+        )
+    )
+    db.commit()
+
+
+def group_role(role):
+    return mock.patch.object(
+        keycloak_service, "get_project_role", lambda user_id, project: role
     )
 
 
@@ -129,6 +149,59 @@ def test_create_project_skips_the_leftovers_check_when_retrying_a_known_project(
 
     seams.leftovers.assert_not_called()
     seams.publish.assert_awaited_once()
+
+
+def test_retry_by_a_user_without_a_role_on_the_project_is_refused(db, seams):
+    seed(db, owner="bob")
+
+    with group_role(None), pytest.raises(HTTPException) as excinfo:
+        create(db, user="alice")
+
+    assert excinfo.value.status_code == 403
+    seams.publish.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "state", [s for s in ProjectStatus if s is not ProjectStatus.FAILED]
+)
+def test_only_a_failed_project_can_be_retried(db, seams, state):
+    seed(db, owner="alice", state=state)
+    tasks = BackgroundTasks()
+
+    with pytest.raises(HTTPException) as excinfo:
+        create(db, user="alice", tasks=tasks)
+
+    assert excinfo.value.status_code == 409
+    seams.publish.assert_not_called()
+    assert tasks.tasks == []
+
+
+def test_retry_keeps_the_owner_and_the_cloud_of_the_first_attempt(db, seams):
+    seed(db, owner="bob", cloud=TargetCloud.GCP)
+    tasks = BackgroundTasks()
+
+    with (
+        group_role("admin"),
+        _states(aws="up", gcp="up"),
+        mock.patch.object(
+            projects_router, "run_project_bootstrap", return_value=True
+        ) as bootstrap,
+        mock.patch.object(projects_router, "add_user_to_project") as grant,
+        mock.patch.object(
+            projects_router, "sync_project_org", new=mock.AsyncMock()
+        ) as org,
+    ):
+        create(db, cloud="public", user="carol", tasks=tasks)
+        asyncio.run(tasks())
+
+    publish = seams.publish.await_args.kwargs
+    assert publish["owner_username"] == "bob"
+    assert publish["target_cloud"] == TargetCloud.GCP
+    bootstrap.assert_called_once_with(
+        project_name="test-p", target_cloud="gcp"
+    )
+    grant.assert_called_once_with("bob", "test-p", "admin")
+    org.assert_awaited_once_with("test-p", "bob")
 
 
 def _states(**by_cloud):
