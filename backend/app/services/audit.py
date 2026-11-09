@@ -43,8 +43,8 @@ ACTIONS: dict[tuple[str, str], str] = {
     ): "project.deletion_protection.update",
     (
         "PUT",
-        "/api/projects/{project_name}/customer-signup",
-    ): "project.customer_signup.update",
+        "/api/projects/{project_name}/customer-access",
+    ): "project.customer_access.update",
     ("POST", "/api/deployments/"): "app.create",
     ("DELETE", "/api/deployments/{deployment_id}"): "app.delete",
     ("PATCH", "/api/deployments/{deployment_id}/config"): "app.config.update",
@@ -176,7 +176,9 @@ NOTABLE = {
     "project.member.add",
     "project.member.remove",
     "project.deletion_protection.update",
+    # Kept for entries written before customer access had modes.
     "project.customer_signup.update",
+    "project.customer_access.update",
     "app.delete",
     "app.exposure.update",
     "security.exception.approve",

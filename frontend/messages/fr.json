@@ -1037,6 +1037,7 @@
       "protectionOff": "a désactivé la protection contre la suppression",
       "signupOn": "a activé l'inscription des clients",
       "signupOff": "a désactivé l'inscription des clients",
+      "customerAccess": "{mode, select, closed {a fermé l'accès des clients} companies {a réservé l'accès des clients aux entreprises clientes} open {a ouvert l'inscription des clients} other {a modifié l'accès des clients}}",
       "agentConnect": "a connecté un assistant IA",
       "agentDisconnect": "a déconnecté un assistant IA",
       "monthClose": "a clôturé un mois FinOps",
@@ -1872,8 +1873,6 @@
     "newApp": "Nouvelle app",
     "protectOn": "Activer la protection contre la suppression",
     "protectOff": "Désactiver la protection contre la suppression",
-    "customerSignupOn": "Activer l'inscription des clients",
-    "customerSignupOff": "Désactiver l'inscription des clients",
     "deleteProject": "Supprimer le projet…",
     "externalLink": "S'ouvre dans un nouvel onglet",
     "reasons": {
@@ -1892,8 +1891,7 @@
       "projectDeleting": "Suppression du projet {name} lancée",
       "protectedOn": "Protection contre la suppression activée",
       "protectedOff": "Protection contre la suppression désactivée",
-      "customerSignupOn": "Inscription des clients activée",
-      "customerSignupOff": "Inscription des clients désactivée"
+      "customerAccess": "Accès des clients enregistré"
     },
     "errors": {
       "loadTemplates": "Impossible de charger les modèles",
@@ -1902,7 +1900,7 @@
       "wake": "Échec du réveil : {message}",
       "notAllowed": "Votre rôle ne permet pas cette action",
       "protect": "Échec du changement de protection : {message}",
-      "customerSignup": "Échec du changement d'inscription des clients : {message}"
+      "customerAccess": "Échec du changement d'accès des clients : {message}"
     }
   },
   "confirm": {
@@ -2750,8 +2748,13 @@
       "description": "Qui peut rejoindre les apps du projet, et si le projet peut être supprimé.",
       "protection": "Protection contre la suppression",
       "protectionHint": "Le projet et ses apps ne peuvent pas être supprimés, ni depuis le CMP ni depuis le cluster, tant qu'elle est active.",
-      "signup": "Inscription des clients",
-      "signupHint": "Les visiteurs peuvent créer leur compte dans le realm du projet et rejoignent son groupe par défaut."
+      "customerAccess": "Accès des clients",
+      "customerAccessHint": "Entreprises clientes : les clients se connectent via le fournisseur d'identité de leur entreprise ou sur invitation. Inscription libre : tout le monde peut créer un compte.",
+      "modes": {
+        "closed": "Fermé",
+        "companies": "Entreprises clientes",
+        "open": "Inscription libre"
+      }
     },
     "security": {
       "title": "Sécurité",

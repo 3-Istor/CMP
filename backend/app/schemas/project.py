@@ -104,10 +104,10 @@ class DeletionProtectionUpdate(BaseModel):
     enabled: bool
 
 
-class CustomerSignupUpdate(BaseModel):
-    """Payload for turning a project's customer sign-up on or off."""
+class CustomerAccessUpdate(BaseModel):
+    """How customers get an account in the project's apps."""
 
-    enabled: bool
+    mode: Literal["closed", "companies", "open"]
 
 
 class ProjectCreateResponse(BaseModel):

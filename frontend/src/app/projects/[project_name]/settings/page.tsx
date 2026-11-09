@@ -18,13 +18,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
+  type CustomerAccess,
   deleteProject,
-  getCustomerSignup,
+  getCustomerAccess,
   getDeletionProtection,
   getSecurityRole,
-  setCustomerSignup,
+  setCustomerAccess,
   setDeletionProtection,
 } from "@/lib/api";
 import { Loader2, Trash2 } from "lucide-react";
@@ -64,20 +72,20 @@ function Section({
   );
 }
 
-function ToggleRow({
+const ACCESS_MODES: CustomerAccess[] = ["closed", "companies", "open"];
+
+function SettingRow({
   title,
   description,
-  checked,
-  disabled,
+  loaded,
   busy,
-  onChange,
+  children,
 }: {
   title: string;
   description: string;
-  checked: boolean | null;
-  disabled: boolean;
+  loaded: boolean;
   busy: boolean;
-  onChange: (value: boolean) => void;
+  children: React.ReactNode;
 }) {
   return (
     <div className="flex items-start justify-between gap-6 py-4 first:pt-0 last:pb-0">
@@ -89,15 +97,10 @@ function ToggleRow({
         {busy && (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         )}
-        {checked === null ? (
-          <span className="text-xs text-muted-foreground">-</span>
+        {loaded ? (
+          children
         ) : (
-          <Switch
-            checked={checked}
-            disabled={disabled || busy}
-            onCheckedChange={onChange}
-            aria-label={title}
-          />
+          <span className="text-xs text-muted-foreground">-</span>
         )}
       </div>
     </div>
@@ -113,10 +116,10 @@ export default function ProjectSettingsPage() {
   const canProtect = can("project.protect");
   const canDelete = can("project.delete");
 
-  // null until read: a switch never shows a state it has not loaded.
+  // null until read: a control never shows a state it has not loaded.
   const [protectedOn, setProtectedOn] = useState<boolean | null>(null);
-  const [signupOn, setSignupOn] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState<"protect" | "signup" | null>(null);
+  const [access, setAccess] = useState<CustomerAccess | null>(null);
+  const [busy, setBusy] = useState<"protect" | "access" | null>(null);
   const [securityRole, setSecurityRole] = useState<{
     admin: boolean;
     cnpAdmin: boolean;
@@ -129,9 +132,9 @@ export default function ProjectSettingsPage() {
       ({ enabled }) => setProtectedOn(enabled),
       () => setProtectedOn(null),
     );
-    getCustomerSignup(projectName).then(
-      ({ enabled }) => setSignupOn(enabled),
-      () => setSignupOn(null),
+    getCustomerAccess(projectName).then(
+      ({ mode }) => setAccess(mode),
+      () => setAccess(null),
     );
     getSecurityRole(projectName).then(
       (r) =>
@@ -167,24 +170,18 @@ export default function ProjectSettingsPage() {
     );
   };
 
-  const onSignupChange = (value: boolean) => {
-    setBusy("signup");
-    setCustomerSignup(projectName, value)
+  const onAccessChange = (mode: CustomerAccess) => {
+    setBusy("access");
+    setCustomerAccess(projectName, mode)
       .then((res) => {
-        setSignupOn(res.enabled);
-        toast.success(
-          ta(
-            res.enabled
-              ? "toasts.customerSignupOn"
-              : "toasts.customerSignupOff",
-          ),
-        );
+        setAccess(res.mode);
+        toast.success(ta("toasts.customerAccess"));
       })
       .catch((err) => {
-        toast.error(ta("errors.customerSignup", { message: errorMessage(err) }));
-        // The flag is saved even when Keycloak fails: show what is saved.
-        getCustomerSignup(projectName)
-          .then(({ enabled }) => setSignupOn(enabled))
+        toast.error(ta("errors.customerAccess", { message: errorMessage(err) }));
+        // Open is saved even when Keycloak fails: show what is saved.
+        getCustomerAccess(projectName)
+          .then(({ mode }) => setAccess(mode))
           .catch(() => {});
       })
       .finally(() => setBusy(null));
@@ -206,22 +203,47 @@ export default function ProjectSettingsPage() {
         >
           <Card>
             <CardContent className="divide-y">
-              <ToggleRow
+              <SettingRow
                 title={t("access.protection")}
                 description={t("access.protectionHint")}
-                checked={protectedOn}
-                disabled={!canProtect}
+                loaded={protectedOn !== null}
                 busy={busy === "protect"}
-                onChange={onProtectChange}
-              />
-              <ToggleRow
-                title={t("access.signup")}
-                description={t("access.signupHint")}
-                checked={signupOn}
-                disabled={!canProtect}
-                busy={busy === "signup"}
-                onChange={onSignupChange}
-              />
+              >
+                <Switch
+                  checked={protectedOn ?? false}
+                  disabled={!canProtect || busy === "protect"}
+                  onCheckedChange={onProtectChange}
+                  aria-label={t("access.protection")}
+                />
+              </SettingRow>
+              <SettingRow
+                title={t("access.customerAccess")}
+                description={t("access.customerAccessHint")}
+                loaded={access !== null}
+                busy={busy === "access"}
+              >
+                <Select
+                  value={access}
+                  onValueChange={(v) => onAccessChange(v as CustomerAccess)}
+                  disabled={!canProtect || busy === "access"}
+                >
+                  <SelectTrigger
+                    className="w-44"
+                    aria-label={t("access.customerAccess")}
+                  >
+                    <SelectValue>
+                      {(v) => t(`access.modes.${v as CustomerAccess}`)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACCESS_MODES.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {t(`access.modes.${m}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingRow>
             </CardContent>
           </Card>
           {!canProtect && (
