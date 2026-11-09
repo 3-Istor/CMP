@@ -171,7 +171,7 @@ def kc():
 
 
 def test_enabling_opens_sign_up_and_organizations(kc):
-    ci.apply("p", True)
+    ci.apply("p", "open")
 
     assert kc.realms["p"]["rep"]["registrationAllowed"] is True
     assert kc.realms["p"]["rep"]["organizationsEnabled"] is True
@@ -179,8 +179,8 @@ def test_enabling_opens_sign_up_and_organizations(kc):
 
 
 def test_sign_ups_land_in_users(kc):
-    ci.apply("p", True)
-    ci.apply("p", True)
+    ci.apply("p", "open")
+    ci.apply("p", "open")
 
     groups = kc.realms["p"]["groups"]
     assert [g["name"] for g in groups] == ["users"]
@@ -188,7 +188,7 @@ def test_sign_ups_land_in_users(kc):
 
 
 def test_each_app_client_gets_the_roles_of_its_own_realm(kc):
-    ci.apply("p", True)
+    ci.apply("p", "open")
 
     assert kc.roles_of("p", "cnp-p-web") == set(APP_ADMIN_ROLES)
     # The fake rejects a role id from another realm, and `p` stays empty.
@@ -210,31 +210,45 @@ def test_each_app_client_gets_the_roles_of_its_own_realm(kc):
         assert "organization" not in client["optionalClientScopes"]
 
 
-def test_the_staging_realm_never_opens_sign_up(kc):
-    ci.apply("p", True)
+def test_companies_sets_everything_up_but_keeps_sign_up_closed(kc):
+    ci.apply("p", "companies")
+
+    for realm in ("p", "p-staging"):
+        assert kc.realms[realm]["rep"]["registrationAllowed"] is False
+        assert kc.realms[realm]["rep"]["organizationsEnabled"] is True
+    assert [g["name"] for g in kc.realms["p"]["groups"]] == ["users"]
+    assert kc.realms["p"]["default_groups"] == ["p:g-users"]
+    assert kc.roles_of("p", "cnp-p-web") == set(APP_ADMIN_ROLES)
+    assert kc.roles_of("p-staging", "cnp-p-web-stg") == set(APP_ADMIN_ROLES)
+    assert "organization" in kc.client("p", "cnp-p-web")["defaultClientScopes"]
+
+
+@pytest.mark.parametrize("mode", ["closed", "companies", "open"])
+def test_the_staging_realm_never_opens_sign_up(kc, mode):
+    assert kc.realms["p-staging"]["rep"]["registrationAllowed"] is True
+
+    ci.apply("p", mode)
+
     assert kc.realms["p-staging"]["rep"]["registrationAllowed"] is False
 
-    kc.realms["p-staging"]["rep"]["registrationAllowed"] = True
-    ci.apply("p", False)
-    assert kc.realms["p-staging"]["rep"]["registrationAllowed"] is False
 
-
-def test_disabling_only_closes_sign_up(kc):
-    ci.apply("p", True)
+@pytest.mark.parametrize("mode", ["closed", "companies"])
+def test_leaving_open_only_closes_sign_up(kc, mode):
+    ci.apply("p", "open")
     before = copy.deepcopy(kc.realms)
 
-    ci.apply("p", False)
+    ci.apply("p", mode)
 
     before["p"]["rep"]["registrationAllowed"] = False
     assert kc.realms == before
 
 
-@pytest.mark.parametrize("enabled", [True, False])
-def test_applying_twice_changes_nothing(kc, enabled):
-    ci.apply("p", enabled)
+@pytest.mark.parametrize("mode", ["closed", "companies", "open"])
+def test_applying_twice_changes_nothing(kc, mode):
+    ci.apply("p", mode)
     kc.writes.clear()
 
-    ci.apply("p", enabled)
+    ci.apply("p", mode)
 
     assert kc.writes == []
 
@@ -247,7 +261,7 @@ def test_a_project_without_staging_realm_or_clients_is_fine(kc):
         if not c["clientId"].startswith("cnp-")
     ]
 
-    ci.apply("p", True)
+    ci.apply("p", "open")
 
     assert kc.realms["p"]["rep"]["registrationAllowed"] is True
     assert [g["name"] for g in kc.realms["p"]["groups"]] == ["users"]
@@ -257,7 +271,7 @@ def test_other_projects_clients_are_left_alone(kc):
     other = copy.deepcopy(kc.client("p", "cnp-other-x"))
     account = copy.deepcopy(kc.client("p", "account"))
 
-    ci.apply("p", True)
+    ci.apply("p", "open")
 
     assert kc.client("p", "cnp-other-x") == other
     assert kc.client("p", "account") == account
@@ -278,8 +292,8 @@ def test_a_group_in_a_large_realm_is_found_by_name(kc):
         {"id": f"p:g{i}", "name": f"team-{i}"} for i in range(GROUPS_PAGE + 5)
     ]
 
-    ci.apply("p", True)
-    ci.apply("p", True)
+    ci.apply("p", "open")
+    ci.apply("p", "open")
 
     groups = kc.realms["p"]["groups"]
     assert [g["name"] for g in groups].count("users") == 1
@@ -287,7 +301,7 @@ def test_a_group_in_a_large_realm_is_found_by_name(kc):
 
 
 def test_sign_up_opens_last(kc):
-    ci.apply("p", True)
+    ci.apply("p", "open")
 
     assert kc.writes[-1] == ("PUT", "/admin/realms/p")
     assert ("POST", "/admin/realms/p/groups") in kc.writes[:-1]
@@ -301,7 +315,7 @@ def test_sign_up_stays_closed_when_an_app_cannot_be_granted(kc):
     ]
 
     with pytest.raises(CustomerIdentityError):
-        ci.apply("p", True)
+        ci.apply("p", "open")
 
     assert kc.realms["p"]["rep"]["registrationAllowed"] is False
 
@@ -309,7 +323,7 @@ def test_sign_up_stays_closed_when_an_app_cannot_be_granted(kc):
 def test_the_realm_name_is_quoted_in_the_path(kc):
     kc.add_realm("a b", ["cnp-a b-web"])
 
-    ci.apply("a b", True)
+    ci.apply("a b", "open")
 
     assert kc.realms["a b"]["rep"]["registrationAllowed"] is True
     assert kc.roles_of("a b", "cnp-a b-web") == set(APP_ADMIN_ROLES)
@@ -328,7 +342,7 @@ def test_a_realm_without_what_the_apps_need_is_a_bad_gateway(kc, missing):
         realm["scopes"].clear()
 
     with pytest.raises(CustomerIdentityError) as err:
-        ci.apply("p", True)
+        ci.apply("p", "open")
 
     assert err.value.status == 502
 
@@ -369,15 +383,19 @@ def test_admin_wraps_a_success_that_is_not_json(no_token):
 
 
 @pytest.mark.parametrize(
-    "flag, applied",
-    [(True, [("p", True)]), (False, [])],
+    "mode, applied",
+    [
+        ("open", [("p", "open")]),
+        ("companies", [("p", "companies")]),
+        ("closed", []),
+    ],
 )
-def test_apply_if_enabled_follows_the_registry_flag(flag, applied):
+def test_apply_if_enabled_follows_the_registry_mode(mode, applied):
     with (
         mock.patch.object(
             ci.project_registry,
-            "is_self_registration_on",
-            new=mock.AsyncMock(return_value=flag),
+            "get_customer_access",
+            new=mock.AsyncMock(return_value=mode),
         ),
         mock.patch.object(ci, "apply") as apply,
     ):
@@ -388,7 +406,7 @@ def test_apply_if_enabled_follows_the_registry_flag(flag, applied):
 
 @pytest.mark.parametrize("broken", ["registry", "keycloak"])
 def test_apply_if_enabled_never_raises(broken):
-    registry = mock.AsyncMock(return_value=True)
+    registry = mock.AsyncMock(return_value="open")
     apply = mock.Mock()
     if broken == "registry":
         registry.side_effect = RuntimeError("registry down")
@@ -397,7 +415,7 @@ def test_apply_if_enabled_never_raises(broken):
 
     with (
         mock.patch.object(
-            ci.project_registry, "is_self_registration_on", new=registry
+            ci.project_registry, "get_customer_access", new=registry
         ),
         mock.patch.object(ci, "apply", new=apply),
     ):

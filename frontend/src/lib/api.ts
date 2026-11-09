@@ -522,13 +522,15 @@ export const setDeletionProtection = (project: string, enabled: boolean) =>
     body: JSON.stringify({ enabled }),
   });
 
-export const getCustomerSignup = (project: string) =>
-  request<{ enabled: boolean }>(`/projects/${project}/customer-signup`);
+export type CustomerAccess = "closed" | "companies" | "open";
 
-export const setCustomerSignup = (project: string, enabled: boolean) =>
-  request<{ enabled: boolean }>(`/projects/${project}/customer-signup`, {
+export const getCustomerAccess = (project: string) =>
+  request<{ mode: CustomerAccess }>(`/projects/${project}/customer-access`);
+
+export const setCustomerAccess = (project: string, mode: CustomerAccess) =>
+  request<{ mode: CustomerAccess }>(`/projects/${project}/customer-access`, {
     method: "PUT",
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ mode }),
   });
 
 // ── FinOps ────────────────────────────────────────────────────────────────────

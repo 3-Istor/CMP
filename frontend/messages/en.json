@@ -1037,6 +1037,7 @@
       "protectionOff": "turned off deletion protection",
       "signupOn": "turned on customer sign-up",
       "signupOff": "turned off customer sign-up",
+      "customerAccess": "{mode, select, closed {closed customer access} companies {set customer access to client companies} open {opened customer sign-up} other {changed customer access}}",
       "agentConnect": "connected an AI assistant",
       "agentDisconnect": "disconnected an AI assistant",
       "monthClose": "closed a FinOps month",
@@ -1872,8 +1873,6 @@
     "newApp": "New app",
     "protectOn": "Turn on deletion protection",
     "protectOff": "Turn off deletion protection",
-    "customerSignupOn": "Turn on customer sign-up",
-    "customerSignupOff": "Turn off customer sign-up",
     "deleteProject": "Delete project…",
     "externalLink": "Opens in a new tab",
     "reasons": {
@@ -1892,8 +1891,7 @@
       "projectDeleting": "Deletion of project {name} started",
       "protectedOn": "Deletion protection turned on",
       "protectedOff": "Deletion protection turned off",
-      "customerSignupOn": "Customer sign-up turned on",
-      "customerSignupOff": "Customer sign-up turned off"
+      "customerAccess": "Customer access saved"
     },
     "errors": {
       "loadTemplates": "Failed to load templates",
@@ -1902,7 +1900,7 @@
       "wake": "Wake failed: {message}",
       "notAllowed": "Your role does not allow this action",
       "protect": "Could not change deletion protection: {message}",
-      "customerSignup": "Could not change customer sign-up: {message}"
+      "customerAccess": "Could not change customer access: {message}"
     }
   },
   "confirm": {
@@ -2750,8 +2748,13 @@
       "description": "Who can join the project's apps, and whether the project can be deleted.",
       "protection": "Deletion protection",
       "protectionHint": "The project and its apps cannot be deleted, from the CMP or from the cluster, until this is turned off.",
-      "signup": "Customer sign-up",
-      "signupHint": "People can create their own account in the project's realm and land in its default group."
+      "customerAccess": "Customer access",
+      "customerAccessHint": "Client companies: customers sign in through their company's identity provider or an invitation. Open sign-up: anyone can create an account.",
+      "modes": {
+        "closed": "Closed",
+        "companies": "Client companies",
+        "open": "Open sign-up"
+      }
     },
     "security": {
       "title": "Security",

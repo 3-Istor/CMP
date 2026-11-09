@@ -1,12 +1,14 @@
 """
-Customer sign-up and Organizations in a project's Keycloak realms.
+Customer access and Organizations in a project's Keycloak realms.
 
 A project owns the realm ``<project>`` (its customers, plus the devs brokered
-from the platform realm) and, once staging is on, ``<project>-staging``. When
-sign-up is on, each app (client ``cnp-<project>-<app>[-stg]``) manages the
-Organizations of its own realm with its own client credentials and the
-narrowest roles of that realm's ``realm-management`` client, never
-``manage-realm``. Turning sign-up off only closes registration.
+from the platform realm) and, once staging is on, ``<project>-staging``. In
+the ``companies`` and ``open`` modes, each app (client
+``cnp-<project>-<app>[-stg]``) manages the Organizations of its own realm
+with its own client credentials and the narrowest roles of that realm's
+``realm-management`` client, never ``manage-realm``. Only ``open`` lets
+people register, and only in ``<project>``; ``closed`` only closes
+registration.
 """
 
 import asyncio
@@ -175,43 +177,48 @@ def _grant_apps(realm: str, project: str, staging: bool) -> None:
             _admin("PUT", f"{path}/default-client-scopes/{scopes[_SCOPE]}")
 
 
-def apply(project: str, enabled: bool) -> None:
+def apply(project: str, mode: str) -> None:
     """
-    Make the project's realms match the sign-up switch. Idempotent: a second
-    call with the same value writes nothing. Turning it off only closes
-    registration; organizations, group and service accounts stay.
+    Make the project's realms match the access mode (``closed``,
+    ``companies`` or ``open``). Idempotent: a second call with the same mode
+    writes nothing. ``closed`` only closes registration; organizations,
+    group and service accounts stay.
     """
     staging = f"{project}-staging"
     realms = {project: _realm(project), staging: _realm(staging)}
     if realms[project] is None:
         raise CustomerIdentityError(404, f"Keycloak realm {project} not found")
     live = {name: rep for name, rep in realms.items() if rep is not None}
+    organizations = mode != "closed"
+    opening = mode == "open"
 
     # Staging never takes sign-ups, and closing is always safe. Opening the
     # project realm waits until the apps and the default group are ready.
     for name, rep in live.items():
-        wanted = {"organizationsEnabled": True} if enabled else {}
-        if name != project or not enabled:
+        wanted = {"organizationsEnabled": True} if organizations else {}
+        if name != project or not opening:
             wanted["registrationAllowed"] = False
         _set_realm(name, rep, wanted)
-    if not enabled:
+    if not organizations:
         return
 
     _default_users_group(project)
     for name in live:
         _grant_apps(name, project, staging=name != project)
-    _set_realm(project, realms[project], {"registrationAllowed": True})
+    if opening:
+        _set_realm(project, realms[project], {"registrationAllowed": True})
 
 
 def apply_if_enabled(project: str) -> None:
     """
-    Re-apply the switch when the project has it on, so a new app client gets
-    its roles. Never raises: a Keycloak or registry failure must not fail the
-    deployment. Blocking and starts its own event loop: from async code, call
-    it through ``asyncio.to_thread``.
+    Re-apply the project's mode unless it is ``closed``, so a new app client
+    gets its roles. Never raises: a Keycloak or registry failure must not
+    fail the deployment. Blocking and starts its own event loop: from async
+    code, call it through ``asyncio.to_thread``.
     """
     try:
-        if asyncio.run(project_registry.is_self_registration_on(project)):
-            apply(project, True)
+        mode = asyncio.run(project_registry.get_customer_access(project))
+        if mode != "closed":
+            apply(project, mode)
     except Exception:
-        logger.exception("Customer sign-up not applied to '%s'", project)
+        logger.exception("Customer access not applied to '%s'", project)

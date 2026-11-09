@@ -14,6 +14,7 @@ Consumers of the record: the Argo CD ApplicationSet (WS-3), the per-project add-
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from io import StringIO
 
@@ -604,32 +605,31 @@ async def _is_on(project_name: str, field: str) -> bool:
     return (existing[0].get("spec") or {}).get(field) is True
 
 
-async def _set_on(
-    project_name: str, field: str, enabled: bool, label: str
+async def _commit_spec(
+    project_name: str,
+    change: Callable[[dict], None],
+    message: str,
+    label: str,
 ) -> None:
+    """Apply ``change`` to the record's spec and commit it in one write."""
     existing = await read_record(project_name)
     if existing is None:
         raise RecordNotFoundError(
             f"Project '{project_name}' has no registry record."
         )
     record, sha = existing
-    spec = record.setdefault("spec", {})
-    if enabled:
-        spec[field] = True
-    else:
-        spec.pop(field, None)
+    change(record.setdefault("spec", {}))
 
     buffer = StringIO()
     _yaml.dump(record, buffer)
     token = await _installation_token()
-    verb = "on" if enabled else "off"
     try:
         await put_file_content(
             token,
             settings.CNP_REGISTRY_REPO,
             record_path(project_name),
             buffer.getvalue(),
-            message=f"feat(registry): turn {label} {verb} for {project_name} [skip ci]",
+            message=f"feat(registry): {message} for {project_name} [skip ci]",
             sha=sha,
             branch=settings.CNP_REGISTRY_BRANCH,
         )
@@ -637,6 +637,19 @@ async def _set_on(
         raise RegistryError(
             f"Could not update {label} of '{project_name}': {exc}"
         ) from exc
+
+
+async def _set_on(
+    project_name: str, field: str, enabled: bool, label: str
+) -> None:
+    def change(spec: dict) -> None:
+        if enabled:
+            spec[field] = True
+        else:
+            spec.pop(field, None)
+
+    verb = "on" if enabled else "off"
+    await _commit_spec(project_name, change, f"turn {label} {verb}", label)
 
 
 async def is_deletion_protected(project_name: str) -> bool:
@@ -666,26 +679,45 @@ async def set_deletion_protection(project_name: str, enabled: bool) -> None:
     )
 
 
-async def is_self_registration_on(project_name: str) -> bool:
+async def get_customer_access(project_name: str) -> str:
     """
-    Whether the project lets customers sign up (``spec.selfRegistration``).
+    How customers get an account: ``closed``, ``companies`` or ``open``.
+
+    A record from before the modes with ``selfRegistration: true`` is
+    ``open``; no record, or an unknown value, is ``closed``.
 
     Raises:
         RegistryError: If the registry cannot be read.
     """
-    return await _is_on(project_name, "selfRegistration")
+    existing = await read_record(project_name)
+    spec = (existing[0].get("spec") or {}) if existing else {}
+    mode = spec.get("customerAccess")
+    if mode is None and spec.get("selfRegistration") is True:
+        return "open"
+    return mode if mode in ("companies", "open") else "closed"
 
 
-async def set_self_registration(project_name: str, enabled: bool) -> None:
+async def set_customer_access(project_name: str, mode: str) -> None:
     """
-    Turn a project's customer sign-up on, or off by removing the field.
+    Save the customer access mode; ``closed`` removes the field.
 
     Raises:
         RecordNotFoundError: The project has no registry record.
         RegistryError: The registry cannot be written.
     """
-    await _set_on(
-        project_name, "selfRegistration", enabled, "customer sign-up"
+
+    def change(spec: dict) -> None:
+        spec.pop("selfRegistration", None)
+        if mode == "closed":
+            spec.pop("customerAccess", None)
+        else:
+            spec["customerAccess"] = mode
+
+    await _commit_spec(
+        project_name,
+        change,
+        f"set customer access to {mode}",
+        "customer access",
     )
 
 

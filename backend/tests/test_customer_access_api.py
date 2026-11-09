@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from ruamel.yaml import YAML
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -16,12 +17,9 @@ from app.core.database import Base
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.environment import AppEnvironment
 from app.routers import projects as projects_router
-from app.schemas.project import CustomerSignupUpdate
-from app.services import (
-    customer_identity,
-    project_registry,
-    terraform_orchestrator as orchestrator,
-)
+from app.schemas.project import CustomerAccessUpdate
+from app.services import audit, customer_identity, project_registry
+from app.services import terraform_orchestrator as orchestrator
 from app.services.customer_identity import CustomerIdentityError
 from app.services.environments import activation
 from app.services.project_registry import RecordNotFoundError, RegistryError
@@ -34,10 +32,10 @@ AGENT = {
 }
 
 
-def put(db, token, project="alpha", enabled=True):
+def put(db, token, project="alpha", mode="open"):
     return asyncio.run(
-        projects_router.update_customer_signup(
-            project, CustomerSignupUpdate(enabled=enabled), token, db
+        projects_router.update_customer_access(
+            project, CustomerAccessUpdate(mode=mode), token, db
         )
     )
 
@@ -47,55 +45,71 @@ def seams():
     """Registry write and Keycloak apply, recording the order they ran in."""
     calls = []
 
-    async def write(project, enabled):
-        calls.append(("registry", project, enabled))
+    async def write(project, mode):
+        calls.append(("registry", project, mode))
 
-    def apply(project, enabled):
-        calls.append(("keycloak", project, enabled, threading.get_ident()))
+    def apply(project, mode):
+        calls.append(("keycloak", project, mode, threading.get_ident()))
 
     with (
-        mock.patch.object(projects_router, "set_self_registration", new=write),
+        mock.patch.object(projects_router, "set_customer_access", new=write),
         mock.patch.object(customer_identity, "apply", new=apply),
     ):
         yield calls
 
 
 @pytest.mark.parametrize(
-    "enabled, order",
-    [(True, ["registry", "keycloak"]), (False, ["keycloak", "registry"])],
+    "mode, order",
+    [
+        ("open", ["registry", "keycloak"]),
+        ("companies", ["keycloak", "registry"]),
+        ("closed", ["keycloak", "registry"]),
+    ],
 )
-def test_an_admin_switches_sign_up(
-    db, roles, seams, enabled, order  # noqa: F811
+def test_an_admin_sets_customer_access(
+    db, roles, seams, mode, order  # noqa: F811
 ):
-    assert put(db, _user("u1"), enabled=enabled) == {"enabled": enabled}
+    assert put(db, _user("u1"), mode=mode) == {"mode": mode}
 
-    # On: registry first, so a deploy heals Keycloak if the second step fails.
-    # Off: Keycloak first, so a failure never leaves it open with the flag off.
+    # Open: registry first, so a deploy heals Keycloak if the second step
+    # fails. Otherwise Keycloak first, so a failure never leaves it open.
     # Keycloak calls are blocking, so off the event loop.
     assert [c[0] for c in seams] == order
-    assert all(c[:3][1:] == ("alpha", enabled) for c in seams)
+    assert all(c[:3][1:] == ("alpha", mode) for c in seams)
     keycloak = next(c for c in seams if c[0] == "keycloak")
     assert keycloak[3] != threading.get_ident()
 
 
-def test_a_platform_admin_may_switch_sign_up(db, roles, seams):  # noqa: F811
+def test_an_unknown_mode_is_refused():
+    with pytest.raises(ValidationError):
+        CustomerAccessUpdate(mode="public")
+    with pytest.raises(ValidationError):
+        CustomerAccessUpdate(enabled=True)
+
+
+def test_a_platform_admin_may_set_customer_access(
+    db, roles, seams  # noqa: F811
+):
     with mock.patch.object(projects_router, "is_cnp_admin", return_value=True):
-        assert put(db, _user("root")) == {"enabled": True}
+        assert put(db, _user("root")) == {"mode": "open"}
 
     assert len(seams) == 2
 
 
-def test_a_member_cannot_switch_sign_up(db, roles, seams):  # noqa: F811
+@pytest.mark.parametrize("mode", ["closed", "companies", "open"])
+def test_a_member_cannot_set_customer_access(
+    db, roles, seams, mode  # noqa: F811
+):
     with pytest.raises(HTTPException) as exc:
-        put(db, _user("u2"))
+        put(db, _user("u2"), mode=mode)
 
     assert exc.value.status_code == 403
     assert seams == []
 
 
-def test_an_agent_cannot_switch_sign_up(db, roles, seams):  # noqa: F811
+def test_an_agent_cannot_set_customer_access(db, roles, seams):  # noqa: F811
     with pytest.raises(HTTPException) as exc:
-        put(db, AGENT)
+        put(db, AGENT, mode="companies")
 
     assert exc.value.status_code == 403
     assert "Assistants cannot change" in exc.value.detail
@@ -105,7 +119,7 @@ def test_an_agent_cannot_switch_sign_up(db, roles, seams):  # noqa: F811
 def test_a_project_without_record_is_not_found(db, roles, seams):  # noqa: F811
     with mock.patch.object(
         projects_router,
-        "set_self_registration",
+        "set_customer_access",
         new=mock.AsyncMock(side_effect=RecordNotFoundError("no record")),
     ):
         with pytest.raises(HTTPException) as exc:
@@ -120,7 +134,7 @@ def test_an_unwritable_registry_leaves_keycloak_alone(
 ):  # noqa: F811
     with mock.patch.object(
         projects_router,
-        "set_self_registration",
+        "set_customer_access",
         new=mock.AsyncMock(side_effect=RegistryError("down")),
     ):
         with pytest.raises(HTTPException) as exc:
@@ -144,11 +158,12 @@ def test_a_keycloak_failure_says_the_setting_is_saved(
     assert exc.value.status_code == 502
     assert "saved" in exc.value.detail
     assert "PUT /admin: forbidden" in exc.value.detail
-    assert seams == [("registry", "alpha", True)]
+    assert seams == [("registry", "alpha", "open")]
 
 
-def test_a_keycloak_failure_keeps_sign_up_on_in_the_registry(
-    db, roles, seams  # noqa: F811
+@pytest.mark.parametrize("mode", ["closed", "companies"])
+def test_a_keycloak_failure_keeps_the_saved_mode(
+    db, roles, seams, mode  # noqa: F811
 ):
     with mock.patch.object(
         customer_identity,
@@ -156,42 +171,55 @@ def test_a_keycloak_failure_keeps_sign_up_on_in_the_registry(
         side_effect=CustomerIdentityError(502, "keycloak down"),
     ):
         with pytest.raises(HTTPException) as exc:
-            put(db, _user("u1"), enabled=False)
+            put(db, _user("u1"), mode=mode)
 
     assert exc.value.status_code == 502
     assert "unchanged" in exc.value.detail
     assert "keycloak down" in exc.value.detail
-    assert seams == []  # the flag was never written
+    assert seams == []  # the mode was never written
 
 
-def test_an_unwritable_registry_after_closing_keycloak_is_a_bad_gateway(
-    db, roles, seams  # noqa: F811
+@pytest.mark.parametrize("mode", ["closed", "companies"])
+def test_an_unwritable_registry_after_keycloak_is_a_bad_gateway(
+    db, roles, seams, mode  # noqa: F811
 ):
     with mock.patch.object(
         projects_router,
-        "set_self_registration",
+        "set_customer_access",
         new=mock.AsyncMock(side_effect=RegistryError("down")),
     ):
         with pytest.raises(HTTPException) as exc:
-            put(db, _user("u1"), enabled=False)
+            put(db, _user("u1"), mode=mode)
 
     assert exc.value.status_code == 502
     assert [c[0] for c in seams] == ["keycloak"]
 
 
-def test_reading_the_switch(roles):  # noqa: F811
+def test_reading_the_mode(roles):  # noqa: F811
     with mock.patch.object(
         projects_router,
-        "is_self_registration_on",
-        new=mock.AsyncMock(return_value=True),
+        "get_customer_access",
+        new=mock.AsyncMock(return_value="companies"),
     ):
         read = asyncio.run(
-            projects_router.get_customer_signup(
+            projects_router.read_customer_access(
                 SimpleNamespace(project_name="alpha")
             )
         )
 
-    assert read == {"enabled": True}
+    assert read == {"mode": "companies"}
+
+
+def test_the_change_is_journaled_as_notable():
+    action, params = audit.match_action(
+        "PUT", "/api/projects/alpha/customer-access"
+    )
+
+    assert action == "project.customer_access.update"
+    assert params == {"project_name": "alpha"}
+    assert action in audit.NOTABLE
+    # Entries written before the modes keep their badge.
+    assert "project.customer_signup.update" in audit.NOTABLE
 
 
 RECORD = """\
@@ -220,7 +248,7 @@ def registry(extra):
     )
 
 
-def written(enabled, extra):
+def written(mode, extra):
     read, token = registry(extra)
     with (
         read,
@@ -229,55 +257,76 @@ def written(enabled, extra):
             project_registry, "put_file_content", new=mock.AsyncMock()
         ) as put_file,
     ):
-        asyncio.run(project_registry.set_self_registration("alpha", enabled))
+        asyncio.run(project_registry.set_customer_access("alpha", mode))
+    put_file.assert_awaited_once()
     args, kwargs = put_file.call_args
     assert kwargs["sha"] == "sha1"
     spec = YAML(typ="safe").load(StringIO(args[3]))["spec"]
     return spec, kwargs["message"]
 
 
-def test_the_record_carries_the_switch():
-    spec, message = written(True, "  deletionProtection: true\n")
+@pytest.mark.parametrize("mode", ["companies", "open"])
+def test_the_record_carries_the_mode(mode):
+    spec, message = written(mode, "  deletionProtection: true\n")
 
-    assert spec["selfRegistration"] is True
+    assert spec["customerAccess"] == mode
     assert spec["deletionProtection"] is True
     assert message == (
-        "feat(registry): turn customer sign-up on for alpha [skip ci]"
+        f"feat(registry): set customer access to {mode} for alpha [skip ci]"
     )
 
-    spec, message = written(False, "  selfRegistration: true\n")
+
+@pytest.mark.parametrize(
+    "mode, expected",
+    [("closed", None), ("companies", "companies"), ("open", "open")],
+)
+def test_writing_a_mode_drops_the_old_flag(mode, expected):
+    spec, message = written(
+        mode, "  selfRegistration: true\n  customerAccess: open\n"
+    )
 
     assert "selfRegistration" not in spec
+    assert spec.get("customerAccess") == expected
     assert spec["targetCloud"] == "onprem"
     assert message == (
-        "feat(registry): turn customer sign-up off for alpha [skip ci]"
+        f"feat(registry): set customer access to {mode} for alpha [skip ci]"
     )
 
 
 @pytest.mark.parametrize(
     "extra, expected",
     [
-        ("  selfRegistration: true\n", True),
-        ("", False),
-        ("  selfRegistration: false\n", False),
+        ("", "closed"),
+        ("  customerAccess: companies\n", "companies"),
+        ("  customerAccess: open\n", "open"),
+        # Records written before the modes existed.
+        ("  selfRegistration: true\n", "open"),
+        ("  selfRegistration: false\n", "closed"),
+        (
+            "  customerAccess: companies\n  selfRegistration: true\n",
+            "companies",
+        ),
+        ("  customerAccess: public\n", "closed"),
     ],
 )
-def test_the_switch_reads_from_the_record(extra, expected):
+def test_the_mode_reads_from_the_record(extra, expected):
     read, _ = registry(extra)
     with read:
         assert (
-            asyncio.run(project_registry.is_self_registration_on("alpha"))
-            is expected
+            asyncio.run(project_registry.get_customer_access("alpha"))
+            == expected
         )
 
 
-def test_a_project_without_record_has_sign_up_off():
+def test_a_project_without_record_is_closed():
     with mock.patch.object(
         project_registry, "read_record", new=mock.AsyncMock(return_value=None)
     ):
-        assert not asyncio.run(project_registry.is_self_registration_on("x"))
+        assert (
+            asyncio.run(project_registry.get_customer_access("x")) == "closed"
+        )
         with pytest.raises(RecordNotFoundError):
-            asyncio.run(project_registry.set_self_registration("x", True))
+            asyncio.run(project_registry.set_customer_access("x", "open"))
 
 
 @pytest.fixture
@@ -322,7 +371,7 @@ class FakeExecutor:
         return {"resource_count": 1}
 
 
-def test_a_new_app_gets_the_rights_when_sign_up_is_on(
+def test_a_new_app_gets_the_rights_when_customer_access_is_on(
     session_factory, tmp_path, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)  # the orchestrator writes logs/deployments
@@ -417,7 +466,9 @@ def test_staging_gets_the_rights_before_it_is_ready(session_factory):
         assert db.get(AppEnvironment, (1, "staging")).state == "ready"
 
 
-def test_a_broken_sign_up_never_fails_the_staging_activation(session_factory):
+def test_a_broken_customer_access_never_fails_the_staging_activation(
+    session_factory,
+):
     with session_factory() as db:
         db.add(
             Deployment(
@@ -454,7 +505,7 @@ def test_a_broken_sign_up_never_fails_the_staging_activation(session_factory):
         ),
         mock.patch.object(
             project_registry,
-            "is_self_registration_on",
+            "get_customer_access",
             new=mock.AsyncMock(side_effect=RegistryError("down")),
         ),
     ):

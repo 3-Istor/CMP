@@ -147,6 +147,8 @@ export function describe(e: ActivityEvent, t: Translate): string {
       return t(
         d.enabled === false ? "events.signupOff" : "events.signupOn",
       );
+    case "project.customer_access.update":
+      return t("events.customerAccess", { mode: str(d.mode) });
     case "app.create":
       return t("events.appCreate", { app });
     case "app.delete":

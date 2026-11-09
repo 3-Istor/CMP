@@ -32,7 +32,7 @@ from app.models.project import Project, ProjectStatus, TargetCloud
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     AddMemberRequest,
-    CustomerSignupUpdate,
+    CustomerAccessUpdate,
     DeletionProtectionUpdate,
     ProjectCreate,
     ProjectCreateResponse,
@@ -88,12 +88,12 @@ from app.services.project_registry import (
     RecordNotFoundError,
     RegistryError,
     ensure_project_names_free,
+    get_customer_access,
     is_deletion_protected,
-    is_self_registration_on,
     publish_record,
     remove_record,
+    set_customer_access,
     set_deletion_protection,
-    set_self_registration,
 )
 
 logger = logging.getLogger(__name__)
@@ -877,15 +877,15 @@ async def update_deletion_protection(
 
 
 # ---------------------------------------------------------------------------
-# Customer sign-up
+# Customer access
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{project_name}/customer-signup")
-async def get_customer_signup(ctx: RequireGuest) -> dict[str, bool]:
-    """Whether customers can sign up to the project's apps."""
+@router.get("/{project_name}/customer-access")
+async def read_customer_access(ctx: RequireGuest) -> dict[str, str]:
+    """How customers get an account: ``closed``, ``companies`` or ``open``."""
     try:
-        return {"enabled": await is_self_registration_on(ctx.project_name)}
+        return {"mode": await get_customer_access(ctx.project_name)}
     except RegistryError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -893,18 +893,19 @@ async def get_customer_signup(ctx: RequireGuest) -> dict[str, bool]:
         ) from exc
 
 
-@router.put("/{project_name}/customer-signup")
-async def update_customer_signup(
+@router.put("/{project_name}/customer-access")
+async def update_customer_access(
     project_name: str,
-    payload: CustomerSignupUpdate,
+    payload: CustomerAccessUpdate,
     token: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
-) -> dict[str, bool]:
+) -> dict[str, str]:
     """
-    Turn the project's customer sign-up on or off.
+    Set how customers get an account in the project's apps.
 
-    On: writes the registry flag, then opens Keycloak. Off: closes Keycloak,
-    then writes the flag, so a failure never leaves sign-up open.
+    ``open``: writes the registry, then opens Keycloak. Any other mode:
+    updates Keycloak, then the registry, so a failure never leaves sign-up
+    open.
 
     Requirements:
     - Caller must be a project admin or a platform admin
@@ -914,22 +915,23 @@ async def update_customer_signup(
     Raises:
         403: Caller is an assistant, or is not a project admin
         404: The project has no registry record
-        502: The registry or Keycloak failed. Turning on, the flag is already
-            saved after a Keycloak failure: the next deployment of an app
-            re-applies it, and so does sending the value again. Turning off,
-            a Keycloak failure leaves the flag on.
+        502: The registry or Keycloak failed. For ``open``, the mode is
+            already saved after a Keycloak failure: the next deployment of an
+            app re-applies it, and so does sending it again. For the other
+            modes, a Keycloak failure leaves the saved mode unchanged.
     """
     if token.get("cnp_agent"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Assistants cannot change customer sign-up.",
+            detail="Assistants cannot change customer access.",
         )
     if not is_cnp_admin(token):
         assert_project_role(db, token, project_name, ProjectRole.ADMIN)
+    opening = payload.mode == "open"
 
     async def save() -> None:
         try:
-            await set_self_registration(project_name, payload.enabled)
+            await set_customer_access(project_name, payload.mode)
         except RecordNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -943,12 +945,12 @@ async def update_customer_signup(
     async def sync() -> None:
         try:
             await run_in_threadpool(
-                customer_identity.apply, project_name, payload.enabled
+                customer_identity.apply, project_name, payload.mode
             )
         except customer_identity.CustomerIdentityError as exc:
             saved = (
                 "The setting is saved, but Keycloak was not updated"
-                if payload.enabled
+                if opening
                 else "The setting is unchanged: Keycloak was not updated"
             )
             raise HTTPException(
@@ -956,9 +958,9 @@ async def update_customer_signup(
                 detail=f"{saved}: {exc}. Try again.",
             ) from exc
 
-    for step in (save, sync) if payload.enabled else (sync, save):
+    for step in (save, sync) if opening else (sync, save):
         await step()
-    return {"enabled": payload.enabled}
+    return {"mode": payload.mode}
 
 
 # ---------------------------------------------------------------------------
