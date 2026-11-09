@@ -347,13 +347,30 @@ async def create_project(
 
     # Both checks run before anything is written or applied. A project the DB
     # already knows is a retry: its own resources are expected to exist.
-    is_known_project = (
+    existing_project = (
         db.query(Project)
         .filter(Project.project_name == payload.project_name)
         .first()
-        is not None
     )
-    if not is_known_project:
+    owner = username
+    if existing_project is not None:
+        # Only an admin resumes a failed bootstrap, as its owner and on its cloud.
+        assert_project_role(
+            db, token_payload, payload.project_name, ProjectRole.ADMIN
+        )
+        if existing_project.status != ProjectStatus.FAILED:
+            in_progress = existing_project.status == ProjectStatus.PROVISIONING
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Project '{payload.project_name}' is still being created."
+                    if in_progress
+                    else f"Project '{payload.project_name}' already exists."
+                ),
+            )
+        owner = existing_project.owner_username
+        payload.target_cloud = existing_project.target_cloud
+    else:
         try:
             leftovers = await run_in_threadpool(
                 find_leftovers, payload.project_name
@@ -411,7 +428,7 @@ async def create_project(
     try:
         await publish_record(
             project_name=payload.project_name,
-            owner_username=username,
+            owner_username=owner,
             target_cloud=payload.target_cloud,
         )
     except (ImmutableCloudError, ProtectedRecordError) as exc:
@@ -432,11 +449,6 @@ async def create_project(
     # creator access from the very next request: authorization resolves owner
     # from the database, so it does not wait on Terraform or on the background
     # task below.
-    existing_project = (
-        db.query(Project)
-        .filter(Project.project_name == payload.project_name)
-        .first()
-    )
     if existing_project is None:
         db.add(
             Project(
@@ -448,13 +460,13 @@ async def create_project(
             )
         )
         db.commit()
-    elif existing_project.status == ProjectStatus.FAILED:
+    else:
         existing_project.status = ProjectStatus.PROVISIONING
         existing_project.step_message = "Bootstrap queued"
         db.commit()
         logger.info(
             "Recorded '%s' as owner of project '%s' on '%s'",
-            username,
+            owner,
             payload.project_name,
             payload.target_cloud.value,
         )
@@ -486,15 +498,15 @@ async def create_project(
             return
 
         try:
-            add_user_to_project(username, payload.project_name, "admin")
+            add_user_to_project(owner, payload.project_name, "admin")
             logger.info(
                 "Added user '%s' as admin of project '%s'",
-                username,
+                owner,
                 payload.project_name,
             )
 
             # The bootstrap that just succeeded created the Grafana org.
-            await sync_project_org(payload.project_name, username)
+            await sync_project_org(payload.project_name, owner)
 
         except Exception as e:
             logger.error(

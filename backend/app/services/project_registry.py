@@ -244,8 +244,9 @@ async def publish_record(
     created_at: datetime | None = None,
 ) -> None:
     """
-    Create a project's registry record, or overwrite an existing one with a
-    fresh record: its ``apps`` list and ``createdAt`` are reset.
+    Create a project's registry record. An existing one, left by the first
+    attempt of a retried creation, is kept as is: rewriting it would drop its
+    apps and flags.
 
     Raises:
         ImmutableCloudError: If a record already exists on a different cloud.
@@ -254,10 +255,8 @@ async def publish_record(
         RegistryError: If the registry cannot be written.
     """
     existing = await read_record(project_name)
-    sha: str | None = None
-
     if existing is not None:
-        record, sha = existing
+        record, _ = existing
         if (record.get("spec") or {}).get("deletionProtection") is True:
             raise ProtectedRecordError(
                 f"Project '{project_name}' is deletion-protected: turn "
@@ -271,9 +270,9 @@ async def publish_record(
                 "would orphan every resource already provisioned on "
                 f"'{current}'. Re-create the project instead."
             )
+        return
 
     token = await _installation_token()
-    verb = "Update" if sha else "Register"
     try:
         await put_file_content(
             token,
@@ -283,10 +282,9 @@ async def publish_record(
                 project_name, owner_username, target_cloud, created_at
             ),
             message=(
-                f"feat(registry): {verb.lower()} project {project_name} "
+                f"feat(registry): register project {project_name} "
                 f"on {target_cloud.value} [skip ci]"
             ),
-            sha=sha,
             branch=settings.CNP_REGISTRY_BRANCH,
         )
     except GitHubAppError as exc:
@@ -295,8 +293,7 @@ async def publish_record(
         ) from exc
 
     logger.info(
-        "%sed project '%s' in the registry on '%s'",
-        verb,
+        "Registered project '%s' in the registry on '%s'",
         project_name,
         target_cloud.value,
     )
