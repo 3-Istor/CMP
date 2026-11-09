@@ -16,7 +16,10 @@ from typing import Any
 
 from app.core.config import settings
 from app.services import keycloak_admin, vault_auth
-from app.services.state_lock import raise_if_state_locked
+from app.services.state_lock import (
+    raise_if_state_locked,
+    run_releasing_dead_pod_lock,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +97,20 @@ class TerraformExecutor:
         return backend_config
 
     def _run_command(
+        self,
+        command: list[str],
+        capture_output: bool = True,
+        stream_output: bool = False,
+    ) -> subprocess.CompletedProcess:
+        """Run a Terraform command, releasing a dead backend pod's lock."""
+        return run_releasing_dead_pod_lock(
+            lambda cmd: self._run_command_once(
+                cmd, capture_output, stream_output
+            ),
+            command,
+        )
+
+    def _run_command_once(
         self,
         command: list[str],
         capture_output: bool = True,

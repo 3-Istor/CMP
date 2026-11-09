@@ -50,6 +50,7 @@ from app.services.grafana_service import (
     sync_all_project_orgs,
 )
 from app.services.kube_client import ClusterNotConnectedError
+from app.services.project_status import fail_interrupted_runs
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
 from app.services.template_repository import get_repository
@@ -250,6 +251,9 @@ async def lifespan(app: FastAPI):
     from app.services.terraform_orchestrator import backfill_gitops_repo_urls
 
     backfill_gitops_repo_urls()
+
+    # Before anything can start a new Terraform run.
+    fail_interrupted_runs()
 
     # Mount static files after repository is cloned
     if os.path.exists("data/templates/templates"):

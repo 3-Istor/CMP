@@ -31,7 +31,11 @@ from app.services import keycloak_admin, metrics_isolation, vault_auth
 from app.services.environments import staging_realm
 from app.services.github_service import GitHubAppError, get_installation_token
 from app.services.project_status import delete_project_row, set_project_status
-from app.services.state_lock import StateLockedError, raise_if_state_locked
+from app.services.state_lock import (
+    StateLockedError,
+    raise_if_state_locked,
+    run_releasing_dead_pod_lock,
+)
 from app.services.template_repository import get_repository
 
 logger = logging.getLogger(__name__)
@@ -494,6 +498,22 @@ def _write_local_backend_override(
 
 
 def _run(
+    cmd: list[str],
+    cwd: Path,
+    work_dir: Path,
+    github_token: str = "",
+    extra_env: dict[str, str] | None = None,
+) -> None:
+    """Run a Terraform command, releasing a dead backend pod's lock."""
+    run_releasing_dead_pod_lock(
+        lambda command: _run_once(
+            command, cwd, work_dir, github_token, extra_env
+        ),
+        cmd,
+    )
+
+
+def _run_once(
     cmd: list[str],
     cwd: Path,
     work_dir: Path,
