@@ -8,9 +8,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
 from app.core.roles import ProjectRole
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, ProjectStatus, TargetCloud
 from app.routers import projects as projects_router
-from app.services import project_bootstrap, project_status
+from app.services import project_bootstrap, project_status, state_lock
 from app.services.authz import assert_project_role
 from app.services.project_bootstrap import _failure_message
 from app.services.state_lock import StateLockedError, StateLockInfo
@@ -333,3 +334,77 @@ def test_other_users_are_refused_a_failed_teardown_without_groups(
         delete_as(session_factory, "bob", "demo", groups_exist=False)
 
     assert raised.value.status_code == 403
+
+
+def add_app(factory, name, status):
+    with factory() as db:
+        db.add(Deployment(name=name, template_id="k3s", status=status))
+        db.commit()
+
+
+def read_app(factory, name):
+    with factory() as db:
+        return db.query(Deployment).filter_by(name=name).one()
+
+
+def test_restart_fails_the_runs_it_interrupted(session_factory):
+    add_project(session_factory, "creating", status=ProjectStatus.PROVISIONING)
+    add_project(
+        session_factory, "deleting", status=ProjectStatus.DECOMMISSIONING
+    )
+    add_project(session_factory, "live", status=ProjectStatus.ACTIVE)
+    for status in (
+        DeploymentStatus.PENDING,
+        DeploymentStatus.INITIALIZING,
+        DeploymentStatus.PLANNING,
+        DeploymentStatus.DEPLOYING,
+        DeploymentStatus.DELETING,
+    ):
+        add_app(session_factory, status.value, status)
+    add_app(session_factory, "up", DeploymentStatus.RUNNING)
+
+    project_status.fail_interrupted_runs()
+
+    creating = read_project(session_factory, "creating")
+    assert creating.status == ProjectStatus.FAILED
+    assert "restart" in creating.step_message
+    deleting = read_project(session_factory, "deleting")
+    assert deleting.status == ProjectStatus.DECOMMISSION_FAILED
+    assert "restart" in deleting.step_message
+    assert read_project(session_factory, "live").status == ProjectStatus.ACTIVE
+    for status in (
+        "pending",
+        "initializing",
+        "planning",
+        "deploying",
+        "deleting",
+    ):
+        app = read_app(session_factory, status)
+        assert app.status == DeploymentStatus.FAILED
+        assert "restart" in app.step_message
+    assert read_app(session_factory, "up").status == DeploymentStatus.RUNNING
+
+
+def test_bootstrap_commands_release_a_lock_left_by_a_dead_pod(tmp_path):
+    dead = StateLockInfo(
+        lock_id="lock-1", who="app@arcl-cmp-backend-fd6757c6b-z68tw"
+    )
+
+    with mock.patch.object(
+        project_bootstrap,
+        "_run_once",
+        side_effect=[StateLockedError(dead), None, None],
+    ) as once, mock.patch.object(
+        state_lock.socket,
+        "gethostname",
+        return_value="arcl-cmp-backend-7c9d5b8f4-k2x8p",
+    ):
+        project_bootstrap._run(
+            ["terraform", "apply"], cwd=tmp_path, work_dir=tmp_path
+        )
+
+    assert [c.args[0] for c in once.call_args_list] == [
+        ["terraform", "apply"],
+        ["terraform", "force-unlock", "-force", "lock-1"],
+        ["terraform", "apply"],
+    ]

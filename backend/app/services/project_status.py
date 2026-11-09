@@ -1,6 +1,7 @@
 import logging
 
 from app.core.database import SessionLocal
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, ProjectStatus
 
 logger = logging.getLogger(__name__)
@@ -42,4 +43,57 @@ def set_project_status(
 def delete_project_row(project_name: str) -> None:
     with SessionLocal() as db:
         db.query(Project).filter(Project.project_name == project_name).delete()
+        db.commit()
+
+
+# Bootstraps, teardowns and app runs are background tasks of this process: a
+# restart kills them, and nothing else moves them out of these states.
+_INTERRUPTED_PROJECTS = {
+    ProjectStatus.PROVISIONING: (
+        ProjectStatus.FAILED,
+        "Bootstrap interrupted by a CMP restart. Retry to resume.",
+    ),
+    ProjectStatus.DECOMMISSIONING: (
+        ProjectStatus.DECOMMISSION_FAILED,
+        "Teardown interrupted by a CMP restart. Delete again to resume.",
+    ),
+}
+_INTERRUPTED_APPS = {
+    **dict.fromkeys(
+        (
+            DeploymentStatus.PENDING,
+            DeploymentStatus.INITIALIZING,
+            DeploymentStatus.PLANNING,
+            DeploymentStatus.DEPLOYING,
+        ),
+        "Deployment interrupted by a CMP restart.",
+    ),
+    DeploymentStatus.DELETING: (
+        "Deletion interrupted by a CMP restart. Delete again to resume."
+    ),
+}
+
+
+def fail_interrupted_runs() -> None:
+    """Mark the runs a restart killed as failed, so they can be retried.
+
+    Call at startup only: the backend is a single replica, so no run is alive.
+    """
+    with SessionLocal() as db:
+        for state, (failed, message) in _INTERRUPTED_PROJECTS.items():
+            for project in db.query(Project).filter(Project.status == state):
+                logger.warning(
+                    "Project '%s' was %s when the CMP stopped",
+                    project.project_name,
+                    state.value,
+                )
+                project.status, project.step_message = failed, message
+        for state, message in _INTERRUPTED_APPS.items():
+            for app in db.query(Deployment).filter(Deployment.status == state):
+                logger.warning(
+                    "App '%s' was %s when the CMP stopped",
+                    app.name,
+                    state.value,
+                )
+                app.status, app.step_message = DeploymentStatus.FAILED, message
         db.commit()
