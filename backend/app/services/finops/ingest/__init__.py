@@ -103,10 +103,17 @@ def ingest_once(today: date | None = None) -> dict[str, int]:
             carbon.refresh(db, days[0])
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.warning("FinOps: carbon intensity not refreshed: %s", exc)
+        clusters = {
+            cloud: url
+            for cloud, url in opencost.clusters().items()
+            if cloud == opencost.CLUSTER or opencost.reachable(url)
+        }
+        for cloud in opencost.clusters().keys() - clusters.keys():
+            logger.warning("FinOps: OpenCost %s unreachable, skipped", cloud)
         for day in days:
             final = is_final(day, today)
             g_per_kwh = carbon.intensity_for(db, day)
-            for cloud, url in opencost.clusters().items():
+            for cloud, url in clusters.items():
                 try:
                     allocations = opencost.fetch_day(day, url)
                     lines = opencost.to_lines(

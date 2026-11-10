@@ -44,6 +44,17 @@ def clusters() -> dict[str, str]:
     return urls
 
 
+def reachable(base_url: str) -> bool:
+    """
+    A cloud is up only for demos: probe once per pass so a stopped cluster
+    costs a few seconds, not a 60 s timeout for every replayed day.
+    """
+    try:
+        return httpx.get(f"{base_url}/healthz", timeout=5.0).is_success
+    except httpx.HTTPError:
+        return False
+
+
 def fetch_day(day: date, base_url: str | None = None) -> dict[str, dict]:
     start, end = day_window(day)
     response = httpx.get(

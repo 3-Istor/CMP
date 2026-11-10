@@ -155,6 +155,8 @@ class Settings(BaseSettings):
     FINOPS_AWS_EXPORT_BUCKET: str = ""
     FINOPS_AWS_EXPORT_PREFIX: str = ""
     FINOPS_AWS_REGION: str = "eu-west-3"
+    # Role assumed with the Keycloak token instead of the AWS_* keys.
+    FINOPS_AWS_ROLE_ARN: str = ""
     # BigQuery billing export. The FOCUS view wins over the detailed table
     # when both are set; neither set disables the source. Tables are fully
     # qualified: project.dataset.table.
@@ -164,6 +166,17 @@ class Settings(BaseSettings):
     FINOPS_GCP_PROJECT: str = ""
     # Service account key; falls back to GOOGLE_APPLICATION_CREDENTIALS.
     FINOPS_GCP_CREDENTIALS_FILE: str = ""
+    # Workload Identity Federation from Keycloak, preferred over the key file:
+    # //iam.googleapis.com/projects/<n>/locations/global/workloadIdentityPools/
+    # cnp-finops/providers/keycloak, and the reader service account email.
+    FINOPS_GCP_WIF_AUDIENCE: str = ""
+    FINOPS_GCP_SERVICE_ACCOUNT: str = ""
+    # Keycloak client cnp-finops, whose token both clouds trust.
+    FINOPS_OIDC_TOKEN_URL: str = (
+        "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token"
+    )
+    FINOPS_OIDC_CLIENT_ID: str = "cnp-finops"
+    FINOPS_OIDC_CLIENT_SECRET: str = ""
     # A day is an anomaly when an app costs more than the median of its
     # previous 14 days by this share AND by this many euros: on-prem apps
     # cost cents a day, where a relative jump alone is noise.

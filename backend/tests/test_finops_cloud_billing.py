@@ -25,6 +25,7 @@ from app.services.finops.ingest.projects import IDLE, PLATFORM
 from app.services.finops.ingest.store import CostLine, upsert
 
 FIXTURES = Path(__file__).parent / "fixtures" / "finops"
+REAL_EKS_NODES = aws_focus.eks_nodes
 TODAY = date(2026, 10, 29)
 SINCE = date(2026, 10, 1)
 WINDOW = [date(2026, 10, 26), date(2026, 10, 27), date(2026, 10, 28)]
@@ -131,6 +132,7 @@ def _export(files_by_period, stale=None) -> FakeS3:
 def aws_settings(monkeypatch):
     monkeypatch.setattr(settings, "FINOPS_AWS_EXPORT_BUCKET", "cnp-billing")
     monkeypatch.setattr(settings, "FINOPS_AWS_EXPORT_PREFIX", "cur/cnp/")
+    monkeypatch.setattr(aws_focus, "eks_nodes", lambda oldest, today: {})
 
 
 def _aws_lines(s3, rate_for=usd_at_1_25):
@@ -224,6 +226,83 @@ def test_aws_marks_eks_node_lines_for_the_split(aws_settings):
 
     assert line.project == CLUSTER
     assert line.tags()["k8s_cluster"] == "cnp-eks"
+
+
+def test_aws_marks_untagged_nodes_seen_by_kube_state_metrics(
+    aws_settings, monkeypatch
+):
+    monkeypatch.setattr(
+        aws_focus, "eks_nodes", lambda oldest, today: {"i-0abc": "cnp-eks"}
+    )
+    node = _row(
+        ServiceName="Amazon Elastic Compute Cloud",
+        ServiceCategory="Compute",
+        ResourceId="arn:aws:ec2:eu-west-3:947554757826:instance/i-0abc",
+        Tags=json.dumps({}),
+    )
+    s3 = _export({"2026-10": [node]})
+
+    line = _aws_lines(s3)[0]
+
+    assert line.project == CLUSTER
+
+
+def test_aws_eks_nodes_come_from_kube_node_info_provider_ids(monkeypatch):
+    body = {
+        "data": {
+            "result": [
+                {"metric": {"provider_id": "aws:///eu-west-3a/i-0abc"}},
+                {"metric": {"provider_id": "k3s://onprem-node"}},
+            ]
+        }
+    }
+    monkeypatch.setattr(
+        aws_focus.httpx,
+        "get",
+        lambda url, params, timeout: httpx.Response(
+            200, json=body, request=httpx.Request("GET", url)
+        ),
+    )
+
+    assert aws_focus.eks_nodes(SINCE, TODAY) == {"i-0abc": "cnp-eks"}
+
+
+def test_aws_source_fails_when_metrics_are_down_so_stored_lines_stay(
+    aws_settings, monkeypatch
+):
+    def down(*_args, **_kwargs):
+        raise httpx.ConnectError("vmselect down")
+
+    monkeypatch.setattr(aws_focus, "eks_nodes", REAL_EKS_NODES)
+    monkeypatch.setattr(aws_focus.httpx, "get", down)
+
+    with pytest.raises(httpx.ConnectError):
+        _aws_lines(_export({"2026-10": [_row()]}))
+
+
+def test_aws_node_lookback_reaches_the_oldest_re_read_day(monkeypatch):
+    seen = {}
+
+    def capture(url, params, timeout):
+        seen["query"] = params["query"]
+        return httpx.Response(
+            200,
+            json={"data": {"result": []}},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(aws_focus.httpx, "get", capture)
+
+    aws_focus.eks_nodes(date(2026, 9, 1), date(2026, 10, 29))
+
+    assert "[60d]" in seen["query"]
+
+
+def test_aws_oldest_day_is_the_start_of_the_oldest_open_period():
+    assert aws_focus._oldest_day(TODAY, WINDOW, SINCE) == SINCE
+    assert aws_focus._oldest_day(TODAY, WINDOW, date(2026, 8, 1)) == date(
+        2026, 9, 1
+    )
 
 
 def test_aws_reads_only_the_files_of_the_newest_manifest(aws_settings):
@@ -412,12 +491,22 @@ def test_gcp_prefers_the_focus_view_when_configured(gcp_settings, monkeypatch):
     assert "ChargePeriodStart" in sql
 
 
+@pytest.mark.parametrize(
+    "table",
+    [
+        "a`; DROP TABLE x; --",
+        "a*`",
+        "a*b",
+        "*;--",
+        "p.cnp_billing.*",
+        "p.cnp_billing.gcp_billing_export_*",
+        "p.cnp_billing.export_v1\n",
+    ],
+)
 def test_gcp_rejects_a_table_name_that_could_inject_sql(
-    gcp_settings, monkeypatch
+    gcp_settings, monkeypatch, table
 ):
-    monkeypatch.setattr(
-        settings, "FINOPS_GCP_BILLING_TABLE", "a`; DROP TABLE x; --"
-    )
+    monkeypatch.setattr(settings, "FINOPS_GCP_BILLING_TABLE", table)
 
     with pytest.raises(ValueError):
         _gcp_lines([])

@@ -19,6 +19,7 @@ import httpx
 import jwt
 
 from app.core.config import settings
+from app.services.finops.ingest import federation
 from app.services.finops.ingest.focus import (
     DayAggregator,
     RateFor,
@@ -37,7 +38,13 @@ CLUSTER_TAG = "goog_k8s_cluster_name"
 
 BIGQUERY = "https://bigquery.googleapis.com/bigquery/v2"
 SCOPE = "https://www.googleapis.com/auth/bigquery"
-_TABLE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+_TABLE = re.compile(r"[A-Za-z0-9_.:-]+")
+# The detailed table may end in * to skip the billing account id in its name,
+# but only after a full table prefix: gcp_billing_export_* would also match
+# the standard export and count every cost twice.
+_RESOURCE_TABLE = re.compile(
+    r"[A-Za-z0-9_.:-]+\.gcp_billing_export_resource_v1_\*"
+)
 _MAX_POLLS = 30
 
 _FOCUS_SQL = """
@@ -115,6 +122,8 @@ def _credentials() -> dict:
 
 
 def access_token(client: httpx.Client) -> str:
+    if federation.gcp_enabled():
+        return federation.gcp_access_token(client)
     if _token["value"] and time.time() < _token["expires"] - 60:
         return _token["value"]
     creds = _credentials()
@@ -216,7 +225,10 @@ def _get_results(
 def _sql() -> str:
     view = settings.FINOPS_GCP_FOCUS_VIEW
     table = view or settings.FINOPS_GCP_BILLING_TABLE
-    if not _TABLE.match(table):
+    if not (
+        _TABLE.fullmatch(table)
+        or (not view and _RESOURCE_TABLE.fullmatch(table))
+    ):
         raise ValueError(f"invalid BigQuery table name: {table!r}")
     return (_FOCUS_SQL if view else _DETAILED_SQL).format(table=table)
 
