@@ -148,9 +148,17 @@ def _number(value: object) -> float:
 class DayAggregator:
     """One bucket per (day, resource_id, charge_category)."""
 
-    def __init__(self, cloud: str, wanted: Callable[[date], bool]):
+    def __init__(
+        self,
+        cloud: str,
+        wanted: Callable[[date], bool],
+        resource_tags: Mapping[str, dict[str, str]] | None = None,
+    ):
         self.cloud = cloud
         self._wanted = wanted
+        # Tags known from outside the invoice, by raw ResourceId: a tag only
+        # reaches the export once activated, ~24 h after it is first seen.
+        self._resource_tags = resource_tags or {}
         self._buckets: dict[tuple, _Bucket] = {}
 
     def add(self, row: Mapping[str, object]) -> None:
@@ -186,6 +194,10 @@ class DayAggregator:
             bucket.unit = bucket.unit or unit
             bucket.quantity = (bucket.quantity or 0.0) + _number(quantity)
         for tag, value in parse_tags(row.get("Tags")).items():
+            bucket.tags.setdefault(tag, value)
+        raw_id = str(row.get("ResourceId") or "")
+        known = self._resource_tags.get(raw_id.rsplit("/", 1)[-1])
+        for tag, value in (known or {}).items():
             bucket.tags.setdefault(tag, value)
 
     def lines(

@@ -274,6 +274,27 @@ def test_days_to_ingest_backfills_days_never_ingested(monkeypatch):
     assert days[-1] == date(2026, 10, 26)
 
 
+def test_ingest_once_skips_a_stopped_cloud_without_querying_its_days(
+    factory, data_dir, monkeypatch
+):
+    monkeypatch.setattr(ingest, "SessionLocal", factory)
+    monkeypatch.setattr(ingest, "in_cluster", lambda: False)
+    monkeypatch.setattr(ingest.fx, "refresh", lambda db: None)
+    monkeypatch.setattr(ingest.carbon, "refresh", lambda db, since: 0)
+    monkeypatch.setattr(
+        settings, "FINOPS_OPENCOST_CLUSTERS", "aws=http://aws-apps:18081"
+    )
+    monkeypatch.setattr(ingest.opencost, "reachable", lambda url: False)
+    fetch = mock.Mock(return_value={})
+    monkeypatch.setattr(ingest.opencost, "fetch_day", fetch)
+    monkeypatch.setattr(ingest.ai_gateway, "fetch_day", lambda day: [])
+    monkeypatch.setattr(ingest.savings, "targets", lambda: {})
+
+    ingest.ingest_once(date(2026, 10, 29))
+
+    assert {c.args[1] for c in fetch.call_args_list} == {settings.OPENCOST_URL}
+
+
 def test_ingest_once_keeps_going_when_one_source_fails(
     factory, data_dir, monkeypatch
 ):
