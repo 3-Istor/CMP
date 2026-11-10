@@ -37,7 +37,7 @@ from app.services.agents import repo as repo_ops
 from app.services.agents import skills, store
 from app.services.agents.provider import CmpAuthProvider
 from app.services.authz import assert_project_role
-from app.services.clusters.state import ensure_cluster_up
+from app.services.clusters.state import cluster_states, ensure_cluster_up
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
@@ -380,15 +380,20 @@ async def whoami() -> dict:
                 "role": project["role"],
                 "stake": stake.effective_level,
                 "status": project.get("status"),
+                "cloud": project.get("target_cloud", "onprem"),
             }
         )
     guides = await skills.list_skills()
+    clouds = {"onprem": "up"} | {
+        cloud.value: state for cloud, state in (await cluster_states()).items()
+    }
     return {
         "user": caller.username,
         "name": caller.claims.get("name"),
         "assistant": caller.claims["cnp_agent"]["client"],
         "can_write": store.WRITE_SCOPE in caller.scopes,
         "projects": enriched,
+        "clouds": clouds,
         "guides": [
             {"name": g.name, "use_when": g.description} for g in guides
         ],
@@ -462,6 +467,15 @@ async def create_project(
             "or external users."
         ),
     ] = "sandbox",
+    cloud: Annotated[
+        Literal["onprem", "aws", "gcp", "public"],
+        Field(
+            description="Where its apps run, for good: changing it later "
+            "means re-creating the project. aws and gcp only while that "
+            "cloud is up (see clouds in whoami). public: an up public cloud "
+            "picked by the platform."
+        ),
+    ] = "onprem",
     user_confirmed: bool = False,
 ) -> dict:
     """Create a project (a team space with its own access rights). Takes a
@@ -473,14 +487,17 @@ async def create_project(
         "project.create",
         name,
         tool="create_project",
-        arguments={"name": name, "stake": stake},
-        summary=f"Create the project '{name}' ({stake}) owned by you?",
+        arguments={"name": name, "stake": stake, "cloud": cloud},
+        summary=f"Create the project '{name}' ({stake}, on {cloud}) owned "
+        "by you? The cloud cannot be changed later.",
         user_confirmed=user_confirmed,
     )
     if verdict == "stop":
         return answer
     created = await caller.api(
-        "POST", "/api/projects/", json={"project_name": name}
+        "POST",
+        "/api/projects/",
+        json={"project_name": name, "target_cloud": cloud},
     )
     await to_thread.run_sync(
         lambda: policy.set_project_stake(name, caller.username, level=stake)
@@ -489,6 +506,7 @@ async def create_project(
         "ok": True,
         "project": name,
         "stake": stake,
+        "cloud": created.get("target_cloud", cloud),
         "status": created.get("status", "provisioning"),
         "next": "Projects take a few minutes to be ready: call whoami until "
         "its status is active, then create_app.",

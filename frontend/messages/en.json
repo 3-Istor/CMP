@@ -120,7 +120,12 @@
       "namePlaceholder": "my-team",
       "nameHint": "Lowercase, with hyphens. For example <code>platform-team</code>",
       "cloud": "Target cloud",
-      "comingSoon": "Coming soon",
+      "clusterState": {
+        "checking": "Checking…",
+        "down": "Stopped",
+        "starting": "Starting",
+        "unknown": "Unavailable"
+      },
       "clouds": {
         "onprem": {
           "label": "On-premise",
@@ -141,7 +146,7 @@
           "advantage3": "Strong data and AI tooling"
         }
       },
-      "cloudNote": "AWS and GCP need a cluster registered by the infra team before they can be selected. <strong>This cannot be changed later.</strong> Moving a project means re-creating it.",
+      "cloudNote": "AWS and GCP can be chosen only while their cluster is running. <strong>This cannot be changed later.</strong> Moving a project means re-creating it.",
       "errors": {
         "tooShort": "The name must be at least 2 characters.",
         "tooLong": "The name must be at most 40 characters.",

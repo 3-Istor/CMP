@@ -54,6 +54,7 @@ from app.services.authz import (
 )
 from app.services.clusters.state import (
     PUBLIC_CLOUDS,
+    ensure_cluster_up,
     fresh_state,
     pick_public_cloud,
 )
@@ -414,6 +415,10 @@ async def create_project(
             .scalar()
         )
         payload.target_cloud = pick_public_cloud(states, last)
+    else:
+        # A project recorded on a stopped cloud is never reconciled: its
+        # namespaces, Vault role and apps wait for a cluster that is not there.
+        await ensure_cluster_up(TargetCloud(payload.target_cloud))
 
     logger.info(
         "Creating project '%s' for user_id='%s'",

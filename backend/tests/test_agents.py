@@ -21,6 +21,7 @@ import app.models.audit  # noqa: F401
 import app.models.deployment  # noqa: F401
 from app import mcp_server
 from app.core.database import Base, get_db
+from app.models.project import TargetCloud
 from app.routers import agents as agents_router
 from app.services.agents import (
     internal_api,
@@ -646,3 +647,79 @@ def test_list_releases_filters_in_the_api(monkeypatch):
     )
     assert result["releases"][0]["environment"] == "prod"
     assert result["releases"][0]["component"] == "backend"
+
+
+@pytest.fixture
+def project_api(monkeypatch):
+    calls = []
+
+    async def api(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"status": "provisioning", "target_cloud": "aws"}
+
+    caller = SimpleNamespace(
+        username="alice", require_write=lambda: None, api=api
+    )
+    monkeypatch.setattr(mcp_server, "Caller", lambda: caller)
+    monkeypatch.setattr(
+        mcp_server, "_gate", mock.AsyncMock(return_value=("go", None))
+    )
+    monkeypatch.setattr(mcp_server.policy, "set_project_stake", mock.Mock())
+    return calls
+
+
+def test_create_project_sends_the_chosen_cloud(project_api):
+    result = asyncio.run(
+        mcp_server.create_project("probe", stake="demo", cloud="aws")
+    )
+
+    assert project_api[0][2]["json"] == {
+        "project_name": "probe",
+        "target_cloud": "aws",
+    }
+    assert result["cloud"] == "aws"
+
+
+def test_create_project_approval_names_the_cloud(project_api):
+    asyncio.run(mcp_server.create_project("probe", cloud="gcp"))
+
+    assert mcp_server._gate.await_args.kwargs["arguments"]["cloud"] == "gcp"
+
+
+def test_create_project_stays_on_prem_by_default(project_api):
+    asyncio.run(mcp_server.create_project("probe"))
+
+    assert project_api[0][2]["json"]["target_cloud"] == "onprem"
+
+
+def test_whoami_lists_each_cloud_state_and_project_cloud(monkeypatch):
+    async def api(method, path, **kwargs):
+        return [{"name": "shop", "role": "owner", "target_cloud": "aws"}]
+
+    caller = SimpleNamespace(
+        api=api,
+        username="alice",
+        claims={"name": "Alice", "cnp_agent": {"client": "Claude"}},
+        scopes=[],
+    )
+    monkeypatch.setattr(mcp_server, "Caller", lambda: caller)
+    monkeypatch.setattr(
+        mcp_server.policy,
+        "project_stake",
+        lambda name: SimpleNamespace(effective_level="demo"),
+    )
+    monkeypatch.setattr(
+        mcp_server.skills, "list_skills", mock.AsyncMock(return_value=[])
+    )
+    monkeypatch.setattr(
+        mcp_server,
+        "cluster_states",
+        mock.AsyncMock(
+            return_value={TargetCloud.AWS: "up", TargetCloud.GCP: "down"}
+        ),
+    )
+
+    result = asyncio.run(mcp_server.whoami())
+
+    assert result["clouds"] == {"onprem": "up", "aws": "up", "gcp": "down"}
+    assert result["projects"][0]["cloud"] == "aws"
