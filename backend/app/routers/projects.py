@@ -636,6 +636,7 @@ def get_project_members(
 async def add_project_member(
     payload: AddMemberRequest,
     ctx: RequireAdmin,
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     Add a user to a project, or change the role they already hold.
@@ -654,6 +655,18 @@ async def add_project_member(
     project_name = ctx.project_name
     username = payload.username
     role = payload.role
+
+    # Changing a role first drops every role held: done to the owner, it
+    # would demote them, which removal already refuses.
+    project = (
+        db.query(Project).filter(Project.project_name == project_name).first()
+    )
+    if project and project.owner_username == username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{username}' is the project owner; their role cannot "
+            "change.",
+        )
 
     try:
         # Clear any role the user already holds here, so the new one is the

@@ -11,6 +11,7 @@ audit journal apply, and through the stake policy (policy.yaml) first.
 import asyncio
 import functools
 import json
+import logging
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
@@ -66,10 +67,21 @@ How to work:
   a sandbox project (create_project with level "sandbox").
 - Stacks: "static" (HTML/CSS/JS served by nginx) or "fullstack" (FastAPI +
   React + PostgreSQL). Prefer static unless the app must store data.
+- A project runs on one cloud for good (create_project cloud): on-prem by
+  default; aws or gcp only while whoami shows that cloud up.
 - A release is a git tag vX.Y.Z (cut_release); an app with a staging
-  environment gets release candidates vX.Y.Z-rc.N, promoted to prod from the
-  CMP. CI builds the image, the platform deploys it, with a canary when the
-  app has one.
+  environment gets release candidates vX.Y.Z-rc.N, promoted to prod with
+  promotion. CI builds the image, the platform deploys it, with a canary when
+  the app has one.
+- Running apps: app_power, get_app_config/update_app_config, staging,
+  get_environments, ci_run, release_traffic, update_release_settings.
+  Projects: list_members/project_member, delete_project (sandbox, demo).
+  Costs: get_costs, set_budget, cost_recommendation. Security: get_security,
+  security_scan, request_security_exception. Data: list_backups,
+  database_backup, database_restore (dry_run first). Alerts: list_alerts,
+  update_alert. Read before you change.
+- Creating a project or an app can answer "in_progress": follow it with
+  whoami or list_apps, never call it again.
 - Never put secrets in files: use request_secret, the user types the value
   in the CMP.
 - Some actions answer "needs_user_confirmation": ask the user in plain words,
@@ -83,6 +95,8 @@ How to work:
 """
 
 provider = CmpAuthProvider()
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
     "CNP",
@@ -256,6 +270,32 @@ async def _repo_token(caller: Caller, app: dict) -> tuple[str, str]:
         app["github_repo_url"].rstrip("/").removesuffix(".git").split("/")[-2:]
     )
     return token, repo
+
+
+# The MCP proxy in front of the assistant gives up after about 30 s, while
+# creating a project or an app can take longer. Past this, the call answers
+# "in progress" and the CMP finishes the work on its own.
+SLOW_CALL_SECONDS = 20
+_background: set[asyncio.Task] = set()
+
+
+PENDING = object()
+
+
+async def _bounded(call) -> Any:
+    """The API answer, or PENDING while it is still running past the budget."""
+    task = asyncio.ensure_future(call)
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+    # Attached before waiting: a cancelled tool call must not hide a failure.
+    task.add_done_callback(_log_late_failure)
+    done, _ = await asyncio.wait({task}, timeout=SLOW_CALL_SECONDS)
+    return task.result() if done else PENDING
+
+
+def _log_late_failure(task: asyncio.Task) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.warning("MCP call failed: %s", task.exception())
 
 
 async def _gate(
@@ -494,14 +534,33 @@ async def create_project(
     )
     if verdict == "stop":
         return answer
-    created = await caller.api(
-        "POST",
-        "/api/projects/",
-        json={"project_name": name, "target_cloud": cloud},
-    )
-    await to_thread.run_sync(
-        lambda: policy.set_project_stake(name, caller.username, level=stake)
-    )
+
+    async def create() -> dict:
+        created = await caller.api(
+            "POST",
+            "/api/projects/",
+            json={"project_name": name, "target_cloud": cloud},
+        )
+        # Only once the CMP accepted it: a refused name (an existing project
+        # included) must not get its stake rewritten.
+        await to_thread.run_sync(
+            lambda: policy.set_project_stake(
+                name, caller.username, level=stake
+            )
+        )
+        return created
+
+    created = await _bounded(create())
+    if created is PENDING:
+        return {
+            "ok": True,
+            "project": name,
+            "stake": stake,
+            "cloud": cloud,
+            "status": "in_progress",
+            "next": "Still being created. Call whoami until the project is "
+            "listed and active; do not call create_project again.",
+        }
     return {
         "ok": True,
         "project": name,
@@ -596,21 +655,33 @@ async def create_app(
     installation = me.get("github_installation_id") or (
         settings.GITHUB_INSTALLATION_ID
     )
-    created = await caller.api(
-        "POST",
-        "/api/deployments/",
-        json={
-            "name": name,
-            "template_id": "k3s-gitops-app",
-            "project_id": project,
-            "app_config": {
-                "template_repo_name": STACKS[stack],
-                "github_owner": "3-Istor",
-                "project_name": project,
-                "github_installation_id": str(installation),
+    created = await _bounded(
+        caller.api(
+            "POST",
+            "/api/deployments/",
+            json={
+                "name": name,
+                "template_id": "k3s-gitops-app",
+                "project_id": project,
+                "app_config": {
+                    "template_repo_name": STACKS[stack],
+                    "github_owner": "3-Istor",
+                    "project_name": project,
+                    "github_installation_id": str(installation),
+                },
             },
-        },
+        )
     )
+    if created is PENDING:
+        return {
+            "ok": True,
+            "project": project,
+            "name": name,
+            "status": "in_progress",
+            "next": "Still being created. Call list_apps on the project to "
+            "get its app_id, then wait_for_app; do not call create_app "
+            "again.",
+        }
     return {
         "ok": True,
         **_app_summary(created),
@@ -1123,3 +1194,8 @@ def weekly_status() -> str:
         "projects: apps up or degraded, releases of the last 7 days, "
         "anything that needs a decision. Plain language, one screen."
     )
+
+
+# Registers the operations tools on ``mcp``; imported last because it uses
+# the plumbing above.
+import app.mcp_operations  # noqa: E402,F401  # isort: skip  # pylint: disable=wrong-import-position,unused-import,cyclic-import

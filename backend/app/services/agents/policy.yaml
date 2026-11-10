@@ -29,12 +29,34 @@ actions:
   release.abort:        {sandbox: allow, demo: allow, standard: allow, critical: ask}
   release.settings:     {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   app.delete:           {sandbox: ask,   demo: ask,   standard: deny,  critical: deny}
+  app.restart:          {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  app.sleep:            {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  app.config:           {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  staging.manage:       {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  promotion.policy:     {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  ci.run:               {sandbox: allow, demo: allow, standard: allow, critical: ask}
+  release.traffic:      {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  project.members:      {sandbox: ask,   demo: ask,   standard: ask,   critical: confirm}
+  project.delete:       {sandbox: ask,   demo: ask,   standard: deny,  critical: deny}
+  finops.budget:        {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  finops.apply:         {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  finops.triage:        {sandbox: allow, demo: allow, standard: allow, critical: ask}
+  security.scan:        {sandbox: allow, demo: allow, standard: allow, critical: allow}
+  security.exception:   {sandbox: ask,   demo: ask,   standard: confirm, critical: confirm}
+  db.backup:            {sandbox: allow, demo: allow, standard: allow, critical: ask}
+  db.restore:           {sandbox: ask,   demo: ask,   standard: confirm, critical: confirm}
+  alert.update:         {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
 
 # While an alert fires on the app, stopping or retrying a release is never
 # slowed down: whoever is putting the fire out goes first.
 incident:
   release.abort: allow
   release.retry: allow
+  app.restart: allow
+
+# Never relaxed by an autonomous window: these destroy data or a project, so
+# the project's own level applies, not autonomous_as.
+never_autonomous: [app.delete, project.delete, db.restore]
 
 # A standard project whose owner opened an autonomous window is treated as
 # this level until the window closes.

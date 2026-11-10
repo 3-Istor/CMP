@@ -109,7 +109,11 @@ def decide(
     action: str, stake: ProjectStake, incident: bool = False
 ) -> Decision:
     data = rules()
-    level = stake.effective_level
+    level = (
+        stake.level
+        if action in data.get("never_autonomous", [])
+        else stake.effective_level
+    )
     outcome = data["actions"][action][level]
     reason = f"{action} on a {level} project"
     if level != stake.level:
