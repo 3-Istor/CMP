@@ -12,23 +12,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createProject } from "@/lib/api";
-import type { TargetCloud } from "@/types";
+import { createProject, getGlobalHealth } from "@/lib/api";
+import type { ClusterStatus, TargetCloud } from "@/types";
 import { Check, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-interface CloudOption {
-    value: TargetCloud;
-    available: boolean;
-}
+type ClusterState = ClusterStatus["state"] | "checking";
 
-const CLOUDS: CloudOption[] = [
-    { value: "onprem", available: true },
-    { value: "aws", available: true },
-    { value: "gcp", available: true },
-];
+const CLOUDS: TargetCloud[] = ["onprem", "aws", "gcp"];
 
 interface Props {
     open: boolean;
@@ -51,6 +44,13 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     const tc = useTranslations("common");
     const [name, setName] = useState("");
     const [targetCloud, setTargetCloud] = useState<TargetCloud>("onprem");
+    // A public cloud is offered only while its cluster is up: the backend
+    // refuses the others, since nothing would reconcile the project there.
+    const [clusterStates, setClusterStates] = useState<
+        Partial<Record<TargetCloud, ClusterState>>
+    >({});
+    const stateOf = (cloud: TargetCloud): ClusterState | "up" =>
+        cloud === "onprem" ? "up" : (clusterStates[cloud] ?? "checking");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +61,16 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
             setName("");
             setTargetCloud("onprem");
             setError(null);
+            setClusterStates({ aws: "checking", gcp: "checking" });
+            getGlobalHealth()
+                .then((health) =>
+                    setClusterStates(
+                        Object.fromEntries(
+                            health.clusters.map((c) => [c.cloud, c.state]),
+                        ),
+                    ),
+                )
+                .catch(() => setClusterStates({ aws: "unknown", gcp: "unknown" }));
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [open]);
@@ -147,7 +157,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                             aria-label={t("cloud")}
                             className="grid grid-cols-1 gap-2 sm:grid-cols-3"
                         >
-                            {CLOUDS.map((cloud) => {
+                            {CLOUDS.map((value) => {
+                                const state = stateOf(value);
+                                const cloud = { value, available: state === "up" };
                                 const selected = targetCloud === cloud.value;
                                 return (
                                     <button
@@ -178,7 +190,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                                                     variant="secondary"
                                                     className="text-[10px] px-1.5 py-0"
                                                 >
-                                                    {t("comingSoon")}
+                                                    {t(`clusterState.${state}`)}
                                                 </Badge>
                                             ) : null}
                                         </div>

@@ -120,7 +120,12 @@
       "namePlaceholder": "mon-equipe",
       "nameHint": "Minuscules, avec des tirets. Par exemple <code>platform-team</code>",
       "cloud": "Cloud cible",
-      "comingSoon": "Bientôt disponible",
+      "clusterState": {
+        "checking": "Vérification…",
+        "down": "Arrêté",
+        "starting": "Démarrage",
+        "unknown": "Indisponible"
+      },
       "clouds": {
         "onprem": {
           "label": "Sur site",
@@ -141,7 +146,7 @@
           "advantage3": "Outils data et IA performants"
         }
       },
-      "cloudNote": "AWS et GCP nécessitent un cluster enregistré par l'équipe infra avant de pouvoir être sélectionnés. <strong>Ce choix ne pourra pas être modifié.</strong> Pour changer de cloud, il faut recréer le projet.",
+      "cloudNote": "AWS et GCP ne peuvent être choisis que lorsque leur cluster tourne. <strong>Ce choix ne pourra pas être modifié.</strong> Pour changer de cloud, il faut recréer le projet.",
       "errors": {
         "tooShort": "Le nom doit contenir au moins 2 caractères.",
         "tooLong": "Le nom doit contenir au plus 40 caractères.",

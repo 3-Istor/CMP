@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from unittest import mock
 
 import pytest
@@ -12,6 +13,7 @@ from app.models.project import Project, ProjectStatus, TargetCloud
 from app.routers import projects as projects_router
 from app.schemas.project import ProjectCreate
 from app.services import keycloak_admin, keycloak_service, vault_auth
+from app.services.clusters import state as cluster_state
 from app.services.project_registry import (
     NameCollisionError,
     ProtectedRecordError,
@@ -204,10 +206,16 @@ def test_retry_keeps_the_owner_and_the_cloud_of_the_first_attempt(db, seams):
     org.assert_awaited_once_with("test-p", "bob")
 
 
+@contextlib.contextmanager
 def _states(**by_cloud):
-    return mock.patch.object(
-        projects_router, "fresh_state", lambda c: by_cloud[c.value]
-    )
+    def read(cloud):
+        return by_cloud[cloud.value]
+
+    with (
+        mock.patch.object(projects_router, "fresh_state", read),
+        mock.patch.object(cluster_state, "fresh_state", read),
+    ):
+        yield
 
 
 def test_public_project_goes_to_the_other_cloud_than_the_last_one(db, seams):
@@ -246,11 +254,27 @@ def test_public_project_is_refused_when_no_public_cloud_is_up(db, seams):
 
 
 @pytest.mark.parametrize("cloud", ["onprem", "aws", "gcp"])
-def test_explicit_cloud_is_kept_without_reading_cluster_states(
-    db, seams, cloud
-):
-    with mock.patch.object(projects_router, "fresh_state") as states:
+def test_explicit_cloud_is_kept_when_its_cluster_is_up(db, seams, cloud):
+    with _states(aws="up", gcp="up"):
         created = create(db, cloud=cloud)
 
     assert created.target_cloud == TargetCloud(cloud)
+
+
+def test_onprem_project_does_not_read_cluster_states(db, seams):
+    with mock.patch.object(projects_router, "fresh_state") as states:
+        create(db, cloud="onprem")
+
     states.assert_not_called()
+
+
+@pytest.mark.parametrize("state", ["down", "starting"])
+def test_explicit_cloud_is_refused_when_its_cluster_is_not_up(
+    db, seams, state
+):
+    with _states(aws=state, gcp="up"):
+        with pytest.raises(HTTPException) as excinfo:
+            create(db, cloud="aws")
+
+    assert excinfo.value.status_code == 409
+    seams.publish.assert_not_called()
