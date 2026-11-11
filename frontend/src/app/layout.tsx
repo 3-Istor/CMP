@@ -1,3 +1,4 @@
+import { StepUpNotice } from "@/components/auth/StepUpNotice";
 import { AppShell } from "@/components/layout/AppShell";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { Toaster } from "@/components/ui/sonner";
@@ -54,6 +55,7 @@ export default async function RootLayout({
           <SessionProvider>
             <AppShell>{children}</AppShell>
             <Toaster richColors position="bottom-right" />
+            <StepUpNotice />
           </SessionProvider>
         </NextIntlClientProvider>
       </body>

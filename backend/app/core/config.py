@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     # Comma separated, so a client switch can accept both for a while.
     # Empty means KEYCLOAK_CLIENT_ID alone.
     KEYCLOAK_ALLOWED_CLIENTS: str = ""
+    # Step-up before destructive actions (app.services.step_up). Off until the
+    # Keycloak flow that issues the acr is live: with it on and no such flow,
+    # every destructive action would loop on the login page.
+    STEP_UP_ENABLED: bool = False
+    # acr of Keycloak LoA 2 (a passkey), per the clients' acr.loa.map.
+    STEP_UP_ACR: str = "gold"
+    # Must be at least the LoA 2 max age of the Keycloak flow (300 s).
+    STEP_UP_MAX_AGE: int = 300
     # Master realm client (cmp-provisioner) for realm provisioning and
     # Terraform.
     KEYCLOAK_PROVISIONER_CLIENT_ID: str = ""

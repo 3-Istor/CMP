@@ -5,6 +5,7 @@ import type {
   TerraformOutputs,
 } from "@/types";
 import { getSession, signIn } from "next-auth/react";
+import { parseStepUpHint, startStepUp } from "./stepUp";
 
 // Declare runtime config type
 declare global {
@@ -124,6 +125,11 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const err = await res.text();
+    const stepUp = parseStepUpHint(res.status, err);
+    if (stepUp && (await startStepUp(stepUp))) {
+      // The page is leaving for Keycloak: settling would flash an error.
+      return new Promise<T>(() => {});
+    }
     throw new ApiError(res.status, err);
   }
 

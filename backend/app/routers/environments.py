@@ -50,6 +50,7 @@ from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
 )
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/deployments", tags=["Environments"])
 callbacks = APIRouter(prefix="/verification-runs", tags=["Environments"])
@@ -653,6 +654,7 @@ async def start_promotion(
             status_code=403,
             detail="Only a project admin can start an emergency promotion.",
         )
+    assert_step_up(token)
     rollback_of = None
     if payload.rollback_to is not None:
         rollback_of = _promotion(db, deployment, payload.rollback_to)
@@ -729,6 +731,7 @@ async def approve_promotion(
         _app, db, token, deployment_id, ProjectRole.ADMIN
     )
     item = _promotion(db, deployment, promotion_id)
+    assert_step_up(token)
     try:
         promotion.approve(item, _actor(token), is_cnp_admin(token))
         db.commit()

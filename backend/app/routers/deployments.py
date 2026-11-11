@@ -52,6 +52,7 @@ from app.services.project_registry import (
     RegistryError,
     ensure_app_names_free,
 )
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/deployments", tags=["Deployments"])
 
@@ -392,6 +393,8 @@ async def delete_deployment(
     Refused with 409 while the project's deletion protection is on.
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
+    # Assistants may delete only where policy.yaml lets them (sandbox, demo).
+    assert_step_up(token, agents_allowed=True)
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,

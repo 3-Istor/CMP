@@ -2585,6 +2585,10 @@
       "slate": "Slate"
     }
   },
+  "stepUp": {
+    "confirmed": "Identity confirmed with your passkey. Confirm the action again.",
+    "failed": "This action needs a recent login with a passkey, and the login did not provide it. Add a passkey in your 3Istor ID account, then try again."
+  },
   "signin": {
     "redirecting": "Redirecting to Keycloak…",
     "wait": "Please wait while we redirect you to the sign-in page."

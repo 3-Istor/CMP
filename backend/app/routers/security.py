@@ -60,6 +60,7 @@ from app.services.security.collector import (
     utcnow,
 )
 from app.services.security.model import Category, Source, Tier
+from app.services.step_up import assert_step_up
 
 logger = logging.getLogger(__name__)
 
@@ -714,17 +715,21 @@ async def approve_exception(
             detail="Un autre admin du projet que l'auteur doit valider.",
         )
     reviewer = is_cnp_admin(token) or is_auditor(token)
+    # A core finding is a fixable critical. An unknown tier is treated as
+    # critical.
+    critical = _exception_tier(db, row) in (Tier.CORE, None)
     if not reviewer:
         await _require_admin(token, row.project)
-        # A core finding is a fixable critical: only the auditor or a platform
-        # admin may accept it. An unknown tier is treated as critical.
-        if _exception_tier(db, row) in (Tier.CORE, None):
+        # Only the auditor or a platform admin may accept a critical.
+        if critical:
             raise HTTPException(
                 status_code=403,
                 detail="Une exception critique est validée par l'audit sécurité.",
             )
     if row.revoked_at is not None:
         raise HTTPException(status_code=409, detail="Exception réactivée.")
+    if critical:
+        assert_step_up(token)
     row.approved_by, row.approved_at = approver, utcnow()
     row.approved_by_reviewer = reviewer
     db.commit()

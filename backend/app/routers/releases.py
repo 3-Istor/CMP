@@ -74,6 +74,7 @@ from app.services.release.view import (
     promote_patch,
     skip_patch,
 )
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/deployments", tags=["Releases"])
 
@@ -333,6 +334,9 @@ def promote_release(
         if not view.in_progress or view.phase == "Aborted":
             raise _conflict("No release in progress.")
         _forbid_force(view)
+        # Skips the remaining canary steps in prod. Assistants are gated by
+        # release.promote in policy.yaml.
+        assert_step_up(token, agents_allowed=True)
         if payload.reason is None:
             raise HTTPException(
                 status_code=422,
