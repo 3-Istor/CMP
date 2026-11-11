@@ -470,3 +470,28 @@ class TestNotifications:
             grants._notify(item)  # pylint: disable=protected-access
 
         assert notify.call_args.args[0] == {"bob"}
+
+
+def test_group_token_uses_the_provisioner_client_when_configured(monkeypatch):
+    from app.services.access import groups
+
+    calls = []
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"access_token": "tok", "expires_in": 300}
+
+    def _post(url, data, timeout):
+        calls.append((url, data["grant_type"]))
+        return _Response()
+
+    monkeypatch.setattr(groups, "_token_cache", None)
+    monkeypatch.setattr(groups.keycloak_admin, "is_configured", lambda: True)
+    monkeypatch.setattr(groups.requests, "post", _post)
+
+    token = groups._token()  # pylint: disable=protected-access
+
+    assert token == "tok" and calls[0][1] == "client_credentials"
