@@ -1,0 +1,48 @@
+{
+  "me": "e2e-demo-user",
+  "can_manage": true,
+  "settings": {
+    "auto_start": false,
+    "interval_days": 90,
+    "deadline_days": 14,
+    "inactive_after_days": 60,
+    "inactive_grace_days": 14,
+    "inactive_disable_enabled": true
+  },
+  "campaigns": [
+    {
+      "id": 1,
+      "status": "open",
+      "trigger": "manual",
+      "started_by": "e2e-demo-user",
+      "started_at": "2026-11-01T08:00:00Z",
+      "due_at": "2026-11-15T08:00:00Z",
+      "escalated_at": null,
+      "closed_at": null,
+      "closed_by": null,
+      "total": 4,
+      "decided": 2,
+      "open_tasks": 1
+    }
+  ],
+  "accounts": [
+    {
+      "user_id": "u1",
+      "username": "old.user",
+      "last_login_at": null,
+      "tracked_since": "2026-08-01T00:00:00Z",
+      "flagged_at": "2026-11-05T00:00:00Z",
+      "disabled_at": null,
+      "disable_due_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "user_id": "u2",
+      "username": "gone.user",
+      "last_login_at": "2026-07-01T10:00:00Z",
+      "tracked_since": "2026-08-01T00:00:00Z",
+      "flagged_at": "2026-10-01T00:00:00Z",
+      "disabled_at": "2026-10-15T00:00:00Z",
+      "disable_due_at": null
+    }
+  ]
+}

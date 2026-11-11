@@ -106,6 +106,23 @@ class Settings(BaseSettings):
     # and reported. Off only while migrating by hand.
     ACCESS_REMOVE_UNMANAGED_MEMBERS: bool = True
 
+    # Periodic access review (CNP-124). Infra opens a campaign by hand; with
+    # ACCESS_REVIEW_AUTO_START the CMP also opens one every
+    # ACCESS_REVIEW_INTERVAL_DAYS. Undecided items are escalated at the
+    # deadline, never removed.
+    ACCESS_REVIEW_AUTO_START: bool = False
+    ACCESS_REVIEW_INTERVAL_DAYS: int = 90
+    ACCESS_REVIEW_DEADLINE_DAYS: int = 14
+    # Accounts without a login for INACTIVE_AFTER_DAYS are reported, then
+    # disabled (enabled=false, reversible) INACTIVE_GRACE_DAYS later, only
+    # when INACTIVE_DISABLE_ENABLED. Usernames starting with one of the
+    # comma-separated prefixes, or listed exactly, are never touched.
+    INACTIVE_AFTER_DAYS: int = 60
+    INACTIVE_GRACE_DAYS: int = 14
+    INACTIVE_DISABLE_ENABLED: bool = False
+    INACTIVE_EXCLUDED_PREFIXES: str = "demo-,break-glass,service-account-"
+    INACTIVE_EXCLUDED_USERS: str = ""
+
     # Vault (for secret management in Terraform modules)
     VAULT_URL: str = ""
     # "kubernetes" logs in with the pod's ServiceAccount; anything else uses

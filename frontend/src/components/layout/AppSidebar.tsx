@@ -9,7 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useSecurityOverview } from "@/lib/hooks";
-import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
+import { usePlatformRoles } from "@/lib/usePlatformRoles";
 import { cn } from "@/lib/utils";
 import {
   BookOpen,
@@ -37,6 +37,7 @@ import {
   HOME_PAGE,
   PLATFORM_PAGES,
   WORK_PAGES,
+  isPageVisible,
   useVisibleWork,
   type PageEntry,
 } from "./shellData";
@@ -131,7 +132,7 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
   const security = useSecurityOverview();
   const hasCoreAlert = security.some((s) => s.core > 0);
   const projectName = projectFromPath(pathname);
-  const platformAdmin = usePlatformAdmin();
+  const platformRoles = usePlatformRoles();
 
   useEffect(() => {
     if (projectName) recordRecentProject(projectName);
@@ -255,8 +256,8 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
             {WORK_PAGES.map(renderLink)}
           </Group>
           <Group title={t("groupPlatform")} collapsed={collapsed}>
-            {PLATFORM_PAGES.filter(
-              (page) => !page.platformAdminOnly || platformAdmin,
+            {PLATFORM_PAGES.filter((page) =>
+              isPageVisible(page, platformRoles),
             ).map(renderLink)}
           </Group>
         </nav>

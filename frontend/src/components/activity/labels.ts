@@ -32,6 +32,7 @@ export const ACTION_GROUPS: { value: string; labelKey: string }[] = [
   { value: "keycloak.login_error", labelKey: "groups.logins" },
   { value: "deployment.", labelKey: "groups.deployments" },
   { value: "access.", labelKey: "groups.access" },
+  { value: "access_review.", labelKey: "groups.accessReview" },
 ];
 
 const EXPOSURE_KEYS: Record<string, string> = {
@@ -135,6 +136,18 @@ export function describe(e: ActivityEvent, t: Translate): string {
       user: str(d.requester) || user || "",
       elevation: str(d.elevation) || elevation || "",
     });
+  }
+  if (e.action.startsWith("access_review.")) {
+    const [user, subject] = e.target.split(":");
+    return t(
+      `events.accessReview.${e.action.slice("access_review.".length).replace(".", "_")}`,
+      {
+        user: user ?? "",
+        subject: str(d.subject) || subject || "",
+        decision: str(d.decision) || "other",
+        count: str(d.undecided ?? d.items),
+      },
+    );
   }
   switch (e.action) {
     case "project.create":

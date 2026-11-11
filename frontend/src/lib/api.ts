@@ -910,6 +910,85 @@ export async function downloadActivity(
   URL.revokeObjectURL(url);
 }
 
+// Periodic access review (infra and security auditors, owners for /mine)
+export const getAccessReviews = () =>
+  request<import("@/types/accessReview").AccessReviewOverview>(
+    "/access-reviews",
+  );
+
+export const getAccessReview = (id: number) =>
+  request<import("@/types/accessReview").AccessReviewDetail>(
+    `/access-reviews/campaigns/${id}`,
+  );
+
+export const startAccessReview = (deadlineDays?: number) =>
+  request<import("@/types/accessReview").AccessReviewCampaign>(
+    "/access-reviews/campaigns",
+    {
+      method: "POST",
+      body: JSON.stringify(
+        deadlineDays ? { deadline_days: deadlineDays } : {},
+      ),
+    },
+  );
+
+export const closeAccessReview = (id: number) =>
+  request<import("@/types/accessReview").AccessReviewCampaign>(
+    `/access-reviews/campaigns/${id}/close`,
+    { method: "POST" },
+  );
+
+export const getMyAccessReview = (project: string) =>
+  request<import("@/types/accessReview").MyAccessReview>(
+    `/access-reviews/mine?project=${encodeURIComponent(project)}`,
+  );
+
+export const decideAccessReview = (
+  itemId: number,
+  body: {
+    decision: import("@/types/accessReview").ReviewDecision;
+    role?: string;
+    note?: string;
+  },
+) =>
+  request<import("@/types/accessReview").AccessReviewItem>(
+    `/access-reviews/items/${itemId}/decision`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+
+export const markReviewTaskDone = (itemId: number) =>
+  request<import("@/types/accessReview").AccessReviewItem>(
+    `/access-reviews/items/${itemId}/task-done`,
+    { method: "POST" },
+  );
+
+export const enableInactiveAccount = (userId: string) =>
+  request<import("@/types/accessReview").InactiveAccount>(
+    `/access-reviews/accounts/${encodeURIComponent(userId)}/enable`,
+    { method: "POST" },
+  );
+
+export async function downloadAccessReview(
+  id: number,
+  format: "csv" | "json",
+) {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${BASE}/access-reviews/campaigns/${id}/export?format=${format}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `access-review-${id}.${format}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export const getProjectLogs = (
   project: string,
   f: import("@/types").LogFilters,
@@ -1345,7 +1424,8 @@ export type NotificationKind =
   | "alert"
   | "member_added"
   | "approval_request"
-  | "access";
+  | "access"
+  | "access_review";
 
 export interface AppNotification {
   id: number;

@@ -23,6 +23,7 @@ import {
   ShieldQuestion,
   Trash2,
   TriangleAlert,
+  UserCheck,
   UserPlus,
   XCircle,
   type LucideIcon,
@@ -42,6 +43,7 @@ const KIND_ICONS: Record<NotificationKind, LucideIcon> = {
   member_added: UserPlus,
   approval_request: ShieldQuestion,
   access: KeyRound,
+  access_review: UserCheck,
 };
 
 const KIND_TONES: Record<NotificationKind, string> = {
@@ -52,6 +54,7 @@ const KIND_TONES: Record<NotificationKind, string> = {
   member_added: "text-primary",
   approval_request: "text-primary",
   access: "text-amber-600 dark:text-amber-400",
+  access_review: "text-amber-600 dark:text-amber-400",
 };
 
 function useUnreadCount(): [number, () => Promise<void>] {

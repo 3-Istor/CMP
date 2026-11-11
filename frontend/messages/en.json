@@ -25,7 +25,8 @@
       "navigationHint": "Platform pages, links, theme and profile.",
       "openMenu": "Open the menu",
       "skipToContent": "Skip to content",
-      "access": "Elevated access"
+      "access": "Elevated access",
+      "accessReviews": "Access reviews"
     },
     "home": {
       "fallbackName": "Developer",
@@ -965,7 +966,8 @@
       "vault": "Vault secrets",
       "logins": "Failed logins",
       "deployments": "Deployments",
-      "access": "Elevated access"
+      "access": "Elevated access",
+      "accessReview": "Access reviews"
     },
     "roles": {
       "admin": "admin",
@@ -1059,6 +1061,17 @@
         "expire": "{elevation} of {user} expired",
         "lapse": "request of {user} for {elevation} lapsed without a decision",
         "unmanaged": "found {user} in {elevation} without a grant"
+      },
+      "accessReview": {
+        "start": "Opened access review #{subject}",
+        "close": "Closed access review #{subject}",
+        "escalate": "Access review #{subject} overdue: {count} undecided",
+        "decide": "Reviewed {user} on {subject}: {decision, select, keep {kept} remove {removed} change_role {role changed} other {decided}}",
+        "terraform_task": "Terraform change needed to remove {user} from {subject}",
+        "task_done": "Terraform change applied for {user} on {subject}",
+        "account_flag": "{user} reported inactive",
+        "account_disable": "{user} disabled for inactivity",
+        "account_enable": "{user} kept active"
       }
     },
     "audit": {
@@ -2666,7 +2679,13 @@
       "access_denied": "{by} denied your {elevation} access",
       "access_expired": "Your {elevation} access has expired",
       "access_revoked": "{by} ended your {elevation} access",
-      "access_lapsed": "Your {elevation} request lapsed without a decision"
+      "access_lapsed": "Your {elevation} request lapsed without a decision",
+      "access_review_pending": "Review who can access {project} before {due}",
+      "access_review_platform_pending": "Review the platform groups before {due}",
+      "access_review_escalated": "Access review overdue: {count} undecided",
+      "access_review_terraform_task": "Remove {user} from {group} in the K3s Terraform",
+      "access_review_inactive": "{user} has not logged in for {days} days",
+      "access_review_disabled": "{user} was disabled after {days} days without login"
     }
   },
   "secretsPresence": {
@@ -3051,6 +3070,116 @@
       "deny": "Request denied.",
       "cancel": "Request cancelled.",
       "end": "Access ended."
+    }
+  },
+  "accessReviews": {
+    "title": "Access reviews",
+    "description": "Periodic review of who can access each project and platform group, and accounts nobody uses any more.",
+    "forbidden": "Access reviews are for infra and security auditors.",
+    "loading": "Loading access reviews",
+    "readOnly": "Read-only: infra starts campaigns and reviews the platform groups. Exports are available to you.",
+    "campaigns": {
+      "title": "Campaigns",
+      "auto": "A campaign opens automatically every {days} days.",
+      "manual": "Campaigns are opened by infra.",
+      "deadline": "Reviewers have {days} days; undecided items are escalated, never removed.",
+      "empty": "No campaign yet.",
+      "none": "Select a campaign to see its items.",
+      "name": "Campaign #{id}",
+      "meta": "{decided} of {total} decided, due {due}"
+    },
+    "status": {
+      "open": "Open",
+      "closed": "Closed",
+      "overdue": "Overdue"
+    },
+    "detail": {
+      "meta": "Started by {by} on {started}, due {due}.",
+      "platformTitle": "Platform groups",
+      "platformDescription": "infra, security-auditor and finops. Reviewed by an infra member other than the person concerned. A removal becomes a Terraform task.",
+      "projectsTitle": "Projects",
+      "projectsDescription": "Decided by each project owner, or its admins when the owner is gone. Decisions apply at once.",
+      "empty": "Nothing to review here."
+    },
+    "tasks": {
+      "title": "Terraform tasks",
+      "description": "Platform groups are declared in the K3s Terraform: apply these changes there, then mark them done.",
+      "remove": "Remove {user} from {group}",
+      "done": "Done by {user}"
+    },
+    "inactive": {
+      "title": "Inactive accounts",
+      "description": "Accounts without a login for {days} days. Demo, break-glass and service accounts are never listed.",
+      "disableOn": "They are disabled {days} days after being reported, and can be enabled again here.",
+      "disableOff": "Automatic disabling is off: they are only reported.",
+      "empty": "No inactive account.",
+      "state": "State",
+      "notSince": "None since {date}",
+      "disabled": "Disabled on {date}",
+      "disableDue": "Disabled on {date} unless kept",
+      "reported": "Reported"
+    },
+    "table": {
+      "subject": "Project or group",
+      "member": "Member",
+      "role": "Role",
+      "lastLogin": "Last login",
+      "decision": "Decision",
+      "actions": "Actions"
+    },
+    "roles": {
+      "owner": "Owner",
+      "admin": "Administrator",
+      "member": "Member",
+      "guest": "Guest"
+    },
+    "lastLogin": {
+      "none": "Not seen"
+    },
+    "decision": {
+      "pending": "To review",
+      "keep": "Kept",
+      "remove": "Removed",
+      "changedTo": "Now {role, select, admin {administrator} guest {guest} other {member}}",
+      "self": "Reviewed by someone else",
+      "confirmRemove": "Remove {user} from the project?",
+      "confirmPlatformRemove": "Remove {user}? A Terraform task will be created.",
+      "newRole": "New role",
+      "by": "By {user}"
+    },
+    "actions": {
+      "start": "Start a campaign",
+      "close": "Close the campaign",
+      "exportCsv": "Export CSV",
+      "exportJson": "Export JSON",
+      "keep": "Keep",
+      "remove": "Remove",
+      "role": "Change role",
+      "confirmRemove": "Remove",
+      "confirmRole": "Apply",
+      "cancel": "Cancel",
+      "keepUser": "Keep {user}",
+      "roleUser": "Change the role of {user}",
+      "removeUser": "Remove {user}",
+      "taskDone": "Mark as done",
+      "enable": "Enable again",
+      "keepActive": "Keep active",
+      "keepAccount": "Keep the account of {user}"
+    },
+    "toasts": {
+      "keep": "{user} kept",
+      "remove": "{user} removed",
+      "change_role": "Role of {user} changed",
+      "started": "Campaign started, reviewers notified",
+      "closed": "Campaign closed",
+      "taskDone": "Task marked as done",
+      "kept": "{user} kept active"
+    },
+    "card": {
+      "title": "Review access",
+      "description": "{count, plural, =0 {Every member reviewed.} one {1 member to review} other {# members to review}}, due {due}. Keep, remove or change the role of each.",
+      "open": "Review",
+      "hide": "Hide"
     }
   }
 }

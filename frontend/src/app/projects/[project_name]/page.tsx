@@ -2,6 +2,7 @@
 
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
 
+import { ProjectAccessReviewCard } from "@/components/access-reviews/ProjectAccessReviewCard";
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { AppCard } from "@/components/projects/AppCard";
@@ -193,6 +194,9 @@ export default function ProjectPage() {
         )}
 
         <div className="space-y-6">
+          {role === "owner" || role === "admin" ? (
+            <ProjectAccessReviewCard project={projectName} />
+          ) : null}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <p className="text-sm text-muted-foreground">
