@@ -143,6 +143,14 @@ ACTIONS: dict[tuple[str, str], str] = {
         "POST",
         "/api/account/github-installation",
     ): "account.github.link",
+    ("POST", "/api/access/requests"): "access.request",
+    (
+        "POST",
+        "/api/access/requests/{request_id}/approve",
+    ): "access.approve",
+    ("POST", "/api/access/requests/{request_id}/deny"): "access.deny",
+    ("POST", "/api/access/requests/{request_id}/cancel"): "access.cancel",
+    ("POST", "/api/access/requests/{request_id}/end"): "access.end",
 }
 
 # Matched on the raw path rather than on the route FastAPI selected: since
@@ -189,6 +197,11 @@ NOTABLE = {
     "release.settings.update",
     "agent.connect",
     "project.agents.update",
+    "access.request",
+    "access.approve",
+    "access.end",
+    "access.expire",
+    "access.unmanaged",
 }
 
 # Body fields copied into the journal. Anything else, config values in
@@ -327,6 +340,32 @@ def record_agent_event(
     )
 
 
+def record_system_event(
+    action: str,
+    target: str,
+    details: dict,
+    actor: str = "cmp",
+    succeeded: bool = True,
+) -> None:
+    """
+    Journal a change the CMP made on its own, such as a grant removed at
+    expiry, which no REST call carries.
+    """
+    _store(
+        AuditEvent(
+            actor=actor,
+            action=action,
+            project=None,
+            app=None,
+            target=target,
+            outcome="success" if succeeded else "failure",
+            status_code=200 if succeeded else 500,
+            source_ip="cmp",
+            details=json.dumps(details, default=str),
+        )
+    )
+
+
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
@@ -442,7 +481,7 @@ async def _record(
     if action == "app.create":
         app = app or fields.get("name")
 
-    target = next(
+    target = noted.pop("target", None) or next(
         (
             str(params[k])
             for k in (

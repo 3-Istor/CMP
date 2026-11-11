@@ -97,6 +97,15 @@ class Settings(BaseSettings):
     KEYCLOAK_PROVISIONER_CLIENT_ID: str = ""
     KEYCLOAK_PROVISIONER_CLIENT_SECRET: str = ""
 
+    # Just-in-time access (CNP-124). Durations in minutes; the max is capped
+    # at 240 whatever is configured. A request nobody decides on lapses.
+    ACCESS_DEFAULT_MINUTES: int = 60
+    ACCESS_MAX_MINUTES: int = 60
+    ACCESS_REQUEST_TTL_MINUTES: int = 120
+    # Members found in an elevated group without an active grant are removed
+    # and reported. Off only while migrating by hand.
+    ACCESS_REMOVE_UNMANAGED_MEMBERS: bool = True
+
     # Vault (for secret management in Terraform modules)
     VAULT_URL: str = ""
     # "kubernetes" logs in with the pod's ServiceAccount; anything else uses
