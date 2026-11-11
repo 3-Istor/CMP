@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -8,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models.access import AccessRequest
 from app.models.audit import AuditEvent
@@ -20,6 +22,12 @@ TOKENS = {
     "alice": {"sub": "a", "preferred_username": "alice", "groups": ["infra"]},
     "bob": {"sub": "b", "preferred_username": "bob", "groups": ["/infra"]},
     "eve": {"sub": "e", "preferred_username": "eve", "groups": ["member"]},
+    "alice-assistant": {
+        "sub": "a",
+        "preferred_username": "alice",
+        "groups": ["infra"],
+        "cnp_agent": {"grant_id": 1, "client": "claude", "scopes": []},
+    },
 }
 VAULT_GROUP = "elevated-vault-data"
 NOW = datetime(2026, 11, 11, 10, 0, 0)
@@ -152,6 +160,89 @@ class TestPlatformAdminsOnly:
 
         assert response.status_code == 403
         assert keycloak.members[VAULT_GROUP] == set()
+
+
+class TestAssistantsRefused:
+    def test_refuses_a_request_from_an_assistant_token(self, client, factory):
+        response = ask(client, user="alice-assistant")
+
+        assert response.status_code == 403
+        with factory() as db:
+            assert db.query(AccessRequest).count() == 0
+
+    def test_refuses_an_approval_from_an_assistant_token(
+        self, client, keycloak
+    ):
+        request_id = ask(client, user="bob").json()["id"]
+
+        response = client.post(
+            f"/api/access/requests/{request_id}/approve",
+            headers=as_user("alice-assistant"),
+        )
+
+        assert response.status_code == 403
+        assert keycloak.members[VAULT_GROUP] == set()
+
+    def test_refuses_to_end_a_grant_from_an_assistant_token(
+        self, client, keycloak
+    ):
+        request_id = ask(client).json()["id"]
+        client.post(
+            f"/api/access/requests/{request_id}/approve",
+            headers=as_user("bob"),
+        )
+
+        response = client.post(
+            f"/api/access/requests/{request_id}/end",
+            headers=as_user("alice-assistant"),
+        )
+
+        assert response.status_code == 403
+        assert keycloak.members[VAULT_GROUP] == {"alice"}
+
+
+class TestStepUp:
+    @pytest.fixture
+    def step_up_on(self):
+        with (
+            mock.patch.object(settings, "STEP_UP_ENABLED", True),
+            mock.patch.object(settings, "STEP_UP_ACR", "gold"),
+        ):
+            yield
+
+    def test_asks_for_a_passkey_before_a_request(
+        self, client, factory, step_up_on
+    ):
+        response = ask(client)
+
+        assert response.status_code == 401
+        assert response.json()["detail"]["code"] == "step_up_required"
+        with factory() as db:
+            assert db.query(AccessRequest).count() == 0
+
+    def test_asks_for_a_passkey_before_an_approval(
+        self, client, keycloak, step_up_on
+    ):
+        with mock.patch.object(settings, "STEP_UP_ENABLED", False):
+            request_id = ask(client).json()["id"]
+
+        response = client.post(
+            f"/api/access/requests/{request_id}/approve",
+            headers=as_user("bob"),
+        )
+
+        assert response.status_code == 401
+        assert keycloak.members[VAULT_GROUP] == set()
+
+    def test_accepts_a_request_after_a_recent_passkey_login(
+        self, client, step_up_on
+    ):
+        stepped_up = {"acr": "gold", "auth_time": time.time() - 10}
+
+        with mock.patch.dict(TOKENS["alice"], stepped_up):
+            response = ask(client)
+
+        assert response.status_code == 201
 
 
 class TestFourEyes:

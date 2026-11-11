@@ -17,6 +17,7 @@ from app.services.access import catalog, grants
 from app.services.audit import note
 from app.services.authz import is_cnp_admin
 from app.services.keycloak_service import get_current_user
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/access", tags=["access"])
 
@@ -34,18 +35,29 @@ def require_platform_admin(
     return token
 
 
-def require_step_up(
+def require_human_admin(
     token: Annotated[dict, Depends(require_platform_admin)],
 ) -> dict:
-    """
-    Hook point for passkey step-up (S3): will require a recent strong
-    authentication (acr, auth_time) before a request or an approval. Lets
-    every platform admin through until then.
-    """
+    # An assistant token carries its user's groups, so is_cnp_admin alone
+    # would let it request, approve or end an elevation on their behalf.
+    if token.get("cnp_agent"):
+        raise HTTPException(
+            status_code=403,
+            detail="An assistant cannot request, approve or end elevated "
+            "access; a person does it in the CMP.",
+        )
+    return token
+
+
+def require_step_up(
+    token: Annotated[dict, Depends(require_human_admin)],
+) -> dict:
+    assert_step_up(token)
     return token
 
 
 PlatformAdmin = Annotated[dict, Depends(require_platform_admin)]
+HumanAdmin = Annotated[dict, Depends(require_human_admin)]
 SteppedUp = Annotated[dict, Depends(require_step_up)]
 
 
@@ -260,7 +272,7 @@ async def cancel_request(
 async def end_grant(
     request_id: int,
     request: Request,
-    token: PlatformAdmin,
+    token: HumanAdmin,
     db: Session = Depends(get_db),
 ):
     actor = _username(token)
