@@ -96,6 +96,7 @@ from app.services.project_registry import (
     set_customer_access,
     set_deletion_protection,
 )
+from app.services.step_up import assert_step_up
 
 logger = logging.getLogger(__name__)
 
@@ -994,6 +995,7 @@ async def delete_project(
         409: Deletion protection is on, or still being lifted on the cluster
     """
     project_name = ctx.project_name
+    assert_step_up(ctx.token)
 
     try:
         row = (

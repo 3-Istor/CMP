@@ -2585,6 +2585,10 @@
       "slate": "Ardoise"
     }
   },
+  "stepUp": {
+    "confirmed": "Identité confirmée avec votre passkey. Confirmez à nouveau l'action.",
+    "failed": "Cette action demande une connexion récente avec une passkey, et la connexion ne l'a pas fournie. Ajoutez une passkey dans votre compte 3Istor ID, puis réessayez."
+  },
   "signin": {
     "redirecting": "Redirection vers Keycloak…",
     "wait": "Veuillez patienter pendant la redirection vers la page de connexion."

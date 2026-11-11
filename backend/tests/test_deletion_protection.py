@@ -224,7 +224,7 @@ def test_deleting_a_protected_project_is_refused(db, roles):  # noqa: F811
     ):
         asyncio.run(
             projects_router.delete_project(
-                SimpleNamespace(project_name="gamma"),
+                SimpleNamespace(project_name="gamma", token={}),
                 BackgroundTasks(),
                 db,
             )
