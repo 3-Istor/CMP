@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     TF_BACKEND_AWS_REGION: str = "eu-west-3"
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
+    # Role assumed with a token of the Keycloak client cnp-tfstate instead of
+    # the static key above (Cloud repo, terraform/public/aws/cmp-iam). Empty
+    # keeps the static key: that is the rollback switch.
+    TF_BACKEND_AWS_ROLE_ARN: str = ""
+    TF_BACKEND_OIDC_TOKEN_URL: str = (
+        "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token"
+    )
+    TF_BACKEND_OIDC_CLIENT_ID: str = "cnp-tfstate"
+    TF_BACKEND_OIDC_CLIENT_SECRET: str = ""
 
     # Project registry, the Git source of truth for project placement (D-01)
     CNP_REGISTRY_REPO: str = "3-Istor/cnp-projects"

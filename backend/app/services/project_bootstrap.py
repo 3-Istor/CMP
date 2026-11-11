@@ -26,7 +26,12 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.models.project import ProjectStatus
-from app.services import keycloak_admin, metrics_isolation, vault_auth
+from app.services import (
+    aws_tfstate,
+    keycloak_admin,
+    metrics_isolation,
+    vault_auth,
+)
 from app.services.environments import staging_realm
 from app.services.github_service import GitHubAppError, get_installation_token
 from app.services.project_status import delete_project_row, set_project_status
@@ -546,6 +551,8 @@ def _run_once(
             settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
         )
         env["AWS_DEFAULT_REGION"] = settings.TF_BACKEND_AWS_REGION
+
+    aws_tfstate.apply_terraform_env(env)
 
     env.update(vault_auth.terraform_env())
     env.update(keycloak_admin.terraform_env())
