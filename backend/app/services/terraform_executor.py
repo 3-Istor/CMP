@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
-from app.services import keycloak_admin, vault_auth
+from app.services import aws_tfstate, keycloak_admin, vault_auth
 from app.services.state_lock import (
     raise_if_state_locked,
     run_releasing_dead_pod_lock,
@@ -81,6 +81,10 @@ class TerraformExecutor:
             "-backend-config=encrypt=true",
             "-backend-config=use_lockfile=true",
         ]
+
+        # Federated runs get their credentials from the AWS profile.
+        if aws_tfstate.enabled():
+            return backend_config
 
         # Add S3 backend credentials if provided
         if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
@@ -194,6 +198,7 @@ class TerraformExecutor:
             )
 
         env.update(vault_auth.terraform_env())
+        aws_tfstate.apply_terraform_env(env)
 
         # Pass GitHub Registry credentials to Terraform (for image pull secrets)
         if settings.GITHUB_REGISTRY_TOKEN:
