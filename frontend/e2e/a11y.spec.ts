@@ -12,6 +12,7 @@ const PAGES = [
   "/activity",
   "/alerts",
   "/access",
+  "/access-reviews",
   "/projects/demo",
   "/projects/demo/costs",
   "/projects/demo/apps/1",

@@ -1,0 +1,102 @@
+{
+  "campaign": {
+    "id": 1,
+    "status": "open",
+    "trigger": "manual",
+    "started_by": "e2e-demo-user",
+    "started_at": "2026-11-01T08:00:00Z",
+    "due_at": "2026-11-15T08:00:00Z",
+    "escalated_at": null,
+    "closed_at": null,
+    "closed_by": null,
+    "total": 4,
+    "decided": 2,
+    "open_tasks": 1
+  },
+  "items": [
+    {
+      "id": 1,
+      "campaign_id": 1,
+      "scope": "platform",
+      "subject": "infra",
+      "username": "alice",
+      "role": "member",
+      "last_login_at": "2026-11-01T09:12:00Z",
+      "reviewers": [
+        "e2e-demo-user"
+      ],
+      "decision": null,
+      "new_role": null,
+      "note": null,
+      "decided_by": null,
+      "decided_at": null,
+      "outcome": null,
+      "outcome_detail": null,
+      "task_done_by": null,
+      "task_done_at": null
+    },
+    {
+      "id": 2,
+      "campaign_id": 1,
+      "scope": "platform",
+      "subject": "security-auditor",
+      "username": "sam",
+      "role": "member",
+      "last_login_at": null,
+      "reviewers": [
+        "e2e-demo-user"
+      ],
+      "decision": "remove",
+      "new_role": null,
+      "note": null,
+      "decided_by": "e2e-demo-user",
+      "decided_at": "2026-11-10T08:00:00Z",
+      "outcome": "terraform_task",
+      "outcome_detail": "K3s terraform/groups.tf: remove \"sam\" from local.platform_group_members[\"security-auditor\"], resource keycloak_group_memberships.platform[\"security-auditor\"], then plan and apply.",
+      "task_done_by": null,
+      "task_done_at": null
+    },
+    {
+      "id": 3,
+      "campaign_id": 1,
+      "scope": "project",
+      "subject": "demo",
+      "username": "dan",
+      "role": "member",
+      "last_login_at": "2026-11-01T09:12:00Z",
+      "reviewers": [
+        "e2e-demo-user"
+      ],
+      "decision": null,
+      "new_role": null,
+      "note": null,
+      "decided_by": null,
+      "decided_at": null,
+      "outcome": null,
+      "outcome_detail": null,
+      "task_done_by": null,
+      "task_done_at": null
+    },
+    {
+      "id": 4,
+      "campaign_id": 1,
+      "scope": "project",
+      "subject": "demo",
+      "username": "erin",
+      "role": "admin",
+      "last_login_at": null,
+      "reviewers": [
+        "e2e-demo-user"
+      ],
+      "decision": "change_role",
+      "new_role": "member",
+      "note": null,
+      "decided_by": "e2e-demo-user",
+      "decided_at": "2026-11-10T08:00:00Z",
+      "outcome": "applied",
+      "outcome_detail": null,
+      "task_done_by": null,
+      "task_done_at": null
+    }
+  ]
+}

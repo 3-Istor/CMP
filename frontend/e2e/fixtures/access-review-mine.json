@@ -1,0 +1,49 @@
+{
+  "me": "e2e-demo-user",
+  "campaign_id": 1,
+  "due_at": "2026-11-15T08:00:00Z",
+  "items": [
+    {
+      "id": 3,
+      "campaign_id": 1,
+      "scope": "project",
+      "subject": "demo",
+      "username": "dan",
+      "role": "member",
+      "last_login_at": "2026-11-01T09:12:00Z",
+      "reviewers": [
+        "e2e-demo-user"
+      ],
+      "decision": null,
+      "new_role": null,
+      "note": null,
+      "decided_by": null,
+      "decided_at": null,
+      "outcome": null,
+      "outcome_detail": null,
+      "task_done_by": null,
+      "task_done_at": null
+    },
+    {
+      "id": 4,
+      "campaign_id": 1,
+      "scope": "project",
+      "subject": "demo",
+      "username": "erin",
+      "role": "admin",
+      "last_login_at": null,
+      "reviewers": [
+        "e2e-demo-user"
+      ],
+      "decision": "change_role",
+      "new_role": "member",
+      "note": null,
+      "decided_by": "e2e-demo-user",
+      "decided_at": "2026-11-10T08:00:00Z",
+      "outcome": "applied",
+      "outcome_detail": null,
+      "task_done_by": null,
+      "task_done_at": null
+    }
+  ]
+}

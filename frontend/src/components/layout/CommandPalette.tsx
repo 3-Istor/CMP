@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/command";
 import { useFavorites } from "@/lib/favorites";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
+import { usePlatformRoles } from "@/lib/usePlatformRoles";
 import type { Deployment, Project } from "@/types";
 import { Boxes, ExternalLink, FolderKanban, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -22,6 +23,7 @@ import {
   ADMIN_LINKS,
   ALL_PAGES,
   PUBLIC_LINKS,
+  isPageVisible,
   useVisibleWork,
 } from "./shellData";
 
@@ -60,6 +62,7 @@ function PaletteBody({ close }: { close: () => void }) {
   const tLinks = useTranslations("shell.links");
   const router = useRouter();
   const isAdmin = usePlatformAdmin();
+  const platformRoles = usePlatformRoles();
   const { projects: allProjects, apps: allApps } = useVisibleWork(0);
   const tFav = useTranslations("favorites");
   const favorites = useFavorites();
@@ -160,8 +163,8 @@ function PaletteBody({ close }: { close: () => void }) {
         )}
 
         <CommandGroup heading={t("pages")}>
-          {ALL_PAGES.filter(
-            (page) => !page.platformAdminOnly || isAdmin,
+          {ALL_PAGES.filter((page) =>
+            isPageVisible(page, platformRoles),
           ).map(({ key, href, icon: Icon }) => (
             <CommandItem
               key={key}

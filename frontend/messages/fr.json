@@ -25,7 +25,8 @@
       "navigationHint": "Pages de la plateforme, liens, thème et profil.",
       "openMenu": "Ouvrir le menu",
       "skipToContent": "Aller au contenu",
-      "access": "Accès élevés"
+      "access": "Accès élevés",
+      "accessReviews": "Revues d'accès"
     },
     "home": {
       "fallbackName": "Développeur",
@@ -965,7 +966,8 @@
       "vault": "Secrets Vault",
       "logins": "Échecs de connexion",
       "deployments": "Déploiements",
-      "access": "Accès élevés"
+      "access": "Accès élevés",
+      "accessReview": "Revues d'accès"
     },
     "roles": {
       "admin": "admin",
@@ -1059,6 +1061,17 @@
         "expire": "{elevation} de {user} a expiré",
         "lapse": "la demande de {user} pour {elevation} a expiré sans décision",
         "unmanaged": "a trouvé {user} dans {elevation} sans accès accordé"
+      },
+      "accessReview": {
+        "start": "Revue d'accès n°{subject} ouverte",
+        "close": "Revue d'accès n°{subject} clôturée",
+        "escalate": "Revue d'accès n°{subject} en retard : {count} non décidés",
+        "decide": "{user} revu sur {subject} : {decision, select, keep {conservé} remove {retiré} change_role {rôle changé} other {décidé}}",
+        "terraform_task": "Changement Terraform requis pour retirer {user} de {subject}",
+        "task_done": "Changement Terraform appliqué pour {user} sur {subject}",
+        "account_flag": "{user} signalé inactif",
+        "account_disable": "{user} désactivé pour inactivité",
+        "account_enable": "{user} maintenu actif"
       }
     },
     "audit": {
@@ -2666,7 +2679,13 @@
       "access_denied": "{by} a refusé votre accès {elevation}",
       "access_expired": "Votre accès {elevation} a expiré",
       "access_revoked": "{by} a mis fin à votre accès {elevation}",
-      "access_lapsed": "Votre demande {elevation} a expiré sans décision"
+      "access_lapsed": "Votre demande {elevation} a expiré sans décision",
+      "access_review_pending": "Revoyez qui accède à {project} avant le {due}",
+      "access_review_platform_pending": "Revoyez les groupes plateforme avant le {due}",
+      "access_review_escalated": "Revue d'accès en retard : {count} non décidés",
+      "access_review_terraform_task": "Retirer {user} de {group} dans le Terraform K3s",
+      "access_review_inactive": "{user} ne s'est pas connecté depuis {days} jours",
+      "access_review_disabled": "{user} a été désactivé après {days} jours sans connexion"
     }
   },
   "secretsPresence": {
@@ -3051,6 +3070,116 @@
       "deny": "Demande refusée.",
       "cancel": "Demande annulée.",
       "end": "Accès terminé."
+    }
+  },
+  "accessReviews": {
+    "title": "Revues d'accès",
+    "description": "Revue périodique de qui accède à chaque projet et groupe plateforme, et des comptes que plus personne n'utilise.",
+    "forbidden": "Les revues d'accès sont réservées à infra et aux auditeurs sécurité.",
+    "loading": "Chargement des revues d'accès",
+    "readOnly": "Lecture seule : infra ouvre les campagnes et revoit les groupes plateforme. Les exports vous sont accessibles.",
+    "campaigns": {
+      "title": "Campagnes",
+      "auto": "Une campagne s'ouvre automatiquement tous les {days} jours.",
+      "manual": "Les campagnes sont ouvertes par infra.",
+      "deadline": "Les relecteurs ont {days} jours ; les éléments non décidés sont escaladés, jamais retirés.",
+      "empty": "Aucune campagne pour l'instant.",
+      "none": "Choisissez une campagne pour voir ses éléments.",
+      "name": "Campagne n°{id}",
+      "meta": "{decided} sur {total} décidés, échéance le {due}"
+    },
+    "status": {
+      "open": "Ouverte",
+      "closed": "Clôturée",
+      "overdue": "En retard"
+    },
+    "detail": {
+      "meta": "Ouverte par {by} le {started}, échéance le {due}.",
+      "platformTitle": "Groupes plateforme",
+      "platformDescription": "infra, security-auditor et finops. Revus par un membre d'infra autre que la personne concernée. Un retrait devient une tâche Terraform.",
+      "projectsTitle": "Projets",
+      "projectsDescription": "Décidé par le propriétaire de chaque projet, ou ses administrateurs s'il est parti. Les décisions s'appliquent immédiatement.",
+      "empty": "Rien à revoir ici."
+    },
+    "tasks": {
+      "title": "Tâches Terraform",
+      "description": "Les groupes plateforme sont déclarés dans le Terraform K3s : appliquez ces changements là-bas, puis marquez-les comme faits.",
+      "remove": "Retirer {user} de {group}",
+      "done": "Fait par {user}"
+    },
+    "inactive": {
+      "title": "Comptes inactifs",
+      "description": "Comptes sans connexion depuis {days} jours. Les comptes de démo, break-glass et de service ne sont jamais listés.",
+      "disableOn": "Ils sont désactivés {days} jours après le signalement, et peuvent être réactivés ici.",
+      "disableOff": "La désactivation automatique est coupée : ils sont seulement signalés.",
+      "empty": "Aucun compte inactif.",
+      "state": "État",
+      "notSince": "Aucune depuis le {date}",
+      "disabled": "Désactivé le {date}",
+      "disableDue": "Désactivé le {date} sauf maintien",
+      "reported": "Signalé"
+    },
+    "table": {
+      "subject": "Projet ou groupe",
+      "member": "Membre",
+      "role": "Rôle",
+      "lastLogin": "Dernière connexion",
+      "decision": "Décision",
+      "actions": "Actions"
+    },
+    "roles": {
+      "owner": "Propriétaire",
+      "admin": "Administrateur",
+      "member": "Membre",
+      "guest": "Invité"
+    },
+    "lastLogin": {
+      "none": "Jamais vu"
+    },
+    "decision": {
+      "pending": "À revoir",
+      "keep": "Conservé",
+      "remove": "Retiré",
+      "changedTo": "Désormais {role, select, admin {administrateur} guest {invité} other {membre}}",
+      "self": "Revu par quelqu'un d'autre",
+      "confirmRemove": "Retirer {user} du projet ?",
+      "confirmPlatformRemove": "Retirer {user} ? Une tâche Terraform sera créée.",
+      "newRole": "Nouveau rôle",
+      "by": "Par {user}"
+    },
+    "actions": {
+      "start": "Ouvrir une campagne",
+      "close": "Clôturer la campagne",
+      "exportCsv": "Exporter en CSV",
+      "exportJson": "Exporter en JSON",
+      "keep": "Conserver",
+      "remove": "Retirer",
+      "role": "Changer le rôle",
+      "confirmRemove": "Retirer",
+      "confirmRole": "Appliquer",
+      "cancel": "Annuler",
+      "keepUser": "Conserver {user}",
+      "roleUser": "Changer le rôle de {user}",
+      "removeUser": "Retirer {user}",
+      "taskDone": "Marquer comme fait",
+      "enable": "Réactiver",
+      "keepActive": "Garder actif",
+      "keepAccount": "Garder le compte de {user}"
+    },
+    "toasts": {
+      "keep": "{user} conservé",
+      "remove": "{user} retiré",
+      "change_role": "Rôle de {user} modifié",
+      "started": "Campagne ouverte, relecteurs prévenus",
+      "closed": "Campagne clôturée",
+      "taskDone": "Tâche marquée comme faite",
+      "kept": "{user} reste actif"
+    },
+    "card": {
+      "title": "Revoir les accès",
+      "description": "{count, plural, =0 {Tous les membres sont revus.} one {1 membre à revoir} other {# membres à revoir}}, échéance le {due}. Conservez, retirez ou changez le rôle de chacun.",
+      "open": "Revoir",
+      "hide": "Masquer"
     }
   }
 }
