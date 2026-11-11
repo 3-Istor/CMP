@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import (
     access,
+    access_reviews,
     account,
     activity,
     agents,
@@ -40,6 +41,7 @@ from app.routers import (
 )
 from app.services import health_poller, keycloak_admin, vault_auth
 from app.services.access.grants import access_sweep_loop
+from app.services.access_review.jobs import access_review_loop
 from app.services.activity_collector import activity_collector_loop
 from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
@@ -297,6 +299,7 @@ async def lifespan(app: FastAPI):
     release_recorder_task = asyncio.create_task(release_recorder_loop())
     environment_task = asyncio.create_task(environment_loop())
     access_sweep_task = asyncio.create_task(access_sweep_loop())
+    access_review_task = asyncio.create_task(access_review_loop())
     # Runs once, after startup: Grafana being down only logs.
     grafana_sync_task = asyncio.create_task(sync_all_project_orgs())
     grafana_platform_task = asyncio.create_task(platform_org_sync_loop())
@@ -325,6 +328,7 @@ async def lifespan(app: FastAPI):
     release_recorder_task.cancel()
     environment_task.cancel()
     access_sweep_task.cancel()
+    access_review_task.cancel()
     grafana_sync_task.cancel()
     grafana_platform_task.cancel()
     for task in (
@@ -336,6 +340,7 @@ async def lifespan(app: FastAPI):
         release_recorder_task,
         environment_task,
         access_sweep_task,
+        access_review_task,
         grafana_sync_task,
         grafana_platform_task,
     ):
@@ -384,6 +389,7 @@ app.add_middleware(
 )
 
 app.include_router(access.router, prefix="/api")
+app.include_router(access_reviews.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(agents.projects_router, prefix="/api")

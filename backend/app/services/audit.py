@@ -151,6 +151,23 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/access/requests/{request_id}/deny"): "access.deny",
     ("POST", "/api/access/requests/{request_id}/cancel"): "access.cancel",
     ("POST", "/api/access/requests/{request_id}/end"): "access.end",
+    ("POST", "/api/access-reviews/campaigns"): "access_review.start",
+    (
+        "POST",
+        "/api/access-reviews/campaigns/{campaign_id}/close",
+    ): "access_review.close",
+    (
+        "POST",
+        "/api/access-reviews/items/{item_id}/decision",
+    ): "access_review.decide",
+    (
+        "POST",
+        "/api/access-reviews/items/{item_id}/task-done",
+    ): "access_review.task_done",
+    (
+        "POST",
+        "/api/access-reviews/accounts/{user_id}/enable",
+    ): "access_review.account.enable",
 }
 
 # Matched on the raw path rather than on the route FastAPI selected: since
@@ -202,6 +219,13 @@ NOTABLE = {
     "access.end",
     "access.expire",
     "access.unmanaged",
+    "access_review.start",
+    "access_review.decide",
+    "access_review.escalate",
+    "access_review.terraform_task",
+    "access_review.account.flag",
+    "access_review.account.disable",
+    "access_review.account.enable",
 }
 
 # Body fields copied into the journal. Anything else, config values in

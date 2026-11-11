@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Imported so every model is registered on Base.metadata (autogenerate).
 import app.models.access  # noqa: F401
+import app.models.access_review  # noqa: F401
 import app.models.agent  # noqa: F401
 import app.models.deployment  # noqa: F401
 import app.models.environment  # noqa: F401
