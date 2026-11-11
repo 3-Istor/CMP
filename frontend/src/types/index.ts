@@ -1272,3 +1272,49 @@ export interface AppEvent {
   kind: string;
   object: string;
 }
+
+export interface AccessElevation {
+  key: string;
+  group: string;
+  system: string;
+}
+
+export type AccessStatus =
+  | "pending"
+  | "active"
+  | "denied"
+  | "cancelled"
+  | "lapsed"
+  | "expired"
+  | "revoked"
+  | "failed";
+
+export interface AccessRequest {
+  id: number;
+  elevation: string;
+  requester: string;
+  reason: string;
+  duration_minutes: number;
+  status: AccessStatus;
+  created_at: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  activated_at: string | null;
+  expires_at: string | null;
+  ended_at: string | null;
+  ended_by: string | null;
+}
+
+export interface AccessOverview {
+  me: string;
+  catalog: {
+    elevations: AccessElevation[];
+    default_minutes: number;
+    min_minutes: number;
+    max_minutes: number;
+  };
+  pending: AccessRequest[];
+  active: AccessRequest[];
+  history: AccessRequest[];
+}

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import {
   Bell,
   CheckCircle2,
+  KeyRound,
   ShieldQuestion,
   Trash2,
   TriangleAlert,
@@ -40,6 +41,7 @@ const KIND_ICONS: Record<NotificationKind, LucideIcon> = {
   alert: TriangleAlert,
   member_added: UserPlus,
   approval_request: ShieldQuestion,
+  access: KeyRound,
 };
 
 const KIND_TONES: Record<NotificationKind, string> = {
@@ -49,6 +51,7 @@ const KIND_TONES: Record<NotificationKind, string> = {
   alert: "text-amber-600 dark:text-amber-400",
   member_added: "text-primary",
   approval_request: "text-primary",
+  access: "text-amber-600 dark:text-amber-400",
 };
 
 function useUnreadCount(): [number, () => Promise<void>] {

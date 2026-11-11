@@ -24,7 +24,8 @@
       "navigation": "Main navigation",
       "navigationHint": "Platform pages, links, theme and profile.",
       "openMenu": "Open the menu",
-      "skipToContent": "Skip to content"
+      "skipToContent": "Skip to content",
+      "access": "Elevated access"
     },
     "home": {
       "fallbackName": "Developer",
@@ -963,7 +964,8 @@
       "shells": "Shells in a pod",
       "vault": "Vault secrets",
       "logins": "Failed logins",
-      "deployments": "Deployments"
+      "deployments": "Deployments",
+      "access": "Elevated access"
     },
     "roles": {
       "admin": "admin",
@@ -1047,7 +1049,17 @@
       "agentDisconnect": "disconnected an AI assistant",
       "monthClose": "closed a FinOps month",
       "costCenters": "changed the cost centers",
-      "catalogSync": "synchronised the catalog"
+      "catalogSync": "synchronised the catalog",
+      "access": {
+        "request": "{user} asked for {elevation}",
+        "approve": "approved {elevation} for {user}",
+        "deny": "denied {elevation} for {user}",
+        "cancel": "cancelled the request for {elevation}",
+        "end": "ended {elevation} of {user} early",
+        "expire": "{elevation} of {user} expired",
+        "lapse": "request of {user} for {elevation} lapsed without a decision",
+        "unmanaged": "found {user} in {elevation} without a grant"
+      }
     },
     "audit": {
       "kpi": {
@@ -2648,7 +2660,13 @@
       "cost_anomaly": "Cost anomaly on {app}",
       "member_added": "You are now {role, select, admin {administrator} guest {guest} other {member}} of {project}",
       "approval_request": "{user} needs your approval: {summary}",
-      "unknown": "New notification"
+      "unknown": "New notification",
+      "access_requested": "{user} asks for {elevation}, your approval is needed",
+      "access_approved": "{by} approved your {elevation} access",
+      "access_denied": "{by} denied your {elevation} access",
+      "access_expired": "Your {elevation} access has expired",
+      "access_revoked": "{by} ended your {elevation} access",
+      "access_lapsed": "Your {elevation} request lapsed without a decision"
     }
   },
   "secretsPresence": {
@@ -2945,6 +2963,94 @@
       "title": "Admin-locked setting changed in the repo",
       "detail": "deploy/security.yaml no longer follows the project policy.",
       "fix": "Put the locked value back, or ask the project admin to lift the lock."
+    }
+  },
+  "access": {
+    "title": "Elevated access",
+    "description": "Just-in-time access to sensitive systems: asked with a reason, approved by another platform admin, removed at expiry.",
+    "forbidden": "Elevated access is reserved for platform admins (infra group).",
+    "loading": "Loading",
+    "remaining": "{time} left",
+    "denyReason": "Reason for the refusal (optional)",
+    "elevations": {
+      "vault-data": {
+        "title": "Vault: project secrets",
+        "description": "Read and write every project-* secret in Vault (policy vault_data_admin)."
+      },
+      "k3s-admin": {
+        "title": "K3s: cluster-admin",
+        "description": "cluster-admin on the K3s cluster through kubectl OIDC."
+      }
+    },
+    "duration": {
+      "minutes": "{count} min",
+      "hours": "{count, plural, one {# hour} other {# hours}}"
+    },
+    "form": {
+      "title": "Request access",
+      "description": "Another platform admin must approve. Nobody can approve their own request.",
+      "elevation": "Access",
+      "duration": "Duration",
+      "durationHint": "At most {max}. The access is removed automatically at expiry.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Incident, ticket, what you need to do (10 characters minimum)",
+      "lagHint": "Log in again to Vault or kubectl once approved. After expiry, tokens already issued stay valid until they expire (5 minutes for kubectl, at most 1 hour for Vault).",
+      "submit": "Send the request"
+    },
+    "mine": {
+      "title": "My access",
+      "description": "Your pending requests and active grants.",
+      "empty": "Nothing pending or active."
+    },
+    "queue": {
+      "title": "Waiting for approval",
+      "description": "Requests from other platform admins.",
+      "empty": "No request waiting for you."
+    },
+    "active": {
+      "title": "Active grants",
+      "description": "Every elevated access in effect right now.",
+      "empty": "Nobody holds an elevated access."
+    },
+    "history": {
+      "title": "History",
+      "description": "The last 50 closed requests.",
+      "empty": "No history yet.",
+      "when": "Requested",
+      "who": "Requester",
+      "elevation": "Access",
+      "decidedBy": "Decided by",
+      "status": "Status",
+      "reason": "Reason",
+      "note": "Note: {note}"
+    },
+    "meta": {
+      "pending": "{user}, {duration}, {when}",
+      "active": "{user}, approved by {approver}"
+    },
+    "status": {
+      "pending": "Pending",
+      "active": "Active",
+      "denied": "Denied",
+      "cancelled": "Cancelled",
+      "lapsed": "Lapsed",
+      "expired": "Expired",
+      "revoked": "Ended early",
+      "failed": "Failed"
+    },
+    "actions": {
+      "approve": "Approve",
+      "deny": "Deny",
+      "confirmDeny": "Confirm refusal",
+      "cancel": "Cancel",
+      "end": "End now"
+    },
+    "toasts": {
+      "request": "Request sent to the other platform admins.",
+      "approve": "Access granted.",
+      "deny": "Request denied.",
+      "cancel": "Request cancelled.",
+      "end": "Access ended."
     }
   }
 }
