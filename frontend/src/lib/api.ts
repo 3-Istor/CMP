@@ -1344,7 +1344,8 @@ export type NotificationKind =
   | "app_deleted"
   | "alert"
   | "member_added"
-  | "approval_request";
+  | "approval_request"
+  | "access";
 
 export interface AppNotification {
   id: number;
@@ -1379,3 +1380,30 @@ export const markNotificationRead = (id: number) =>
 
 export const markAllNotificationsRead = () =>
   request<{ updated: number }>("/notifications/read-all", { method: "POST" });
+
+// Just-in-time access (platform admins only)
+export const getAccessOverview = () =>
+  request<import("@/types").AccessOverview>("/access");
+
+export const requestAccess = (body: {
+  elevation: string;
+  reason: string;
+  duration_minutes: number;
+}) =>
+  request<import("@/types").AccessRequest>("/access/requests", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const decideAccess = (
+  id: number,
+  action: "approve" | "deny" | "cancel" | "end",
+  reason?: string,
+) =>
+  request<import("@/types").AccessRequest>(
+    `/access/requests/${id}/${action}`,
+    {
+      method: "POST",
+      body: action === "deny" ? JSON.stringify({ reason: reason ?? "" }) : undefined,
+    },
+  );

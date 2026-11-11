@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import access from "./access.json";
 import appHealth from "./app-health.json";
 import finopsOverview from "./finops-overview.json";
 import infraHealth from "./infra-health.json";
@@ -11,6 +12,7 @@ import session from "./session.json";
 
 const ROUTES: Record<string, unknown> = {
   "/account/me": me,
+  "/access": access,
   "/projects/": projects,
   "/projects/demo/apps": projectApps,
   "/projects/demo/links": projectLinks,

@@ -11,6 +11,7 @@ import {
   FolderKanban,
   History,
   Home,
+  KeyRound,
   Shield,
   Wallet,
   type LucideIcon,
@@ -26,13 +27,15 @@ export type PageKey =
   | "security"
   | "activity"
   | "alerts"
-  | "assistants";
+  | "assistants"
+  | "access";
 
 export interface PageEntry {
   key: PageKey;
   href: string;
   icon: LucideIcon;
   isActive: (pathname: string) => boolean;
+  platformAdminOnly?: boolean;
 }
 
 export const HOME_PAGE: PageEntry = {
@@ -89,6 +92,13 @@ export const PLATFORM_PAGES: PageEntry[] = [
     href: "/connect-ai",
     icon: Bot,
     isActive: (pathname) => pathname.startsWith("/connect-ai"),
+  },
+  {
+    key: "access",
+    href: "/access",
+    icon: KeyRound,
+    isActive: (pathname) => pathname.startsWith("/access"),
+    platformAdminOnly: true,
   },
 ];
 

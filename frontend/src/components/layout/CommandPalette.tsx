@@ -160,7 +160,9 @@ function PaletteBody({ close }: { close: () => void }) {
         )}
 
         <CommandGroup heading={t("pages")}>
-          {ALL_PAGES.map(({ key, href, icon: Icon }) => (
+          {ALL_PAGES.filter(
+            (page) => !page.platformAdminOnly || isAdmin,
+          ).map(({ key, href, icon: Icon }) => (
             <CommandItem
               key={key}
               value={`page ${tNav(key)}`}

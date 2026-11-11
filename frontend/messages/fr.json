@@ -24,7 +24,8 @@
       "navigation": "Navigation principale",
       "navigationHint": "Pages de la plateforme, liens, thème et profil.",
       "openMenu": "Ouvrir le menu",
-      "skipToContent": "Aller au contenu"
+      "skipToContent": "Aller au contenu",
+      "access": "Accès élevés"
     },
     "home": {
       "fallbackName": "Développeur",
@@ -963,7 +964,8 @@
       "shells": "Shells dans un pod",
       "vault": "Secrets Vault",
       "logins": "Échecs de connexion",
-      "deployments": "Déploiements"
+      "deployments": "Déploiements",
+      "access": "Accès élevés"
     },
     "roles": {
       "admin": "admin",
@@ -1047,7 +1049,17 @@
       "agentDisconnect": "a déconnecté un assistant IA",
       "monthClose": "a clôturé un mois FinOps",
       "costCenters": "a modifié les centres de coût",
-      "catalogSync": "a synchronisé le catalogue"
+      "catalogSync": "a synchronisé le catalogue",
+      "access": {
+        "request": "{user} a demandé {elevation}",
+        "approve": "a approuvé {elevation} pour {user}",
+        "deny": "a refusé {elevation} pour {user}",
+        "cancel": "a annulé la demande de {elevation}",
+        "end": "a mis fin plus tôt à {elevation} de {user}",
+        "expire": "{elevation} de {user} a expiré",
+        "lapse": "la demande de {user} pour {elevation} a expiré sans décision",
+        "unmanaged": "a trouvé {user} dans {elevation} sans accès accordé"
+      }
     },
     "audit": {
       "kpi": {
@@ -2648,7 +2660,13 @@
       "cost_anomaly": "Anomalie de coût sur {app}",
       "member_added": "Vous êtes désormais {role, select, admin {administrateur} guest {invité} other {membre}} de {project}",
       "approval_request": "{user} attend votre approbation : {summary}",
-      "unknown": "Nouvelle notification"
+      "unknown": "Nouvelle notification",
+      "access_requested": "{user} demande {elevation}, votre validation est attendue",
+      "access_approved": "{by} a approuvé votre accès {elevation}",
+      "access_denied": "{by} a refusé votre accès {elevation}",
+      "access_expired": "Votre accès {elevation} a expiré",
+      "access_revoked": "{by} a mis fin à votre accès {elevation}",
+      "access_lapsed": "Votre demande {elevation} a expiré sans décision"
     }
   },
   "secretsPresence": {
@@ -2945,6 +2963,94 @@
       "title": "Réglage imposé par l'admin modifié dans le repo",
       "detail": "deploy/security.yaml ne suit plus la politique du projet.",
       "fix": "Remets la valeur imposée, ou demande à l'admin du projet de lever le verrou."
+    }
+  },
+  "access": {
+    "title": "Accès élevés",
+    "description": "Accès temporaire aux systèmes sensibles : demandé avec un motif, validé par un autre admin plateforme, retiré à l'expiration.",
+    "forbidden": "Les accès élevés sont réservés aux admins plateforme (groupe infra).",
+    "loading": "Chargement",
+    "remaining": "encore {time}",
+    "denyReason": "Motif du refus (facultatif)",
+    "elevations": {
+      "vault-data": {
+        "title": "Vault : secrets des projets",
+        "description": "Lire et écrire tous les secrets project-* dans Vault (politique vault_data_admin)."
+      },
+      "k3s-admin": {
+        "title": "K3s : cluster-admin",
+        "description": "cluster-admin sur le cluster K3s via kubectl OIDC."
+      }
+    },
+    "duration": {
+      "minutes": "{count} min",
+      "hours": "{count, plural, one {# heure} other {# heures}}"
+    },
+    "form": {
+      "title": "Demander un accès",
+      "description": "Un autre admin plateforme doit valider. Personne ne peut valider sa propre demande.",
+      "elevation": "Accès",
+      "duration": "Durée",
+      "durationHint": "Au plus {max}. L'accès est retiré automatiquement à l'expiration.",
+      "reason": "Motif",
+      "reasonPlaceholder": "Incident, ticket, ce que vous devez faire (10 caractères minimum)",
+      "lagHint": "Reconnectez-vous à Vault ou kubectl après la validation. Après l'expiration, les jetons déjà émis restent valides jusqu'à leur fin (5 minutes pour kubectl, 1 heure au plus pour Vault).",
+      "submit": "Envoyer la demande"
+    },
+    "mine": {
+      "title": "Mes accès",
+      "description": "Vos demandes en attente et vos accès actifs.",
+      "empty": "Rien en attente ni d'actif."
+    },
+    "queue": {
+      "title": "En attente de validation",
+      "description": "Demandes des autres admins plateforme.",
+      "empty": "Aucune demande ne vous attend."
+    },
+    "active": {
+      "title": "Accès actifs",
+      "description": "Tous les accès élevés en vigueur.",
+      "empty": "Personne ne détient d'accès élevé."
+    },
+    "history": {
+      "title": "Historique",
+      "description": "Les 50 dernières demandes closes.",
+      "empty": "Pas encore d'historique.",
+      "when": "Demandé",
+      "who": "Demandeur",
+      "elevation": "Accès",
+      "decidedBy": "Décidé par",
+      "status": "Statut",
+      "reason": "Motif",
+      "note": "Note : {note}"
+    },
+    "meta": {
+      "pending": "{user}, {duration}, {when}",
+      "active": "{user}, validé par {approver}"
+    },
+    "status": {
+      "pending": "En attente",
+      "active": "Actif",
+      "denied": "Refusé",
+      "cancelled": "Annulé",
+      "lapsed": "Sans décision",
+      "expired": "Expiré",
+      "revoked": "Terminé plus tôt",
+      "failed": "Échec"
+    },
+    "actions": {
+      "approve": "Valider",
+      "deny": "Refuser",
+      "confirmDeny": "Confirmer le refus",
+      "cancel": "Annuler",
+      "end": "Terminer"
+    },
+    "toasts": {
+      "request": "Demande envoyée aux autres admins plateforme.",
+      "approve": "Accès accordé.",
+      "deny": "Demande refusée.",
+      "cancel": "Demande annulée.",
+      "end": "Accès terminé."
     }
   }
 }

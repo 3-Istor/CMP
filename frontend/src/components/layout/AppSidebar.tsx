@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useSecurityOverview } from "@/lib/hooks";
+import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { cn } from "@/lib/utils";
 import {
   BookOpen,
@@ -130,6 +131,7 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
   const security = useSecurityOverview();
   const hasCoreAlert = security.some((s) => s.core > 0);
   const projectName = projectFromPath(pathname);
+  const platformAdmin = usePlatformAdmin();
 
   useEffect(() => {
     if (projectName) recordRecentProject(projectName);
@@ -253,7 +255,9 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
             {WORK_PAGES.map(renderLink)}
           </Group>
           <Group title={t("groupPlatform")} collapsed={collapsed}>
-            {PLATFORM_PAGES.map(renderLink)}
+            {PLATFORM_PAGES.filter(
+              (page) => !page.platformAdminOnly || platformAdmin,
+            ).map(renderLink)}
           </Group>
         </nav>
       )}
