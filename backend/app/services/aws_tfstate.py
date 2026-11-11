@@ -184,7 +184,7 @@ def reset() -> None:
 
 def main() -> int:
     try:
-        print(credential_process_output())
+        document = credential_process_output()
     except Exception as exc:  # pylint: disable=broad-exception-caught
         # The SDK shows stderr in Terraform's error; the type and message say
         # which leg failed without echoing the token.
@@ -193,6 +193,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    # Not a log: stdout is the credential_process channel, read by the AWS SDK
+    # of the parent Terraform process and never shown.
+    sys.stdout.write(document + "\n")
     return 0
 
 

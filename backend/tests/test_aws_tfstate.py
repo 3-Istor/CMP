@@ -214,3 +214,13 @@ def test_health_check_clients_use_the_federated_session(monkeypatch):
         aws_access_key_id="ASIAFED",
         aws_session_token="t",
     )
+
+
+def test_main_writes_only_the_document_on_stdout(monkeypatch, capsys):
+    monkeypatch.setattr(
+        aws_tfstate, "credential_process_output", lambda: '{"Version": 1}'
+    )
+
+    code = aws_tfstate.main()
+
+    assert (code, capsys.readouterr().out) == (0, '{"Version": 1}\n')
