@@ -26,7 +26,7 @@ class GroupError(RuntimeError):
 
 def _token() -> str:
     global _token_cache  # pylint: disable=global-statement
-    if not keycloak_admin.uses_provisioner():
+    if not keycloak_admin.is_configured():
         # pylint: disable-next=protected-access
         return keycloak_service._get_admin_token()
     now = time.monotonic()
