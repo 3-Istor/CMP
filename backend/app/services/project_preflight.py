@@ -97,11 +97,10 @@ def _keycloak_leftovers(project_name: str) -> list[str]:
     realm = requests.get(
         f"{admin}/{project_name}", headers=headers, timeout=REQUEST_TIMEOUT
     )
-    # With the provisioner client, 403 means the realm exists but was created
-    # by another admin, so the client holds no role on it.
-    hidden = realm.status_code == 403 and keycloak_admin.uses_provisioner()
+    # 403 means the realm exists but was created by another admin, so the
+    # provisioner client holds no role on it.
     if realm.status_code != 404:
-        if not hidden:
+        if realm.status_code != 403:
             realm.raise_for_status()
         found.append(f"Keycloak realm '{project_name}'")
 

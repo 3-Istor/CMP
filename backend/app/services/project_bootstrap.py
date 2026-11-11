@@ -12,8 +12,7 @@ The Terraform module is expected to be located in the cloned templates repositor
 
 Terraform variables injected:
   project_name, target_cloud, keycloak_url, keycloak_client_id and
-  keycloak_client_secret (or the legacy keycloak_admin_username and
-  keycloak_admin_password), vault_url, vault_token,
+  keycloak_client_secret, vault_url, vault_token,
   github_token, discord_webhook_url
 """
 

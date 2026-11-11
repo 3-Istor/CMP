@@ -75,13 +75,10 @@ class Settings(BaseSettings):
     # Comma separated, so a client switch can accept both for a while.
     # Empty means KEYCLOAK_CLIENT_ID alone.
     KEYCLOAK_ALLOWED_CLIENTS: str = ""
-    # Master realm identity for realm provisioning and Terraform. The
-    # confidential client wins when both are set; the admin user is the
-    # legacy fallback.
+    # Master realm client (cmp-provisioner) for realm provisioning and
+    # Terraform.
     KEYCLOAK_PROVISIONER_CLIENT_ID: str = ""
     KEYCLOAK_PROVISIONER_CLIENT_SECRET: str = ""
-    KEYCLOAK_ADMIN_USERNAME: str = ""
-    KEYCLOAK_ADMIN_PASSWORD: str = ""
 
     # Vault (for secret management in Terraform modules)
     VAULT_URL: str = ""
