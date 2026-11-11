@@ -10,14 +10,14 @@
 
 **Required Variables**:
 
-| Variable                  | Type   | Source                    | Default                         | Sensitive |
-| ------------------------- | ------ | ------------------------- | ------------------------------- | --------- |
-| `project_name`            | string | Dynamic                   | -                               | ❌        |
-| `keycloak_url`            | string | `KEYCLOAK_URL`            | `https://admin-auth.3istor.com` | ❌        |
-| `keycloak_admin_username` | string | `KEYCLOAK_ADMIN_USERNAME` | `admin`                         | ❌        |
-| `keycloak_admin_password` | string | `KEYCLOAK_ADMIN_PASSWORD` | -                               | ✅        |
-| `vault_url`               | string | `VAULT_URL`               | `https://vault.3istor.com`      | ❌        |
-| `vault_token`             | string | `VAULT_TOKEN`             | -                               | ✅        |
+| Variable                 | Type   | Source                               | Default                         | Sensitive |
+| ------------------------ | ------ | ------------------------------------ | ------------------------------- | --------- |
+| `project_name`           | string | Dynamic                              | -                               | ❌        |
+| `keycloak_url`           | string | `KEYCLOAK_URL`                       | `https://admin-auth.3istor.com` | ❌        |
+| `keycloak_client_id`     | string | `KEYCLOAK_PROVISIONER_CLIENT_ID`     | `cmp-provisioner`               | ❌        |
+| `keycloak_client_secret` | string | `KEYCLOAK_PROVISIONER_CLIENT_SECRET` | -                               | ✅        |
+| `vault_url`              | string | `VAULT_URL`                          | `https://vault.3istor.com`      | ❌        |
+| `vault_token`            | string | `VAULT_TOKEN`                        | -                               | ✅        |
 
 **Optional Variables**:
 
@@ -32,7 +32,7 @@
 cd backend/data/templates/templates/k3s-project-bootstrap
 terraform apply \
   -var="project_name=sandbox" \
-  -var="keycloak_admin_password=$KEYCLOAK_ADMIN_PASSWORD" \
+  -var="keycloak_client_secret=$KEYCLOAK_PROVISIONER_CLIENT_SECRET" \
   -var="vault_token=$VAULT_TOKEN"
 ```
 
@@ -44,19 +44,19 @@ terraform apply \
 
 **Required Variables**:
 
-| Variable                  | Type   | Source                    | Default | Sensitive |
-| ------------------------- | ------ | ------------------------- | ------- | --------- |
-| `github_token`            | string | Generated via GitHub App  | -       | ✅        |
-| `github_owner`            | string | Dynamic                   | -       | ❌        |
-| `template_repo_name`      | string | Dynamic                   | -       | ❌        |
-| `app_name`                | string | Dynamic                   | -       | ❌        |
-| `project_name`            | string | Dynamic                   | -       | ❌        |
-| `vault_token`             | string | `VAULT_TOKEN`             | -       | ✅        |
-| `github_registry_token`   | string | `GITHUB_REGISTRY_TOKEN`   | -       | ✅        |
-| `cloudflare_api_token`    | string | `CLOUDFLARE_API_TOKEN`    | -       | ✅        |
-| `cloudflare_account_id`   | string | `CLOUDFLARE_ACCOUNT_ID`   | -       | ❌        |
-| `cloudflare_zone_id`      | string | `CLOUDFLARE_ZONE_ID`      | -       | ❌        |
-| `keycloak_admin_password` | string | `KEYCLOAK_ADMIN_PASSWORD` | -       | ✅        |
+| Variable                 | Type   | Source                               | Default | Sensitive |
+| ------------------------ | ------ | ------------------------------------ | ------- | --------- |
+| `github_token`           | string | Generated via GitHub App             | -       | ✅        |
+| `github_owner`           | string | Dynamic                              | -       | ❌        |
+| `template_repo_name`     | string | Dynamic                              | -       | ❌        |
+| `app_name`               | string | Dynamic                              | -       | ❌        |
+| `project_name`           | string | Dynamic                              | -       | ❌        |
+| `vault_token`            | string | `VAULT_TOKEN`                        | -       | ✅        |
+| `github_registry_token`  | string | `GITHUB_REGISTRY_TOKEN`              | -       | ✅        |
+| `cloudflare_api_token`   | string | `CLOUDFLARE_API_TOKEN`               | -       | ✅        |
+| `cloudflare_account_id`  | string | `CLOUDFLARE_ACCOUNT_ID`              | -       | ❌        |
+| `cloudflare_zone_id`     | string | `CLOUDFLARE_ZONE_ID`                 | -       | ❌        |
+| `keycloak_client_secret` | string | `KEYCLOAK_PROVISIONER_CLIENT_SECRET` | -       | ✅        |
 
 **Optional Variables (with defaults)**:
 
@@ -66,7 +66,7 @@ terraform apply \
 | `github_registry_username` | string | `"3-Istor"`                       | GitHub username for image registry         |
 | `keycloak_realm`           | string | `"3istor"`                        | Keycloak realm name                        |
 | `keycloak_url`             | string | `"https://admin-auth.3istor.com"` | Keycloak server URL                        |
-| `keycloak_admin_username`  | string | `"admin"`                         | Keycloak admin username                    |
+| `keycloak_client_id`       | string | `"cmp-provisioner"`               | Master realm client (client credentials)   |
 | `vault_url`                | string | `"https://vault.3istor.com"`      | Vault server URL                           |
 
 **Manual Test**:
@@ -84,7 +84,7 @@ terraform apply \
   -var="cloudflare_api_token=$CLOUDFLARE_API_TOKEN" \
   -var="cloudflare_account_id=$CLOUDFLARE_ACCOUNT_ID" \
   -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
-  -var="keycloak_admin_password=$KEYCLOAK_ADMIN_PASSWORD"
+  -var="keycloak_client_secret=$KEYCLOAK_PROVISIONER_CLIENT_SECRET"
 ```
 
 ---
@@ -150,9 +150,9 @@ CLOUDFLARE_ACCOUNT_ID=b522d6f1d77b7df478edbbf07ef7d5c4
 # Keycloak (for SSO)
 KEYCLOAK_URL=https://auth.3istor.com
 KEYCLOAK_CLIENT_ID=3-istor-openid
-KEYCLOAK_CLIENT_SECRET=Y1aUBf71Bf...
-KEYCLOAK_ADMIN_USERNAME=admin
-KEYCLOAK_ADMIN_PASSWORD=m2wRadiKHT...
+KEYCLOAK_CLIENT_SECRET=<from kvv2/arcl-cmp/credentials>
+KEYCLOAK_PROVISIONER_CLIENT_ID=cmp-provisioner
+KEYCLOAK_PROVISIONER_CLIENT_SECRET=<from kvv2/arcl-cmp/keycloak-provisioner>
 
 # Vault (for secrets)
 VAULT_URL=https://vault.3istor.com
@@ -366,18 +366,18 @@ TF_VAR_lowercase_snake_case
 
 ## Quick Reference Table
 
-| .env Variable             | TF_VAR                            | Terraform Variable         | Template(s)    |
-| ------------------------- | --------------------------------- | -------------------------- | -------------- |
-| `CLOUDFLARE_API_TOKEN`    | `TF_VAR_cloudflare_api_token`     | `cloudflare_api_token`     | k3s-gitops-app |
-| `CLOUDFLARE_ZONE_ID`      | `TF_VAR_cloudflare_zone_id`       | `cloudflare_zone_id`       | k3s-gitops-app |
-| `CLOUDFLARE_ACCOUNT_ID`   | `TF_VAR_cloudflare_account_id`    | `cloudflare_account_id`    | k3s-gitops-app |
-| `KEYCLOAK_URL`            | `TF_VAR_keycloak_url`             | `keycloak_url`             | Both           |
-| `KEYCLOAK_ADMIN_USERNAME` | `TF_VAR_keycloak_admin_username`  | `keycloak_admin_username`  | Both           |
-| `KEYCLOAK_ADMIN_PASSWORD` | `TF_VAR_keycloak_admin_password`  | `keycloak_admin_password`  | Both           |
-| `VAULT_URL`               | `TF_VAR_vault_url`                | `vault_url`                | Both           |
-| `VAULT_TOKEN`             | `TF_VAR_vault_token`              | `vault_token`              | Both           |
-| `GITHUB_REGISTRY_TOKEN`   | `TF_VAR_github_registry_token`    | `github_registry_token`    | k3s-gitops-app |
-| - (hardcoded)             | `TF_VAR_github_registry_username` | `github_registry_username` | k3s-gitops-app |
+| .env Variable                        | TF_VAR                            | Terraform Variable         | Template(s)    |
+| ------------------------------------ | --------------------------------- | -------------------------- | -------------- |
+| `CLOUDFLARE_API_TOKEN`               | `TF_VAR_cloudflare_api_token`     | `cloudflare_api_token`     | k3s-gitops-app |
+| `CLOUDFLARE_ZONE_ID`                 | `TF_VAR_cloudflare_zone_id`       | `cloudflare_zone_id`       | k3s-gitops-app |
+| `CLOUDFLARE_ACCOUNT_ID`              | `TF_VAR_cloudflare_account_id`    | `cloudflare_account_id`    | k3s-gitops-app |
+| `KEYCLOAK_URL`                       | `TF_VAR_keycloak_url`             | `keycloak_url`             | Both           |
+| `KEYCLOAK_PROVISIONER_CLIENT_ID`     | `TF_VAR_keycloak_client_id`       | `keycloak_client_id`       | Both           |
+| `KEYCLOAK_PROVISIONER_CLIENT_SECRET` | `TF_VAR_keycloak_client_secret`   | `keycloak_client_secret`   | Both           |
+| `VAULT_URL`                          | `TF_VAR_vault_url`                | `vault_url`                | Both           |
+| `VAULT_TOKEN`                        | `TF_VAR_vault_token`              | `vault_token`              | Both           |
+| `GITHUB_REGISTRY_TOKEN`              | `TF_VAR_github_registry_token`    | `github_registry_token`    | k3s-gitops-app |
+| - (hardcoded)                        | `TF_VAR_github_registry_username` | `github_registry_username` | k3s-gitops-app |
 
 ---
 

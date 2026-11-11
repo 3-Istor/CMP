@@ -90,35 +90,35 @@ terraform destroy -input=false -auto-approve \
 
 ### k3s-project-bootstrap (6 variables)
 
-| Variable                  | Type    | Source                    |
-| ------------------------- | ------- | ------------------------- |
-| `project_name`            | Dynamic | User input                |
-| `keycloak_url`            | Env     | `KEYCLOAK_URL`            |
-| `keycloak_admin_username` | Env     | `KEYCLOAK_ADMIN_USERNAME` |
-| `keycloak_admin_password` | Env     | `KEYCLOAK_ADMIN_PASSWORD` |
-| `vault_url`               | Env     | `VAULT_URL`               |
-| `vault_token`             | Env     | `VAULT_TOKEN`             |
+| Variable                 | Type    | Source                               |
+| ------------------------ | ------- | ------------------------------------ |
+| `project_name`           | Dynamic | User input                           |
+| `keycloak_url`           | Env     | `KEYCLOAK_URL`                       |
+| `keycloak_client_id`     | Env     | `KEYCLOAK_PROVISIONER_CLIENT_ID`     |
+| `keycloak_client_secret` | Env     | `KEYCLOAK_PROVISIONER_CLIENT_SECRET` |
+| `vault_url`              | Env     | `VAULT_URL`                          |
+| `vault_token`            | Env     | `VAULT_TOKEN`                        |
 
 ### k3s-gitops-app (16 variables)
 
-| Variable                   | Type      | Source                         |
-| -------------------------- | --------- | ------------------------------ |
-| `github_token`             | Dynamic   | Generated via GitHub App       |
-| `github_owner`             | Dynamic   | User input                     |
-| `template_repo_name`       | Dynamic   | User input                     |
-| `app_name`                 | Dynamic   | User input                     |
-| `project_name`             | Dynamic   | User input                     |
-| `app_type`                 | Dynamic   | User input (default: "static") |
-| `vault_token`              | Env       | `VAULT_TOKEN`                  |
-| `vault_url`                | Env       | `VAULT_URL`                    |
-| `github_registry_token`    | Env       | `GITHUB_REGISTRY_TOKEN`        |
-| `github_registry_username` | Hardcoded | "3-Istor"                      |
-| `keycloak_url`             | Env       | `KEYCLOAK_URL`                 |
-| `keycloak_admin_username`  | Env       | `KEYCLOAK_ADMIN_USERNAME`      |
-| `keycloak_admin_password`  | Env       | `KEYCLOAK_ADMIN_PASSWORD`      |
-| `cloudflare_api_token`     | Env       | `CLOUDFLARE_API_TOKEN`         |
-| `cloudflare_account_id`    | Env       | `CLOUDFLARE_ACCOUNT_ID`        |
-| `cloudflare_zone_id`       | Env       | `CLOUDFLARE_ZONE_ID`           |
+| Variable                   | Type      | Source                               |
+| -------------------------- | --------- | ------------------------------------ |
+| `github_token`             | Dynamic   | Generated via GitHub App             |
+| `github_owner`             | Dynamic   | User input                           |
+| `template_repo_name`       | Dynamic   | User input                           |
+| `app_name`                 | Dynamic   | User input                           |
+| `project_name`             | Dynamic   | User input                           |
+| `app_type`                 | Dynamic   | User input (default: "static")       |
+| `vault_token`              | Env       | `VAULT_TOKEN`                        |
+| `vault_url`                | Env       | `VAULT_URL`                          |
+| `github_registry_token`    | Env       | `GITHUB_REGISTRY_TOKEN`              |
+| `github_registry_username` | Hardcoded | "3-Istor"                            |
+| `keycloak_url`             | Env       | `KEYCLOAK_URL`                       |
+| `keycloak_client_id`       | Env       | `KEYCLOAK_PROVISIONER_CLIENT_ID`     |
+| `keycloak_client_secret`   | Env       | `KEYCLOAK_PROVISIONER_CLIENT_SECRET` |
+| `cloudflare_api_token`     | Env       | `CLOUDFLARE_API_TOKEN`               |
+| `cloudflare_account_id`    | Env       | `CLOUDFLARE_ACCOUNT_ID`              |
+| `cloudflare_zone_id`       | Env       | `CLOUDFLARE_ZONE_ID`                 |
 
 ---
 
@@ -238,9 +238,9 @@ poetry run python -m app.main
 --------------------------------------------------------------------------------
   ✅ KEYCLOAK_URL                             = https://au...
   ✅ KEYCLOAK_CLIENT_ID                       = 3-istor-op...
-  ✅ KEYCLOAK_CLIENT_SECRET                   = Y1aUBf71Bf...
-  ✅ KEYCLOAK_ADMIN_USERNAME                  = [SET]
-  ✅ KEYCLOAK_ADMIN_PASSWORD                  = m2wRadiKHT...
+  ✅ KEYCLOAK_CLIENT_SECRET                   = [SET]
+  ✅ KEYCLOAK_PROVISIONER_CLIENT_ID           = cmp-provisioner
+  ✅ KEYCLOAK_PROVISIONER_CLIENT_SECRET       = [SET]
 
 🔒 HashiCorp Vault (k3s-gitops-app template)
 --------------------------------------------------------------------------------
