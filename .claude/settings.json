@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh pr create *)",
+            "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"PostToolUse\", \"additionalContext\": \"PR opened: comment on the linked Jira ticket (PR link, what it changes) and move it to In Progress if needed. See AGENTS.md.\"}}'"
+          },
+          {
+            "type": "command",
+            "if": "Bash(gh pr merge *)",
+            "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"PostToolUse\", \"additionalContext\": \"PR merged: add a summary to the linked Jira ticket (what shipped, version, what is left), update its status and create sub-tickets for the rest. See AGENTS.md.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}
