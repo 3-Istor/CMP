@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 SCHEMA_VERSION = "1"
 
 # DNS-1035; app names are capped at 40 characters like the CNP registry.
-DNS_1035 = r"^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$"
+DNS_1035 = r"[a-z]([-a-z0-9]{0,61}[a-z0-9])?"
 AppName = Annotated[str, Field(pattern=r"^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$")]
 PortNumber = Annotated[int, Field(ge=1, le=65535)]
 EvidenceKind = Literal[

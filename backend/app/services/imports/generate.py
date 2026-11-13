@@ -21,7 +21,7 @@ from app.services.registry_names import HOSTNAME_DOMAIN
 
 CATALOGUE_DIR = Path(__file__).parent / "catalogue"
 SUPPORTED_BACKING = ("mongodb", "redis", "neo4j", "elasticsearch")
-IMPORTED_NAME = re.compile(r"^[a-z]([-a-z0-9]*[a-z0-9])?$")
+IMPORTED_NAME = re.compile(r"[a-z]([-a-z0-9]*[a-z0-9])?")
 MAX_IMPORTED_NAME = 40
 # <name>-<project> is the project's own auth, status and offhours hostname.
 RESERVED_APP_NAMES = frozenset({"auth", "status", "offhours", "system"})
@@ -29,7 +29,7 @@ RESERVED_APP_NAMES = frozenset({"auth", "status", "offhours", "system"})
 RESERVED_ALIASES = frozenset(
     {"kubernetes", "default", "vault", "keycloak", "argocd"}
 )
-SHA = re.compile(r"^[0-9a-f]{40}$")
+SHA = re.compile(r"[0-9a-f]{40}")
 # How a service reaches a catalogue app without credentials (v1: only neo4j
 # has generated credentials, the others stay reachable inside the project).
 URL_SCHEMES = {
@@ -38,10 +38,12 @@ URL_SCHEMES = {
     "neo4j": "bolt://{host}:{port}",
     "elasticsearch": "http://{host}:{port}",
 }
-DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
-PORT_NAME = re.compile(r"^[a-z]([-a-z0-9]{0,13}[a-z0-9])?$")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+PORT_NAME = re.compile(r"[a-z]([-a-z0-9]{0,13}[a-z0-9])?")
+# Pasted into probe specs and into the monitoring annotation URLs of the
+# chart: no quote, space, query or fragment can reach them.
+PROBE_PATH = re.compile(r"/[A-Za-z0-9._~/-]{0,200}")
 USER_LINE = re.compile(r"^\s*USER\s+(\d+)(?::\d+)?\s*$", re.MULTILINE)
-PROBE_PATH = re.compile(r"^/[A-Za-z0-9._~/%-]{0,199}$")
 
 VALUES_HEADER = (
     "# Written by the CMP from the import of {repo} at {sha}.\n"
@@ -168,7 +170,7 @@ def scrub_env(env: list[dict]) -> tuple[list[dict], list[str]]:
 
 
 def check_name(name: str) -> list[str]:
-    if len(name) > MAX_IMPORTED_NAME or not IMPORTED_NAME.match(name):
+    if len(name) > MAX_IMPORTED_NAME or not IMPORTED_NAME.fullmatch(name):
         return [
             f"'{name}' is not a valid app name: lowercase letters, digits "
             f"and '-', starting with a letter, at most {MAX_IMPORTED_NAME} "
@@ -177,6 +179,33 @@ def check_name(name: str) -> list[str]:
     if name in RESERVED_APP_NAMES:
         return [f"'{name}' is reserved by the platform for the project itself"]
     return []
+
+
+def _checked_probe(
+    probe: dict | None, ports: list[dict], warnings: list[str]
+) -> dict | None:
+    """
+    The probe if it is a TCP probe or a safe HTTP probe on the first port,
+    else None (a TCP probe on the first port) with a warning. The monitoring
+    of the chart checks the probe path on the first port only.
+    """
+    if not probe or probe.get("kind") != "http" or not ports:
+        return probe
+    path = probe.get("path")
+    if not isinstance(path, str) or not PROBE_PATH.fullmatch(path):
+        warnings.append(
+            f"HTTP probe path {str(path)[:80]!r} refused: only '/' followed by "
+            "letters, digits and . _ ~ / - is kept, probing TCP instead"
+        )
+        return None
+    if probe.get("port") != ports[0]["port"]:
+        warnings.append(
+            f"HTTP probe on port {probe.get('port')} refused: only the first "
+            f"port ({ports[0]['port']}) is probed over HTTP, probing TCP "
+            "instead"
+        )
+        return None
+    return probe
 
 
 def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
@@ -275,7 +304,7 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
         ports = []
         for port in service["ports"]:
             port_name = port["name"].lower()
-            if not PORT_NAME.match(port_name):
+            if not PORT_NAME.fullmatch(port_name):
                 port_name = f"p{port['port']}"
             ports.append({"name": port_name, "port": port["port"]})
         if not ports:
@@ -306,6 +335,7 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
             warnings.append(
                 "image runs as root: kept, with privilege escalation off"
             )
+        probe = _checked_probe(probe, ports, warnings)
         specs.append(
             AppSpec(
                 name=name,
@@ -371,9 +401,14 @@ def _edited_probe(
         problems.append(f"app '{name}': probe kind must be tcp or http")
     if port not in {p["port"] for p in ports}:
         problems.append(f"app '{name}': the probe port is not a port of it")
-    if kind == "http" and (path is None or not PROBE_PATH.match(path)):
+    if kind == "http" and (path is None or not PROBE_PATH.fullmatch(path)):
         problems.append(
             f"app '{name}': an HTTP probe needs a path such as /health"
+        )
+    if kind == "http" and ports and port != ports[0]["port"]:
+        problems.append(
+            f"app '{name}': an HTTP probe must use the first port "
+            f"({ports[0]['port']}), the one the monitoring checks"
         )
     if problems:
         return None, problems
@@ -411,7 +446,7 @@ def _link(
         if (
             alias in RESERVED_ALIASES
             or alias == source.name
-            or not IMPORTED_NAME.match(alias)
+            or not IMPORTED_NAME.fullmatch(alias)
             or len(alias) > 63
         ):
             source.warnings.append(
@@ -533,12 +568,23 @@ def needs_secret(spec: AppSpec) -> bool:
     return bool(spec.secret_env) or spec.backing_kind == "neo4j"
 
 
+def _http_probe_path(spec: AppSpec) -> str | None:
+    """Specs stored before the probe checks of resolve() are checked again."""
+    if _checked_probe(spec.probe, spec.ports, []) is None:
+        return None
+    probe = spec.probe or {}
+    return probe.get("path") if probe.get("kind") == "http" else None
+
+
 def _probes(spec: AppSpec) -> dict:
-    probe = spec.probe or {"kind": "tcp", "port": spec.ports[0]["port"]}
-    if probe["kind"] == "http" and probe.get("path"):
-        handler = {"httpGet": {"path": probe["path"], "port": probe["port"]}}
+    first_port = spec.ports[0]["port"]
+    path = _http_probe_path(spec)
+    if path:
+        handler = {"httpGet": {"path": path, "port": first_port}}
+    elif spec.probe and spec.probe.get("kind") == "tcp":
+        handler = {"tcpSocket": {"port": spec.probe["port"]}}
     else:
-        handler = {"tcpSocket": {"port": probe["port"]}}
+        handler = {"tcpSocket": {"port": first_port}}
     probes = {
         "liveness": {**copy.deepcopy(handler), "periodSeconds": 10},
         "readiness": {**copy.deepcopy(handler), "periodSeconds": 5},
@@ -578,9 +624,9 @@ def service_values(
             },
         },
     }
-    probe = spec.probe or {}
-    if probe.get("kind") == "http" and probe.get("path"):
-        values["monitoring"] = {"enabled": True, "path": probe["path"]}
+    probe_path = _http_probe_path(spec)
+    if probe_path:
+        values["monitoring"] = {"enabled": True, "path": probe_path}
     elif spec.public:
         values["monitoring"] = {"enabled": True, "path": "/"}
     else:
@@ -727,10 +773,10 @@ def apply_to_record(
             name already used by a template app of the project.
     """
     problems = []
-    if not SHA.match(sha):
+    if not SHA.fullmatch(sha):
         problems.append(f"source commit '{sha}' is not a full SHA")
     for app, digest in digests.items():
-        if not DIGEST.match(digest):
+        if not DIGEST.fullmatch(digest):
             problems.append(f"digest of '{app}' is not sha256:<64 hex>")
     apps: list = record.setdefault("spec", {}).setdefault("apps", [])
     existing = {

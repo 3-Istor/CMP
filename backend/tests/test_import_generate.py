@@ -522,3 +522,147 @@ def test_resolve_refuses_bad_port_probe_and_link_edits(edits, problem):
         generate.resolve(_plan(), edits)
 
     assert any(problem in p for p in error.value.problems)
+
+
+def _with_probe(probe: dict) -> dict:
+    plan = _plan()
+    service = next(s for s in plan["services"] if s["name"] == "frontend")
+    service["probes"] = probe
+    return plan
+
+
+def _frontend_values(plan: dict) -> tuple[generate.AppSpec, dict]:
+    specs = generate.resolve(plan)
+    digests = {name: _digest(3) for name in _services(specs)}
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, digests, REPO, SHA, PREFIX
+    )
+    spec = next(s for s in specs if s.name == "frontend")
+    return spec, _values(files, "frontend")
+
+
+def test_a_safe_http_probe_on_the_first_port_is_kept_and_monitored():
+    plan = _with_probe({"kind": "http", "path": "/api/health-1.0", "port": 80})
+
+    spec, values = _frontend_values(plan)
+
+    assert values["monitoring"] == {"enabled": True, "path": "/api/health-1.0"}
+    assert values["workload"]["probes"]["liveness"]["httpGet"] == {
+        "path": "/api/health-1.0",
+        "port": 80,
+    }
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        '/x"} ,{"evil": "1',
+        "/health\n",
+        "/health\nfoo: bar",
+        "/a b",
+        "/health?full=1",
+        "/health#frag",
+        "health",
+        "",
+        None,
+        "/" + "a" * 201,
+    ],
+)
+def test_an_unsafe_http_probe_path_falls_back_to_tcp(path):
+    plan = _with_probe({"kind": "http", "path": path, "port": 80})
+
+    spec, values = _frontend_values(plan)
+
+    assert spec.probe is None
+    assert any("probe path" in w for w in spec.warnings)
+    assert values["workload"]["probes"]["liveness"]["tcpSocket"] == {
+        "port": 80
+    }
+    assert values["monitoring"] == {"enabled": True, "path": "/"}
+
+
+def test_an_http_probe_on_another_port_than_the_first_falls_back_to_tcp():
+    plan = _with_probe({"kind": "http", "path": "/health", "port": 9090})
+
+    spec, values = _frontend_values(plan)
+
+    assert any("port 9090 refused" in w for w in spec.warnings)
+    assert values["workload"]["probes"]["readiness"]["tcpSocket"] == {
+        "port": 80
+    }
+    assert values["monitoring"] == {"enabled": True, "path": "/"}
+
+
+def test_a_stored_spec_with_an_unsafe_probe_path_is_checked_again():
+    spec = generate.resolve(_plan())[-1]
+    spec.probe = {"kind": "http", "path": '/"x', "port": spec.ports[0]["port"]}
+
+    values = generate.service_values("epitweet", spec, PREFIX, _digest(4))
+
+    assert "httpGet" not in values["workload"]["probes"]["liveness"]
+
+
+@pytest.mark.parametrize("name", ["api\n", "api\n\n"])
+def test_a_name_with_a_trailing_newline_is_refused(name):
+    assert generate.check_name(name)
+
+
+@pytest.mark.parametrize(
+    "sha, digest", [(SHA + "\n", _digest(1)), (SHA, _digest(1) + "\n")]
+)
+def test_a_sha_or_digest_with_a_trailing_newline_is_refused(sha, digest):
+    specs = generate.resolve(_plan())
+
+    with pytest.raises(PlanError):
+        generate.apply_to_record(
+            _record(),
+            "epitweet",
+            specs,
+            {name: digest for name in _services(specs)},
+            REPO,
+            sha,
+            PREFIX,
+        )
+
+
+@pytest.mark.parametrize("path", ["/health\n", '/h"x', "/h?x=1", "/a b"])
+def test_an_edited_http_probe_with_an_unsafe_path_is_refused(path):
+    edits = {
+        "probe": {"user-service": {"kind": "http", "path": path, "port": 8081}}
+    }
+
+    with pytest.raises(PlanError) as refused:
+        generate.resolve(_plan(), edits)
+
+    assert any("needs a path" in p for p in refused.value.problems)
+
+
+def test_an_edited_http_probe_on_a_second_port_is_refused():
+    plan = _plan()
+    service = next(s for s in plan["services"] if s["name"] == "user-service")
+    service["ports"].append({"name": "admin", "port": 9000})
+    edits = {
+        "probe": {
+            "user-service": {"kind": "http", "path": "/health", "port": 9000}
+        }
+    }
+
+    with pytest.raises(PlanError) as refused:
+        generate.resolve(plan, edits)
+
+    assert any("must use the first port" in p for p in refused.value.problems)
+
+
+def test_an_edited_probe_overrides_an_unsafe_analyzer_probe():
+    plan = _with_probe({"kind": "http", "path": '/"x', "port": 80})
+    edits = {
+        "probe": {"frontend": {"kind": "http", "path": "/ok", "port": 80}}
+    }
+
+    specs = {s.name: s for s in generate.resolve(plan, edits)}
+
+    assert specs["frontend"].probe == {
+        "kind": "http",
+        "path": "/ok",
+        "port": 80,
+    }

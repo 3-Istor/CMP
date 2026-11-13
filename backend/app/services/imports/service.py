@@ -46,8 +46,8 @@ from app.services.registry_names import check_app
 
 logger = logging.getLogger(__name__)
 
-BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,255}$")
-SAFE_PATH = re.compile(r"^([A-Za-z0-9_.@+-]+(/[A-Za-z0-9_.@+-]+)*)?$")
+BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,255}")
+SAFE_PATH = re.compile(r"([A-Za-z0-9_.@+-]+(/[A-Za-z0-9_.@+-]+)*)?")
 MAX_PLAN_BYTES = 2 * 1024 * 1024
 MAX_MESSAGE = 2000
 ARCHIVE_MAX_BYTES = 256 * 1024 * 1024
@@ -269,7 +269,7 @@ async def start_analysis(
     db: Session, project: str, user: str, repo: RepoRef, branch: str | None
 ) -> ImportRun:
     branch = branch or repo.default_branch
-    if not BRANCH.match(branch) or ".." in branch:
+    if not BRANCH.fullmatch(branch) or ".." in branch:
         raise ImportRefused("Invalid branch name", 422)
     source = (
         db.query(ImportSource)
@@ -557,7 +557,7 @@ def _recipes(run: ImportRun) -> list[dict]:
         build = builds[service.spec["plan_name"]]
         for path in (build.get("context"), build.get("dockerfile")):
             if path is not None and (
-                not SAFE_PATH.match(path) or ".." in path.split("/")
+                not SAFE_PATH.fullmatch(path) or ".." in path.split("/")
             ):
                 raise ImportRefused(f"Unsafe path in the plan: {path!r}", 422)
         strategy = build["strategy"]
@@ -681,7 +681,7 @@ def receive_publish(db: Session, run: ImportRun, services: list[dict]) -> None:
             raise ImportRefused(f"Unexpected app {app!r}", 422)
         if item.get("image") != image_name(run.source.project_name, app):
             raise ImportRefused(f"Image of {app} is not where it belongs", 422)
-        if not generate.DIGEST.match(str(item.get("digest", ""))):
+        if not generate.DIGEST.fullmatch(str(item.get("digest", ""))):
             raise ImportRefused(f"Digest of {app} is malformed", 422)
         digests[app] = {
             "digest": item["digest"],
