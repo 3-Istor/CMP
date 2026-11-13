@@ -22,6 +22,7 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
+from app.services import app_repo
 from app.services.authz import (
     is_auditor,
     is_cnp_admin,
@@ -56,7 +57,6 @@ from app.services.security import store
 from app.services.security.collector import (
     K8S_TEMPLATE,
     SECURITY_WORKFLOW,
-    repo_full_name,
     utcnow,
 )
 from app.services.security.model import Category, Source, Tier
@@ -496,8 +496,13 @@ async def _github_token(deployment: Deployment) -> tuple[str, str]:
     installation_id = json.loads(deployment.app_config or "{}").get(
         "github_installation_id"
     )
-    repo = repo_full_name(deployment.github_repo_url)
-    if not installation_id or not repo:
+    try:
+        repo = app_repo.bound_repo(
+            deployment.github_repo_url, deployment.name, deployment.status
+        )
+    except app_repo.RepoNotBound as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not installation_id:
         raise HTTPException(
             status_code=409, detail="This app has no GitHub repository linked."
         )

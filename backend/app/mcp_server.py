@@ -31,7 +31,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.roles import ProjectRole
 from app.models.project import Project, TargetCloud
-from app.services import audit, notifications
+from app.services import app_repo, audit, notifications
 from app.services.agents import internal_api, policy, ratelimit
 from app.services.agents import repo as repo_ops
 from app.services.agents import skills, store
@@ -242,19 +242,14 @@ def _app_summary(app: dict) -> dict:
 
 
 async def _repo_token(caller: Caller, app: dict) -> tuple[str, str]:
-    if not app.get("github_repo_url"):
-        raise ValueError(
-            "The app has no repository yet: wait until it is deployed "
-            "(wait_for_app)."
-        )
+    repo = app_repo.bound_repo(
+        app.get("github_repo_url"), app["name"], app["status"]
+    )
     me = await caller.api("GET", "/api/account/me")
     installation = me.get("github_installation_id") or (
         settings.GITHUB_INSTALLATION_ID
     )
     token = await get_installation_token(str(installation))
-    repo = "/".join(
-        app["github_repo_url"].rstrip("/").removesuffix(".git").split("/")[-2:]
-    )
     return token, repo
 
 

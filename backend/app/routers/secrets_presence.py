@@ -41,7 +41,7 @@ async def get_secret_presence(
         deployment_id, db, token, ProjectRole.MEMBER
     )
     gh_token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
     files = list(
         dict.fromkeys(
             reversed(security_data.values_files_for(_app_type_of(deployment)))

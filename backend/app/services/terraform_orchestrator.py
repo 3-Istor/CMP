@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services import app_inputs, customer_identity, notifications
+from app.services.app_repo import is_platform_repo_name, repo_url_for
 from app.services.github_service import get_installation_token
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
@@ -184,9 +185,11 @@ def run_deployment(deployment_id: int) -> None:
             # present; the k3s-gitops-app template doesn't expose a
             # github_repo_url output, so reconstruct it from the deterministic
             # naming (repo name = app name, created under the GitHub org).
+            # Set only here, after a successful apply: the repository
+            # resource fails on an existing name, so this repo is the app's.
             repo_url = outputs.get("github_repo_url")
             if not repo_url and deployment.template_id == "k3s-gitops-app":
-                repo_url = f"https://github.com/{settings.GITHUB_ORG}/{deployment.name}"
+                repo_url = repo_url_for(deployment.name)
             if repo_url:
                 deployment.github_repo_url = repo_url
             if outputs.get("argocd_app_name"):
@@ -300,6 +303,9 @@ def backfill_gitops_repo_urls() -> None:
     Fill in ``github_repo_url`` for existing k3s-gitops-app deployments that
     predate repo-URL persistence. Idempotent: only touches rows where the column
     is empty. Safe to run on every startup.
+
+    Only rows whose apply went through (running or degraded): a failed row
+    never created its repository, and its name may be another app's.
     """
     db = SessionLocal()
     try:
@@ -307,6 +313,9 @@ def backfill_gitops_repo_urls() -> None:
             db.query(Deployment)
             .filter(
                 Deployment.template_id == "k3s-gitops-app",
+                Deployment.status.in_(
+                    [DeploymentStatus.RUNNING, DeploymentStatus.DEGRADED]
+                ),
                 (Deployment.github_repo_url.is_(None))
                 | (Deployment.github_repo_url == ""),
             )
@@ -314,9 +323,9 @@ def backfill_gitops_repo_urls() -> None:
         )
         updated = 0
         for d in rows:
-            d.github_repo_url = (
-                f"https://github.com/{settings.GITHUB_ORG}/{d.name}"
-            )
+            if is_platform_repo_name(d.name):
+                continue
+            d.github_repo_url = repo_url_for(d.name)
             updated += 1
         if updated:
             db.commit()
@@ -471,6 +480,8 @@ def run_deletion(deployment_id: int) -> None:
                         exc,
                     )
 
+            # The name is free again: another app may now own that repo.
+            deployment.github_repo_url = None
             _update(
                 db,
                 deployment,

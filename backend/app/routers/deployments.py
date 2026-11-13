@@ -19,12 +19,13 @@ from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
-from app.services import app_inputs
+from app.services import app_inputs, app_repo
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
 from app.services.authz import (
@@ -225,6 +226,12 @@ async def create_deployment(
     app_config["project_name"] = project_name = payload.project_id
 
     if payload.template_id == "k3s-gitops-app":
+        if app_repo.is_platform_repo_name(payload.name):
+            raise HTTPException(
+                status_code=409,
+                detail=f"'{payload.name}' is the name of a platform "
+                "repository: choose another app name.",
+            )
         # Forced from the DB: the Vault role mount depends on it, and a project
         # admin must not pick another cloud's mount.
         project_row = (
@@ -458,23 +465,14 @@ def _get_kubernetes_deployment_or_404(
     return deployment
 
 
-def _extract_repo_full_name(github_repo_url: str) -> str:
-    """
-    Extract ``owner/repo`` from a GitHub HTTPS URL.
-
-    Examples:
-      ``https://github.com/3-istor/my-app``  → ``"3-istor/my-app"``
-      ``https://github.com/3-istor/my-app.git`` → ``"3-istor/my-app"``
-    """
-    # Strip trailing .git and take the last two path segments
-    clean = github_repo_url.rstrip("/").removesuffix(".git")
-    parts = clean.split("/")
-    if len(parts) < 2:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Cannot parse GitHub repo from URL: '{github_repo_url}'",
+def _extract_repo_full_name(deployment: Deployment) -> str:
+    """``owner/repo`` of the repository created for *deployment*, or 409."""
+    try:
+        return app_repo.bound_repo(
+            deployment.github_repo_url, deployment.name, deployment.status
         )
-    return "/".join(parts[-2:])
+    except app_repo.RepoNotBound as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _deep_merge(base: Any, updates: Any) -> Any:
@@ -576,7 +574,7 @@ async def get_deployment_config(
     file_path = _config_file_for(app_type, component)
     # Named gh_token so it cannot shadow the caller's JWT above.
     gh_token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
 
     try:
         raw_content, sha = await get_file_content(
@@ -681,7 +679,7 @@ async def update_deployment_config(
 
     # Named gh_token so it cannot shadow the caller's JWT above.
     gh_token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
 
     # ── 1. Fetch current file content ────────────────────────────────────
     try:
@@ -800,7 +798,7 @@ async def get_security_data(
     )
 
     token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
     exposure_file, database_file = security_data.values_files_for(
         _app_type_of(deployment)
     )
@@ -850,7 +848,7 @@ async def update_security_data(
     )
 
     token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
     exposure_file, database_file = security_data.values_files_for(
         _app_type_of(deployment)
     )

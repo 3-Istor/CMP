@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.models.deployment import Deployment, ProviderType
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.routers import deployments as deployments_router
 from app.services import app_security_data as sd
 from app.services import keycloak_service
@@ -158,6 +158,7 @@ def add_deployment(factory, app_type: str) -> int:
             template_id="k3s-gitops-app",
             provider_type=ProviderType.KUBERNETES,
             project_id="demo",
+            status=DeploymentStatus.RUNNING,
             github_repo_url="https://github.com/3-istor/shop",
             app_config=json.dumps(
                 {"app_type": app_type, "github_installation_id": "1"}
