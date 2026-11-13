@@ -16,7 +16,7 @@ from app.routers import account as account_router
 from app.routers import deployments as deployments_router
 from app.routers import security as security_router
 from app.schemas.account import GitHubInstallationRequest
-from app.services import github_service, project_registry
+from app.services import github_account, github_service, project_registry
 from app.services import terraform_orchestrator as orchestrator
 from app.services.environments import activation, gitops
 from app.services.security import collector
@@ -234,33 +234,31 @@ class TestRecordInstallation:
             )
         )
 
-    def test_foreign_installation_is_refused_with_409(self, db):
-        with pytest.raises(HTTPException) as exc:
-            self._save(db, FOREIGN_INSTALLATION)
+    # An installation id alone proves nothing: it is recorded only once the
+    # caller's linked GitHub token lists it (tests/test_github_account.py).
 
-        assert exc.value.status_code == 409
-        assert "CNP-241" in exc.value.detail
-
-    def test_foreign_installation_is_not_stored(self, db):
-        with pytest.raises(HTTPException):
-            self._save(db, FOREIGN_INSTALLATION)
-
-        assert db.query(UserGitHubInstallation).count() == 0
-
-    def test_org_installation_is_recorded(self, db):
-        self._save(db, ORG_INSTALLATION)
-
-        assert (
-            db.query(UserGitHubInstallation).one().installation_id
-            == ORG_INSTALLATION
-        )
-
-    def test_nothing_is_accepted_when_the_org_installation_is_unset(self, db):
-        with mock.patch.object(settings, "GITHUB_INSTALLATION_ID", ""):
+    def test_installation_is_refused_without_a_github_link(self, db):
+        with mock.patch.object(
+            github_account, "cnp_user_id", lambda claims: "uid-alice"
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._save(db, FOREIGN_INSTALLATION)
 
-        assert exc.value.status_code == 409
+        assert exc.value.status_code in (403, 503)
+
+    @pytest.mark.parametrize(
+        "installation", [FOREIGN_INSTALLATION, ORG_INSTALLATION]
+    )
+    def test_no_installation_is_stored_without_a_github_link(
+        self, db, installation
+    ):
+        with mock.patch.object(
+            github_account, "cnp_user_id", lambda claims: "uid-alice"
+        ):
+            with pytest.raises(HTTPException):
+                self._save(db, installation)
+
+        assert db.query(UserGitHubInstallation).count() == 0
 
 
 class TestScopedInstallationToken:

@@ -311,13 +311,20 @@ export interface UserProfile {
   platform_roles?: string[];
 }
 
-export interface GitHubStatus {
+export interface GitHubConnectionStatus {
   github_installation_id: string | null;
+  identity_linked: boolean;
+  github_login: string | null;
+  oauth_configured: boolean;
+  installations: { id: string; account: string; account_type: string }[];
+  installation_url: string | null;
 }
 
 export interface GitHubInstallationResponse {
   message: string;
   installation_id: string;
+  github_login: string;
+  account: string;
 }
 
 export interface PictureUploadResponse {

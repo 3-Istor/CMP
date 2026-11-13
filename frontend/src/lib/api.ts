@@ -347,24 +347,36 @@ export const updateFavorites = (favorites: Favorites) =>
     body: JSON.stringify(favorites),
   });
 
-export const getGitHubStatus = async (): Promise<
-  import("@/types").GitHubStatus
-> => {
-  const profile = await request<import("@/types").UserProfile>("/account/me");
-  return { github_installation_id: profile.github_installation_id ?? null };
-};
+export const getGitHubConnectionStatus = () =>
+  request<import("@/types").GitHubConnectionStatus>("/account/github");
 
-export const saveGitHubInstallationId = async (
-  installation_id: string,
-): Promise<import("@/types").GitHubInstallationResponse> => {
-  return request<import("@/types").GitHubInstallationResponse>(
+export const connectGitHubInstallation = (installation_id: string) =>
+  request<import("@/types").GitHubInstallationResponse>(
     "/account/github-installation",
     {
       method: "POST",
       body: JSON.stringify({ installation_id }),
     },
   );
-};
+
+export const unlinkGitHub = () =>
+  request<void>("/account/github", { method: "DELETE" });
+
+// Goes through the Next.js bridge, which keeps the OAuth binding cookie.
+export async function startGitHubLink(
+  mode: "authorize" | "install" = "authorize",
+): Promise<{ authorization_url: string }> {
+  const response = await fetch("/api/auth/github/link", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, "GitHub linking is unavailable");
+  }
+  return response.json();
+}
 
 // Projects (Phase 4)
 export const getProjects = () =>

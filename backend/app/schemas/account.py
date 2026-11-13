@@ -32,16 +32,47 @@ class PictureUploadResponse(BaseModel):
 
 
 class GitHubInstallationRequest(BaseModel):
-    """Request to save GitHub App installation ID."""
+    """An installation of CNP-Portal the caller's GitHub account reaches."""
 
-    installation_id: str
+    installation_id: str = Field(pattern=r"^[1-9][0-9]{0,19}$")
 
 
 class GitHubInstallationResponse(BaseModel):
-    """Response after saving GitHub installation ID."""
+    """The installation recorded once the user's token showed it."""
 
     message: str
     installation_id: str
+    github_login: str
+    account: str
+
+
+class GitHubInstallationOption(BaseModel):
+    id: str
+    account: str
+    account_type: str
+
+
+class GitHubConnectionStatus(BaseModel):
+    github_installation_id: str | None
+    identity_linked: bool
+    github_login: str | None
+    oauth_configured: bool
+    installations: list[GitHubInstallationOption]
+    installation_url: str | None
+
+
+class GitHubOAuthStartRequest(BaseModel):
+    mode: Literal["authorize", "install"] = "authorize"
+    # Random value the frontend bridge keeps in an httpOnly cookie.
+    binding: str = Field(min_length=32, max_length=256, repr=False)
+
+
+class GitHubOAuthCallbackRequest(BaseModel):
+    binding: str = Field(min_length=32, max_length=256, repr=False)
+    state: str = Field(min_length=1, max_length=128, repr=False)
+    code: str | None = Field(
+        default=None, min_length=1, max_length=512, repr=False
+    )
 
 
 class Favorites(BaseModel):
