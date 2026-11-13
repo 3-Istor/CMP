@@ -9,7 +9,14 @@ import httpx
 import pytest
 
 from app.core.config import settings
-from app.services import aws_tfstate, monitoring_service
+from app.services import (
+    aws_tfstate,
+    keycloak_admin,
+    monitoring_service,
+    project_bootstrap,
+    terraform_executor,
+    vault_auth,
+)
 from app.services.terraform_executor import TerraformExecutor
 
 ROLE = "arn:aws:iam::947554757826:role/cnp-tfstate-cmp"
@@ -224,3 +231,74 @@ def test_main_writes_only_the_document_on_stdout(monkeypatch, capsys):
     code = aws_tfstate.main()
 
     assert (code, capsys.readouterr().out) == (0, '{"Version": 1}\n')
+
+
+@pytest.fixture
+def static_keys_everywhere(monkeypatch):
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAPODENV")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "pod-env")
+    monkeypatch.setattr(settings, "AWS_ACCESS_KEY_ID", "AKIAPROVIDER")
+    monkeypatch.setattr(settings, "AWS_SECRET_ACCESS_KEY", "provider")
+    monkeypatch.setattr(vault_auth, "terraform_env", dict)
+    monkeypatch.setattr(keycloak_admin, "terraform_env", dict)
+
+
+def _env_of_terraform_run(monkeypatch, tmp_path) -> dict:
+    run = mock.Mock(return_value=subprocess.CompletedProcess([], 0, "", ""))
+    monkeypatch.setattr(terraform_executor.subprocess, "run", run)
+    executor = TerraformExecutor(tmp_path, "app", "cnp/projects/p/app")
+
+    executor._run_command_once(["terraform", "plan"])
+
+    return run.call_args.kwargs["env"]
+
+
+def _env_of_bootstrap_run(monkeypatch, tmp_path) -> dict:
+    run = mock.Mock(return_value=subprocess.CompletedProcess([], 0, "", ""))
+    monkeypatch.setattr(project_bootstrap.subprocess, "run", run)
+
+    project_bootstrap._run_once(["terraform", "plan"], tmp_path, tmp_path)
+
+    return run.call_args.kwargs["env"]
+
+
+@pytest.mark.usefixtures("static_keys_everywhere")
+def test_terraform_run_gets_no_static_aws_key_when_federated(
+    monkeypatch, tmp_path
+):
+    env = _env_of_terraform_run(monkeypatch, tmp_path)
+
+    assert not {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} & set(env)
+    assert env["AWS_PROFILE"] == "cnp-tfstate"
+
+
+@pytest.mark.usefixtures("static_keys_everywhere")
+def test_bootstrap_run_gets_no_static_aws_key_when_federated(
+    monkeypatch, tmp_path
+):
+    env = _env_of_bootstrap_run(monkeypatch, tmp_path)
+
+    assert not {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} & set(env)
+    assert env["AWS_PROFILE"] == "cnp-tfstate"
+
+
+@pytest.mark.usefixtures("static_keys_everywhere")
+def test_terraform_run_keeps_the_provider_key_without_a_role(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(settings, "TF_BACKEND_AWS_ROLE_ARN", "")
+
+    env = _env_of_terraform_run(monkeypatch, tmp_path)
+
+    assert env["AWS_ACCESS_KEY_ID"] == "AKIAPROVIDER"
+
+
+@pytest.mark.usefixtures("static_keys_everywhere")
+def test_bootstrap_run_keeps_the_backend_key_without_a_role(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(settings, "TF_BACKEND_AWS_ROLE_ARN", "")
+
+    env = _env_of_bootstrap_run(monkeypatch, tmp_path)
+
+    assert env["AWS_ACCESS_KEY_ID"] == "AKIASTATIC"
