@@ -1,12 +1,14 @@
 "use client";
 
-import { CheckCircle2, GitBranch, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, GitBranch, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { IMPORT_RETURN_KEY } from "@/components/imports/RepoStep";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -28,6 +30,7 @@ export function GitHubLinkButton() {
   const [status, setStatus] = useState<GitHubConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [importReturn, setImportReturn] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -46,6 +49,13 @@ export function GitHubLinkButton() {
       window.history.replaceState({}, document.title, window.location.pathname);
       if (outcome === "linked") toast.success(t("callbackSaved"));
       else toast.error(t("callbackFailed"));
+    }
+    try {
+      // Set by the import wizard before it sent the user to GitHub.
+      const back = sessionStorage.getItem(IMPORT_RETURN_KEY);
+      if (back && /^\/projects\/[^/?#]+\/import$/.test(back)) setImportReturn(back);
+    } catch {
+      // storage blocked: no way back offered
     }
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,6 +193,22 @@ export function GitHubLinkButton() {
           )}
         </div>
         <p className="text-xs text-muted-foreground">{t("linkedHelp")}</p>
+        {importReturn && (
+          <Link
+            href={importReturn}
+            onClick={() => {
+              try {
+                sessionStorage.removeItem(IMPORT_RETURN_KEY);
+              } catch {
+                // nothing to clear
+              }
+            }}
+            className={buttonVariants({ size: "sm" })}
+          >
+            <ArrowLeft aria-hidden />
+            {t("backToImport")}
+          </Link>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"

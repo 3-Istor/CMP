@@ -41,7 +41,10 @@ export type Capability =
   | "finops.view"
   | "finops.act"
   | "finops.editBudget"
-  | "agents.configure";
+  | "agents.configure"
+  | "topology.view"
+  | "topology.link"
+  | "import.manage";
 
 /**
  * The weakest role that holds each capability.
@@ -71,6 +74,10 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "finops.act": "admin",
   "finops.editBudget": "owner",
   "agents.configure": "admin",
+  // Mirrors backend routers/topology.py and routers/imports.py.
+  "topology.view": "member",
+  "topology.link": "admin",
+  "import.manage": "admin",
 };
 
 /**

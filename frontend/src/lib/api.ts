@@ -1499,3 +1499,79 @@ export const decideAccess = (
       body: action === "deny" ? JSON.stringify({ reason: reason ?? "" }) : undefined,
     },
   );
+
+// Topology (CNP-242)
+const projectPath = (project: string) =>
+  `/projects/${encodeURIComponent(project)}`;
+
+export const getTopology = (project: string) =>
+  request<import("@/types").Topology>(`${projectPath(project)}/topology`);
+
+export const linkApps = (
+  project: string,
+  link: { from: string; to: string; port: number; alias?: string | null },
+) =>
+  request<{ from: string; app: string; port: number; alias: string }>(
+    `${projectPath(project)}/topology/links`,
+    { method: "POST", body: JSON.stringify(link) },
+  );
+
+export const unlinkApps = (
+  project: string,
+  link: { from: string; to: string; alias?: string | null },
+) => {
+  const query = new URLSearchParams({ from: link.from, to: link.to });
+  if (link.alias) query.set("alias", link.alias);
+  return request<{ commit: string }>(
+    `${projectPath(project)}/topology/links?${query}`,
+    { method: "DELETE" },
+  );
+};
+
+// Repository import (CNP-241)
+export const getImportableRepos = (project: string) =>
+  request<{ repositories: import("@/types").ImportableRepo[] }>(
+    `${projectPath(project)}/import/repos`,
+  ).then((r) => r.repositories);
+
+export const startImport = (
+  project: string,
+  repo_full_name: string,
+  branch: string | null,
+) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports`,
+    { method: "POST", body: JSON.stringify({ repo_full_name, branch }) },
+  ).then((r) => r.run);
+
+export const getImports = (project: string) =>
+  request<{ imports: import("@/types").ImportSourceView[] }>(
+    `${projectPath(project)}/imports`,
+  ).then((r) => r.imports);
+
+export const getImportRun = (project: string, runId: string) =>
+  request<import("@/types").ImportRunDetail>(
+    `${projectPath(project)}/imports/runs/${encodeURIComponent(runId)}`,
+  );
+
+export const applyImport = (
+  project: string,
+  sourceId: string,
+  edits: import("@/types").ImportPlanEdits,
+) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/apply`,
+    { method: "POST", body: JSON.stringify(edits) },
+  ).then((r) => r.run);
+
+export const rebuildImport = (project: string, sourceId: string) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/rebuild`,
+    { method: "POST" },
+  ).then((r) => r.run);
+
+export const deleteImport = (project: string, sourceId: string) =>
+  request<{ message: string }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}`,
+    { method: "DELETE" },
+  );

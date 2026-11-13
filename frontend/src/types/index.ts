@@ -1325,3 +1325,200 @@ export interface AccessOverview {
   active: AccessRequest[];
   history: AccessRequest[];
 }
+
+// ── Topology (CNP-242) ──────────────────────────────────────────────────────
+
+export type TopologyNodeKind = "static" | "fullstack" | "service" | "backing";
+
+export type TopologyEdgeState =
+  | "declared_observed"
+  | "declared_only"
+  | "observed_only"
+  | "denied";
+
+export interface TopologyPort {
+  name: string;
+  port: number;
+}
+
+export interface TopologyNode {
+  id: string;
+  app: string;
+  kind: TopologyNodeKind;
+  components: string[];
+  public: boolean;
+  hostname: string | null;
+  health: string | null;
+  sync: string | null;
+  asleep: boolean | null;
+  digest: string | null;
+  imported: boolean;
+  backing_kind: string | null;
+  ports: TopologyPort[];
+  linkable: boolean;
+  deployment_id: number | null;
+  in_registry: boolean;
+}
+
+export interface TopologyEdge {
+  id: string;
+  from: string;
+  to: string;
+  port: number | null;
+  alias: string | null;
+  declared: boolean;
+  observed: {
+    rps: number;
+    count: number;
+    last_seen: string | null;
+    verdict: "forwarded" | "dropped";
+  } | null;
+  state: TopologyEdgeState;
+}
+
+export interface Topology {
+  project: string;
+  nodes: TopologyNode[];
+  edges: TopologyEdge[];
+  observed_available: boolean;
+  generated_at: string;
+}
+
+// ── Repository import (CNP-241) ─────────────────────────────────────────────
+
+export interface ImportableRepo {
+  full_name: string;
+  default_branch: string;
+  private: boolean;
+}
+
+export type ImportRunStatus =
+  | "queued"
+  | "claimed"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type Confidence = "high" | "medium" | "low";
+
+export interface PlanPort {
+  name: string;
+  port: number;
+}
+
+export interface PlanProbe {
+  kind: "tcp" | "http";
+  path: string | null;
+  port: number;
+}
+
+export interface PlanService {
+  name: string;
+  path: string;
+  stack: { language: string; framework: string | null; version: string | null };
+  build: { strategy: "dockerfile" | "repaired_dockerfile" | "railpack"; context: string; notes: string[] };
+  ports: PlanPort[];
+  probes: PlanProbe | null;
+  env: { name: string; value: string | null; from_link: string | null; secret: boolean }[];
+  public: boolean;
+  resources: { requests_mem_mib: number; limits_mem_mib: number; cpu: string };
+  confidence: { overall: Confidence; reasons: string[] };
+}
+
+export interface PlanBacking {
+  name: string;
+  kind: string;
+  image: string;
+  supported: boolean;
+  port: number | null;
+  resources: { requests_mem_mib: number; limits_mem_mib: number; cpu: string };
+  credentials_found: string[];
+}
+
+export interface PlanLink {
+  from: string;
+  to: string;
+  port: number | null;
+  alias: string;
+  evidence: { file: string; line: number; kind: string }[];
+}
+
+export interface ImportPlan {
+  schema_version: string;
+  source: { branch: string | null; sha: string | null };
+  services: PlanService[];
+  backing: PlanBacking[];
+  links: PlanLink[];
+  unsupported: { name: string; kind: string; reason: string; file: string | null; line: number | null }[];
+  secrets_found: { file: string; line: number; kind: string; redacted: string }[];
+  warnings: string[];
+  capacity: { requests_mem_mib: number; limits_mem_mib: number };
+}
+
+export interface ImportPlanEdits {
+  exclude: string[];
+  rename: Record<string, string>;
+  public: Record<string, boolean>;
+  memory: Record<string, { requests_mem_mib: number; limits_mem_mib: number }>;
+  port: Record<string, number>;
+  probe: Record<string, PlanProbe>;
+  drop_links: { from: string; to: string }[];
+}
+
+export interface ImportCapacity {
+  project_max_mib: number;
+  namespace_max_mib: number;
+  other_imports_mib: number;
+  backing_requests_mib: Record<string, number>;
+}
+
+export interface ImportServiceView {
+  app: string;
+  kind: "service" | "backing";
+  path: string;
+  status: "pending" | "deploying" | "running" | "failed" | string;
+  message: string | null;
+  last_sha: string | null;
+  last_digest: string | null;
+  deployment_id: number | null;
+  public: boolean;
+  warnings: string[];
+}
+
+export interface ImportRunReport {
+  stage?: string;
+  error?: string;
+  commit?: string;
+  images?: Record<string, { digest: string; vulns: Record<string, number>; sbom: Record<string, unknown> }>;
+  states?: Record<string, string>;
+}
+
+export interface ImportRun {
+  id: string;
+  source_id: string;
+  kind: "analyze" | "build";
+  sha: string;
+  status: ImportRunStatus;
+  plan: ImportPlan | { edits: ImportPlanEdits } | null;
+  report: ImportRunReport | null;
+  requested_by: string;
+  approved_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportRunDetail extends ImportRun {
+  capacity: ImportCapacity;
+  services: ImportServiceView[];
+}
+
+export interface ImportSourceView {
+  id: string;
+  repo_full_name: string;
+  branch: string;
+  created_by: string;
+  created_at: string;
+  runs: ImportRun[];
+  services: ImportServiceView[];
+}
