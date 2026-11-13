@@ -386,14 +386,9 @@ terraform {{
   }}
 }}
 
+# Credentials come from the OS_* variables of the terraform process: this
+# file lives in the template clone and must never hold them.
 provider "openstack" {{
-  user_name           = "{settings.OS_USERNAME}"
-  password            = "{settings.OS_PASSWORD}"
-  tenant_name         = "{settings.OS_PROJECT_NAME}"
-  user_domain_name    = "{settings.OS_USER_DOMAIN_NAME}"
-  project_domain_name = "{settings.OS_PROJECT_DOMAIN_NAME}"
-  auth_url            = "{settings.OS_AUTH_URL}"
-
   # Override endpoints to use real IPs instead of localhost
   endpoint_overrides = {{
     "identity"      = "{base_url}:5000/v3/"
