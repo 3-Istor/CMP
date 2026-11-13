@@ -17,7 +17,7 @@ import type {
 
 const APP_NAME = /^[a-z]([-a-z0-9]*[a-z0-9])?$/;
 const MAX_APP_NAME = 40;
-const PROBE_PATH = /^\/[A-Za-z0-9._~/%-]{0,199}$/;
+const PROBE_PATH = /^\/[A-Za-z0-9._~/-]{0,200}$/;
 const MIN_MEMORY_MIB = 16;
 const SUPPORTED_BACKING = ["mongodb", "redis", "neo4j", "elasticsearch"];
 
@@ -217,6 +217,7 @@ export type PlanProblem =
   | { code: "duplicate"; app: string }
   | { code: "memory"; app: string }
   | { code: "probePath"; app: string }
+  | { code: "probePort"; app: string }
   | { code: "nothing" };
 
 /** What the apply endpoint would refuse, found before the step-up. */
@@ -250,6 +251,12 @@ export function planProblems(
       !PROBE_PATH.test(effective.probe.path ?? "")
     ) {
       problems.push({ code: "probePath", app: effective.name });
+    }
+    if (
+      edits.probe[effective.name]?.kind === "http" &&
+      effective.probe?.port !== effective.ports[0]?.port
+    ) {
+      problems.push({ code: "probePort", app: effective.name });
     }
   }
   for (const name of new Set(names)) {

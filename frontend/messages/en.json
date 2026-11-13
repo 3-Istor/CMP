@@ -3436,6 +3436,7 @@
       "duplicate": "{app} is already used by another app.",
       "memory": "{app}: the memory request must be at least 16 MiB and at most the limit.",
       "probePath": "{app}: an HTTP probe needs a path such as /health.",
+      "probePort": "{app}: an HTTP probe must use the first port, the one the monitoring checks.",
       "nothing": "Every app is excluded: there is nothing to import."
     },
     "list": {

@@ -3436,6 +3436,7 @@
       "duplicate": "{app} est déjà utilisé par une autre app.",
       "memory": "{app} : la mémoire demandée doit valoir au moins 16 Mio et au plus la limite.",
       "probePath": "{app} : une sonde HTTP a besoin d'un chemin, par exemple /health.",
+      "probePort": "{app} : une sonde HTTP doit utiliser le premier port, celui que la supervision vérifie.",
       "nothing": "Toutes les apps sont exclues : il n'y a rien à importer."
     },
     "list": {

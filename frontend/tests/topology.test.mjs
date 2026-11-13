@@ -312,3 +312,59 @@ test("a backing app skips the build stages and a private app skips the smoke tes
 
   assert.deepEqual(Object.values(stages), ["skipped", "skipped", "skipped", "active", "skipped"]);
 });
+
+// ── Review fixes ────────────────────────────────────────────────────────────
+
+test("only a hostname of the platform domain is a link", () => {
+  assert.deepEqual(
+    [
+      "api-shop.3istor.com",
+      "evil.com",
+      "3istor.com.evil.com",
+      "x.3istor.com/../",
+      "javascript:alert(1)//.3istor.com",
+      null,
+    ].map((h) => topology.isPlatformHostname(h)),
+    [true, false, false, false, false, false],
+  );
+});
+
+test("an edited HTTP probe must use the first port of the app", () => {
+  const service = plan.services.find((s) => s.name === "user-service");
+  const twoPorts = {
+    ...plan,
+    services: plan.services.map((s) =>
+      s === service ? { ...s, ports: [...s.ports, { name: "admin", port: 9000 }] } : s,
+    ),
+  };
+  const edits = reduce([
+    { type: "setProbe", app: "user-service", probe: { kind: "http", path: "/health", port: 9000 } },
+  ]);
+
+  assert.deepEqual(importPlan.planProblems(twoPorts, edits), [
+    { code: "probePort", app: "user-service" },
+  ]);
+});
+
+test("a probe path with a newline or a query is refused", () => {
+  const edits = reduce([
+    { type: "setProbe", app: "post-service", probe: { kind: "http", path: "/h?x=1", port: 8082 } },
+  ]);
+
+  assert.deepEqual(importPlan.planProblems(plan, edits), [
+    { code: "probePath", app: "post-service" },
+  ]);
+});
+
+test("the security auditor views the topology of any project but cannot link", () => {
+  const permissions = load("src/lib/permissions.ts");
+
+  assert.deepEqual(
+    [
+      permissions.canAsPlatform(["security-auditor"], "topology.view"),
+      permissions.canAsPlatform(["security-auditor"], "topology.link"),
+      permissions.canAsPlatform(["finops"], "topology.view"),
+    ],
+    [true, false, false],
+  );
+});

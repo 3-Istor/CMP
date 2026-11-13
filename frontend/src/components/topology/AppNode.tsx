@@ -14,7 +14,12 @@ import {
 import { useTranslations } from "next-intl";
 
 import { cn } from "@/lib/utils";
-import { shortDigest, type GraphNode, type GraphNodeKind } from "@/lib/topology";
+import {
+  isPlatformHostname,
+  shortDigest,
+  type GraphNode,
+  type GraphNodeKind,
+} from "@/lib/topology";
 import { INTERNET_SIZE, NODE_HEIGHT, NODE_WIDTH } from "./layout";
 
 export const KIND_ICON: Record<GraphNodeKind, LucideIcon> = {
@@ -145,7 +150,10 @@ export function AppNode({ data, selected }: NodeProps<AppFlowNode>) {
           </span>
         )}
       </div>
-      {node.hostname && (
+      {node.hostname && !isPlatformHostname(node.hostname) && (
+        <span className="truncate text-[11px] text-muted-foreground">{node.hostname}</span>
+      )}
+      {isPlatformHostname(node.hostname) && (
         <a
           href={`https://${node.hostname}`}
           target="_blank"

@@ -81,6 +81,16 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
 };
 
 /**
+ * What the security-auditor platform group reads on every project, whatever
+ * its project role. Mirrors backend routers/topology.py.
+ */
+const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(["topology.view"]);
+
+export function canAsPlatform(platformRoles: readonly string[], capability: Capability): boolean {
+  return platformRoles.includes("security-auditor") && AUDITOR_CAPABILITIES.has(capability);
+}
+
+/**
  * Return true if *role* holds *capability*.
  *
  * A null or undefined role, not loaded yet, or no access to this project,

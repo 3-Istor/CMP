@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   edgeActions,
   INTERNET_ID,
+  isPlatformHostname,
   shortDigest,
   type EdgeAction,
   type Graph,
@@ -71,7 +72,7 @@ export function TopologyTable({
                   {node.asleep ? t("asleep") : t(`health.${node.health ?? "unknown"}`)}
                 </td>
                 <td className={TD}>
-                  {node.hostname ? (
+                  {isPlatformHostname(node.hostname) ? (
                     <a
                       href={`https://${node.hostname}`}
                       target="_blank"
@@ -81,7 +82,7 @@ export function TopologyTable({
                       {node.hostname}
                     </a>
                   ) : (
-                    t("internal")
+                    (node.hostname ?? t("internal"))
                   )}
                 </td>
                 <td className={`${TD} font-mono text-xs`}>{shortDigest(node.digest) ?? "-"}</td>

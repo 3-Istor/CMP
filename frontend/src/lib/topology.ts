@@ -123,6 +123,19 @@ export function nodeRank(kind: GraphNodeKind, isPublic: boolean): number {
   return 3;
 }
 
+/** The platform domain apps are served under (backend registry_names.HOSTNAME_DOMAIN). */
+export const PLATFORM_DOMAIN = "3istor.com";
+const PLATFORM_HOSTNAME = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/;
+
+/** Only a hostname of the platform domain is rendered as a link. */
+export function isPlatformHostname(hostname: string | null): hostname is string {
+  return (
+    !!hostname &&
+    hostname.endsWith(`.${PLATFORM_DOMAIN}`) &&
+    PLATFORM_HOSTNAME.test(hostname)
+  );
+}
+
 export function shortDigest(digest: string | null): string | null {
   if (!digest) return null;
   const hex = digest.replace(/^sha256:/, "");
