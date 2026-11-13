@@ -357,11 +357,32 @@ def test_a_repository_outside_the_platform_organisation_is_listed_not_copied(
     apps = [{"github_repo_url": "https://github.com/acme/shop"}]
 
     # Act
-    asyncio.run(collectors.collect_repos(apps, repos, None, Bundle(tmp_path)))
+    asyncio.run(
+        collectors.collect_repos(apps, repos, no_token, Bundle(tmp_path))
+    )
 
     # Assert
     listing = json.loads((tmp_path / "git/repositories.json").read_text())
     assert repos.calls == [] and listing[0]["reason"] == "customer-owned"
+
+
+def test_repositories_are_read_with_a_read_only_token_limited_to_them():
+    # Arrange
+    calls = []
+
+    async def scoped(installation, repositories, permissions):
+        calls.append((repositories, permissions))
+        return "t"
+
+    # Act
+    with (
+        mock.patch.object(settings, "GITHUB_INSTALLATION_ID", "42"),
+        mock.patch.object(runner, "get_scoped_installation_token", scoped),
+    ):
+        asyncio.run(runner._github_token(["alpha-web"]))
+
+    # Assert
+    assert calls == [(["alpha-web"], {"contents": "read", "metadata": "read"})]
 
 
 def test_git_bundle_carries_every_branch_of_the_repository(tmp_path):

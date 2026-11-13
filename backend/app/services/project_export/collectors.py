@@ -8,6 +8,7 @@ import asyncio
 import importlib
 import json
 import pkgutil
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -255,32 +256,38 @@ def _repo_slug(url: str) -> str:
 async def collect_repos(
     apps: list[dict],
     archiver: RepoArchiver,
-    token: str | None,
+    token_for: Callable[[list[str]], Awaitable[str | None]],
     bundle: Bundle,
 ) -> None:
     """
     A bundle of every repository of the platform's GitHub organisation the
-    project's apps use. A repository elsewhere already belongs to the
-    customer: it is listed, not copied.
+    project's apps use, read with a token limited to those repositories. A
+    repository elsewhere already belongs to the customer: it is listed, not
+    copied.
     """
     org_prefix = f"https://github.com/{settings.GITHUB_ORG}/".lower()
     listing = []
-    for url in sorted(
+    urls = sorted(
         {a["github_repo_url"] for a in apps if a.get("github_repo_url")}
-    ):
+    )
+    owned = [
+        url
+        for url in urls
+        if url.lower().startswith("https://github.com/")
+        and not url.lower().startswith(org_prefix)
+    ]
+    listing = [
+        {"repository": url, "exported": False, "reason": "customer-owned"}
+        for url in owned
+    ]
+    to_copy = [url for url in urls if url not in owned]
+    token = (
+        await token_for([_repo_slug(url).split("/")[1] for url in to_copy])
+        if to_copy
+        else None
+    )
+    for url in to_copy:
         slug = _repo_slug(url)
-        lower = url.lower()
-        if lower.startswith("https://github.com/") and not lower.startswith(
-            org_prefix
-        ):
-            listing.append(
-                {
-                    "repository": url,
-                    "exported": False,
-                    "reason": "customer-owned",
-                }
-            )
-            continue
         rel = f"git/{slug.replace('/', '__')}.bundle"
         try:
             metadata = await asyncio.to_thread(

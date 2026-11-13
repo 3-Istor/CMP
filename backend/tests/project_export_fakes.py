@@ -269,5 +269,5 @@ def fake_sources(project: str, **overrides) -> Sources:
     return Sources(**{**defaults, **overrides})
 
 
-async def no_token() -> None:
+async def no_token(_repositories: list[str]) -> None:
     return None

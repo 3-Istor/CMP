@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.project import Project, TargetCloud
 from app.models.project_export import ProjectExport
-from app.services.github_service import get_installation_token
+from app.services.github_service import get_scoped_installation_token
 from app.services.project_export import collectors
 from app.services.project_export.bundle import Bundle
 from app.services.project_export.collectors import Sources
@@ -63,10 +63,15 @@ def platform_sources(cloud: TargetCloud) -> Sources:
     )
 
 
-async def _github_token() -> str | None:
+async def _github_token(repositories: list[str]) -> str | None:
+    """Read-only token on the org installation, for these repositories only."""
     if not settings.GITHUB_INSTALLATION_ID:
         return None
-    return await get_installation_token(settings.GITHUB_INSTALLATION_ID)
+    return await get_scoped_installation_token(
+        settings.GITHUB_INSTALLATION_ID,
+        repositories,
+        {"contents": "read", "metadata": "read"},
+    )
 
 
 def not_exported() -> list[dict]:
@@ -103,8 +108,9 @@ async def build(
         return await asyncio.to_thread(run)
 
     async def repos(apps: list[dict]) -> None:
-        token = await github_token()
-        await collectors.collect_repos(apps, sources.repos, token, bundle)
+        await collectors.collect_repos(
+            apps, sources.repos, github_token, bundle
+        )
 
     async def images(objects: list[dict]) -> None:
         collectors.collect_images(objects, bundle)
