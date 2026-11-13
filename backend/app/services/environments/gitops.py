@@ -7,6 +7,7 @@ from typing import Any
 from ruamel.yaml import YAML
 
 from app.models.deployment import Deployment
+from app.services import app_repo
 from app.services import app_security_data as security_data
 from app.services.environments import layout
 from app.services.github_service import (
@@ -47,13 +48,12 @@ def target_cloud(deployment: Deployment) -> str:
 
 
 def repo_of(deployment: Deployment) -> str:
-    if not deployment.github_repo_url:
-        raise GitOpsError("This app has no GitHub repository linked yet.")
-    return "/".join(
-        deployment.github_repo_url.rstrip("/")
-        .removesuffix(".git")
-        .split("/")[-2:]
-    )
+    try:
+        return app_repo.bound_repo(
+            deployment.github_repo_url, deployment.name, deployment.status
+        )
+    except app_repo.RepoNotBound as exc:
+        raise GitOpsError(str(exc)) from exc
 
 
 async def token_for(deployment: Deployment) -> str:

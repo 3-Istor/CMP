@@ -38,13 +38,15 @@ async def get_scorecard(
         )
 
     async def read_readme() -> str | None:
+        try:
+            repo = _extract_repo_full_name(deployment)
+        except HTTPException:
+            return None
         gh_token = await _get_github_token_for_deployment(deployment)
         try:
             content, _ = await get_file_content(
                 installation_token=gh_token,
-                repo_full_name=_extract_repo_full_name(
-                    deployment.github_repo_url or ""
-                ),
+                repo_full_name=repo,
                 file_path="README.md",
             )
         except FileNotInRepoError:
