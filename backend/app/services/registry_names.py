@@ -8,7 +8,7 @@ are applied here before a record is written. Keep both in sync.
 
 import re
 
-DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+DNS_LABEL = re.compile(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?")
 MAX_LABEL_LENGTH = 63
 FULLSTACK_COMPONENTS = ("frontend", "backend")
 HOSTNAME_DOMAIN = "3istor.com"
@@ -168,7 +168,7 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             f"app '{app_name}' gives staging namespace '{staging}' of "
             f"{len(staging)} characters, the limit is {MAX_LABEL_LENGTH}"
         )
-    elif not DNS_LABEL.match(namespace):
+    elif not DNS_LABEL.fullmatch(namespace):
         errors.append(
             f"app '{app_name}' gives namespace '{namespace}' which is "
             "not a valid DNS-1123 label (lowercase alphanumerics and '-' only)"

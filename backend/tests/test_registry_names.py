@@ -241,3 +241,11 @@ def test_check_app_accepts_an_app_whose_vault_roles_are_free():
     errors = check_app("shop", app("web"), [record("shop")])
 
     assert errors == []
+
+
+def test_check_app_name_refuses_a_namespace_with_a_trailing_newline():
+    from app.services.registry_names import check_app_name
+
+    errors = check_app_name("foo", "web\n")
+
+    assert any("not a valid DNS-1123 label" in error for error in errors)
