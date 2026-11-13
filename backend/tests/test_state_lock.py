@@ -188,3 +188,35 @@ def test_app_deployment_commands_release_a_lock_left_by_a_dead_pod(
         ["terraform", "force-unlock", "-force", LOCK_ID],
         ["terraform", "apply"],
     ]
+
+
+def test_apps_with_the_same_name_in_two_projects_get_separate_terraform_data_dirs(
+    tmp_path, monkeypatch
+):
+    # Arrange
+    monkeypatch.chdir(tmp_path)
+
+    # Act
+    first = TerraformExecutor(tmp_path, "web", "cnp/projects/proj-a/web")
+    second = TerraformExecutor(tmp_path, "web", "cnp/projects/proj-b/web")
+
+    # Assert
+    assert first.state_dir.resolve() != second.state_dir.resolve()
+
+
+def test_an_apps_staging_gets_its_own_terraform_data_dir(
+    tmp_path, monkeypatch
+):
+    # Arrange
+    monkeypatch.chdir(tmp_path)
+
+    # Act
+    app = TerraformExecutor(tmp_path, "web", "cnp/projects/proj-a/web")
+    staging = TerraformExecutor(
+        tmp_path, "web-staging", "cnp/projects/proj-a/web/staging"
+    )
+
+    # Assert
+    assert (app.state_dir / ".terraform").resolve() != (
+        staging.state_dir / ".terraform"
+    ).resolve()
