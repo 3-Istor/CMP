@@ -33,7 +33,7 @@ pillow = ">=11,<14"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.4.0"
-pylint = "^3.2.0"
+pylint = ">=3.2,<5.0"
 isort = "^5.13.0"
 
 [build-system]
