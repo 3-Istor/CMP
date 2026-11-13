@@ -23,7 +23,12 @@ from app.models.notification import Notification
 from app.models.project import Project
 from app.models.project_export import ProjectExport
 from app.routers import project_export as export_router
-from app.services import activity_sources, audit, keycloak_service
+from app.services import (
+    activity_sources,
+    audit,
+    keycloak_service,
+    vault_client,
+)
 from app.services.authz import assert_project_role
 from app.services.project_export import collectors, runner
 from app.services.project_export.bundle import MANIFEST, Bundle
@@ -31,10 +36,17 @@ from app.services.project_export.inventory import (
     EXCLUDED_TABLES,
     EXPORTED_TABLES,
 )
-from app.services.project_export.sources import GitRepoArchiver, LokiLogReader
+from app.services.project_export.sources import (
+    DatabaseRef,
+    GitRepoArchiver,
+    JobDumper,
+    LokiLogReader,
+    VaultSecretReader,
+    dump_job,
+)
 from tests.project_export_fakes import (
     FailingIdentity,
-    FakeSecrets,
+    FakeKube,
     FakeStore,
     fake_sources,
     no_token,
@@ -113,13 +125,12 @@ def _request() -> Request:
     )
 
 
-def _new_export(factory, include_values=False, status="pending") -> str:
+def _new_export(factory, status="pending") -> str:
     with factory() as session:
         row = ProjectExport(
             id="e1",
             project="alpha",
             requested_by="o1",
-            include_secret_values=include_values,
             status=status,
             created_at=datetime(2026, 11, 13),
             problems="[]",
@@ -290,36 +301,106 @@ def test_cluster_assigned_fields_and_controller_output_are_not_exported(
     )
 
 
-def test_secret_values_are_left_out_unless_the_owner_asks(factory, tmp_path):
+def test_vault_secrets_are_read_as_key_names_never_values():
     # Arrange
-    _new_export(factory, include_values=False)
+    names = mock.AsyncMock(return_value=["API_KEY"])
+    values = mock.AsyncMock(return_value={"API_KEY": "hunter2"})
+
+    # Act
+    with (
+        mock.patch.object(
+            vault_client, "list_paths", mock.AsyncMock(return_value=["shop"])
+        ),
+        mock.patch.object(vault_client, "read_key_names", names),
+        mock.patch.object(vault_client, "read_kv", values),
+    ):
+        result = asyncio.run(VaultSecretReader().read("alpha"))
+
+    # Assert
+    assert result == {"shop": ["API_KEY"]} and values.await_count == 0
+
+
+def test_the_manifest_says_where_the_secret_values_stay(factory, tmp_path):
+    # Arrange
+    _new_export(factory)
     store = FakeStore()
 
     # Act
-    _run(factory, store, secrets=FakeSecrets({"shop": {"API_KEY": "hunter2"}}))
+    _run(factory, store)
 
     # Assert
-    archive = _archive(store, tmp_path)
-    with tarfile.open(archive) as tar:
-        everything = b"".join(
-            tar.extractfile(m).read() for m in tar.getmembers() if m.isfile()
-        )
-    assert b"hunter2" not in everything and b"API_KEY" in everything
-
-
-def test_secret_values_are_exported_when_the_owner_asks(factory, tmp_path):
-    # Arrange
-    _new_export(factory, include_values=True)
-    store = FakeStore()
-
-    # Act
-    _run(factory, store, secrets=FakeSecrets({"shop": {"API_KEY": "hunter2"}}))
-
-    # Assert
-    values = json.loads(
-        _member(_archive(store, tmp_path), "secrets/values.json")
+    manifest = _manifest(_archive(store, tmp_path))
+    assert any(
+        "Vault" in entry["data"] and "members" in entry["reason"]
+        for entry in manifest["not_exported"]
     )
-    assert values == {"shop": {"API_KEY": "hunter2"}}
+
+
+def _ref() -> DatabaseRef:
+    return DatabaseRef(
+        namespace="alpha-shop",
+        cluster="shop-db",
+        database="shop",
+        secret="shop-secrets",
+        image="ghcr.io/cloudnative-pg/postgresql:18@sha256:" + "b" * 64,
+    )
+
+
+def test_the_dump_job_takes_the_database_password_from_its_own_namespace():
+    # Act
+    job = dump_job(_ref(), "cnp-export-x", "cnp-export-x", {"l": "v"})
+
+    # Assert
+    pod = job["spec"]["template"]["spec"]
+    env = {e["name"]: e for e in pod["containers"][0]["env"]}
+    assert (
+        env["PGPASSWORD"]["valueFrom"]["secretKeyRef"]["name"]
+        == "shop-secrets"
+        and "value" not in env["PGPASSWORD"]
+        and env["PGSSLMODE"]["value"] == "verify-full"
+        and pod["automountServiceAccountToken"] is False
+        and pod["containers"][0]["image"] == _ref().image
+        and pod["containers"][0]["securityContext"]["readOnlyRootFilesystem"]
+    )
+
+
+def test_a_database_is_dumped_by_a_job_and_everything_it_left_is_removed(
+    tmp_path,
+):
+    # Arrange
+    store = FakeStore()
+    kube = FakeKube(store)
+    dumper = JobDumper(kube, store, "e1abcdef", poll_seconds=0)
+
+    # Act
+    metadata = dumper.dump(_ref(), tmp_path / "dump.sql")
+
+    # Assert
+    assert (
+        (tmp_path / "dump.sql").read_bytes().startswith(b"CREATE TABLE")
+        and metadata["row_counts"] == {"public.t": 3}
+        and store.objects == {}
+        and {path.rsplit("/", 1)[-1] for path, _ in kube.deleted}
+        == {"jobs", "secrets"}
+    )
+
+
+def test_a_failed_dump_job_reports_why(tmp_path):
+    # Arrange
+    store = FakeStore()
+    dumper = JobDumper(
+        FakeKube(store, fail_with="FATAL: password authentication failed"),
+        store,
+        "e1abcdef",
+        poll_seconds=0,
+    )
+
+    # Act
+    with pytest.raises(RuntimeError) as exc:
+        dumper.dump(_ref(), tmp_path / "dump.sql")
+
+    # Assert
+    assert "password authentication failed" in str(exc.value)
 
 
 def test_an_object_key_escaping_the_archive_is_reported_not_written(
@@ -552,7 +633,6 @@ def _request_export(factory, token):
         ctx = assert_project_role(session, token, "alpha", ProjectRole.OWNER)
         return asyncio.run(
             export_router.request_export(
-                export_router.ExportRequest(),
                 ctx,
                 _request(),
                 BackgroundTasks(),

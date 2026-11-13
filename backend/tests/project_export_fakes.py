@@ -87,6 +87,8 @@ def sample_objects(project: str) -> dict[str, list[dict]]:
                 "metadata": {**meta, "name": "shop-db"},
                 "spec": {
                     "instances": 1,
+                    "imageName": "ghcr.io/cloudnative-pg/postgresql:18.6@sha256:"
+                    + "b" * 64,
                     "bootstrap": {
                         "initdb": {
                             "database": "shop",
@@ -202,7 +204,7 @@ class FakeBuckets:
 
 class FakeSecrets:
     def __init__(self, data: dict | None = None) -> None:
-        self.data = data if data is not None else {"shop": {"API_KEY": "v"}}
+        self.data = data if data is not None else {"shop": ["API_KEY"]}
 
     async def read(self, project: str) -> dict:
         return self.data
@@ -248,8 +250,14 @@ class FakeStore:
     def put(self, key: str, path: Path) -> None:
         self.objects[key] = path.read_bytes()
 
+    def fetch(self, key: str, path: Path) -> None:
+        path.write_bytes(self.objects[key])
+
     def link(self, key: str, seconds: int) -> str:
         return f"https://s3.test/{key}?X-Amz-Expires={seconds}"
+
+    def upload_link(self, key: str, seconds: int) -> str:
+        return f"put:{key}"
 
     def delete(self, key: str) -> None:
         self.deleted.append(key)
@@ -271,3 +279,56 @@ def fake_sources(project: str, **overrides) -> Sources:
 
 async def no_token(_repositories: list[str]) -> None:
     return None
+
+
+class FakeKube:
+    """
+    The API server and the dump Job: creating the Job "runs" it, writing
+    what the real script would upload through the two URLs in the Secret.
+    """
+
+    def __init__(self, store: FakeStore, fail_with: str | None = None) -> None:
+        self.store = store
+        self.fail_with = fail_with
+        self.created: list[dict] = []
+        self.deleted: list[tuple[str, dict]] = []
+        self.status: dict[str, dict] = {}
+
+    def create(self, path: str, body: dict) -> dict:
+        self.created.append(body)
+        if body["kind"] == "Secret":
+            self.urls = body["stringData"]
+        if body["kind"] == "Job":
+            name = body["metadata"]["name"]
+            if self.fail_with:
+                self.status[name] = {"failed": 1}
+            else:
+                put = {
+                    var: url.removeprefix("put:")
+                    for var, url in self.urls.items()
+                }
+                self.store.objects[put["DUMP_URL"]] = (
+                    b"CREATE TABLE t (id int);\n"
+                )
+                self.store.objects[put["COUNTS_URL"]] = b"public.t\t3\n"
+                self.status[name] = {"succeeded": 1}
+        return body
+
+    def get(self, path: str, params: dict | None = None) -> dict | None:
+        if path.endswith("/pods"):
+            message = self.fail_with or ""
+            return {
+                "items": [
+                    {
+                        "status": {
+                            "containerStatuses": [
+                                {"state": {"terminated": {"message": message}}}
+                            ]
+                        }
+                    }
+                ]
+            }
+        return {"status": self.status.get(path.rsplit("/", 1)[-1], {})}
+
+    def delete_collection(self, path: str, params: dict) -> None:
+        self.deleted.append((path, params))

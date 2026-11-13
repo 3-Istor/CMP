@@ -1,14 +1,17 @@
 """
 Restore drill, step 1: export a project from a fake platform.
 
-The CMP database (SQLite), the cluster, Vault, Keycloak and Loki are fakes;
-the database dump (pg_dump), the bucket copy (S3), the git bundle and the
-export bucket (Garage) are the real adapters against throwaway containers.
-Prints {"url", "sha256", "size"} of the stored archive as JSON.
+The CMP database (SQLite), the cluster listing, Vault, Keycloak and Loki are
+fakes. The database dump is the real dump Job, run in a kind cluster through
+``kubectl proxy`` against a TLS PostgreSQL there; the bucket copy (S3), the
+git bundle and the export bucket (Garage) are the real adapters against
+throwaway containers. Prints {"url", "sha256", "size"} of the archive as
+JSON.
 
     python -m tests.export_drill.make_fixture --work DIR
 
-Environment: SOURCE_PG_HOST/PORT/USER/PASSWORD, S3_ENDPOINT,
+Environment: KUBE_PROXY (kubectl proxy URL), DUMP_IMAGE (CNPG image the Job
+runs), S3_ENDPOINT, S3_INTERNAL_ENDPOINT (Garage as pods reach it),
 S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.
 """
 
@@ -23,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 import boto3
-import psycopg2
+import httpx
 from botocore.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -39,7 +42,7 @@ from app.services.project_export.collectors import Sources, load_models
 from app.services.project_export.sources import (
     BucketRef,
     GitRepoArchiver,
-    PgDumper,
+    JobDumper,
     S3BucketReader,
     S3ExportStore,
 )
@@ -52,7 +55,6 @@ from tests.project_export_fakes import (
 )
 
 PROJECT = "drill"
-DATABASE = "shop"
 SOURCE_BUCKET = "shop-media"
 EXPORT_BUCKET = "cnp-project-exports"
 OBJECTS = {
@@ -69,36 +71,26 @@ def _env(name: str) -> str:
     return value
 
 
-def _pg(dbname: str) -> dict:
-    return {
-        "host": _env("SOURCE_PG_HOST"),
-        "port": int(_env("SOURCE_PG_PORT")),
-        "user": _env("SOURCE_PG_USER"),
-        "password": _env("SOURCE_PG_PASSWORD"),
-        "dbname": dbname,
-    }
+class ProxyKubeApi:
+    """The API server through ``kubectl proxy``, which adds the credentials."""
 
+    def __init__(self, base: str) -> None:
+        self.client = httpx.Client(base_url=base, timeout=30)
 
-def seed_database() -> None:
-    admin = psycopg2.connect(**_pg("postgres"))
-    admin.autocommit = True
-    with admin.cursor() as cursor:
-        cursor.execute(f"DROP DATABASE IF EXISTS {DATABASE}")
-        cursor.execute(f"CREATE DATABASE {DATABASE}")
-    admin.close()
-    with psycopg2.connect(**_pg(DATABASE)) as conn, conn.cursor() as cursor:
-        cursor.execute(
-            "CREATE TABLE customers (id serial PRIMARY KEY, name text, "
-            "created_at timestamptz DEFAULT now());"
-            "CREATE TABLE orders (id serial PRIMARY KEY, customer_id int "
-            "REFERENCES customers(id), total numeric(10,2), note jsonb);"
-            "INSERT INTO customers (name) SELECT 'client ' || g "
-            "FROM generate_series(1, 250) g;"
-            "INSERT INTO orders (customer_id, total, note) SELECT "
-            "1 + g % 250, g * 1.5, jsonb_build_object('n', g) "
-            "FROM generate_series(1, 1000) g;"
-        )
-    conn.close()
+    def get(self, path: str, params: dict | None = None) -> dict | None:
+        response = self.client.get(path, params=params)
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    def create(self, path: str, body: dict) -> dict:
+        response = self.client.post(path, json=body)
+        response.raise_for_status()
+        return response.json()
+
+    def delete_collection(self, path: str, params: dict) -> None:
+        self.client.delete(path, params=params).raise_for_status()
 
 
 def _s3():
@@ -185,7 +177,6 @@ def seed_cmp(repo: str):
                 id="drill",
                 project=PROJECT,
                 requested_by="owner",
-                include_secret_values=False,
                 status="pending",
                 created_at=runner.utcnow(),
                 problems="[]",
@@ -202,7 +193,6 @@ def main() -> None:
     work.mkdir(parents=True, exist_ok=True)
     os.chdir(work)
 
-    seed_database()
     seed_bucket()
     factory = seed_cmp(seed_repository(work))
 
@@ -214,21 +204,28 @@ def main() -> None:
         access_key=_env("S3_ACCESS_KEY_ID"),
         secret_key=_env("S3_SECRET_ACCESS_KEY"),
     )
-    sources = Sources(
-        cluster=FakeCluster(PROJECT),
-        repos=GitRepoArchiver(),
-        databases=PgDumper(lambda ref: _pg(ref.database)),
-        buckets=S3BucketReader(lambda _project, _objects: [bucket]),
-        secrets=FakeSecrets(),
-        identity=FakeIdentity(),
-        logs=FakeLogs(),
-    )
+    cluster = FakeCluster(PROJECT)
+    for obj in cluster.objects(f"{PROJECT}-shop"):
+        if obj["kind"] == "Cluster":
+            obj["spec"]["imageName"] = _env("DUMP_IMAGE")
     store = S3ExportStore(
         _env("S3_ENDPOINT"),
         EXPORT_BUCKET,
         _env("S3_ACCESS_KEY_ID"),
         _env("S3_SECRET_ACCESS_KEY"),
         "garage",
+        internal_endpoint=_env("S3_INTERNAL_ENDPOINT"),
+    )
+    sources = Sources(
+        cluster=cluster,
+        repos=GitRepoArchiver(),
+        databases=JobDumper(
+            ProxyKubeApi(_env("KUBE_PROXY")), store, "drill", poll_seconds=2
+        ),
+        buckets=S3BucketReader(lambda _project, _objects: [bucket]),
+        secrets=FakeSecrets(),
+        identity=FakeIdentity(),
+        logs=FakeLogs(),
     )
     asyncio.run(
         runner.run_export(

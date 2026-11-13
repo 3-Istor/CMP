@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     EXPORT_S3_ACCESS_KEY_ID: str = ""
     EXPORT_S3_SECRET_ACCESS_KEY: str = ""
     EXPORT_S3_REGION: str = "garage"
+    # The store as dump Jobs reach it from inside the cluster (its Service),
+    # so database dumps never leave the cluster. Empty: EXPORT_S3_ENDPOINT.
+    EXPORT_S3_INTERNAL_ENDPOINT: str = ""
     EXPORT_RETENTION_DAYS: int = 30
     EXPORT_LINK_MAX_SECONDS: int = 7 * 24 * 3600
     # Log history exported, bounded by the Loki retention anyway.

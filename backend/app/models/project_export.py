@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -18,7 +18,6 @@ class ProjectExport(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     project: Mapped[str] = mapped_column(String(100), index=True)
     requested_by: Mapped[str] = mapped_column(String(255))
-    include_secret_values: Mapped[bool] = mapped_column(Boolean, default=False)
     # pending, running, ready, partial, failed, expired
     status: Mapped[str] = mapped_column(String(16), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)

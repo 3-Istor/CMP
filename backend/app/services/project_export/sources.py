@@ -3,16 +3,18 @@ Adapters between the export and the live platform: the cluster, GitHub,
 CloudNativePG, the project's buckets, Vault, Keycloak and Loki.
 
 Each is a small class behind a Protocol, so tests and the restore drill run
-the export against fakes, or against a plain Postgres and a Garage container,
+the export against fakes, or against a kind cluster and a Garage container,
 without platform credentials. All of them are blocking except the Vault and
 Loki readers; the collectors call the blocking ones off the event loop.
 """
 
 import base64
+import hashlib
 import os
 import re
 import subprocess
 import tempfile
+import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -20,9 +22,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import boto3
-import psycopg2
 from botocore.config import Config
-from psycopg2 import sql
 
 from app.core.config import settings
 from app.models.project import TargetCloud
@@ -32,7 +32,12 @@ from app.services import (
     keycloak_service,
     vault_client,
 )
-from app.services.kube_client import kube_get, kube_list
+from app.services.kube_client import (
+    kube_create,
+    kube_delete_collection,
+    kube_get,
+    kube_list,
+)
 
 PROJECT_LABEL = "cnp.3istor.com/project"
 
@@ -68,6 +73,8 @@ class DatabaseRef:
     database: str
     # Secret holding the owner's username and password.
     secret: str
+    # The cluster's own image: pg_dump of the server's exact version.
+    image: str
 
 
 @dataclass(frozen=True)
@@ -109,7 +116,7 @@ class BucketReader(Protocol):
 
 
 class SecretReader(Protocol):
-    async def read(self, project: str) -> dict[str, dict[str, Any]]: ...
+    async def read(self, project: str) -> dict[str, list[str]]: ...
 
 
 class IdentityReader(Protocol):
@@ -131,7 +138,11 @@ class LogReader(Protocol):
 class ExportStore(Protocol):
     def put(self, key: str, path: Path) -> None: ...
 
+    def fetch(self, key: str, path: Path) -> None: ...
+
     def link(self, key: str, seconds: int) -> str: ...
+
+    def upload_link(self, key: str, seconds: int) -> str: ...
 
     def delete(self, key: str) -> None: ...
 
@@ -245,100 +256,255 @@ class GitRepoArchiver:
 # PostgreSQL
 # ---------------------------------------------------------------------------
 
+EXPORT_LABEL = "cnp.3istor.com/export"
+DUMP_TIMEOUT_SECONDS = 3600
 
-class PgDumper:
+# Runs in the database's own image, inside the project namespace: the CMP
+# never connects to a project database nor reads its password. pg_dump and
+# psql read PG* from the environment; the two files go to the export bucket
+# through presigned PUT URLs good for this export only.
+DUMP_SCRIPT = r"""set -eu
+pg_dump --format=plain --no-owner --no-privileges --file=/work/dump.sql
+psql -AtX -v ON_ERROR_STOP=1 -c "SELECT format('SELECT %L, count(*) FROM %I.%I;', schemaname || '.' || tablename, schemaname, tablename) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema') ORDER BY 1" > /work/count.sql
+psql -AtX -v ON_ERROR_STOP=1 -F "$(printf '\t')" -f /work/count.sql > /work/counts.tsv
+python3 - <<'PY'
+import os, urllib.request
+for path, var in (("/work/dump.sql", "DUMP_URL"), ("/work/counts.tsv", "COUNTS_URL")):
+    with open(path, "rb") as body:
+        request = urllib.request.Request(
+            os.environ[var], data=body, method="PUT",
+            headers={"Content-Length": str(os.path.getsize(path))},
+        )
+        urllib.request.urlopen(request, timeout=600).close()
+PY
+"""
+
+
+class KubeApi(Protocol):
+    def get(self, path: str, params: dict | None = None) -> dict | None: ...
+
+    def create(self, path: str, body: dict) -> dict: ...
+
+    def delete_collection(self, path: str, params: dict) -> None: ...
+
+
+class ClusterKubeApi:
+    """The CMP's own identity on the project's cluster."""
+
+    def __init__(self, cloud: TargetCloud) -> None:
+        self.cloud = cloud
+
+    def get(self, path: str, params: dict | None = None) -> dict | None:
+        return kube_get(path, params, cloud=self.cloud)
+
+    def create(self, path: str, body: dict) -> dict:
+        return kube_create(path, body, cloud=self.cloud)
+
+    def delete_collection(self, path: str, params: dict) -> None:
+        kube_delete_collection(path, params, cloud=self.cloud)
+
+
+def _env_secret(name: str, secret: str, key: str) -> dict:
+    return {
+        "name": name,
+        "valueFrom": {"secretKeyRef": {"name": secret, "key": key}},
+    }
+
+
+def dump_job(
+    ref: DatabaseRef, name: str, urls_secret: str, labels: dict
+) -> dict:
     """
-    A plain SQL dump with ``pg_dump``, restorable by ``psql`` into any
-    PostgreSQL, plus the exact row count of every table so a restore can be
-    checked. *resolve* gives the connection (host, port, dbname, user,
-    password) of a :class:`DatabaseRef`.
+    The Job that dumps one CNPG database. TLS is verified against the
+    cluster's own CA; the pod runs with the restricted profile, no service
+    account token and a read-only root filesystem.
+    """
+    env = [
+        {"name": "PGHOST", "value": f"{ref.cluster}-rw"},
+        {"name": "PGPORT", "value": "5432"},
+        {"name": "PGDATABASE", "value": ref.database},
+        {"name": "PGSSLMODE", "value": "verify-full"},
+        {"name": "PGSSLROOTCERT", "value": "/ca/ca.crt"},
+        {"name": "HOME", "value": "/work"},
+        {"name": "TMPDIR", "value": "/work"},
+        _env_secret("PGUSER", ref.secret, "username"),
+        _env_secret("PGPASSWORD", ref.secret, "password"),
+        _env_secret("DUMP_URL", urls_secret, "DUMP_URL"),
+        _env_secret("COUNTS_URL", urls_secret, "COUNTS_URL"),
+    ]
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": name,
+            "namespace": ref.namespace,
+            "labels": labels,
+        },
+        "spec": {
+            "backoffLimit": 0,
+            "activeDeadlineSeconds": DUMP_TIMEOUT_SECONDS,
+            "ttlSecondsAfterFinished": 600,
+            "template": {
+                "metadata": {"labels": labels},
+                "spec": {
+                    "restartPolicy": "Never",
+                    "automountServiceAccountToken": False,
+                    "enableServiceLinks": False,
+                    "securityContext": {
+                        "runAsNonRoot": True,
+                        "runAsUser": 26,
+                        "runAsGroup": 26,
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                    },
+                    "containers": [
+                        {
+                            "name": "pg-dump",
+                            "image": ref.image,
+                            "command": ["sh", "-c", DUMP_SCRIPT],
+                            "env": env,
+                            "resources": {
+                                "requests": {"cpu": "50m", "memory": "128Mi"},
+                                "limits": {"memory": "1Gi"},
+                            },
+                            "securityContext": {
+                                "allowPrivilegeEscalation": False,
+                                "readOnlyRootFilesystem": True,
+                                "capabilities": {"drop": ["ALL"]},
+                            },
+                            "terminationMessagePolicy": "FallbackToLogsOnError",
+                            "volumeMounts": [
+                                {"name": "work", "mountPath": "/work"},
+                                {
+                                    "name": "ca",
+                                    "mountPath": "/ca",
+                                    "readOnly": True,
+                                },
+                            ],
+                        }
+                    ],
+                    "volumes": [
+                        {"name": "work", "emptyDir": {}},
+                        {
+                            "name": "ca",
+                            "secret": {
+                                "secretName": f"{ref.cluster}-ca",
+                                "items": [{"key": "ca.crt", "path": "ca.crt"}],
+                            },
+                        },
+                    ],
+                },
+            },
+        },
+    }
+
+
+class JobDumper:
+    """
+    A plain SQL dump of a CNPG database, made by a short-lived Job in the
+    project namespace, plus the exact row count of every table so a restore
+    can be checked.
+
+    Least privilege: the CMP creates a Job and a Secret holding two presigned
+    PUT URLs (one object each, this export only, one hour), then fetches the
+    two objects from its own bucket. It needs no network path to the
+    database, never sees its password, and needs no pods/exec or pods/log.
     """
 
-    def __init__(self, resolve: Callable[[DatabaseRef], dict]) -> None:
-        self.resolve = resolve
+    def __init__(
+        self,
+        kube: KubeApi,
+        store: ExportStore,
+        export_id: str,
+        poll_seconds: float = 5,
+    ) -> None:
+        self.kube = kube
+        self.store = store
+        self.export_id = export_id
+        self.poll_seconds = poll_seconds
 
     def dump(self, ref: DatabaseRef, dest: Path) -> dict:
-        conn = self.resolve(ref)
-        result = subprocess.run(
-            [
-                "pg_dump",
-                "--format=plain",
-                "--no-owner",
-                "--no-privileges",
-                f"--host={conn['host']}",
-                f"--port={conn['port']}",
-                f"--username={conn['user']}",
-                f"--dbname={conn['dbname']}",
-                f"--file={dest}",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=3600,
-            # Through the environment, never argv: argv shows in ps.
-            env={**os.environ, "PGPASSWORD": conn["password"]},
-            check=False,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"pg_dump failed: {result.stderr.strip()[-300:]}"
-            )
-        return {
-            "database": conn["dbname"],
-            "row_counts": _row_counts(conn),
+        if not ref.image:
+            raise RuntimeError(f"{ref.cluster}: no imageName on the Cluster")
+        digest = hashlib.sha256(ref.cluster.encode()).hexdigest()[:8]
+        name = f"cnp-export-{self.export_id[:8]}-{digest}"
+        prefix = f"tmp/{self.export_id}/{ref.namespace}/{ref.cluster}"
+        keys = {
+            "DUMP_URL": f"{prefix}/dump.sql",
+            "COUNTS_URL": f"{prefix}/counts.tsv",
         }
+        labels = {EXPORT_LABEL: self.export_id}
+        core = f"/api/v1/namespaces/{ref.namespace}"
+        jobs = f"/apis/batch/v1/namespaces/{ref.namespace}/jobs"
+        try:
+            self.kube.create(
+                f"{core}/secrets",
+                {
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": {"name": name, "labels": labels},
+                    "type": "Opaque",
+                    "stringData": {
+                        var: self.store.upload_link(key, DUMP_TIMEOUT_SECONDS)
+                        for var, key in keys.items()
+                    },
+                },
+            )
+            self.kube.create(jobs, dump_job(ref, name, name, labels))
+            self._wait(core, jobs, name)
+            self.store.fetch(keys["DUMP_URL"], dest)
+            with tempfile.TemporaryDirectory() as work:
+                counts = Path(work) / "counts.tsv"
+                self.store.fetch(keys["COUNTS_URL"], counts)
+                row_counts = _parse_counts(counts.read_text())
+        finally:
+            selector = {"labelSelector": f"{EXPORT_LABEL}={self.export_id}"}
+            self.kube.delete_collection(
+                jobs, {**selector, "propagationPolicy": "Background"}
+            )
+            self.kube.delete_collection(f"{core}/secrets", selector)
+            for key in keys.values():
+                try:
+                    self.store.delete(key)
+                except Exception:  # pylint: disable=broad-except
+                    pass
+        return {"database": ref.database, "row_counts": row_counts}
+
+    def _wait(self, core: str, jobs: str, name: str) -> None:
+        deadline = time.monotonic() + DUMP_TIMEOUT_SECONDS + 60
+        while time.monotonic() < deadline:
+            status = (self.kube.get(f"{jobs}/{name}") or {}).get(
+                "status"
+            ) or {}
+            if status.get("succeeded"):
+                return
+            if status.get("failed"):
+                raise RuntimeError(f"dump job failed: {self._why(core, name)}")
+            time.sleep(self.poll_seconds)
+        raise RuntimeError("dump job timed out")
+
+    def _why(self, core: str, name: str) -> str:
+        pods = self.kube.get(
+            f"{core}/pods", {"labelSelector": f"job-name={name}"}
+        )
+        for pod in (pods or {}).get("items", []):
+            for container in (pod.get("status") or {}).get(
+                "containerStatuses", []
+            ):
+                terminated = (container.get("state") or {}).get(
+                    "terminated"
+                ) or {}
+                if terminated.get("message"):
+                    return terminated["message"].strip()[-300:]
+        return "no message"
 
 
-def _row_counts(conn: dict) -> dict[str, int]:
+def _parse_counts(text: str) -> dict[str, int]:
     counts = {}
-    with psycopg2.connect(
-        host=conn["host"],
-        port=conn["port"],
-        dbname=conn["dbname"],
-        user=conn["user"],
-        password=conn["password"],
-    ) as connection, connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT table_schema, table_name FROM information_schema.tables "
-            "WHERE table_type = 'BASE TABLE' AND table_schema NOT IN "
-            "('pg_catalog', 'information_schema') ORDER BY 1, 2"
-        )
-        for schema, table in cursor.fetchall():
-            cursor.execute(
-                sql.SQL("SELECT count(*) FROM {}.{}").format(
-                    sql.Identifier(schema), sql.Identifier(table)
-                )
-            )
-            counts[f"{schema}.{table}"] = cursor.fetchone()[0]
-    connection.close()
+    for line in text.splitlines():
+        if line:
+            table, _, count = line.partition("\t")
+            counts[table] = int(count)
     return counts
-
-
-def cnpg_resolver(cloud: TargetCloud) -> Callable[[DatabaseRef], dict]:
-    """
-    The owner's connection to a CNPG cluster, from the secret the chart
-    bootstraps it with. Needs the CMP to reach ``<cluster>-rw`` on 5432,
-    which the project network policies do not allow yet.
-    """
-
-    def resolve(ref: DatabaseRef) -> dict:
-        secret = kube_get(
-            f"/api/v1/namespaces/{ref.namespace}/secrets/{ref.secret}",
-            cloud=cloud,
-        )
-        data = (secret or {}).get("data") or {}
-        if "username" not in data or "password" not in data:
-            raise RuntimeError(
-                f"no credentials in {ref.namespace}/{ref.secret}"
-            )
-        return {
-            "host": f"{ref.cluster}-rw.{ref.namespace}.svc.cluster.local",
-            "port": 5432,
-            "dbname": ref.database,
-            "user": base64.b64decode(data["username"]).decode(),
-            "password": base64.b64decode(data["password"]).decode(),
-        }
-
-    return resolve
 
 
 # ---------------------------------------------------------------------------
@@ -453,9 +619,17 @@ class S3ExportStore:
         access_key: str,
         secret_key: str,
         region: str,
+        internal_endpoint: str = "",
     ) -> None:
         self.bucket = bucket
         self.client = _s3(endpoint, access_key, secret_key, region)
+        # Upload links are used by dump Jobs inside the cluster, which reach
+        # the store by its Service; download links by the customer.
+        self.internal = (
+            _s3(internal_endpoint, access_key, secret_key, region)
+            if internal_endpoint
+            else self.client
+        )
 
     @classmethod
     def from_settings(cls) -> "S3ExportStore":
@@ -465,6 +639,7 @@ class S3ExportStore:
             settings.EXPORT_S3_ACCESS_KEY_ID,
             settings.EXPORT_S3_SECRET_ACCESS_KEY,
             settings.EXPORT_S3_REGION,
+            settings.EXPORT_S3_INTERNAL_ENDPOINT,
         )
 
     def put(self, key: str, path: Path) -> None:
@@ -478,6 +653,16 @@ class S3ExportStore:
     def link(self, key: str, seconds: int) -> str:
         return self.client.generate_presigned_url(
             "get_object",
+            Params={"Bucket": self.bucket, "Key": key},
+            ExpiresIn=seconds,
+        )
+
+    def fetch(self, key: str, path: Path) -> None:
+        self.client.download_file(self.bucket, key, str(path))
+
+    def upload_link(self, key: str, seconds: int) -> str:
+        return self.internal.generate_presigned_url(
+            "put_object",
             Params={"Bucket": self.bucket, "Key": key},
             ExpiresIn=seconds,
         )
@@ -499,12 +684,16 @@ def export_store_configured() -> bool:
 
 
 class VaultSecretReader:
-    """The project's KV v2 mount, ``project-<name>``."""
+    """
+    The secret paths of the project's KV v2 mount, ``project-<name>``, and
+    their key names. Never the values: they stay in Vault, readable by the
+    project's members, for the whole transition.
+    """
 
-    async def read(self, project: str) -> dict[str, dict[str, Any]]:
+    async def read(self, project: str) -> dict[str, list[str]]:
         mount = f"project-{project}"
         return {
-            path: await vault_client.read_kv(mount, path)
+            path: await vault_client.read_key_names(mount, path)
             for path in await vault_client.list_paths(mount)
         }
 

@@ -32,17 +32,11 @@ from app.services.step_up import assert_step_up
 router = APIRouter(prefix="/projects", tags=["Project export"])
 
 
-class ExportRequest(BaseModel):
-    # Values of the project's Vault secrets, on top of their names.
-    include_secret_values: bool = False
-
-
 class ExportRead(BaseModel):
     id: str
     project: str
     status: str
     requested_by: str
-    include_secret_values: bool
     created_at: datetime
     finished_at: datetime | None
     expires_at: datetime | None
@@ -63,7 +57,6 @@ def _read(row: ProjectExport) -> ExportRead:
         project=row.project,
         status=row.status,
         requested_by=row.requested_by,
-        include_secret_values=row.include_secret_values,
         created_at=row.created_at,
         finished_at=row.finished_at,
         expires_at=row.expires_at,
@@ -82,7 +75,6 @@ def _export(db: Session, project: str, export_id: str) -> ProjectExport:
 
 @router.post("/{project_name}/export", status_code=202)
 async def request_export(
-    payload: ExportRequest,
     ctx: RequireOwner,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -118,7 +110,6 @@ async def request_export(
         id=token_source.token_hex(16),
         project=ctx.project_name,
         requested_by=ctx.username,
-        include_secret_values=payload.include_secret_values,
         status="pending",
         created_at=runner.utcnow(),
         problems="[]",

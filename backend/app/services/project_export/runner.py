@@ -23,16 +23,16 @@ from app.services.project_export.bundle import Bundle
 from app.services.project_export.collectors import Sources
 from app.services.project_export.inventory import EXCLUDED_TABLES, NOT_EXPORTED
 from app.services.project_export.sources import (
+    ClusterKubeApi,
     ExportStore,
     GitRepoArchiver,
+    JobDumper,
     KeycloakIdentityReader,
     KubeClusterReader,
     LokiLogReader,
-    PgDumper,
     S3BucketReader,
     S3ExportStore,
     VaultSecretReader,
-    cnpg_resolver,
     export_store_configured,
     obc_buckets,
 )
@@ -51,11 +51,13 @@ def object_key(row: ProjectExport) -> str:
     return f"exports/{row.project}/{row.id}.tar.gz"
 
 
-def platform_sources(cloud: TargetCloud) -> Sources:
+def platform_sources(
+    cloud: TargetCloud, store: ExportStore, export_id: str
+) -> Sources:
     return Sources(
         cluster=KubeClusterReader(cloud),
         repos=GitRepoArchiver(),
-        databases=PgDumper(cnpg_resolver(cloud)),
+        databases=JobDumper(ClusterKubeApi(cloud), store, export_id),
         buckets=S3BucketReader(obc_buckets(cloud)),
         secrets=VaultSecretReader(),
         identity=KeycloakIdentityReader(),
@@ -133,9 +135,7 @@ async def build(
     )
     await step(
         "vault",
-        collectors.collect_secrets(
-            project, row.include_secret_values, sources.secrets, bundle
-        ),
+        collectors.collect_secrets(project, sources.secrets, bundle),
     )
     await step(
         "keycloak",
@@ -157,7 +157,6 @@ async def build(
             "export_id": row.id,
             "project": project,
             "created_at": row.created_at.isoformat() + "Z",
-            "include_secret_values": row.include_secret_values,
         },
         not_exported(),
     )
@@ -188,7 +187,7 @@ async def run_export(
         cloud = _cloud(session, row.project)
     try:
         store = store or S3ExportStore.from_settings()
-        sources = sources or platform_sources(cloud)
+        sources = sources or platform_sources(cloud, store, export_id)
         with tempfile.TemporaryDirectory(prefix="cnp-export-") as work:
             bundle = await build(
                 row,

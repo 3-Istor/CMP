@@ -324,15 +324,15 @@ def database_refs(objects: list[dict]) -> list[DatabaseRef]:
         if obj.get("kind") != "Cluster" or group != "postgresql.cnpg.io":
             continue
         name = obj["metadata"]["name"]
-        initdb = ((obj.get("spec") or {}).get("bootstrap") or {}).get(
-            "initdb"
-        ) or {}
+        spec = obj.get("spec") or {}
+        initdb = (spec.get("bootstrap") or {}).get("initdb") or {}
         refs.append(
             DatabaseRef(
                 namespace=obj["metadata"]["namespace"],
                 cluster=name,
                 database=initdb.get("database", "app"),
                 secret=(initdb.get("secret") or {}).get("name", f"{name}-app"),
+                image=spec.get("imageName", ""),
             )
         )
     return refs
@@ -403,26 +403,19 @@ async def collect_buckets(
 
 
 async def collect_secrets(
-    project: str,
-    include_values: bool,
-    reader: SecretReader,
-    bundle: Bundle,
+    project: str, reader: SecretReader, bundle: Bundle
 ) -> None:
+    """
+    Secret paths and key names. The values stay in Vault, where the
+    project's members read them (admins write) for the whole transition.
+    """
     secrets = await reader.read(project)
-    source = f"vault:project-{project}"
     bundle.add_json(
         "secrets/names.json",
-        {path: sorted(data) for path, data in sorted(secrets.items())},
+        {path: sorted(keys) for path, keys in sorted(secrets.items())},
         item_type="vault.secret-names",
-        source=source,
+        source=f"vault:project-{project}",
     )
-    if include_values:
-        bundle.add_json(
-            "secrets/values.json",
-            secrets,
-            item_type="vault.secret-values",
-            source=source,
-        )
 
 
 async def collect_identity(

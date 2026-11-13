@@ -24,7 +24,6 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), primary_key=True),
         sa.Column("project", sa.String(100), nullable=False),
         sa.Column("requested_by", sa.String(255), nullable=False),
-        sa.Column("include_secret_values", sa.Boolean(), nullable=False),
         sa.Column("status", sa.String(16), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("finished_at", sa.DateTime(), nullable=True),

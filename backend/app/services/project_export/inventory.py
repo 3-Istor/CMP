@@ -123,6 +123,16 @@ EXCLUDED_TABLES: dict[str, tuple[str, str]] = {
 # reason. The archive's manifest repeats it under "not_exported".
 NOT_EXPORTED: list[dict[str, str]] = [
     {
+        "data": "Values of the project's Vault secrets",
+        "owner": "customer",
+        "reason": (
+            "Paths and key names are in secrets/names.json. The values stay "
+            "in Vault (project-<name>), readable by the project's members "
+            "and writable by its admins for the whole transition: an archive "
+            "behind a bearer link is no place for them."
+        ),
+    },
+    {
         "data": "Container images (GHCR)",
         "owner": "customer",
         "reason": (
