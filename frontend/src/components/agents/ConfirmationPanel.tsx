@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { decideAgentConfirmation, getAgentConfirmation } from "@/lib/api";
 import type { AgentConfirmation } from "@/types";
 
@@ -81,7 +81,20 @@ export function ConfirmationPanel({
             <dd>{new Date(item.expires_at).toLocaleTimeString(locale)}</dd>
           </dl>
 
-          {item.status === "pending" ? (
+          {item.status === "pending" && item.review_link ? (
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => decide("deny")}
+              >
+                {t("confirmation.decline")}
+              </Button>
+              <Link href={item.review_link} className={buttonVariants()}>
+                {t("confirmation.review")}
+              </Link>
+            </div>
+          ) : item.status === "pending" ? (
             <div className="mt-6 grid grid-cols-2 gap-3">
               <Button
                 variant="outline"

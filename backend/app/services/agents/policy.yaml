@@ -29,6 +29,15 @@ actions:
   release.abort:        {sandbox: allow, demo: allow, standard: allow, critical: ask}
   release.settings:     {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   app.delete:           {sandbox: ask,   demo: ask,   standard: deny,  critical: deny}
+  # Repository import (CNP-243). An analysis only reads the repository and
+  # deploys nothing; on a critical project the user still says yes. The
+  # plan an assistant proposes is applied by a person in the CMP, with a
+  # passkey: repository content the assistant read may carry a prompt
+  # injection (D19). Links between apps open network paths.
+  import.analyze:       {sandbox: allow, demo: allow, standard: allow, critical: ask}
+  import.apply:         {sandbox: confirm, demo: confirm, standard: confirm, critical: confirm}
+  app.link:             {sandbox: confirm, demo: confirm, standard: confirm, critical: confirm}
+  app.unlink:           {sandbox: confirm, demo: confirm, standard: confirm, critical: confirm}
 
 # While an alert fires on the app, stopping or retrying a release is never
 # slowed down: whoever is putting the fire out goes first.
