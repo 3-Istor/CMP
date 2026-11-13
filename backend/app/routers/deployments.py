@@ -215,6 +215,16 @@ async def create_deployment(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
+    if (
+        payload.template_id == "k3s-gitops-app"
+        and app_repo.is_platform_repo_name(payload.name)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{payload.name}' is the name of a platform "
+            "repository: choose another app name.",
+        )
+
     fields = [f.model_dump() for f in template.fields]
     try:
         app_config = app_inputs.validate_request(
@@ -226,12 +236,6 @@ async def create_deployment(
     app_config["project_name"] = project_name = payload.project_id
 
     if payload.template_id == "k3s-gitops-app":
-        if app_repo.is_platform_repo_name(payload.name):
-            raise HTTPException(
-                status_code=409,
-                detail=f"'{payload.name}' is the name of a platform "
-                "repository: choose another app name.",
-            )
         # Forced from the DB: the Vault role mount depends on it, and a project
         # admin must not pick another cloud's mount.
         project_row = (

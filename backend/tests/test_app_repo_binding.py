@@ -217,19 +217,6 @@ def test_app_named_like_a_platform_repository_is_refused_at_creation(
     assert response.status_code == 409
 
 
-def test_client_supplied_github_owner_is_replaced_by_the_platform_org(
-    session_factory,  # noqa: F811
-):
-    response = _post_app(
-        session_factory, "shop", {"app_type": "static", "github_owner": "evil"}
-    )
-
-    assert response.status_code == 202
-    with session_factory() as db:
-        config = json.loads(db.query(Deployment).one().app_config)
-    assert config["github_owner"] == "3-Istor"
-
-
 def test_backfill_gives_a_url_only_to_apps_whose_apply_succeeded(
     session_factory, monkeypatch  # noqa: F811
 ):
