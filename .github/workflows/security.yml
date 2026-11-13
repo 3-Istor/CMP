@@ -49,3 +49,47 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy.sarif
+
+  # Evidence for the RGPD Art. 30 register (cnp-docs compliance/rgpd-registre):
+  # which personal data the code handles and where it goes. A report, never a
+  # gate: a new detection is for a person to classify, not a reason to block.
+  bearer-privacy:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      BEARER_VERSION: 2.1.3
+      BEARER_SHA256: 974d4ad7bb71bc578675684d444e345e8fbad91c85557aac035406ef5cc04c68
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bearer CLI
+        run: |
+          archive="bearer_${BEARER_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/Bearer/bearer/releases/download/v${BEARER_VERSION}/${archive}"
+          echo "${BEARER_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bearer"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/bearer" bearer
+          echo "$RUNNER_TEMP/bearer" >> "$GITHUB_PATH"
+
+      - name: Privacy and dataflow reports
+        continue-on-error: true
+        run: |
+          mkdir -p bearer-reports
+          for part in backend frontend; do
+            for report in privacy dataflow; do
+              bearer scan "$part" --report "$report" --format json \
+                --output "bearer-reports/${part}-${report}.json" \
+                --skip-path node_modules,tests \
+                --disable-version-check --quiet --exit-code 0 || true
+            done
+          done
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: bearer-privacy
+          path: bearer-reports/
+          if-no-files-found: warn
