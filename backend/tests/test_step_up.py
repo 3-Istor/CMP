@@ -98,11 +98,6 @@ class TestAssertStepUp:
         assert exc.value.status_code == 403
         assert exc.value.detail["code"] == "step_up_unavailable_for_agents"
 
-    def test_lets_an_assistant_through_where_its_policy_gates_the_action(self):
-        agent = _token(acr=None, cnp_agent={"grant_id": 1})
-
-        step_up.assert_step_up(agent, agents_allowed=True)
-
 
 class TestRequireStepUpDependency:
     @pytest.fixture

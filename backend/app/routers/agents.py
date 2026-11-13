@@ -27,6 +27,7 @@ from app.services.agents import policy, store
 from app.services.audit import note
 from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.keycloak_service import get_current_user
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/agents", tags=["AI assistants"])
 projects_router = APIRouter(prefix="/projects", tags=["AI assistants"])
@@ -111,6 +112,9 @@ def get_auth_request(request_id: str, _: Human) -> AuthRequestView:
 def approve_auth_request(
     request_id: str, body: ApproveRequest, token: Human
 ) -> RedirectView:
+    # A grant outlives the session that consents to it by weeks: a stolen
+    # session must not be able to turn itself into one.
+    assert_step_up(token)
     request = _pending_or_404(request_id)
     scopes = [s for s in store.SCOPES if s in body.scopes]
     if store.READ_SCOPE not in scopes:
@@ -360,6 +364,8 @@ def decide_confirmation(
     if view is None:
         raise HTTPException(status_code=404, detail="No such request.")
     _may_decide(db, token, view)
+    if decision == "approve":
+        assert_step_up(token)
     if view.status != "pending":
         raise HTTPException(
             status_code=409, detail=f"This request is already {view.status}."

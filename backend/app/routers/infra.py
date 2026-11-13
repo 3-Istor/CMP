@@ -9,10 +9,13 @@ Provides real-time health monitoring endpoints for:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.deployment import Deployment, ProviderType
+from app.core.roles import ProjectRole
+from app.models.deployment import ProviderType
+from app.routers.deployments import _get_app_or_404
 from app.services import monitoring_service
 from app.services.app_health import get_kubernetes_app_health
 from app.services.authz import is_cnp_admin
@@ -66,7 +69,9 @@ async def get_global_infrastructure_health(
     "/deployments/{deployment_id}/health", response_model=AppHealthResponse
 )
 async def get_deployment_health(
-    deployment_id: int, db: Session = Depends(get_db)
+    deployment_id: int,
+    token_payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Get real-time health status for a specific deployment.
@@ -87,16 +92,19 @@ async def get_deployment_health(
     Note: This uses direct SDK calls to get real-time status,
     bypassing Terraform state which may be stale for auto-scaling resources.
     """
-    deployment = db.get(Deployment, deployment_id)
-    if not deployment:
-        raise HTTPException(status_code=404, detail="Deployment not found")
+    deployment = await run_in_threadpool(
+        _get_app_or_404, db, token_payload, deployment_id, ProjectRole.GUEST
+    )
 
     try:
         if deployment.provider_type == ProviderType.KUBERNETES:
             return await get_kubernetes_app_health(deployment)
         return await monitoring_service.get_app_health(deployment.name)
     except Exception as exc:
+        logger.warning(
+            "Health of deployment %s failed: %s", deployment_id, exc
+        )
         raise HTTPException(
             status_code=503,
-            detail=f"Failed to retrieve deployment health: {str(exc)}",
+            detail="Failed to retrieve deployment health.",
         ) from exc

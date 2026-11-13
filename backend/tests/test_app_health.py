@@ -418,17 +418,90 @@ def test_vm_deployments_keep_the_legacy_health_path():
         openstack_backend=None,
     )
     db = mock.Mock()
-    db.get.return_value = _deployment(provider=ProviderType.LEGACY_HYBRID)
+    deployment = _deployment(provider=ProviderType.LEGACY_HYBRID)
 
     with mock.patch.object(
+        infra, "_get_app_or_404", return_value=deployment
+    ), mock.patch.object(
         monitoring_service,
         "get_app_health",
         mock.AsyncMock(return_value=legacy),
     ) as vm, mock.patch.object(
         infra, "get_kubernetes_app_health", mock.AsyncMock()
     ) as k8s:
-        result = asyncio.run(infra.get_deployment_health(1, db))
+        result = asyncio.run(infra.get_deployment_health(1, {}, db))
 
     vm.assert_awaited_once_with("web")
     k8s.assert_not_awaited()
     assert result.components == []
+
+
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.core.database import get_db  # noqa: E402
+from app.services.keycloak_service import get_current_user  # noqa: E402
+from tests.test_release_api import (  # noqa: E402,F401
+    USER_TOKENS,
+    keycloak,
+    session_factory,
+)
+
+
+def _infra_client(session_factory, who):
+    app = FastAPI()
+    app.include_router(infra.router, prefix="/api")
+
+    def override_db():
+        with session_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: USER_TOKENS[who]
+    return TestClient(app)
+
+
+def _healthy(deployment):
+    return monitoring_service.AppHealthResponse(
+        deployment_name=deployment.name,
+        status="healthy",
+        aws_frontend=None,
+        openstack_backend=None,
+    )
+
+
+def test_an_outsider_cannot_read_the_health_of_another_projects_app(
+    session_factory, keycloak
+):
+    # Arrange
+    client = _infra_client(session_factory, "outsider")
+
+    # Act
+    with mock.patch.object(
+        infra, "get_kubernetes_app_health", mock.AsyncMock()
+    ) as k8s:
+        response = client.get("/api/infra/deployments/7/health")
+
+    # Assert
+    assert (response.status_code, k8s.await_count) == (403, 0)
+
+
+def test_a_project_guest_reads_the_health_of_its_app(
+    session_factory, keycloak
+):
+    # Arrange
+    client = _infra_client(session_factory, "guest")
+
+    # Act
+    with mock.patch.object(
+        infra,
+        "get_kubernetes_app_health",
+        mock.AsyncMock(side_effect=_healthy),
+    ):
+        response = client.get("/api/infra/deployments/7/health")
+
+    # Assert
+    assert (response.status_code, response.json()["status"]) == (
+        200,
+        "healthy",
+    )

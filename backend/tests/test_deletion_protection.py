@@ -7,6 +7,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException
 from ruamel.yaml import YAML
 
+from app.core.config import settings
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, TargetCloud
 from app.routers import deployments as deployments_router
@@ -408,3 +409,26 @@ def test_publishing_over_an_existing_record_leaves_it_untouched():
     publish("  deletionProtection: false\n", put_file)
 
     put_file.assert_not_called()
+
+
+def test_an_assistant_cannot_delete_an_app_when_step_up_is_on(
+    db, roles
+):  # noqa: F811
+    # Arrange
+    background = BackgroundTasks()
+    deployment = db.query(Deployment).filter_by(project_id="alpha").one()
+
+    # Act
+    with (
+        mock.patch.object(settings, "STEP_UP_ENABLED", True),
+        registry(return_value=False),
+        pytest.raises(HTTPException) as exc,
+    ):
+        asyncio.run(
+            deployments_router.delete_deployment(
+                deployment.id, background, AGENT, db
+            )
+        )
+
+    # Assert
+    assert (exc.value.status_code, background.tasks) == (403, [])
