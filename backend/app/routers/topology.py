@@ -1,8 +1,9 @@
 """
 Project topology and links between apps (CNP-242, CNP-240).
 
-Members read the map; admins and owners link and unlink apps. Guests get
-nothing: the map names every app and who calls whom.
+Members and the security-auditor platform group read the map; admins and
+owners (and the infra group, admin on every project) link and unlink apps.
+Other guests get nothing: the map names every app and who calls whom.
 """
 
 from typing import Annotated
@@ -12,8 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.services import audit, topology
-from app.services.authz import RequireAdmin, RequireMember
+from app.services.authz import RequireAdmin, RequireGuest, is_auditor
 from app.services.imports import app_links
 from app.services.imports.service import ImportRefused
 from app.services.project_registry import RegistryError
@@ -34,9 +36,11 @@ class LinkRequest(BaseModel):
 
 
 @router.get("/{project_name}/topology")
-async def get_topology(ctx: RequireMember, db: DbSession):
+async def get_topology(ctx: RequireGuest, db: DbSession):
+    if ctx.role is ProjectRole.GUEST and not is_auditor(ctx.token):
+        raise HTTPException(403, "Guests do not see the project topology")
     try:
-        return await topology.build(db, ctx.project_name)
+        return await topology.cached_build(db, ctx.project_name)
     except RegistryError as exc:
         raise HTTPException(502, str(exc)) from exc
 

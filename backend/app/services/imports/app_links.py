@@ -11,12 +11,18 @@ schema refuses ``dependsOn`` on static and fullstack apps, and its validator
 refuses a link whose target is one of them.
 """
 
+import logging
+
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.imports import ImportService, ImportSource
+from app.services import topology_cache
 from app.services.imports import generate
 from app.services.imports.registry_commit import commit_record_change
 from app.services.imports.service import ImportRefused, _active_run
+
+logger = logging.getLogger(__name__)
 
 LINKABLE_TYPES = ("service", "backing")
 MAX_ALIAS = 63
@@ -117,7 +123,8 @@ async def add_link(
     _no_import_running(db, project, source)
     link = {"app": target, "port": port, "alias": alias}
 
-    async def change(record: dict) -> dict[str, str | None]:
+    async def change(record: dict, head: str) -> dict[str, str | None]:
+        del head
         apps = _apps(record)
         caller = _linkable(apps, source)
         _linkable(apps, target)
@@ -138,14 +145,14 @@ async def add_link(
     commit = await commit_record_change(
         project, change, f"feat(registry): link {source} to {target}:{port}"
     )
-    row = _import_row(db, project, source)
-    if row is not None:
-        spec = dict(row.spec)
-        spec["depends_on"] = [
+    topology_cache.invalidate(project)
+
+    def update(spec: dict) -> list[dict]:
+        return [
             d for d in spec.get("depends_on") or [] if d["alias"] != alias
         ] + [{**link, "manual": True}]
-        row.spec = spec
-        db.commit()
+
+    _update_row(db, project, source, update, commit)
     return {"from": source, **link, "commit": commit}
 
 
@@ -164,7 +171,8 @@ async def remove_link(
             alias is None or (entry.get("alias") or target) == alias
         )
 
-    async def change(record: dict) -> dict[str, str | None]:
+    async def change(record: dict, head: str) -> dict[str, str | None]:
+        del head
         caller = _apps(record).get(source)
         links = (caller or {}).get("dependsOn") or []
         kept = [d for d in links if not matches(d)]
@@ -179,16 +187,101 @@ async def remove_link(
     commit = await commit_record_change(
         project, change, f"feat(registry): unlink {source} from {target}"
     )
-    row = _import_row(db, project, source)
-    if row is not None:
-        spec = dict(row.spec)
-        spec["depends_on"] = [
+    topology_cache.invalidate(project)
+
+    def update(spec: dict) -> list[dict]:
+        return [
             d
             for d in spec.get("depends_on") or []
             if not (
                 d["app"] == target and (alias is None or d["alias"] == alias)
             )
         ]
-        row.spec = spec
-        db.commit()
+
+    _update_row(db, project, source, update, commit)
     return commit
+
+
+def _update_row(db: Session, project: str, app: str, links, commit: str):
+    """
+    Copy a committed link change to the caller's import row. The registry
+    already holds it: a failure here is logged, not raised, and
+    :func:`reconcile_rows` copies the record's links on the next read.
+    """
+    try:
+        row = _import_row(db, project, app)
+        if row is None:
+            return
+        row.spec = {**row.spec, "depends_on": links(row.spec)}
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception(
+            "Links of %s/%s committed to the registry (%s) but not to its "
+            "import row: the next topology read reconciles it",
+            project,
+            app,
+            commit,
+        )
+
+
+def reconcile_rows(
+    db: Session, project: str, record_apps: dict[str, dict]
+) -> None:
+    """
+    Make the manual links of each idle imported service match its record
+    entry, the source of truth: a link drawn on the topology whose row update
+    was lost is added, one removed from the record is dropped. Links from the
+    analysis are left alone, the next build writes them from the plan.
+    """
+    rows = (
+        db.query(ImportService)
+        .join(ImportSource)
+        .filter(
+            ImportSource.project_name == project,
+            ImportService.kind == "service",
+        )
+        .all()
+    )
+    changed = False
+    for row in rows:
+        app = record_apps.get(row.app_name)
+        if app is None or _active_run(row.source) is not None:
+            continue
+        current = list(row.spec.get("depends_on") or [])
+        wanted = _reconciled_links(current, app.get("dependsOn") or [])
+        if wanted != current:
+            row.spec = {**row.spec, "depends_on": wanted}
+            changed = True
+    if not changed:
+        return
+    try:
+        db.commit()
+        logger.warning("Import rows of %s reconciled with the record", project)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Import rows of %s could not be reconciled", project)
+
+
+def _reconciled_links(current: list[dict], record_links: list) -> list[dict]:
+    in_record = {}
+    for entry in record_links:
+        if isinstance(entry, dict) and entry.get("app"):
+            alias = entry.get("alias") or entry["app"]
+            in_record[alias] = {
+                "app": entry["app"],
+                "port": entry.get("port"),
+                "alias": alias,
+            }
+    kept = [
+        link
+        for link in current
+        if not link.get("manual") or link.get("alias") in in_record
+    ]
+    known = {link.get("alias") for link in kept}
+    added = [
+        {**link, "manual": True}
+        for alias, link in in_record.items()
+        if alias not in known
+    ]
+    return kept + added

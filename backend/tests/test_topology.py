@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from datetime import timedelta
 
@@ -13,7 +14,7 @@ from app.core.roles import ProjectRole, at_least
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.imports import ImportRun, ImportService, ImportSource
 from app.routers import topology as topology_router
-from app.services import authz, topology
+from app.services import authz, topology, topology_cache
 from app.services.imports import app_links, service
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
@@ -62,6 +63,7 @@ class World:
         Base.metadata.create_all(engine)
         self.Session = sessionmaker(bind=engine, expire_on_commit=False)
         self.roles = {"shop": ProjectRole.ADMIN}
+        self.groups: list[str] = []
         self.record = copy.deepcopy(RECORD)
         self.commits: list[str] = []
         self.flows: list[dict] = []
@@ -69,6 +71,7 @@ class World:
         self.queries: list[str] = []
         self.applications: list[dict] = []
         self.schedules: dict[str, list[dict]] = {}
+        self.record_reads = 0
 
     def db(self):
         return self.Session()
@@ -84,7 +87,7 @@ def _role_override(world, minimum):
             user_id="uid-alice",
             username="alice",
             role=role,
-            token={"preferred_username": "alice"},
+            token={"preferred_username": "alice", "groups": world.groups},
         )
 
     return dep
@@ -142,14 +145,19 @@ def world(monkeypatch):
     world = World()
     _import_rows(world)
 
+    topology_cache.clear()
+    topology._metric_present.clear()
+
     async def read_record(project):
+        world.record_reads += 1
         return (
             (copy.deepcopy(world.record), "sha") if project == "shop" else None
         )
 
     async def commit(project, change, message):
         record = copy.deepcopy(world.record)
-        await change(record)
+        # Same arguments as registry_commit.commit_record_change gives.
+        await change(record, "head")
         world.record = record
         world.commits.append(message)
         return "c0ffee"
@@ -166,7 +174,7 @@ def world(monkeypatch):
             return [{"value": [0, "1"]}] if world.metric_present else []
         return world.flows
 
-    monkeypatch.setattr(topology, "read_record", read_record)
+    monkeypatch.setattr(topology, "read_record_cached", read_record)
     monkeypatch.setattr(topology, "kube_list", kube_list)
     monkeypatch.setattr(topology, "_vm_query", vm_query)
     monkeypatch.setattr(app_links, "commit_record_change", commit)
@@ -188,6 +196,7 @@ def client(world):
     app.dependency_overrides[get_db] = get_session
     for annotation, minimum in (
         (authz.RequireAdmin, ProjectRole.ADMIN),
+        (authz.RequireGuest, ProjectRole.GUEST),
         (authz.RequireMember, ProjectRole.MEMBER),
     ):
         app.dependency_overrides[annotation.__metadata__[0].dependency] = (
@@ -502,3 +511,180 @@ def test_system_and_unknown_namespaces_are_left_out(client, world):
     edges = _edges(client.get("/api/projects/shop/topology"))
 
     assert set(edges) == {("api", "mongodb"), ("api", "cache")}
+
+
+# ── Access, staging, cache and reconciliation ───────────────────────────────
+
+
+def test_security_auditor_reads_the_topology_of_any_project(client, world):
+    world.roles["shop"] = ProjectRole.GUEST
+    world.groups = ["/security-auditor"]
+
+    response = client.get("/api/projects/shop/topology")
+
+    assert response.status_code == 200
+
+
+def test_security_auditor_cannot_link_apps(client, world):
+    world.roles["shop"] = ProjectRole.GUEST
+    world.groups = ["security-auditor"]
+
+    response = _link(client)
+
+    assert (response.status_code, world.commits) == (403, [])
+
+
+def test_staging_traffic_does_not_mark_a_prod_link_observed(client, world):
+    world.flows = [
+        _flow("shop-api-stg/", "shop-mongodb-stg/", "FORWARDED", 3),
+        _flow("shop-worker-stg/", "shop-api-stg/", "FORWARDED", 3),
+    ]
+
+    edges = _edges(client.get("/api/projects/shop/topology"))
+
+    assert {pair: e["state"] for pair, e in edges.items()} == {
+        ("api", "mongodb"): "declared_only",
+        ("api", "cache"): "declared_only",
+    }
+
+
+def test_flow_query_names_prod_namespaces_only(client, world):
+    client.get("/api/projects/shop/topology")
+
+    assert not any("-stg" in q for q in world.queries)
+
+
+def test_topology_is_served_from_cache_within_its_ttl(client, world):
+    client.get("/api/projects/shop/topology")
+    client.get("/api/projects/shop/topology")
+
+    assert world.record_reads == 1
+
+
+def test_a_new_link_invalidates_the_cached_topology(client, world):
+    client.get("/api/projects/shop/topology")
+
+    _link(client)
+    edges = _edges(client.get("/api/projects/shop/topology"))
+
+    assert ("worker", "api") in edges
+
+
+def test_an_unlink_invalidates_the_cached_topology(client, world):
+    client.get("/api/projects/shop/topology")
+
+    client.delete(
+        "/api/projects/shop/topology/links",
+        params={"from": "api", "to": "cache", "alias": "redis"},
+    )
+    edges = _edges(client.get("/api/projects/shop/topology"))
+
+    assert ("api", "cache") not in edges
+
+
+def test_an_import_deploy_invalidates_the_cached_topology(client, world):
+    client.get("/api/projects/shop/topology")
+
+    topology_cache.invalidate("shop")
+    client.get("/api/projects/shop/topology")
+
+    assert world.record_reads == 2
+
+
+def test_a_build_overlapping_an_invalidation_is_not_cached():
+    generation = topology_cache.generation("p")
+    topology_cache.invalidate("p")
+
+    topology_cache.put("p", {"stale": True}, generation)
+
+    assert topology_cache.get("p") is None
+
+
+def test_metric_presence_is_checked_once_per_five_minutes(client, world):
+    world.metric_present = False
+    client.get("/api/projects/shop/topology")
+    topology_cache.invalidate("shop")
+
+    client.get("/api/projects/shop/topology")
+
+    assert sum(q.startswith("count(") for q in world.queries) == 1
+
+
+def test_a_lost_row_update_is_reconciled_from_the_record_on_next_read(
+    client, world, monkeypatch, caplog
+):
+    import_row = app_links._import_row
+
+    def lost_after_the_commit(*args):
+        if world.commits:
+            raise app_links.SQLAlchemyError("database is gone")
+        return import_row(*args)
+
+    monkeypatch.setattr(app_links, "_import_row", lost_after_the_commit)
+    response = _link(client)
+    monkeypatch.setattr(app_links, "_import_row", import_row)
+
+    client.get("/api/projects/shop/topology")
+
+    with world.db() as db:
+        row = db.query(ImportService).filter_by(app_name="worker").one()
+        assert (response.status_code, row.spec["depends_on"]) == (
+            201,
+            [{"app": "api", "port": 8080, "alias": "api", "manual": True}],
+        )
+    assert "not to its import row" in caplog.text
+
+
+def test_a_manual_link_gone_from_the_record_is_dropped_from_the_row(
+    client, world
+):
+    with world.db() as db:
+        row = db.query(ImportService).filter_by(app_name="worker").one()
+        row.spec = {
+            **row.spec,
+            "depends_on": [
+                {"app": "api", "port": 8080, "alias": "api", "manual": True},
+                {"app": "cache", "port": 6379, "alias": "cache"},
+            ],
+        }
+        db.commit()
+
+    client.get("/api/projects/shop/topology")
+
+    with world.db() as db:
+        row = db.query(ImportService).filter_by(app_name="worker").one()
+        assert row.spec["depends_on"] == [
+            {"app": "cache", "port": 6379, "alias": "cache"}
+        ]
+
+
+def test_record_is_downloaded_again_only_when_the_registry_head_moves(
+    monkeypatch,
+):
+    from app.services import project_registry
+
+    heads = iter(["h1", "h1", "h2"])
+    downloads = []
+
+    async def token():
+        return "t"
+
+    async def head(_token, _repo, _branch):
+        return next(heads)
+
+    async def content(_token, _repo, _path, ref):
+        downloads.append(ref)
+        return "metadata: {name: shop}\n", "blob"
+
+    monkeypatch.setattr(project_registry, "_installation_token", token)
+    monkeypatch.setattr(project_registry, "get_branch_head", head)
+    monkeypatch.setattr(project_registry, "get_file_content", content)
+    project_registry._records_at_head.clear()
+
+    async def read_three_times():
+        for _ in range(3):
+            await project_registry.read_record_cached("shop")
+
+    asyncio.run(read_three_times())
+
+    assert downloads == ["h1", "h2"]

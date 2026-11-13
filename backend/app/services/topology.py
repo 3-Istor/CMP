@@ -12,6 +12,7 @@ sends reaches PromQL.
 import asyncio
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,8 +22,10 @@ from sqlalchemy.orm import Session
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.imports import ImportService, ImportSource
 from app.models.project import Project, TargetCloud
+from app.services import topology_cache
 from app.services.app_health import SCHEDULES_PATH, SLEEPING_STATES
 from app.services.environments import gitops, layout
+from app.services.imports.app_links import reconcile_rows
 from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
@@ -30,7 +33,7 @@ from app.services.kube_client import (
 )
 from app.services.links import APPLICATIONS_PATH
 from app.services.metrics_isolation import VMSELECT, cluster_filter
-from app.services.project_registry import read_record
+from app.services.project_registry import read_record_cached
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,11 @@ HEALTH_ORDER = (
     "degraded",
 )
 SYNC_ORDER = ("synced", "unknown", "outofsync")
+METRIC_PRESENT_TTL_SECONDS = 300.0
+KUBE_CONCURRENCY = 4
+
+# {cloud: (expires at, metric present)}
+_metric_present: dict[str, tuple[float, bool]] = {}
 
 
 class MetricsUnavailableError(Exception):
@@ -181,6 +189,19 @@ def initiated(
     return flows
 
 
+async def _flow_metric_present(client: httpx.AsyncClient, cloud: str) -> bool:
+    """Whether Hubble metrics reach VictoriaMetrics at all, for 5 minutes."""
+    cached = _metric_present.get(cloud)
+    if cached is not None and cached[0] > time.monotonic():
+        return cached[1]
+    present = bool(await _vm_query(client, f"count({FLOW_METRIC})", cloud))
+    _metric_present[cloud] = (
+        time.monotonic() + METRIC_PRESENT_TTL_SECONDS,
+        present,
+    )
+    return present
+
+
 async def observed_flows(
     project: str,
     apps: list[str],
@@ -194,11 +215,13 @@ async def observed_flows(
     users cannot read them: the CMP asks vmselect itself, with a query naming
     the project's namespaces only. Not available when the metric is missing
     from VictoriaMetrics or VictoriaMetrics cannot be read.
+
+    Prod namespaces only: the map shows the prod links, and staging traffic
+    must not mark one of them observed.
     """
-    namespace_app = {}
-    for app in apps:
-        for environment in layout.ENVIRONMENTS:
-            namespace_app[layout.namespace(project, app, environment)] = app
+    namespace_app = {
+        layout.namespace(project, app, "prod"): app for app in apps
+    }
     if not namespace_app:
         return False, {}
     namespaces = list(namespace_app)
@@ -213,10 +236,7 @@ async def observed_flows(
                 cloud,
             )
             if not rates and not counts:
-                present = await _vm_query(
-                    client, f"count({FLOW_METRIC})", cloud
-                )
-                if not present:
+                if not await _flow_metric_present(client, cloud):
                     return False, {}
     except MetricsUnavailableError as exc:
         logger.warning("Flows of %s not readable: %s", project, exc)
@@ -286,16 +306,22 @@ def _asleep(namespace: str, cloud: TargetCloud) -> bool | None:
     )
 
 
-def _cluster_state(
+async def _cluster_state(
     project: str, apps: dict[str, str], cloud: TargetCloud
 ) -> tuple[dict[str, dict], dict[str, bool | None]]:
     """(Argo Applications by name, asleep by app); kube calls, threaded."""
-    applications = _argo_by_name(project)
-    asleep = {
-        app: _asleep(layout.namespace(project, app, "prod"), cloud)
-        for app in apps
-    }
-    return applications, asleep
+    limit = asyncio.Semaphore(KUBE_CONCURRENCY)
+
+    async def asleep(app: str) -> tuple[str, bool | None]:
+        async with limit:
+            namespace = layout.namespace(project, app, "prod")
+            return app, await asyncio.to_thread(_asleep, namespace, cloud)
+
+    applications, *states = await asyncio.gather(
+        asyncio.to_thread(_argo_by_name, project),
+        *(asleep(app) for app in apps),
+    )
+    return applications, dict(states)
 
 
 def _node(
@@ -369,8 +395,19 @@ def _declared(
     return edges
 
 
+async def cached_build(db: Session, project: str) -> dict:
+    """:func:`build`, kept for ``topology_cache.TTL_SECONDS``."""
+    cached = topology_cache.get(project)
+    if cached is not None:
+        return cached
+    generation = topology_cache.generation(project)
+    topology = await build(db, project)
+    topology_cache.put(project, topology, generation)
+    return topology
+
+
 async def build(db: Session, project: str) -> dict:
-    record = await read_record(project)
+    record = await read_record_cached(project)
     record_apps = {
         app["name"]: app
         for app in ((record or ({}, ""))[0].get("spec") or {}).get("apps")
@@ -404,9 +441,8 @@ async def build(db: Session, project: str) -> dict:
     kinds = {
         name: _kind(record_apps.get(name), rows.get(name)) for name in names
     }
-    applications, asleep = await asyncio.to_thread(
-        _cluster_state, project, kinds, cloud
-    )
+    reconcile_rows(db, project, record_apps)
+    applications, asleep = await _cluster_state(project, kinds, cloud)
     nodes = [
         _node(
             project,

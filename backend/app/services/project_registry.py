@@ -13,6 +13,7 @@ Consumers of the record: the Argo CD ApplicationSet (WS-3), the per-project add-
 """
 
 import asyncio
+import copy
 import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -27,6 +28,7 @@ from app.services.github_service import (
     FileNotInRepoError,
     GitHubAppError,
     delete_file,
+    get_branch_head,
     get_file_content,
     get_org_installation_token,
     list_directory,
@@ -133,9 +135,11 @@ def build_record(
     return buffer.getvalue()
 
 
-async def read_record(project_name: str) -> tuple[dict, str] | None:
+async def read_record(
+    project_name: str, ref: str | None = None
+) -> tuple[dict, str] | None:
     """
-    Read a project's record.
+    Read a project's record, at *ref* (a commit) or at the branch head.
 
     Returns:
         ``(record, sha)``, or ``None`` if the project has no record yet.
@@ -149,7 +153,7 @@ async def read_record(project_name: str) -> tuple[dict, str] | None:
             token,
             settings.CNP_REGISTRY_REPO,
             record_path(project_name),
-            ref=settings.CNP_REGISTRY_BRANCH,
+            ref=ref or settings.CNP_REGISTRY_BRANCH,
         )
     except FileNotInRepoError:
         return None
@@ -164,6 +168,34 @@ async def read_record(project_name: str) -> tuple[dict, str] | None:
             f"Registry record for '{project_name}' is not a YAML mapping"
         )
     return parsed, sha
+
+
+_records_at_head: dict[str, tuple[str, tuple[dict, str] | None]] = {}
+
+
+async def read_record_cached(project_name: str) -> tuple[dict, str] | None:
+    """
+    :func:`read_record`, fetched again only when the registry branch moved:
+    one branch lookup instead of a file download per call. The caller gets
+    its own copy.
+
+    Raises:
+        RegistryError: If the registry is unreachable or the record is malformed.
+    """
+    token = await _installation_token()
+    try:
+        head = await get_branch_head(
+            token, settings.CNP_REGISTRY_REPO, settings.CNP_REGISTRY_BRANCH
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not read the registry head: {exc}"
+        ) from exc
+    cached = _records_at_head.get(project_name)
+    if cached is None or cached[0] != head:
+        cached = (head, await read_record(project_name, ref=head))
+        _records_at_head[project_name] = cached
+    return copy.deepcopy(cached[1])
 
 
 async def list_records(ref: str | None = None) -> list[dict]:
