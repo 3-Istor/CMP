@@ -15,7 +15,7 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.imports import ImportRun, ImportService, ImportSource
 from app.routers import imports as imports_router
-from app.services import authz
+from app.services import audit, authz
 from app.services.imports import access, rebuilds, service
 from tests.test_import_api import (  # noqa: F401
     DIGEST,
@@ -682,3 +682,24 @@ def test_access_check_uses_the_repository_id(world, identity, monkeypatch):
     _auto(source)
 
     assert seen == [REPO.repo_id]
+
+
+def test_a_streamed_body_above_the_cap_is_refused_behind_the_journal(
+    world, monkeypatch
+):
+    monkeypatch.setattr(settings, "GITHUB_WEBHOOK_SECRET", SECRET)
+    monkeypatch.setattr(settings, "IMPORT_WEBHOOK_MAX_BODY_BYTES", 1024)
+    app = FastAPI()
+    app.include_router(imports_router.webhooks, prefix="/api")
+    app.add_middleware(audit.AuditMiddleware)
+    app.dependency_overrides[get_db] = world.db
+
+    def chunks():
+        for _ in range(64):
+            yield b"x" * 1024
+
+    response = TestClient(app).post(
+        "/api/import/webhooks/github", content=chunks()
+    )
+
+    assert response.status_code == 413

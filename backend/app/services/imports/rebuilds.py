@@ -53,7 +53,6 @@ DELIVERY_TTL = timedelta(hours=24)
 MAX_LISTED = 2048
 # The compare API lists at most 300 files.
 COMPARE_MAX_FILES = 300
-COMPOSE = re.compile(r"(docker-)?compose(\.[\w-]+)*\.ya?ml")
 # Build files that, outside every service folder, are shared by the services
 # below them: a root pom.xml or package.json changes them all.
 SHARED_MANIFESTS = frozenset(
@@ -178,6 +177,15 @@ def _clean(path: str | None) -> str | None:
     return "" if path == "." else path
 
 
+def _is_compose(name: str) -> bool:
+    """compose.yaml, docker-compose.prod.yml and the like."""
+    stem, dot, extension = name.rpartition(".")
+    if not dot or extension not in ("yml", "yaml"):
+        return False
+    base = stem.split(".", 1)[0]
+    return base in ("compose", "docker-compose")
+
+
 def _under(path: str, prefix: str) -> bool:
     return prefix == "" or path == prefix or path.startswith(prefix + "/")
 
@@ -222,7 +230,7 @@ def affected_apps(
     for raw in changed:
         path = _clean(raw) or ""
         name = posixpath.basename(path)
-        if COMPOSE.fullmatch(name):
+        if _is_compose(name):
             return None
         owners = {
             app
