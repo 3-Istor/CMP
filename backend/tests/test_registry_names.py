@@ -134,6 +134,34 @@ APP_CASES = [
         [record("foo", app("web", prod="web-foo.3istor.com"))],
         ["hostname 'web-foo.3istor.com'", "project 'foo'"],
     ),
+    (
+        "app named after the project's status page",
+        "foo",
+        app("status"),
+        [record("foo")],
+        ["app 'status' is reserved", "status hostname"],
+    ),
+    (
+        "app named after the project's auth hostname",
+        "foo",
+        app("auth"),
+        [],
+        ["app 'auth' is reserved"],
+    ),
+    (
+        "app named after the project's offhours page",
+        "foo",
+        app("offhours"),
+        [record("foo")],
+        ["app 'offhours' is reserved"],
+    ),
+    (
+        "app hostname set to the project's own status hostname",
+        "foo",
+        app("web", prod="status-foo.3istor.com"),
+        [record("foo")],
+        ["hostname 'status-foo.3istor.com'", "the status hostname"],
+    ),
 ]
 
 

@@ -43,6 +43,7 @@ from app.services.github_service import (
     get_org_installation_token,
     put_file_content,
 )
+from app.services.imports.service import imported_app_names
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
@@ -223,6 +224,13 @@ async def create_deployment(
             status_code=409,
             detail=f"'{payload.name}' is the name of a platform "
             "repository: choose another app name.",
+        )
+
+    if imported_app_names(db, payload.project_id) & {payload.name}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{payload.name}' is held by a repository import of the "
+            "project: choose another app name.",
         )
 
     fields = [f.model_dump() for f in template.fields]

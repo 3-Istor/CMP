@@ -24,10 +24,9 @@ from app.models.imports import (
     ImportSource,
     RunStatus,
 )
-from app.models.project import Project, TargetCloud
 from app.services import kube_client, vault_client
 from app.services.imports import dns, generate
-from app.services.imports.generate import AppSpec
+from app.services.imports.generate import AppSpec, PlanError
 from app.services.imports.registry_commit import commit_record_change
 from app.services.imports.service import (
     ImportRefused,
@@ -37,6 +36,8 @@ from app.services.imports.service import (
     image_name,
     redact,
 )
+from app.services.project_registry import list_records
+from app.services.registry_names import check_app, project_name_of
 
 logger = logging.getLogger(__name__)
 
@@ -217,15 +218,53 @@ async def deploy(run_id: str) -> None:
                 "stage": "deploy",
                 "error": redact(str(exc)),
             }
+            if isinstance(exc, PlanError):
+                _refuse_services(run, exc)
             db.commit()
             _system_event(run, "import.deploy", False, error=redact(str(exc)))
+
+
+def _refuse_services(run: ImportRun, exc: PlanError) -> None:
+    """A running app keeps its last version; the others never started."""
+    message = redact(f"Not deployed, the registry refused it: {exc}")
+    for row in run.source.services:
+        row.message = message
+        if row.status != "running":
+            row.status = "failed"
+
+
+async def _check_names_at_head(
+    project: str, record: dict, head: str, specs: list[AppSpec]
+) -> None:
+    """
+    The names checked at approval, checked again against the registry as
+    it is when the commit is made: another project may have taken one since.
+
+    Raises:
+        PlanError: On any collision; the commit is not made.
+    """
+    records = [
+        r for r in await list_records(head) if project_name_of(r) != project
+    ]
+    records.append(record)
+    problems: list[str] = []
+    for spec in specs:
+        entry: dict = {"name": spec.name, "type": spec.kind}
+        if spec.public:
+            entry["hostnames"] = {
+                "prod": generate.hostname(project, spec.name)
+            }
+        problems += [
+            f"app '{spec.name}': {p}"
+            for p in check_app(project, entry, records)
+        ]
+    if problems:
+        raise PlanError(sorted(set(problems)))
 
 
 async def _deploy(db: Session, run: ImportRun) -> None:
     source = run.source
     project = source.project_name
-    project_row = db.query(Project).filter_by(project_name=project).first()
-    cloud = project_row.target_cloud if project_row else TargetCloud.ONPREM
     images = (run.report or {}).get("images") or {}
     rows = {s.app_name: s for s in source.services}
     specs = [AppSpec.from_dict(r.spec) for r in rows.values()]
@@ -237,7 +276,13 @@ async def _deploy(db: Session, run: ImportRun) -> None:
     await _ensure_pull_secret(project)
     await _ensure_credentials(project, specs)
 
-    async def change(record: dict) -> dict[str, str | None]:
+    async def change(record: dict, head: str) -> dict[str, str | None]:
+        await _check_names_at_head(
+            project,
+            record,
+            head,
+            [s for s in specs if s.kind == "backing" or s.name in digests],
+        )
         return generate.apply_to_record(
             record,
             project,
@@ -257,10 +302,7 @@ async def _deploy(db: Session, run: ImportRun) -> None:
     for spec in specs:
         if spec.public:
             await dns.ensure_cname(
-                project,
-                spec.name,
-                generate.hostname(project, spec.name),
-                cloud,
+                project, spec.name, generate.hostname(project, spec.name)
             )
 
     expected: dict[str, str] = {}
@@ -328,23 +370,34 @@ def resume_interrupted() -> None:
 async def remove(db: Session, user: str, source: ImportSource) -> None:
     """
     Take the import's apps out of the registry (one commit), then delete
-    their namespaces, volumes included (D17: the user confirmed with step-up).
+    the namespaces, volumes included, of the apps it deployed (D17: the user
+    confirmed with step-up). An app of the record under the same name that
+    this import did not put there stays, with its namespace.
     """
     if _active_run(source) is not None:
         raise ImportRefused("A run of this import is in progress")
     project = source.project_name
-    names = {s.app_name for s in source.services}
-    public = [s.app_name for s in source.services if s.spec.get("public")]
-    if names:
+    services = {s.app_name for s in source.services if s.kind == "service"}
+    deployed = {s.app_name for s in source.services if s.deployment_id}
+    removed: set[str] = set()
+    if services or deployed:
 
-        async def change(record: dict) -> dict[str, str | None]:
-            present = {
-                a.get("name") for a in record.get("spec", {}).get("apps") or []
-            }
-            files = generate.remove_from_record(record, project, names)
-            return {
-                p: c for p, c in files.items() if p.split("/")[2] in present
-            }
+        async def change(record: dict, head: str) -> dict[str, str | None]:
+            del head
+            removed.clear()
+            removed.update(
+                generate.owned_by_import(
+                    record,
+                    source.repo_full_name,
+                    services,
+                    {
+                        s.app_name
+                        for s in source.services
+                        if s.kind == "backing" and s.deployment_id
+                    },
+                )
+            )
+            return generate.remove_from_record(record, project, removed)
 
         await commit_record_change(
             project,
@@ -352,11 +405,15 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
             f"feat(registry): remove import {source.repo_full_name} "
             f"from {project}",
         )
-    for app in public:
-        try:
-            await dns.remove_cname(project, generate.hostname(project, app))
-        except dns.DnsError as exc:
-            logger.warning("DNS cleanup of %s failed: %s", app, exc)
+    for service in source.services:
+        if service.app_name in removed and service.spec.get("public"):
+            app = service.app_name
+            try:
+                await dns.remove_cname(
+                    project, app, generate.hostname(project, app)
+                )
+            except dns.DnsError as exc:
+                logger.warning("DNS cleanup of %s failed: %s", app, exc)
     for service in source.services:
         if service.deployment_id:
             row = db.get(Deployment, service.deployment_id)
@@ -364,8 +421,13 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
                 row.status = DeploymentStatus.DELETING
                 row.step_message = "Removing"
     db.commit()
-    _spawn(_cleanup_namespaces(project, sorted(names), source.id))
-    logger.info("%s removes import %s", user, source.repo_full_name)
+    _spawn(_cleanup_namespaces(project, sorted(deployed), source.id))
+    logger.info(
+        "%s removes import %s (registry entries: %s)",
+        user,
+        source.repo_full_name,
+        sorted(removed),
+    )
 
 
 async def _cleanup_namespaces(

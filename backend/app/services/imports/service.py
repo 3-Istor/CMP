@@ -35,7 +35,7 @@ from app.services.github_service import (
     dispatch_workflow,
     get_branch_head,
     get_org_installation_token,
-    get_scoped_installation_token,
+    get_repository_id_scoped_token,
 )
 from app.services.imports import generate
 from app.services.imports.access import RepoRef
@@ -201,9 +201,9 @@ def _last_run(source: ImportSource, kind: RunKind) -> ImportRun | None:
 
 async def _repo_token(source: ImportSource) -> str:
     """Contents and metadata, read only, on this one repository (D15)."""
-    return await get_scoped_installation_token(
+    return await get_repository_id_scoped_token(
         str(source.installation_id),
-        [source.repo_full_name.split("/", 1)[1]],
+        [source.repo_id],
         {"contents": "read", "metadata": "read"},
     )
 
@@ -299,6 +299,17 @@ async def start_analysis(
     return run
 
 
+def imported_app_names(db: Session, project: str) -> set[str]:
+    """Names the project's imports hold, deployed yet or not."""
+    return {
+        name
+        for (name,) in db.query(ImportService.app_name)
+        .join(ImportSource)
+        .filter(ImportSource.project_name == project)
+        .all()
+    }
+
+
 async def _taken_names(
     db: Session, project: str, source: ImportSource
 ) -> dict[str, str]:
@@ -344,6 +355,12 @@ async def approve(
         specs = generate.resolve(analysis.plan, edits)
     except PlanError as exc:
         raise ImportRefused("; ".join(exc.problems), 422) from exc
+    if len(specs) > settings.IMPORT_MAX_APPS:
+        raise ImportRefused(
+            f"{len(specs)} apps, an import holds at most "
+            f"{settings.IMPORT_MAX_APPS}",
+            422,
+        )
 
     problems: list[str] = []
     taken = await _taken_names(db, project, source)
@@ -450,9 +467,12 @@ def worker_run(
         run.attempt_id.encode(), str(attempt_id).encode()
     ):
         raise ImportRefused("Unknown run or attempt", 403)
-    if run.workflow_run_id and run.workflow_run_id != str(claims["run_id"]):
+    if run.workflow_run_id and (
+        run.workflow_run_id != str(claims["run_id"])
+        or run.workflow_run_attempt != str(claims["run_attempt"])
+    ):
         raise ImportRefused(
-            "This run was claimed by another workflow run", 403
+            "This run was claimed by another workflow run or attempt", 403
         )
     if RunStatus(run.status) in TERMINAL_STATUSES:
         raise ImportRefused("This run is finished", 409)
@@ -553,6 +573,7 @@ async def claim(db: Session, run: ImportRun, claims: dict) -> dict:
         RunStatus.QUEUED.value,
         RunStatus.CLAIMED,
         workflow_run_id=str(claims["run_id"]),
+        workflow_run_attempt=str(claims["run_attempt"]),
     )
     recipes = _recipes(run) if run.kind == RunKind.BUILD.value else []
     try:
@@ -574,6 +595,9 @@ async def claim(db: Session, run: ImportRun, claims: dict) -> dict:
         "kind": run.kind,
         "project": run.source.project_name,
         "repo_full_name": run.source.repo_full_name,
+        # The worker fetches /repositories/{id}/tarball/{sha}: a name can
+        # point at another repository by the time it runs.
+        "repository_id": run.source.repo_id,
         "sha": run.sha,
         "branch": run.source.branch,
         "token": token,
@@ -596,12 +620,22 @@ def receive_plan(db: Session, run: ImportRun, plan: dict) -> None:
     ]
     if len(names) != len(set(names)):
         raise ImportRefused("The plan names two apps the same", 422)
+    if len(names) > settings.IMPORT_MAX_APPS:
+        raise ImportRefused(
+            f"The plan has {len(names)} apps, an import holds at most "
+            f"{settings.IMPORT_MAX_APPS}",
+            422,
+        )
+    stored = parsed.model_dump(by_alias=True, mode="json")
+    for item in stored["services"]:
+        item["env"], warnings = generate.scrub_env(item["env"])
+        stored["warnings"] += [f"{item['name']}: {w}" for w in warnings]
     _transition(
         db,
         run,
         RunStatus.CLAIMED.value,
         RunStatus.SUCCEEDED,
-        plan=parsed.model_dump(by_alias=True, mode="json"),
+        plan=stored,
     )
     _system_event(run, "import.analyze", True)
 

@@ -31,8 +31,9 @@ logger = logging.getLogger(__name__)
 MAX_ATTEMPTS = 5
 _locks: dict[str, asyncio.Lock] = {}
 
-# Gets the record (mutated in place) and returns the other files to write.
-Change = Callable[[dict], Awaitable[dict[str, str | None]]]
+# Gets the record (mutated in place) and the head commit it was read at, and
+# returns the other files to write. Raising aborts the commit.
+Change = Callable[[dict, str], Awaitable[dict[str, str | None]]]
 
 
 def _lock(repo: str) -> asyncio.Lock:
@@ -75,7 +76,7 @@ async def commit_record_change(
                     raise RegistryError(
                         f"Registry record of '{project}' is not a mapping"
                     )
-                files = await change(record)
+                files = await change(record, head)
                 files[path] = dump_yaml(record)
                 return await commit_files(
                     token,

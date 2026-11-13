@@ -52,6 +52,7 @@ def upgrade() -> None:
         sa.Column("sha", sa.String(40), nullable=False),
         sa.Column("attempt_id", sa.String(36), nullable=False),
         sa.Column("workflow_run_id", sa.String(32), nullable=True),
+        sa.Column("workflow_run_attempt", sa.String(8), nullable=True),
         sa.Column("status", sa.String(16), nullable=False),
         sa.Column("plan", sa.JSON(), nullable=True),
         sa.Column("report", sa.JSON(), nullable=True),

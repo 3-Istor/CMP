@@ -263,6 +263,15 @@ class Settings(BaseSettings):
         "3-Istor/app-templates,3-Istor/extern-project-analyzer,"
         "3-Istor/keycloak-theme,3-Istor/cnp-docs,3-Istor/offhours-guard"
     )
+    # runner_environment claims the worker API accepts. "self-hosted" only
+    # for a runner group of isolated, ephemeral runners (one job per VM,
+    # nothing shared with other workflows): a persistent self-hosted runner
+    # lets one import read the next one's source and tokens.
+    IMPORT_ALLOWED_RUNNER_ENVIRONMENTS: list[str] = ["github-hosted"]
+    # Services plus backing apps of one import.
+    IMPORT_MAX_APPS: int = 20
+    # Body of a worker call other than the plan (claim, publish, fail).
+    IMPORT_WORKER_MAX_BODY_BYTES: int = 256 * 1024
     # Sum of the memory requests of one project's imported apps.
     IMPORT_MAX_PROJECT_REQUESTS_MIB: int = 6144
     # Per-namespace quota of cnp-project-base (requests.memory, requests.cpu).

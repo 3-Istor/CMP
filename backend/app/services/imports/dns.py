@@ -2,16 +2,17 @@
 Public hostname of an imported app: one CNAME to the project's tunnel.
 
 Same record the k3s-gitops-app module creates for template apps (name
-<app>-<project>, proxied, to <tunnel id>.cfargotunnel.com, with the D-13
-marker), made with the Cloudflare API rather than a Terraform run per app
-(D9). The tunnel's routing table comes from the registry record's hostnames,
+<app>-<project>, proxied, to <tunnel id>.cfargotunnel.com), made with the
+Cloudflare API rather than a Terraform run per app (D9). Its marker names the
+app as well as the project: a record of a template app or of another import
+carries another marker and is never adopted, patched or deleted from here.
+The tunnel's routing table comes from the registry record's hostnames,
 rendered by cnp-project-base: nothing here touches it.
 """
 
 import httpx
 
 from app.core.config import settings
-from app.models.project import TargetCloud
 
 CLOUDFLARE_API = "https://api.cloudflare.com/client/v4"
 TIMEOUT = 15.0
@@ -46,16 +47,21 @@ async def _call(client: httpx.AsyncClient, method: str, path: str, **kw):
     return response.json().get("result")
 
 
-async def ensure_cname(
-    project: str, app: str, hostname: str, cloud: TargetCloud
-) -> None:
+def marker(project: str, app: str) -> str:
+    # Starts like the D-13 marker so cnp-clean finds it; at most 92
+    # characters (project and app fit a 63-character namespace), under the
+    # 100 Cloudflare keeps on every plan.
+    return f"cnp.project={project} cnp.app={app} cnp.env=prod"
+
+
+async def ensure_cname(project: str, app: str, hostname: str) -> None:
     """
     Raises:
         DnsError: Cloudflare unreachable, the project has no tunnel, or the
-            name is held by a record of something else.
+            name is held by a record that is not this app's.
     """
     _configured()
-    marker = f"cnp.project={project} cnp.cloud={cloud.value} cnp.env=prod"
+    owned = marker(project, app)
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         tunnels = await _call(
             client,
@@ -78,7 +84,7 @@ async def ensure_cname(
             "content": target,
             "proxied": True,
             "ttl": 1,
-            "comment": marker,
+            "comment": owned,
         }
         if not records:
             await _call(
@@ -88,13 +94,17 @@ async def ensure_cname(
                 json=body,
             )
             return
-        record = records[0]
-        if record.get("comment") != marker:
+        if len(records) != 1 or records[0].get("comment") != owned:
             raise DnsError(
-                f"{hostname} already exists and does not belong to project "
-                f"'{project}'"
+                f"{hostname} already exists and does not belong to app "
+                f"'{app}' of project '{project}'"
             )
-        if record.get("content") != target:
+        record = records[0]
+        if (
+            record.get("type") != "CNAME"
+            or record.get("content") != target
+            or not record.get("proxied")
+        ):
             await _call(
                 client,
                 "PATCH",
@@ -104,8 +114,8 @@ async def ensure_cname(
             )
 
 
-async def remove_cname(project: str, hostname: str) -> None:
-    """Delete the record if it carries this project's marker."""
+async def remove_cname(project: str, app: str, hostname: str) -> None:
+    """Delete the record if it carries this app's marker."""
     _configured()
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         records = await _call(
@@ -115,10 +125,7 @@ async def remove_cname(project: str, hostname: str) -> None:
             params={"name": hostname},
         )
         for record in records or []:
-            if (
-                f"cnp.project={project} "
-                in (record.get("comment") or "") + " "
-            ):
+            if record.get("comment") == marker(project, app):
                 await _call(
                     client,
                     "DELETE",

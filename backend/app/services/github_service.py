@@ -162,6 +162,41 @@ async def get_scoped_installation_token(
     )
 
 
+async def get_repository_id_scoped_token(
+    installation_id: str,
+    repository_ids: list[int],
+    permissions: dict[str, str],
+) -> str:
+    """
+    Like get_scoped_installation_token, by repository id: a repository
+    renamed, or deleted and recreated under the same name, is not covered.
+
+    Raises:
+        GitHubAppError: If the scope is empty or malformed, or the exchange fails
+    """
+    if not repository_ids or len(repository_ids) > _MAX_SCOPED_REPOSITORIES:
+        raise GitHubAppError(
+            f"A scoped token covers 1 to {_MAX_SCOPED_REPOSITORIES} "
+            "repositories"
+        )
+    if any(
+        isinstance(i, bool) or not isinstance(i, int) or i <= 0
+        for i in repository_ids
+    ):
+        raise GitHubAppError(f"Invalid repository ids: {repository_ids}")
+    if not permissions or any(
+        v not in _PERMISSION_LEVELS for v in permissions.values()
+    ):
+        raise GitHubAppError(f"Invalid permissions: {permissions}")
+    return await _request_installation_token(
+        installation_id,
+        {
+            "repository_ids": list(repository_ids),
+            "permissions": dict(permissions),
+        },
+    )
+
+
 async def _request_installation_token(
     installation_id: str, body: dict | None
 ) -> str:

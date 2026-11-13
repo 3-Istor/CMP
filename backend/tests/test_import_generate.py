@@ -418,3 +418,26 @@ def test_remove_drops_apps_files_and_links_to_them():
         keep["spec"]["apps"][0],
         {"name": "api", "type": "service"},
     ]
+
+
+@pytest.mark.parametrize("name", ["auth", "status", "offhours", "system"])
+def test_names_of_the_project_itself_are_refused(name):
+    edits = {"rename": {"frontend": name}}
+
+    with pytest.raises(generate.PlanError) as exc:
+        generate.resolve(_plan(), edits)
+
+    assert f"'{name}' is reserved" in str(exc.value)
+
+
+def test_credential_values_never_reach_the_spec():
+    plan = _plan()
+    plan["services"][0]["env"].append(
+        {"name": "MONGO_URL", "value": "mongodb://root:s3cr3tPass@mongo:27017"}
+    )
+
+    specs = generate.resolve(plan)
+
+    spec = next(s for s in specs if s.plan_name == plan["services"][0]["name"])
+    assert "MONGO_URL" not in {e["name"] for e in spec.env}
+    assert any("MONGO_URL looks like a credential" in w for w in spec.warnings)

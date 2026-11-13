@@ -6,16 +6,16 @@ apply and delete). The central workflow: /api/import/worker/{run_id}/...,
 authenticated by its GitHub OIDC token only.
 """
 
-import json
 import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.services import audit
 from app.services.authz import RequireAdmin, RequireMember
@@ -62,6 +62,27 @@ class PlanEdits(BaseModel):
     rename: dict[str, str] = Field(default_factory=dict)
     public: dict[str, bool] = Field(default_factory=dict)
     memory: dict[str, MemoryEdit] = Field(default_factory=dict)
+
+
+async def _recheck_repository(db: Session, claims: dict, source) -> None:
+    """
+    The caller must still be able to import the bound repository, the same
+    one by id, before a build mints a token on it.
+    """
+    try:
+        repo = await access.resolve_repository(
+            db, claims, source.repo_full_name, repo_id=source.repo_id
+        )
+    except access.RepoAccessError as exc:
+        raise HTTPException(
+            403,
+            f"You can no longer import {source.repo_full_name}: {exc}",
+        ) from exc
+    except GitHubAppError as exc:
+        raise HTTPException(502, f"GitHub could not be read: {exc}") from exc
+    if source.installation_id != repo.installation_id:
+        source.installation_id = repo.installation_id
+        db.commit()
 
 
 @router.get("/{project_name}/import/repos")
@@ -132,6 +153,10 @@ async def apply_import(
     assert_step_up(ctx.token)
     try:
         source = service.get_source(db, ctx.project_name, source_id)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    await _recheck_repository(db, ctx.token, source)
+    try:
         run = await service.approve(
             db,
             ctx.project_name,
@@ -150,8 +175,13 @@ async def rebuild_import(
     source_id: str, ctx: RequireAdmin, db: DbSession, request: Request
 ):
     _enabled()
+    assert_step_up(ctx.token)
     try:
         source = service.get_source(db, ctx.project_name, source_id)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    await _recheck_repository(db, ctx.token, source)
+    try:
         run = await service.rebuild(db, ctx.username, source)
     except ImportRefused as exc:
         raise _refused(exc) from exc
@@ -223,6 +253,34 @@ async def worker_claims(
 WorkerClaims = Annotated[dict, Depends(worker_claims)]
 
 
+async def _read_body(request: Request, limit: int) -> bytes:
+    """
+    The raw body, refused past *limit* bytes whatever Content-Length says.
+    Worker endpoints declare no body parameter: FastAPI would read and parse
+    it before the OIDC dependency ran.
+    """
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        if not declared.isdigit():
+            raise HTTPException(400, "Malformed Content-Length")
+        if int(declared) > limit:
+            raise HTTPException(413, "Request body too large")
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > limit:
+            raise HTTPException(413, "Request body too large")
+    return bytes(body)
+
+
+async def _worker_body(request: Request, model: type[BaseModel], limit: int):
+    raw = await _read_body(request, limit)
+    try:
+        return model.model_validate_json(raw)
+    except ValidationError as exc:
+        raise HTTPException(422, "Malformed worker call") from exc
+
+
 def _run_for(db: Session, run_id: str, attempt_id: str, claims: dict):
     try:
         return service.worker_run(db, run_id, attempt_id, claims)
@@ -232,8 +290,11 @@ def _run_for(db: Session, run_id: str, attempt_id: str, claims: dict):
 
 @worker.post("/{run_id}/claim")
 async def worker_claim(
-    run_id: str, body: WorkerCall, claims: WorkerClaims, db: DbSession
+    run_id: str, request: Request, claims: WorkerClaims, db: DbSession
 ):
+    body = await _worker_body(
+        request, WorkerCall, settings.IMPORT_WORKER_MAX_BODY_BYTES
+    )
     run = _run_for(db, run_id, body.attempt_id, claims)
     try:
         return await service.claim(db, run, claims)
@@ -245,13 +306,7 @@ async def worker_claim(
 async def worker_plan(
     run_id: str, request: Request, claims: WorkerClaims, db: DbSession
 ):
-    raw = await request.body()
-    if len(raw) > service.MAX_PLAN_BYTES:
-        raise HTTPException(413, "Plan too large")
-    try:
-        body = PlanCall.model_validate(json.loads(raw))
-    except ValueError as exc:
-        raise HTTPException(422, "Malformed plan call") from exc
+    body = await _worker_body(request, PlanCall, service.MAX_PLAN_BYTES)
     run = _run_for(db, run_id, body.attempt_id, claims)
     try:
         service.receive_plan(db, run, body.plan)
@@ -262,8 +317,11 @@ async def worker_plan(
 
 @worker.post("/{run_id}/publish", status_code=202)
 async def worker_publish(
-    run_id: str, body: PublishCall, claims: WorkerClaims, db: DbSession
+    run_id: str, request: Request, claims: WorkerClaims, db: DbSession
 ):
+    body = await _worker_body(
+        request, PublishCall, settings.IMPORT_WORKER_MAX_BODY_BYTES
+    )
     run = _run_for(db, run_id, body.attempt_id, claims)
     try:
         service.receive_publish(
@@ -276,8 +334,11 @@ async def worker_publish(
 
 @worker.post("/{run_id}/fail", status_code=204)
 async def worker_fail(
-    run_id: str, body: FailCall, claims: WorkerClaims, db: DbSession
+    run_id: str, request: Request, claims: WorkerClaims, db: DbSession
 ):
+    body = await _worker_body(
+        request, FailCall, settings.IMPORT_WORKER_MAX_BODY_BYTES
+    )
     run = _run_for(db, run_id, body.attempt_id, claims)
     try:
         service.receive_failure(db, run, body.stage, body.message)

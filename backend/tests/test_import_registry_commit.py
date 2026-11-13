@@ -60,7 +60,7 @@ async def _no_sleep(seconds):
     return None
 
 
-async def _add_api(record):
+async def _add_api(record, head):
     record["spec"]["apps"].append({"name": "api", "type": "backing"})
     return {"apps/shop/api/values.yaml": "image: {}\n"}
 

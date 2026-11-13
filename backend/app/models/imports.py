@@ -85,8 +85,10 @@ class ImportRun(Base):
     # Sent to the workflow as an input and echoed back on every worker call:
     # a run of an older dispatch cannot act on a newer attempt.
     attempt_id: Mapped[str] = mapped_column(String(36), default=_uuid)
-    # GitHub's run id, bound at the first claim.
+    # GitHub's run id and run attempt, bound at the first claim: a re-run of
+    # the workflow run (same run id, next attempt) cannot act on it.
     workflow_run_id: Mapped[str | None] = mapped_column(String(32))
+    workflow_run_attempt: Mapped[str | None] = mapped_column(String(8))
     status: Mapped[str] = mapped_column(
         String(16), default=RunStatus.QUEUED.value, index=True
     )

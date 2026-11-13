@@ -42,6 +42,9 @@ class Cluster:
         self.commits: list[dict] = []
         self.cnames: list[str] = []
         self.argo: dict[str, str] = {}
+        self.other_records: list[dict] = []
+        self.record = json.loads(json.dumps(RECORD))
+        self.record_reads: list[str] = []
         self.unhealthy: set[str] = set()
 
     async def read_kv(self, mount, path):
@@ -52,12 +55,17 @@ class Cluster:
         self.vault_writes.append((mount, path))
 
     async def commit(self, project, change, message):
-        record = json.loads(json.dumps(RECORD))
-        files = await change(record)
+        record = json.loads(json.dumps(self.record))
+        files = await change(record, "head")
+        self.record = record
         self.commits.append({"record": record, "files": files})
         return "c0ffee"
 
-    async def cname(self, project, app, hostname, cloud):
+    async def records(self, ref=None):
+        self.record_reads.append(ref)
+        return json.loads(json.dumps(self.other_records))
+
+    async def cname(self, project, app, hostname):
         self.cnames.append(hostname)
 
     def argo_state(self, name, image):
@@ -78,6 +86,7 @@ def world(monkeypatch):
     monkeypatch.setattr(deploy.vault_client, "read_kv", cluster.read_kv)
     monkeypatch.setattr(deploy.vault_client, "write_kv", cluster.write_kv)
     monkeypatch.setattr(deploy, "commit_record_change", cluster.commit)
+    monkeypatch.setattr(deploy, "list_records", cluster.records)
     monkeypatch.setattr(deploy.dns, "ensure_cname", cluster.cname)
     monkeypatch.setattr(deploy, "_argo_state", cluster.argo_state)
 
@@ -264,3 +273,169 @@ def test_values_carry_the_published_digest(world):
         files["apps/epitweet/user-service/values.yaml"]
     )
     assert values["image"]["digest"] == _digest("user-service")
+
+
+def test_deploy_reads_the_registry_at_the_head_it_commits_on(world):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    assert cluster.record_reads == ["head"]
+
+
+def test_name_taken_by_another_project_since_approval_aborts_the_commit(
+    world,
+):
+    Session, cluster = world
+    # Project "epitweet-user" owns namespace epitweet-user-service.
+    cluster.other_records = [
+        {
+            "metadata": {"name": "epitweet-user"},
+            "spec": {"apps": [{"name": "service", "type": "static"}]},
+        }
+    ]
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    assert cluster.commits == []
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+        rows = {s.app_name: s for s in db.query(ImportService).all()}
+    assert run.status == "failed"
+    assert "namespace 'epitweet-user-service'" in run.report["error"]
+    assert rows["user-service"].status == "failed"
+    assert "registry refused" in rows["user-service"].message
+
+
+# ── Removal ─────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def removal(world, monkeypatch):
+    Session, cluster = world
+    calls = {"namespaces": [], "dns": []}
+
+    async def noop():
+        return None
+
+    def cleanup(project, apps, source_id):
+        calls["namespaces"].append(apps)
+        return noop()
+
+    async def remove_cname(project, app, hostname):
+        calls["dns"].append(hostname)
+
+    monkeypatch.setattr(deploy, "_cleanup_namespaces", cleanup)
+    monkeypatch.setattr(deploy, "_spawn", lambda coro: coro.close())
+    monkeypatch.setattr(deploy.dns, "remove_cname", remove_cname)
+    return Session, cluster, calls
+
+
+def _never_deployed(Session) -> None:
+    """Applied, then the build failed: no app of it was deployed."""
+    run_id = _published_run(Session)
+    with Session() as db:
+        db.get(ImportRun, run_id).status = "failed"
+        db.commit()
+
+
+def _remove(Session):
+    with Session() as db:
+        source = db.query(ImportSource).one()
+        asyncio.run(deploy.remove(db, "alice", source))
+
+
+def _names(record) -> set[str]:
+    return {a["name"] for a in record["spec"]["apps"]}
+
+
+def test_removal_takes_out_what_the_import_deployed(removal):
+    Session, cluster, calls = removal
+    _deploy(_published_run(Session))
+    with Session() as db:
+        deployed = {s.app_name for s in db.query(ImportService).all()}
+
+    _remove(Session)
+
+    assert _names(cluster.record) == set()
+    assert set(calls["namespaces"][0]) == deployed
+    assert calls["dns"] == ["frontend-epitweet.3istor.com"]
+
+
+def test_removal_keeps_a_template_app_named_like_a_pending_service(removal):
+    Session, cluster, calls = removal
+    _never_deployed(Session)
+    cluster.record["spec"]["apps"] = [
+        {
+            "name": "frontend",
+            "type": "static",
+            "repoURL": "https://github.com/3-Istor/frontend",
+            "hostnames": {"prod": "frontend-epitweet.3istor.com"},
+        }
+    ]
+
+    _remove(Session)
+
+    assert _names(cluster.record) == {"frontend"}
+    assert calls["namespaces"] == [[]]
+    assert calls["dns"] == []
+    files = cluster.commits[-1]["files"]
+    assert "apps/epitweet/frontend/values.yaml" not in files
+
+
+def test_removal_keeps_a_service_of_another_repository(removal):
+    Session, cluster, calls = removal
+    _never_deployed(Session)
+    cluster.record["spec"]["apps"] = [
+        {
+            "name": "user-service",
+            "type": "service",
+            "public": False,
+            "source": {
+                "repo": "https://github.com/someone/else",
+                "path": "",
+                "sha": SHA,
+            },
+        }
+    ]
+
+    _remove(Session)
+
+    assert _names(cluster.record) == {"user-service"}
+    assert calls["namespaces"] == [[]]
+
+
+def test_removal_keeps_a_backing_app_it_never_deployed(removal):
+    Session, cluster, calls = removal
+    _never_deployed(Session)
+    cluster.record["spec"]["apps"] = [{"name": "mongodb", "type": "backing"}]
+
+    _remove(Session)
+
+    assert _names(cluster.record) == {"mongodb"}
+    assert calls["namespaces"] == [[]]
+
+
+def test_deploy_refuses_to_overwrite_a_service_of_another_repository(world):
+    Session, cluster = world
+    cluster.record["spec"]["apps"] = [
+        {
+            "name": "user-service",
+            "type": "service",
+            "public": False,
+            "source": {
+                "repo": "https://github.com/someone/else",
+                "path": "",
+                "sha": SHA,
+            },
+        }
+    ]
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    assert cluster.commits == []
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+    assert "imported from another repository" in run.report["error"]

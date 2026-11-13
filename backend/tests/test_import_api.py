@@ -39,7 +39,8 @@ class World:
         Base.metadata.create_all(engine)
         self.Session = sessionmaker(bind=engine, expire_on_commit=False)
         self.roles: dict[str, ProjectRole] = {"shop": ProjectRole.ADMIN}
-        self.claims = {"run_id": "555"}
+        self.claims = {"run_id": "555", "run_attempt": "1"}
+        self.repos: list[RepoRef] = [REPO]
         self.dispatched: list[dict] = []
         self.deployed: list[str] = []
 
@@ -84,6 +85,10 @@ def world(monkeypatch):
     async def deploy(run_id):
         world.deployed.append(run_id)
 
+    async def importable(db, claims):
+        return list(world.repos)
+
+    monkeypatch.setattr(access, "importable_repositories", importable)
     monkeypatch.setattr(service, "_head", head)
     monkeypatch.setattr(service, "_dispatch", dispatch)
     monkeypatch.setattr(service, "_repo_token", repo_token)
@@ -545,3 +550,202 @@ def test_failure_is_recorded_redacted_and_only_once(client, world):
         report = db.get(ImportRun, run.id).report
     assert report["stage"] == "build"
     assert "ghs_" not in report["error"]
+
+
+# ── Security review ─────────────────────────────────────────────────────────
+
+
+def _applied(world):
+    """An import whose build succeeded, ready to rebuild."""
+    source = _source(world)
+    _run(world, source, status="succeeded", plan=PLAN)
+    with world.db() as db:
+        db.add(
+            ImportService(
+                source_id=source.id,
+                app_name="api",
+                kind="service",
+                path="",
+                spec={},
+            )
+        )
+        db.commit()
+    _run(
+        world,
+        source,
+        kind="build",
+        status="succeeded",
+        plan={"plan": PLAN, "edits": {}},
+    )
+    return source
+
+
+def test_rebuild_needs_step_up(client, world, monkeypatch):
+    monkeypatch.setattr(settings, "STEP_UP_ENABLED", True)
+    source = _applied(world)
+
+    response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
+
+    assert response.status_code == 401
+
+
+def test_rebuild_starts_a_build_while_the_caller_can_import_the_repo(
+    client, world
+):
+    source = _applied(world)
+
+    response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
+
+    assert response.status_code == 202
+    assert world.dispatched[-1]["kind"] == "build"
+
+
+def test_rebuild_is_refused_once_the_caller_lost_the_repository(client, world):
+    source = _applied(world)
+    world.repos = []
+
+    response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
+
+    assert response.status_code == 403
+    assert world.dispatched == []
+
+
+def test_rebuild_is_refused_when_the_name_now_holds_another_repository(
+    client, world
+):
+    source = _applied(world)
+    world.repos = [RepoRef(REPO.full_name, 4242, 7, "main", True)]
+
+    response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
+
+    assert response.status_code == 403
+
+
+def test_rebuild_is_refused_once_the_caller_is_no_longer_project_admin(
+    client, world
+):
+    source = _applied(world)
+    world.roles["shop"] = ProjectRole.MEMBER
+
+    response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
+
+    assert response.status_code == 403
+
+
+def test_apply_is_refused_once_the_caller_lost_the_repository(client, world):
+    source = _source(world)
+    _run(world, source, status="succeeded", plan=PLAN)
+    world.repos = []
+
+    response = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply", json={}
+    )
+
+    assert response.status_code == 403
+
+
+def test_claim_gives_the_repository_id_and_binds_the_run_attempt(
+    client, world
+):
+    run = _run(world, _source(world))
+
+    response = _call(client, run, "claim")
+
+    assert response.json()["repository_id"] == 42
+    with world.db() as db:
+        assert db.get(ImportRun, run.id).workflow_run_attempt == "1"
+
+
+def test_a_rerun_attempt_of_the_workflow_run_cannot_act_on_the_run(
+    client, world
+):
+    run = _run(world, _source(world))
+    _call(client, run, "claim")
+    world.claims = {"run_id": "555", "run_attempt": "2"}
+
+    response = _call(client, run, "fail", stage="build", message="x")
+
+    assert response.status_code == 403
+
+
+def test_plan_over_the_app_cap_is_refused(client, world, monkeypatch):
+    monkeypatch.setattr(settings, "IMPORT_MAX_APPS", 10)
+    run = _run(world, _source(world))
+    _call(client, run, "claim")
+
+    response = _call(client, run, "plan", plan=PLAN)
+
+    assert response.status_code == 422
+    assert "at most 10" in response.json()["detail"]
+
+
+def test_plan_env_values_that_look_like_credentials_are_dropped(client, world):
+    run = _run(world, _source(world))
+    _call(client, run, "claim")
+    plan = json.loads(json.dumps(PLAN))
+    plan["services"][0]["env"] += [
+        {"name": "UPSTREAM_URL", "value": "https://bob:hunter2@api.example"},
+        {"name": "GH", "value": "ghp_" + "a1B2" * 9},
+        {"name": "LOG_LEVEL", "value": "info"},
+    ]
+
+    _call(client, run, "plan", plan=plan)
+
+    with world.db() as db:
+        stored = db.get(ImportRun, run.id).plan
+    env = {e["name"]: e for e in stored["services"][0]["env"]}
+    assert env["UPSTREAM_URL"]["value"] is None
+    assert env["UPSTREAM_URL"]["secret"] is True
+    assert env["GH"]["value"] is None
+    assert env["LOG_LEVEL"]["value"] == "info"
+    assert any("UPSTREAM_URL" in w for w in stored["warnings"])
+
+
+def test_worker_body_over_the_cap_is_refused_before_parsing(
+    client, world, monkeypatch
+):
+    monkeypatch.setattr(settings, "IMPORT_WORKER_MAX_BODY_BYTES", 1024)
+    run = _run(world, _source(world))
+    _call(client, run, "claim")
+
+    response = _call(client, run, "fail", stage="build", message="x" * 5000)
+
+    assert response.status_code == 413
+
+
+def test_worker_body_without_content_length_is_capped_while_streamed(
+    client, world, monkeypatch
+):
+    monkeypatch.setattr(settings, "IMPORT_WORKER_MAX_BODY_BYTES", 1024)
+    run = _run(world, _source(world))
+
+    def chunks():
+        yield b'{"attempt_id": "'
+        yield b"x" * 4096
+        yield b'"}'
+
+    response = client.post(
+        f"/api/import/worker/{run.id}/claim", content=chunks()
+    )
+
+    assert response.status_code == 413
+
+
+def test_unauthenticated_worker_call_is_refused_before_its_body_is_read(
+    client, world, monkeypatch
+):
+    del client.app.dependency_overrides[imports_router.worker_claims]
+    run = _run(world, _source(world))
+    read = []
+    monkeypatch.setattr(
+        imports_router, "_read_body", lambda *a: read.append(a)
+    )
+
+    response = client.post(
+        f"/api/import/worker/{run.id}/plan",
+        content=b"{" + b" " * 3_000_000 + b"}",
+        headers={"Authorization": "Bearer not-a-jwt"},
+    )
+
+    assert response.status_code == 401
+    assert read == []

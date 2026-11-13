@@ -3,11 +3,19 @@ GitHub Actions OIDC tokens of the central import workflow (D10, D14).
 
 Only one workflow may call the worker API: import.yml of the analyzer
 repository, on its main branch, at a commit listed in IMPORT_WORKFLOW_SHAS,
-started by workflow_dispatch. The repository is also pinned by its numeric
-ids, which a deleted and recreated repository of the same name does not keep.
+started by workflow_dispatch, on a runner environment the CMP allows. The
+repository is also pinned by its numeric ids, which a deleted and recreated
+repository of the same name does not keep.
+
+Signing keys are cached; a token with an unknown key id refetches the JWKS
+at most once per JWKS_REFETCH_SECONDS, so forged key ids cannot make the CMP
+hammer GitHub.
 """
 
+import threading
+import time
 from functools import lru_cache
+from typing import Any
 
 import jwt
 
@@ -15,6 +23,11 @@ from app.core.config import settings
 
 ISSUER = "https://token.actions.githubusercontent.com"
 JWKS_URL = f"{ISSUER}/.well-known/jwks"
+JWKS_REFETCH_SECONDS = 60.0
+
+_keys: dict[str, Any] = {}
+_fetched_at: float | None = None
+_keys_lock = threading.Lock()
 
 
 class WorkerTokenError(Exception):
@@ -28,8 +41,36 @@ def _jwks_client() -> jwt.PyJWKClient:
     )
 
 
+def _refetch_keys() -> None:
+    global _fetched_at  # pylint: disable=global-statement
+    _fetched_at = time.monotonic()
+    try:
+        jwk_set = _jwks_client().get_jwk_set(refresh=True)
+    except jwt.PyJWTError as exc:
+        raise WorkerTokenError("JWKS unavailable") from exc
+    _keys.clear()
+    _keys.update(
+        {k.key_id: k.key for k in jwk_set.keys if k.key_id is not None}
+    )
+
+
 def _signing_key(token: str):
-    return _jwks_client().get_signing_key_from_jwt(token).key
+    try:
+        kid = jwt.get_unverified_header(token).get("kid")
+    except jwt.PyJWTError as exc:
+        raise WorkerTokenError("header") from exc
+    if not isinstance(kid, str) or not kid:
+        raise WorkerTokenError("kid")
+    with _keys_lock:
+        if kid not in _keys and (
+            _fetched_at is None
+            or time.monotonic() - _fetched_at >= JWKS_REFETCH_SECONDS
+        ):
+            _refetch_keys()
+        key = _keys.get(kid)
+    if key is None:
+        raise WorkerTokenError("unknown kid")
+    return key
 
 
 def allowed_workflow_shas() -> frozenset[str]:
@@ -71,6 +112,12 @@ def check_claims(claims: dict) -> None:
             raise WorkerTokenError(f"claim {claim}")
     if not str(claims.get("run_id", "")).isdigit():
         raise WorkerTokenError("claim run_id")
+    if not str(claims.get("run_attempt", "")).isdigit():
+        raise WorkerTokenError("claim run_attempt")
+    if str(claims.get("runner_environment", "")) not in set(
+        settings.IMPORT_ALLOWED_RUNNER_ENVIRONMENTS
+    ):
+        raise WorkerTokenError("claim runner_environment")
 
 
 def verify_worker_token(token: str) -> dict:

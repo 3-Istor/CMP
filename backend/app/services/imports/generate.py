@@ -16,12 +16,15 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
+from app.services.imports.secret_scan import is_emittable_value
 from app.services.registry_names import HOSTNAME_DOMAIN
 
 CATALOGUE_DIR = Path(__file__).parent / "catalogue"
 SUPPORTED_BACKING = ("mongodb", "redis", "neo4j", "elasticsearch")
 IMPORTED_NAME = re.compile(r"^[a-z]([-a-z0-9]*[a-z0-9])?$")
 MAX_IMPORTED_NAME = 40
+# <name>-<project> is the project's own auth, status and offhours hostname.
+RESERVED_APP_NAMES = frozenset({"auth", "status", "offhours", "system"})
 # Same list as cnp-projects validate-registry.py and infra-templates links.yaml.
 RESERVED_ALIASES = frozenset(
     {"kubernetes", "default", "vault", "keycloak", "argocd"}
@@ -141,6 +144,28 @@ def _run_as_user(build: dict) -> int | None:
     return None
 
 
+def scrub_env(env: list[dict]) -> tuple[list[dict], list[str]]:
+    """
+    The env with every value that may be a credential (URL userinfo, token
+    pattern, secret-looking name or random-looking value) dropped and the
+    variable marked secret, and one warning per value dropped.
+    """
+    kept: list[dict] = []
+    warnings: list[str] = []
+    for item in env:
+        value = item.get("value")
+        if value is not None and not is_emittable_value(
+            str(item.get("name", "")), str(value)
+        ):
+            item = {**item, "value": None, "secret": True}
+            warnings.append(
+                f"value of {item.get('name')} looks like a credential: "
+                "dropped, set it as a secret of the app"
+            )
+        kept.append(item)
+    return kept, warnings
+
+
 def check_name(name: str) -> list[str]:
     if len(name) > MAX_IMPORTED_NAME or not IMPORTED_NAME.match(name):
         return [
@@ -148,6 +173,8 @@ def check_name(name: str) -> list[str]:
             f"and '-', starting with a letter, at most {MAX_IMPORTED_NAME} "
             "characters"
         ]
+    if name in RESERVED_APP_NAMES:
+        return [f"'{name}' is reserved by the platform for the project itself"]
     return []
 
 
@@ -242,6 +269,10 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
                 f"app '{name}' exposes no port: the platform cannot route "
                 "to it"
             )
+        env, env_warnings = scrub_env(
+            [dict(e) for e in service.get("env") or []]
+        )
+        warnings += env_warnings
         run_as = _run_as_user(service["build"])
         if run_as is None:
             warnings.append(
@@ -255,7 +286,7 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
                 path=service["path"],
                 ports=ports,
                 probe=service.get("probes"),
-                env=[dict(e) for e in service.get("env") or []],
+                env=env,
                 public=bool(public_edits.get(name, service.get("public"))),
                 requests_mem_mib=requests,
                 limits_mem_mib=limits,
@@ -526,6 +557,39 @@ def backing_values(project: str, spec: AppSpec) -> dict:
     return values
 
 
+def repo_url(repo: str) -> str:
+    return f"https://github.com/{repo}"
+
+
+def _from_repo(entry: dict, repo: str) -> bool:
+    source = entry.get("source")
+    return (
+        isinstance(source, dict)
+        and str(source.get("repo", "")).lower() == repo_url(repo).lower()
+    )
+
+
+def owned_by_import(
+    record: dict, repo: str, services: set[str], deployed_backing: set[str]
+) -> set[str]:
+    """
+    Names of the record's apps this import may remove: its services, built
+    from its repository, and the backing apps it deployed. A template app or
+    an app of another import under the same name is never one of them.
+    """
+    owned = set()
+    for app in (record.get("spec") or {}).get("apps") or []:
+        if not isinstance(app, dict):
+            continue
+        name = app.get("name")
+        if app.get("type") == "service" and name in services:
+            if _from_repo(app, repo):
+                owned.add(name)
+        elif app.get("type") == "backing" and name in deployed_backing:
+            owned.add(name)
+    return owned
+
+
 def registry_entry(spec: AppSpec, project: str, repo: str, sha: str) -> dict:
     entry: dict = {"name": spec.name, "type": spec.kind}
     if spec.kind == "service":
@@ -533,7 +597,7 @@ def registry_entry(spec: AppSpec, project: str, repo: str, sha: str) -> dict:
         if spec.public:
             entry["hostnames"] = {"prod": hostname(project, spec.name)}
         entry["source"] = {
-            "repo": f"https://github.com/{repo}",
+            "repo": repo_url(repo),
             "path": spec.path,
             "sha": sha,
         }
@@ -595,13 +659,17 @@ def apply_to_record(
     deployable = [s for s in specs if s.kind == "backing" or s.name in digests]
     for spec in deployable:
         current = existing.get(spec.name)
-        if current is not None and current.get("type") not in (
-            "service",
-            "backing",
-        ):
+        if current is None:
+            continue
+        if current.get("type") != spec.kind:
             problems.append(
                 f"app '{spec.name}' already exists in project '{project}' "
                 f"as a {current.get('type')} app"
+            )
+        elif spec.kind == "service" and not _from_repo(current, repo):
+            problems.append(
+                f"app '{spec.name}' already exists in project '{project}', "
+                "imported from another repository"
             )
     if problems:
         raise PlanError(problems)
