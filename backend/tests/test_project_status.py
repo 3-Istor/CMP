@@ -166,7 +166,7 @@ def stubbed_terraform(session_factory, tmp_path):
     ), mock.patch.object(
         project_bootstrap, "_stage_module", return_value=tmp_path
     ), mock.patch.object(
-        project_bootstrap, "get_installation_token"
+        project_bootstrap, "get_org_installation_token"
     ), mock.patch.object(
         project_bootstrap.settings, "GITHUB_INSTALLATION_ID", ""
     ), mock.patch.object(

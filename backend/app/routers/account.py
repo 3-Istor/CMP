@@ -384,17 +384,30 @@ async def save_github_installation(
     db: Session = Depends(get_db),
 ) -> GitHubInstallationResponse:
     """
-    Save GitHub App installation ID to database.
+    Record the GitHub App installation linked to the caller.
 
-    This endpoint is called either:
-    1. Automatically when GitHub redirects back after app installation
-    2. Manually when user enters existing installation ID
+    An installation ID alone proves nothing: any user can type someone
+    else's. Until the GitHub OAuth linking flow ties an installation to the
+    caller's GitHub identity (CNP-241), only the platform org installation is
+    accepted, and any other ID is refused with 409.
     """
     installation_id = request_data.installation_id.strip()
 
     if not installation_id:
         raise HTTPException(
             status_code=400, detail="Installation ID cannot be empty"
+        )
+    if (
+        not settings.GITHUB_INSTALLATION_ID
+        or installation_id != settings.GITHUB_INSTALLATION_ID
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Linking a personal GitHub installation is disabled until "
+                "the GitHub OAuth linking flow ships (CNP-241). Apps are "
+                "created in the platform organization and do not need it."
+            ),
         )
 
     # Get user identifier from token (use preferred_username for consistency)

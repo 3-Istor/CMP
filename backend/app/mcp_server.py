@@ -41,7 +41,7 @@ from app.services.clusters.state import cluster_states, ensure_cluster_up
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
 )
 
 PUBLIC_URL = settings.CMP_PUBLIC_URL.rstrip("/")
@@ -241,15 +241,11 @@ def _app_summary(app: dict) -> dict:
     }
 
 
-async def _repo_token(caller: Caller, app: dict) -> tuple[str, str]:
+async def _repo_token(app: dict) -> tuple[str, str]:
     repo = app_repo.bound_repo(
         app.get("github_repo_url"), app["name"], app["status"]
     )
-    me = await caller.api("GET", "/api/account/me")
-    installation = me.get("github_installation_id") or (
-        settings.GITHUB_INSTALLATION_ID
-    )
-    token = await get_installation_token(str(installation))
+    token = await get_org_installation_token()
     return token, repo
 
 
@@ -599,10 +595,6 @@ async def create_app(
                 "message": f"A sandbox holds {policy.sandbox_max_apps()} "
                 "apps. Delete one, or move the app to a real project.",
             }
-    me = await caller.api("GET", "/api/account/me")
-    installation = me.get("github_installation_id") or (
-        settings.GITHUB_INSTALLATION_ID
-    )
     created = await caller.api(
         "POST",
         "/api/deployments/",
@@ -614,7 +606,6 @@ async def create_app(
                 "template_repo_name": STACKS[stack],
                 "github_owner": settings.GITHUB_ORG,
                 "project_name": project,
-                "github_installation_id": str(installation),
             },
         },
     )
@@ -690,7 +681,7 @@ async def list_app_files(
     caller = Caller()
     app = await caller.api("GET", f"/api/deployments/{app_id}")
     await caller.require_role(app["project_id"], ProjectRole.MEMBER)
-    token, repo = await _repo_token(caller, app)
+    token, repo = await _repo_token(app)
     paths = [
         p
         for p in await repo_ops.list_files(token, repo)
@@ -711,7 +702,7 @@ async def read_app_file(app_id: int, path: str) -> dict:
     caller = Caller()
     app = await caller.api("GET", f"/api/deployments/{app_id}")
     await caller.require_role(app["project_id"], ProjectRole.MEMBER)
-    token, repo = await _repo_token(caller, app)
+    token, repo = await _repo_token(app)
     content, _ = await get_file_content(
         token, repo, repo_ops.normalize_path(path)
     )
@@ -784,7 +775,7 @@ async def push_files(
     )
     if verdict == "stop":
         return answer
-    token, repo = await _repo_token(caller, app)
+    token, repo = await _repo_token(app)
     via = caller.claims["cnp_agent"]["client"]
     result = await repo_ops.commit_files(
         token,
@@ -887,7 +878,7 @@ async def cut_release(
     project = app["project_id"]
     await caller.require_role(project, ProjectRole.MEMBER)
     await caller.require_cluster_up(project)
-    token, repo = await _repo_token(caller, app)
+    token, repo = await _repo_token(app)
     offered = await caller.api(
         "GET", f"/api/deployments/{app_id}/release/choices"
     )

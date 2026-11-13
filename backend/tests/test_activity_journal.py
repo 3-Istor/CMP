@@ -60,7 +60,7 @@ def build(session_factory):
             ),
             mock.patch.object(
                 deployments_router,
-                "get_installation_token",
+                "get_org_installation_token",
                 mock.AsyncMock(return_value="tok"),
             ),
             mock.patch.object(

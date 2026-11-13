@@ -8,6 +8,7 @@ Manages the full lifecycle of Terraform-based deployments:
 - Destroy resources
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -20,7 +21,10 @@ from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services import app_inputs, customer_identity, notifications
 from app.services.app_repo import is_platform_repo_name, repo_url_for
-from app.services.github_service import get_installation_token
+from app.services.github_service import (
+    GitHubAppError,
+    get_org_installation_token,
+)
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
 
@@ -82,28 +86,17 @@ def run_deployment(deployment_id: int) -> None:
             logger.debug(f"Template path verified: {template_path}")
 
             app_config = _terraform_variables(deployment, template)
-            installation_id = app_inputs.stored_installation_id(
-                deployment.app_config
-            )
-            if installation_id is not None:
+            # App repos live in the org: a stored installation ID was sent by
+            # the client and is never used to mint a token.
+            if deployment.template_id == "k3s-gitops-app":
                 try:
-                    import asyncio
-
                     app_config["github_token"] = asyncio.run(
-                        get_installation_token(installation_id)
+                        get_org_installation_token()
                     )
-                except Exception as token_error:
-                    logger.error(
-                        f"Failed to generate GitHub token: {token_error}"
-                    )
+                except GitHubAppError as token_error:
                     raise RuntimeError(
                         f"Cannot deploy without GitHub token: {token_error}"
-                    )
-            elif deployment.template_id == "k3s-gitops-app":
-                raise ValueError(
-                    "DEPLOYMENT BLOCKED: the app has no GitHub installation. "
-                    "Link a GitHub account in the Account page and deploy again."
-                )
+                    ) from token_error
             logger.info(f"Terraform variables: {sorted(app_config)}")
 
             # Create Terraform executor
@@ -208,8 +201,6 @@ def run_deployment(deployment_id: int) -> None:
             if deployment.template_id == "k3s-gitops-app" and outputs.get(
                 "hostname"
             ):
-                import asyncio
-
                 from app.services.project_registry import (
                     RegistryError,
                     register_app,
@@ -401,20 +392,15 @@ def run_deletion(deployment_id: int) -> None:
             )
 
             app_config = _terraform_variables(deployment, template)
-            installation_id = app_inputs.stored_installation_id(
-                deployment.app_config
-            )
             # The token is never stored: mint one, or pass a placeholder so
             # Terraform does not prompt for it.
             app_config["github_token"] = "dummy-token-for-destroy"
-            if installation_id is not None:
+            if deployment.template_id == "k3s-gitops-app":
                 try:
-                    import asyncio
-
                     app_config["github_token"] = asyncio.run(
-                        get_installation_token(installation_id)
+                        get_org_installation_token()
                     )
-                except Exception as token_error:
+                except GitHubAppError as token_error:
                     logger.warning(
                         f"Failed to regenerate GitHub token, destroying "
                         f"anyway (GitHub resources may need manual cleanup): "
@@ -458,8 +444,6 @@ def run_deletion(deployment_id: int) -> None:
                 deployment.template_id == "k3s-gitops-app"
                 and deployment.project_id
             ):
-                import asyncio
-
                 from app.services.project_registry import (
                     RegistryError,
                     unregister_app,

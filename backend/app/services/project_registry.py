@@ -27,7 +27,7 @@ from app.services.github_service import (
     GitHubAppError,
     delete_file,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
     list_directory,
     put_file_content,
 )
@@ -468,7 +468,7 @@ async def _installation_token() -> str:
             "GITHUB_INSTALLATION_ID is not configured, the registry cannot be reached."
         )
     try:
-        return await get_installation_token(settings.GITHUB_INSTALLATION_ID)
+        return await get_org_installation_token()
     except GitHubAppError as exc:
         raise RegistryError(
             f"Could not obtain a GitHub installation token: {exc}"

@@ -82,7 +82,7 @@ def validate_request(
     """
     Check a create request's app_config against the template's manifest
     fields and return what may be stored: the user fields (with their
-    defaults) and the GitHub installation ID.
+    defaults). A GitHub installation ID is accepted and dropped.
 
     ``project_name`` is accepted when it names the request's project, and a
     platform field when it holds the platform's value: the portal sends both.
@@ -102,10 +102,9 @@ def validate_request(
             if value != platform[key]:
                 problems.append(f"{key} is set by the platform.")
         elif key == GITHUB_INSTALLATION_ID:
-            if isinstance(value, bool) or not _DIGITS.match(str(value)):
-                problems.append(f"{key} must be a number.")
-            else:
-                accepted[key] = str(value)
+            # Older portal and MCP builds send it. App repos live in the org,
+            # so a client-chosen installation is never stored.
+            continue
         elif key in user_fields:
             if value == "" and not user_fields[key].get("required"):
                 continue
@@ -126,15 +125,6 @@ def validate_request(
     if problems:
         raise InvalidAppConfig(problems)
     return accepted
-
-
-def stored_installation_id(app_config: str | None) -> int | None:
-    value = json.loads(app_config or "{}").get(GITHUB_INSTALLATION_ID)
-    if value is None or isinstance(value, bool):
-        return None
-    if not _DIGITS.match(str(value)):
-        return None
-    return int(value)
 
 
 def stored_target_cloud(app_config: str | None) -> str:
