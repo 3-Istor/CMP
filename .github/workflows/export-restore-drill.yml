@@ -48,7 +48,10 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./backend
-        run: poetry install --no-interaction
+        # pytest is not in the Poetry dev group: the Test workflow lints only.
+        run: |
+          poetry install --no-interaction
+          poetry run pip install pytest==9.2.0
 
       - name: Unit tests of the export
         working-directory: ./backend

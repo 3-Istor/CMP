@@ -313,9 +313,8 @@ async def collect_repos(
 def database_refs(objects: list[dict]) -> list[DatabaseRef]:
     refs = []
     for obj in objects:
-        if obj.get("kind") != "Cluster" or not obj.get(
-            "apiVersion", ""
-        ).startswith("postgresql.cnpg.io/"):
+        group = obj.get("apiVersion", "").partition("/")[0]
+        if obj.get("kind") != "Cluster" or group != "postgresql.cnpg.io":
             continue
         name = obj["metadata"]["name"]
         initdb = ((obj.get("spec") or {}).get("bootstrap") or {}).get(
