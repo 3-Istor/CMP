@@ -40,7 +40,7 @@ from app.services.deletion_protection import assert_deletable
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
     put_file_content,
 )
 from app.services.keycloak_service import (
@@ -505,26 +505,15 @@ async def _get_github_token_for_deployment(deployment: Deployment) -> str:
     """
     Retrieve a fresh GitHub installation token for the given deployment.
 
-    The installation ID is read from the deployment's ``app_config`` JSON.
+    App repositories live in the platform org, so the org installation is
+    used. The installation ID a client stored in ``app_config`` is ignored.
 
     Raises:
-        HTTPException 400, if no installation ID is stored.
         HTTPException 502, if GitHub token exchange fails.
     """
-    app_config: dict = json.loads(deployment.app_config or "{}")
-    installation_id: str | None = app_config.get("github_installation_id")
-
-    if not installation_id:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No GitHub installation ID found for this deployment. "
-                "The user must link their GitHub account first."
-            ),
-        )
-
+    del deployment
     try:
-        return await get_installation_token(installation_id)
+        return await get_org_installation_token()
     except GitHubAppError as exc:
         raise HTTPException(
             status_code=502,

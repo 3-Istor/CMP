@@ -163,7 +163,6 @@ def test_create_accepts_the_portal_payload_and_stores_server_values(
         "template_repo_name": "template-html-css",
         "github_owner": "3-Istor",
         "project_name": "demo",
-        "github_installation_id": "12345",
         "target_cloud": "onprem",
     }
 
@@ -215,7 +214,7 @@ def test_a_legacy_row_with_platform_overrides_does_not_reach_terraform_argv(
         mock.patch.object(orchestrator, "get_repository", lambda: repo),
         mock.patch.object(
             orchestrator,
-            "get_installation_token",
+            "get_org_installation_token",
             mock.AsyncMock(return_value="ghs_token"),
         ),
         mock.patch.object(orchestrator, "_notify"),

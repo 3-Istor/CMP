@@ -17,7 +17,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { getGitHubStatus, saveGitHubInstallationId } from "@/lib/api";
+import {
+  ApiError,
+  getGitHubStatus,
+  saveGitHubInstallationId,
+} from "@/lib/api";
+
+const isLinkingDisabled = (error: unknown) =>
+  error instanceof ApiError && error.status === 409;
 
 export function GitHubLinkButton() {
   const t = useTranslations("account.github");
@@ -56,7 +63,17 @@ export function GitHubLinkButton() {
         await fetchGitHubStatus();
       } catch (error) {
         console.error("Failed to save installation ID from callback:", error);
-        toast.error(t("callbackFailed"));
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname,
+        );
+        toast.error(
+          isLinkingDisabled(error)
+            ? t("linkingDisabled")
+            : t("callbackFailed"),
+        );
+        await fetchGitHubStatus();
       } finally {
         setSaving(false);
       }
@@ -117,7 +134,9 @@ export function GitHubLinkButton() {
       await fetchGitHubStatus();
     } catch (error) {
       console.error("Failed to save installation ID:", error);
-      toast.error(t("idSaveFailed"));
+      toast.error(
+        isLinkingDisabled(error) ? t("linkingDisabled") : t("idSaveFailed"),
+      );
     } finally {
       setSaving(false);
     }

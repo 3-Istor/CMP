@@ -127,24 +127,14 @@ export default function ProjectPage() {
     if (!selectedTemplate) return;
     setDeploying(true);
     try {
-      // Fetch GitHub installation ID from user profile
-      const { github_installation_id } = await import("@/lib/api").then((m) =>
-        m.getGitHubStatus(),
-      );
-
       await createDeployment({
         name,
         template_id: selectedTemplate.id,
         // CRITICAL: Set project_id at top level for database storage
         project_id: projectName,
-        // Inject project context AND GitHub installation ID
         app_config: {
           ...config,
           project_name: projectName,
-          // Only add github_installation_id if template is Kubernetes (paas)
-          ...(selectedTemplate.category === "paas" && github_installation_id
-            ? { github_installation_id: String(github_installation_id) }
-            : {}),
         },
       });
       toast.success(ta("errors.deployStarted", { name }));

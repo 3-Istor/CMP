@@ -83,7 +83,7 @@ def mcp_caller(monkeypatch):
     monkeypatch.setattr(mcp_server, "Caller", lambda: caller)
     monkeypatch.setattr(
         mcp_server,
-        "get_installation_token",
+        "get_org_installation_token",
         mock.AsyncMock(return_value="tok"),
     )
     monkeypatch.setattr(

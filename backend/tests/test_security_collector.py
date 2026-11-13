@@ -56,7 +56,7 @@ def _github(artifact=None, error=None, files=None):
     if files is None:
         files = {settings.WORKFLOW_FILE: "name: Security Scans"}
     patches = {
-        "get_installation_token": mock.AsyncMock(return_value="t"),
+        "get_org_installation_token": mock.AsyncMock(return_value="t"),
         "get_default_branch": mock.AsyncMock(return_value="main"),
         "get_latest_artifact": mock.AsyncMock(
             return_value=artifact, side_effect=error

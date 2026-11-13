@@ -87,21 +87,76 @@ def generate_jwt() -> str:
 
 async def get_installation_token(installation_id: str) -> str:
     """
-    Exchange the GitHub App JWT for a short-lived Installation Access Token.
+    Exchange the GitHub App JWT for an installation token with every
+    permission the app holds on every repository of the installation.
 
-    This token is scoped to a specific user/organization installation and has
-    the permissions defined in the GitHub App configuration.
-
-    Args:
-        installation_id: The GitHub App installation ID (stored in the
-            ``user_github_installations`` table and in the deployment's app_config)
-
-    Returns:
-        str: The installation access token (valid for 1 hour)
+    Only for the 3-Istor org installation, through
+    ``get_org_installation_token``. A user's installation must go through
+    ``get_scoped_installation_token``.
 
     Raises:
         GitHubAppError: If the token exchange fails
     """
+    return await _request_installation_token(installation_id, None)
+
+
+async def get_org_installation_token() -> str:
+    """
+    Installation token of the CNP-Portal app on the platform org.
+
+    App repositories live in the org and are created by the CMP, so this is
+    the only installation used for them. An installation ID stored in a
+    deployment or sent by a client is never used to mint a token.
+
+    Raises:
+        GitHubAppError: If GITHUB_INSTALLATION_ID is not set or the exchange fails
+    """
+    if not settings.GITHUB_INSTALLATION_ID:
+        raise GitHubAppError("GITHUB_INSTALLATION_ID is not configured")
+    return await get_installation_token(settings.GITHUB_INSTALLATION_ID)
+
+
+_PERMISSION_LEVELS = frozenset({"read", "write"})
+
+
+async def get_scoped_installation_token(
+    installation_id: str,
+    repositories: list[str],
+    permissions: dict[str, str],
+) -> str:
+    """
+    Installation token limited to ``repositories`` (names, without owner) and
+    ``permissions`` (e.g. ``{"contents": "read", "metadata": "read"}``).
+
+    Every token minted on an installation the user controls goes through
+    here, so a token never carries the app's full permission set.
+
+    Raises:
+        GitHubAppError: If the scope is empty or malformed, or the exchange fails
+    """
+    if not repositories:
+        raise GitHubAppError("A scoped token needs at least one repository")
+    if not permissions:
+        raise GitHubAppError("A scoped token needs explicit permissions")
+    bad_names = [r for r in repositories if not r or "/" in r]
+    if bad_names:
+        raise GitHubAppError(
+            f"Repository names must not include the owner: {bad_names}"
+        )
+    bad_levels = {
+        k: v for k, v in permissions.items() if v not in _PERMISSION_LEVELS
+    }
+    if bad_levels:
+        raise GitHubAppError(f"Invalid permission levels: {bad_levels}")
+    return await _request_installation_token(
+        installation_id,
+        {"repositories": list(repositories), "permissions": dict(permissions)},
+    )
+
+
+async def _request_installation_token(
+    installation_id: str, body: dict | None
+) -> str:
     app_jwt = generate_jwt()
 
     url = (
@@ -115,7 +170,9 @@ async def get_installation_token(installation_id: str) -> str:
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, timeout=10.0)
+            response = await client.post(
+                url, headers=headers, json=body, timeout=10.0
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -139,6 +196,8 @@ async def get_installation_token(installation_id: str) -> str:
         raise GitHubAppError(
             f"Failed to get installation token: {exc.response.status_code}"
         ) from exc
+    except GitHubAppError:
+        raise
     except Exception as exc:
         raise GitHubAppError(
             f"Failed to communicate with GitHub API: {exc}"

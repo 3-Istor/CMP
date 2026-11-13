@@ -17,7 +17,7 @@ from app.services.github_service import (
     commit_files,
     get_branch_head,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
 )
 
 COMMIT_ATTEMPTS = 3
@@ -57,13 +57,9 @@ def repo_of(deployment: Deployment) -> str:
 
 
 async def token_for(deployment: Deployment) -> str:
-    installation_id = json.loads(deployment.app_config or "{}").get(
-        "github_installation_id"
-    )
-    if not installation_id:
-        raise GitOpsError("No GitHub installation is linked to this app.")
+    del deployment
     try:
-        return await get_installation_token(installation_id)
+        return await get_org_installation_token()
     except GitHubAppError as exc:
         raise GitOpsError(f"GitHub token: {exc}") from exc
 

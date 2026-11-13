@@ -1377,7 +1377,8 @@
       "opened": "The GitHub App installation opened in a new tab. Come back here once it is installed.",
       "idRequired": "Enter an installation ID",
       "idSaved": "Installation ID saved",
-      "idSaveFailed": "Failed to save the ID. Check it and try again."
+      "idSaveFailed": "Failed to save the ID. Check it and try again.",
+      "linkingDisabled": "Linking a personal GitHub installation is not available yet. Apps are created in the platform organisation and do not need it."
     }
   },
   "common": {
@@ -1454,9 +1455,6 @@
       "selectOption": "Select an option…",
       "required": "Required",
       "optional": "Optional",
-      "githubTitle": "GitHub account required",
-      "githubText": "To deploy Kubernetes applications, you first need to link your GitHub account.",
-      "githubLink": "Go to account settings",
       "provisionedTitle": "What will be provisioned",
       "repo": "Private GitHub repository with the template code",
       "namespace": "Kubernetes namespace with RBAC",

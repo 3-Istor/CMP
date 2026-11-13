@@ -37,7 +37,7 @@ from app.services.github_service import (
     dispatch_workflow,
     get_default_branch,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
     put_file_content,
 )
 from app.services.keycloak_service import get_current_user, get_project_role
@@ -493,21 +493,14 @@ class ScanRequest(BaseModel):
 
 
 async def _github_token(deployment: Deployment) -> tuple[str, str]:
-    installation_id = json.loads(deployment.app_config or "{}").get(
-        "github_installation_id"
-    )
     try:
         repo = app_repo.bound_repo(
             deployment.github_repo_url, deployment.name, deployment.status
         )
     except app_repo.RepoNotBound as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if not installation_id:
-        raise HTTPException(
-            status_code=409, detail="This app has no GitHub repository linked."
-        )
     try:
-        return await get_installation_token(installation_id), repo
+        return await get_org_installation_token(), repo
     except GitHubAppError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

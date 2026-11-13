@@ -1377,7 +1377,8 @@
       "opened": "L'installation de l'application GitHub s'est ouverte dans un nouvel onglet. Revenez ici une fois l'installation terminée.",
       "idRequired": "Saisissez un identifiant d'installation",
       "idSaved": "Identifiant d'installation enregistré",
-      "idSaveFailed": "Échec de l'enregistrement de l'identifiant. Vérifiez-le et réessayez."
+      "idSaveFailed": "Échec de l'enregistrement de l'identifiant. Vérifiez-le et réessayez.",
+      "linkingDisabled": "La liaison d'une installation GitHub personnelle n'est pas encore disponible. Les applications sont créées dans l'organisation de la plateforme et n'en ont pas besoin."
     }
   },
   "common": {
@@ -1454,9 +1455,6 @@
       "selectOption": "Sélectionnez une option…",
       "required": "Requis",
       "optional": "Facultatif",
-      "githubTitle": "Compte GitHub requis",
-      "githubText": "Pour déployer des applications Kubernetes, vous devez d'abord lier votre compte GitHub.",
-      "githubLink": "Aller aux réglages du compte",
       "provisionedTitle": "Ce qui sera provisionné",
       "repo": "Dépôt GitHub privé avec le code du modèle",
       "namespace": "Namespace Kubernetes avec RBAC",
