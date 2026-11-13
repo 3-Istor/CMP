@@ -20,6 +20,7 @@ import app.models.agent  # noqa: F401
 import app.models.audit  # noqa: F401
 import app.models.deployment  # noqa: F401
 from app import mcp_server
+from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models.project import TargetCloud
 from app.routers import agents as agents_router
@@ -952,3 +953,120 @@ def test_whoami_lists_each_cloud_state_and_project_cloud(monkeypatch):
 
     assert result["clouds"] == {"onprem": "up", "aws": "up", "gcp": "down"}
     assert result["projects"][0]["cloud"] == "aws"
+
+
+# ---------------------------------------------------------------------------
+# Step-up
+# ---------------------------------------------------------------------------
+
+
+def _step_up_on():
+    return mock.patch.object(settings, "STEP_UP_ENABLED", True)
+
+
+def _pending_request(client) -> str:
+    client_id = _register(client).json()["client_id"]
+    _, challenge = _pkce()
+    authorize = client.get(
+        "/authorize",
+        params={
+            "client_id": client_id,
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    return parse_qs(urlparse(authorize.headers["location"]).query)["request"][
+        0
+    ]
+
+
+def test_connecting_an_assistant_needs_a_fresh_passkey_login(platform):
+    # Arrange
+    request_id = _pending_request(platform)
+
+    # Act
+    with _step_up_on():
+        response = platform.post(
+            f"/api/agents/requests/{request_id}/approve",
+            json={"scopes": store.SCOPES},
+            headers={"Authorization": "Bearer human"},
+        )
+
+    # Assert
+    assert (response.status_code, response.json()["detail"]["code"]) == (
+        401,
+        "step_up_required",
+    )
+
+
+def test_approving_an_assistant_request_in_the_cmp_needs_a_fresh_passkey_login(
+    platform,
+):
+    # Arrange
+    tokens = _connect(platform)
+    policy.set_project_stake("demo", "alice", level="critical")
+    asked = _result(
+        _call(
+            platform,
+            tokens["access_token"],
+            "release_action",
+            {"app_id": 1, "action": "promote"},
+        )
+    )
+    confirmation = asked["approval_link"].rsplit("/", 1)[1]
+
+    # Act
+    with _step_up_on():
+        response = platform.post(
+            f"/api/agents/confirmations/{confirmation}/approve",
+            headers={"Authorization": "Bearer human"},
+        )
+
+    # Assert
+    assert (
+        response.status_code,
+        policy.load_confirmation(confirmation).status,
+    ) == (
+        401,
+        "pending",
+    )
+
+
+@pytest.mark.parametrize(
+    "tool, arguments",
+    [
+        (
+            "release_action",
+            {
+                "app_id": 1,
+                "action": "promote",
+                "full": True,
+                "reason": "hotfix",
+                "user_confirmed": True,
+            },
+        ),
+        ("delete_app", {"app_id": 1, "user_confirmed": True}),
+    ],
+)
+def test_an_assistant_hands_passkey_actions_to_the_user_in_the_cmp(
+    platform, tool, arguments
+):
+    # Arrange
+    tokens = _connect(platform)
+    policy.set_project_stake("demo", "alice", level="sandbox")
+
+    # Act
+    with _step_up_on():
+        result = _result(
+            _call(platform, tokens["access_token"], tool, arguments)
+        )
+
+    # Assert
+    assert (result["status"], result["cmp_link"], platform.promoted) == (
+        "not_allowed_for_assistants",
+        f"{mcp_server.PUBLIC_URL}/projects/demo/apps/1",
+        [],
+    )
