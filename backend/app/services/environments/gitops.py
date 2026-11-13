@@ -1,6 +1,7 @@
 """Reading and committing an app's values files for its environments."""
 
 import json
+import re
 from io import StringIO
 from typing import Any
 
@@ -21,6 +22,9 @@ from app.services.github_service import (
 )
 
 COMMIT_ATTEMPTS = 3
+# Same rule as ReleaseSettings.smoke_path: the repo can be edited outside the
+# CMP, and a path such as "@host:port/" would change the smoke GET's target.
+_SMOKE_PATH = re.compile(r"^/\S*$")
 
 _yaml = YAML()
 _yaml.preserve_quotes = True
@@ -104,11 +108,12 @@ async def read_base(
 
 def smoke_path(values: dict[str, Any]) -> str:
     release = values.get("release") or {}
-    return (
-        (release.get("smoke") or {}).get("path")
-        or (values.get("monitoring") or {}).get("path")
-        or "/"
-    )
+    path = (release.get("smoke") or {}).get("path") or (
+        values.get("monitoring") or {}
+    ).get("path")
+    if isinstance(path, str) and _SMOKE_PATH.match(path) and len(path) <= 200:
+        return path
+    return "/"
 
 
 async def commit(token: str, repo: str, build, message: str) -> str:

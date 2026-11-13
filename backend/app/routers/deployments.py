@@ -407,8 +407,7 @@ async def delete_deployment(
     Refused with 409 while the project's deletion protection is on.
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
-    # Assistants may delete only where policy.yaml lets them (sandbox, demo).
-    assert_step_up(token, agents_allowed=True)
+    assert_step_up(token)
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,

@@ -334,9 +334,9 @@ def promote_release(
         if not view.in_progress or view.phase == "Aborted":
             raise _conflict("No release in progress.")
         _forbid_force(view)
-        # Skips the remaining canary steps in prod. Assistants are gated by
-        # release.promote in policy.yaml.
-        assert_step_up(token, agents_allowed=True)
+        # Skips the remaining canary steps in prod: a person with a passkey
+        # does it in the CMP, never an assistant.
+        assert_step_up(token)
         if payload.reason is None:
             raise HTTPException(
                 status_code=422,

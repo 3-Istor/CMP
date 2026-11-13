@@ -316,3 +316,127 @@ def test_a_member_starts_traffic_on_the_app_url_in_its_project_realm(
         4,
         2,
     )
+
+
+EVIL_AUTH = "https://evil.test/realms/shop/protocol/openid-connect/auth"
+
+
+def _recording(handler, seen):
+    def recorder(request):
+        seen.append((request.method, str(request.url)))
+        return handler(request)
+
+    return recorder
+
+
+def _password_reset(seen):
+    return any(url.endswith("/reset-password") for _, url in seen)
+
+
+def _sso_with(overrides):
+    """The real flow, with some URLs answered differently."""
+    base = _fake_sso([])
+
+    def handler(request):
+        url = str(request.url)
+        if url in overrides:
+            return overrides[url](request)
+        return base(request)
+
+    return handler
+
+
+def _login_page(action):
+    return lambda request: httpx.Response(
+        200,
+        text='<script>const kcContext = {"url": {"loginAction": "%s"}}</script>'
+        % action,
+    )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param(
+            {
+                APP: lambda r: httpx.Response(
+                    302, headers={"location": EVIL_AUTH}
+                ),
+                EVIL_AUTH: _login_page("https://evil.test/collect"),
+            },
+            id="challenge-off-keycloak",
+        ),
+        pytest.param(
+            {
+                APP: lambda r: httpx.Response(
+                    302,
+                    headers={
+                        "location": "https://auth.3istor.com/realms/other/"
+                        "protocol/openid-connect/auth"
+                    },
+                ),
+            },
+            id="challenge-on-another-realm",
+        ),
+        pytest.param(
+            {
+                AUTH: lambda r: httpx.Response(
+                    302, headers={"location": EVIL_AUTH}
+                ),
+                EVIL_AUTH: _login_page("https://evil.test/collect"),
+            },
+            id="hop-off-keycloak",
+        ),
+        pytest.param(
+            {AUTH: _login_page("https://evil.test/collect")},
+            id="login-action-off-keycloak",
+        ),
+        pytest.param(
+            {
+                AUTH: _login_page(
+                    "https://auth.3istor.com/realms/shop/../other/"
+                    "login-actions/authenticate"
+                )
+            },
+            id="login-action-escaping-the-realm",
+        ),
+    ],
+)
+def test_refuses_an_sso_flow_off_the_project_realm_before_resetting_the_password(
+    overrides,
+):
+    # Arrange
+    seen = []
+    handler = _recording(_sso_with(overrides), seen)
+
+    # Act
+    with _client_with(handler), pytest.raises(traffic.TrafficError):
+        asyncio.run(traffic.login(APP, "shop"))
+
+    # Assert
+    assert (
+        _password_reset(seen),
+        [url for _, url in seen if "evil.test/collect" in url],
+    ) == (False, [])
+
+
+def test_stops_following_the_post_login_redirects_when_they_leave_the_realm_and_app():
+    # Arrange
+    seen = []
+    handler = _recording(
+        _sso_with(
+            {
+                ACTION: lambda r: httpx.Response(
+                    302, headers={"location": "https://evil.test/after"}
+                )
+            }
+        ),
+        seen,
+    )
+
+    # Act
+    with _client_with(handler), pytest.raises(traffic.TrafficError):
+        asyncio.run(traffic.login(APP, "shop"))
+
+    # Assert
+    assert ("GET", "https://evil.test/after") not in seen

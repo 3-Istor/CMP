@@ -360,6 +360,23 @@ async def _gate(
     }
 
 
+def _passkey_only(app: dict) -> dict | None:
+    """
+    The answer for an action the CMP gates behind a passkey, None when step-up
+    is off. Refused before the stake policy, so nobody approves a call that
+    the route would refuse anyway.
+    """
+    if not settings.STEP_UP_ENABLED:
+        return None
+    return {
+        "ok": False,
+        "status": "not_allowed_for_assistants",
+        "message": "This action needs a passkey: the user does it in the CMP.",
+        "cmp_link": f"{PUBLIC_URL}/projects/{app['project_id']}/apps/"
+        f"{app['id']}",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Who, where, how
 # ---------------------------------------------------------------------------
@@ -647,6 +664,8 @@ async def delete_app(app_id: int, user_confirmed: bool = False) -> dict:
     caller = Caller()
     caller.require_write()
     app = await caller.api("GET", f"/api/deployments/{app_id}")
+    if refused := _passkey_only(app):
+        return refused
     verdict, answer = await _gate(
         caller,
         "app.delete",
@@ -1008,6 +1027,8 @@ async def release_action(
     caller = Caller()
     caller.require_write()
     app = await caller.api("GET", f"/api/deployments/{app_id}")
+    if action == "promote" and full and (refused := _passkey_only(app)):
+        return refused
     verdict, answer = await _gate(
         caller,
         f"release.{action}",

@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.environment import AppEnvironment, Promotion
@@ -241,6 +242,29 @@ class TestActions:
         )
 
         assert (response.status_code, source.patches) == (422, [])
+
+    def test_an_assistant_cannot_promote_all_when_step_up_is_on(
+        self, session_factory, keycloak
+    ):
+        # Arrange
+        source = FakeSource(_paused())
+        client = _client(session_factory, source)
+        assistant = {**USER_TOKENS["dev"], "cnp_agent": {"grant_id": "g"}}
+        client.app.dependency_overrides[get_current_user] = lambda: assistant
+
+        # Act
+        with mock.patch.object(settings, "STEP_UP_ENABLED", True):
+            response = client.post(
+                "/api/deployments/7/release/promote",
+                json={"mode": "full", "reason": "hotfix"},
+            )
+
+        # Assert
+        assert (
+            response.status_code,
+            response.json()["detail"]["code"],
+            source.patches,
+        ) == (403, "step_up_unavailable_for_agents", [])
 
     def test_promote_all_is_recorded_as_forced(
         self, session_factory, keycloak
