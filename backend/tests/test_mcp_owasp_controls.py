@@ -1,8 +1,8 @@
 """
 Evidence for the controls the CNP MCP server claims against the OWASP MCP
 Top 10 and the OWASP Top 10 for Agentic Applications 2026. Each test is
-cited by the matrix in cnp-docs (compliance/mcp-owasp-matrix.md): keep the
-names stable, or update the matrix with them.
+cited by the matrix in cnp-docs (docs/09-conformite/02-matrice-owasp-mcp.md):
+keep the names stable, or update the matrix with them.
 """
 
 import base64

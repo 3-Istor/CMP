@@ -50,7 +50,7 @@ jobs:
         with:
           sarif_file: trivy.sarif
 
-  # Evidence for the RGPD Art. 30 register (cnp-docs compliance/rgpd-registre):
+  # Evidence for the RGPD Art. 30 register (cnp-docs docs/09-conformite):
   # which personal data the code handles and where it goes. A report, never a
   # gate: a new detection is for a person to classify, not a reason to block.
   bearer-privacy:
