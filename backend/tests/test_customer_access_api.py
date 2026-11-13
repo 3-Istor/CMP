@@ -383,7 +383,7 @@ def test_a_new_app_gets_the_rights_when_customer_access_is_on(
                 template_id="k3s-gitops-app",
                 project_id="demo",
                 provider_type=ProviderType.KUBERNETES,
-                app_config=json.dumps({"github_token": "t"}),
+                app_config=json.dumps({"github_installation_id": "1"}),
             )
         )
         db.commit()
@@ -401,6 +401,11 @@ def test_a_new_app_gets_the_rights_when_customer_access_is_on(
             orchestrator, "create_executor", return_value=FakeExecutor()
         ),
         mock.patch.object(orchestrator, "_notify"),
+        mock.patch.object(
+            orchestrator,
+            "get_installation_token",
+            new=mock.AsyncMock(return_value="t"),
+        ),
         mock.patch.object(orchestrator, "_wait_for_url_ready", new=wait),
         mock.patch.object(
             project_registry, "register_app", new=mock.AsyncMock()

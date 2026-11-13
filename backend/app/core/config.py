@@ -228,6 +228,8 @@ class Settings(BaseSettings):
     # Installation ID of the GitHub App on the 3-Istor org, used to mint
     # installation tokens for org-level Terraform operations (e.g. project bootstrap)
     GITHUB_INSTALLATION_ID: str = ""
+    # Owner of every app repository; never taken from a deployment request.
+    GITHUB_ORG: str = "3-Istor"
 
     # GitHub Registry (GHCR) Token for pulling private container images
     # Personal Access Token (PAT) with read:packages scope

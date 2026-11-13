@@ -11,19 +11,19 @@ from app.models.project import Project, TargetCloud
 from app.routers import deployments as router
 from app.services.clusters import state
 from app.services.keycloak_service import get_current_user
+from tests.test_app_inputs import TEMPLATE
 from tests.test_app_security_data import session_factory  # noqa: F401
 
 
 @pytest.mark.parametrize(
-    "cloud,sent,expected",
+    "cloud,expected",
     [
-        (TargetCloud.AWS, None, "aws"),
-        (TargetCloud.ONPREM, None, "onprem"),
-        (TargetCloud.AWS, "gcp", "aws"),  # client value is overridden
+        (TargetCloud.AWS, "aws"),
+        (TargetCloud.ONPREM, "onprem"),
     ],
 )
 def test_app_config_gets_the_project_cloud(
-    session_factory, cloud, sent, expected  # noqa: F811
+    session_factory, cloud, expected  # noqa: F811
 ):
     with session_factory() as db:
         db.add(
@@ -42,12 +42,11 @@ def test_app_config_gets_the_project_cloud(
 
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = lambda: {"sub": "u"}
-    config = {"app_type": "static"}
-    if sent:
-        config["target_cloud"] = sent
+    config = {"template_repo_name": "template-html-css"}
 
     with (
         mock.patch.object(router, "is_cnp_admin", lambda token: True),
+        mock.patch.object(router, "get_template_by_id", lambda _id: TEMPLATE),
         mock.patch.object(router, "ensure_app_names_free", mock.AsyncMock()),
         mock.patch.object(router.terraform_orchestrator, "run_deployment"),
         mock.patch.object(state, "fresh_state", lambda cloud: "up"),
@@ -89,6 +88,7 @@ def _post_deploy(session_factory, project_cloud, cluster):  # noqa: F811
     app.dependency_overrides[get_current_user] = lambda: {"sub": "u"}
     with (
         mock.patch.object(router, "is_cnp_admin", lambda token: True),
+        mock.patch.object(router, "get_template_by_id", lambda _id: TEMPLATE),
         mock.patch.object(router, "ensure_app_names_free", mock.AsyncMock()),
         mock.patch.object(router.terraform_orchestrator, "run_deployment"),
         mock.patch.object(state, "fresh_state", lambda cloud: cluster),
@@ -99,7 +99,7 @@ def _post_deploy(session_factory, project_cloud, cluster):  # noqa: F811
                 "name": "shop",
                 "template_id": "k3s-gitops-app",
                 "project_id": "demo",
-                "app_config": {"app_type": "static"},
+                "app_config": {"template_repo_name": "template-html-css"},
             },
         )
 

@@ -605,7 +605,7 @@ async def create_app(
             "project_id": project,
             "app_config": {
                 "template_repo_name": STACKS[stack],
-                "github_owner": "3-Istor",
+                "github_owner": settings.GITHUB_ORG,
                 "project_name": project,
                 "github_installation_id": str(installation),
             },

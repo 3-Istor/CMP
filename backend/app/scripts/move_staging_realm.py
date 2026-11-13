@@ -38,9 +38,7 @@ async def move(deployment_id: int) -> None:
     if row is None or row.state != "ready":
         raise SystemExit("Staging is not ready on this app: nothing to move.")
     variables = activation._variables(deployment)
-    realm = staging_realm.realm_name(deployment.project_id)
-    if variables["keycloak_realm_id"] != realm:
-        raise SystemExit("This app has its own Keycloak: nothing to move.")
+    realm = variables["keycloak_realm_id"]
 
     await asyncio.to_thread(staging_realm.ensure, deployment.project_id)
     executor = activation._executor(deployment)

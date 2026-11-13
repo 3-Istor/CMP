@@ -387,11 +387,18 @@ class TestStagingRealm:
         )
         executor.apply.assert_not_called()
 
-    def test_a_project_with_its_own_keycloak_keeps_its_realm(self, db):
+    def test_a_stored_realm_never_overrides_the_staging_realm(self, db):
+        # Arrange
         deployment = db.get(Deployment, 7)
-        deployment.app_config = json.dumps({"keycloak_realm_id": "acme"})
+        deployment.app_config = json.dumps(
+            {"keycloak_realm_id": "other-project-staging"}
+        )
 
-        assert activation._variables(deployment)["keycloak_realm_id"] == "acme"
+        # Act
+        variables = activation._variables(deployment)
+
+        # Assert
+        assert variables["keycloak_realm_id"] == "shop-staging"
 
 
 class TestPromotionSteps:
