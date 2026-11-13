@@ -75,6 +75,24 @@ class Settings(BaseSettings):
     ICONS_S3_SECRET_ACCESS_KEY: str = ""
     ICONS_S3_REGION: str = "garage"
 
+    # Project exports (EU Data Act Art. 25): private Garage bucket. Unset keys
+    # disable the export. The archive is kept EXPORT_RETENTION_DAYS, the Data
+    # Act retrieval period; a download link lives at most
+    # EXPORT_LINK_MAX_SECONDS, because SigV4 presigned URLs cannot exceed 7
+    # days: the owner asks for a fresh link within the retention period.
+    EXPORT_S3_ENDPOINT: str = ""
+    EXPORT_S3_BUCKET: str = "cnp-project-exports"
+    EXPORT_S3_ACCESS_KEY_ID: str = ""
+    EXPORT_S3_SECRET_ACCESS_KEY: str = ""
+    EXPORT_S3_REGION: str = "garage"
+    # The store as dump Jobs reach it from inside the cluster (its Service),
+    # so database dumps never leave the cluster. Empty: EXPORT_S3_ENDPOINT.
+    EXPORT_S3_INTERNAL_ENDPOINT: str = ""
+    EXPORT_RETENTION_DAYS: int = 30
+    EXPORT_LINK_MAX_SECONDS: int = 7 * 24 * 3600
+    # Log history exported, bounded by the Loki retention anyway.
+    EXPORT_LOG_DAYS: int = 30
+
     # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
     KEYCLOAK_REALM: str = "3istor"

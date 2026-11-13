@@ -91,3 +91,33 @@ async def read_key_names(mount: str, path: str) -> list[str]:
     if names is None:
         raise VaultError(failure or "Vault read failed")
     return names
+
+
+async def list_paths(mount: str, prefix: str = "") -> list[str]:
+    """Every secret path under *prefix* of a KV v2 mount, recursively."""
+    if not vault_auth.is_configured():
+        raise VaultError("Vault is not configured on the CMP.")
+    headers = await _headers()
+    paths: list[str] = []
+    pending = [prefix]
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        while pending:
+            folder = pending.pop()
+            try:
+                response = await client.request(
+                    "LIST",
+                    f"{settings.VAULT_URL}/v1/{mount}/metadata/{folder}",
+                    headers=headers,
+                )
+            except httpx.HTTPError as exc:
+                raise VaultError(f"Vault unreachable: {exc}") from exc
+            if response.status_code == 404:
+                continue
+            if response.status_code != 200:
+                raise VaultError(f"Vault list failed ({response.status_code})")
+            for key in (response.json().get("data") or {}).get("keys") or []:
+                if key.endswith("/"):
+                    pending.append(f"{folder}{key}")
+                else:
+                    paths.append(f"{folder}{key}")
+    return sorted(paths)

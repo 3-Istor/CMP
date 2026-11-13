@@ -29,6 +29,7 @@ from app.routers import (
     links,
     notifications,
     power,
+    project_export,
     projects,
     releases,
     scorecard,
@@ -53,6 +54,7 @@ from app.services.grafana_service import (
     sync_all_project_orgs,
 )
 from app.services.kube_client import ClusterNotConnectedError
+from app.services.project_export import runner as project_export_runner
 from app.services.project_status import fail_interrupted_runs
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
@@ -257,6 +259,7 @@ async def lifespan(app: FastAPI):
 
     # Before anything can start a new Terraform run.
     fail_interrupted_runs()
+    project_export_runner.fail_interrupted()
 
     # Start background health poller
     logger.info("Starting health poller...")
@@ -289,6 +292,9 @@ async def lifespan(app: FastAPI):
     environment_task = asyncio.create_task(environment_loop())
     access_sweep_task = asyncio.create_task(access_sweep_loop())
     access_review_task = asyncio.create_task(access_review_loop())
+    export_retention_task = asyncio.create_task(
+        project_export_runner.export_retention_loop()
+    )
     # Runs once, after startup: Grafana being down only logs.
     grafana_sync_task = asyncio.create_task(sync_all_project_orgs())
     grafana_platform_task = asyncio.create_task(platform_org_sync_loop())
@@ -318,6 +324,7 @@ async def lifespan(app: FastAPI):
     environment_task.cancel()
     access_sweep_task.cancel()
     access_review_task.cancel()
+    export_retention_task.cancel()
     grafana_sync_task.cancel()
     grafana_platform_task.cancel()
     for task in (
@@ -330,6 +337,7 @@ async def lifespan(app: FastAPI):
         environment_task,
         access_sweep_task,
         access_review_task,
+        export_retention_task,
         grafana_sync_task,
         grafana_platform_task,
     ):
@@ -393,6 +401,7 @@ app.include_router(infra.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(project_export.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
 app.include_router(power.router, prefix="/api")
