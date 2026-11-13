@@ -145,6 +145,10 @@ ACTIONS: dict[tuple[str, str], str] = {
         "DELETE",
         "/api/projects/{project_name}/imports/{source_id}",
     ): "import.delete",
+    (
+        "PUT",
+        "/api/projects/{project_name}/imports/{source_id}/settings",
+    ): "import.settings.update",
     ("POST", "/api/account/picture"): "account.picture.update",
     (
         "POST",

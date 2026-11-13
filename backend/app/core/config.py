@@ -298,6 +298,13 @@ class Settings(BaseSettings):
     # Argo CD API for the post-deploy wait; empty reads the Applications
     # through the Kubernetes API instead.
     IMPORT_ARGO_TIMEOUT_SECONDS: int = 900
+    # Secret of the CNP-Portal GitHub App webhook (push events). Empty
+    # refuses every delivery: rebuilds then only come from the reconciler.
+    GITHUB_WEBHOOK_SECRET: str = ""
+    # GitHub sends up to 25 MB; a push of a few commits is a few kB.
+    IMPORT_WEBHOOK_MAX_BODY_BYTES: int = 1024 * 1024
+    # Branch heads compared with the last build of auto-rebuilt imports.
+    IMPORT_RECONCILE_INTERVAL_SECONDS: int = 600
 
     # GitHub user OAuth (account linking). The client of the CNP-Portal app.
     GITHUB_OAUTH_CLIENT_ID: str = ""

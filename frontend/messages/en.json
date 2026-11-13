@@ -1681,7 +1681,8 @@
       "action": "Action",
       "expires": "Expires",
       "decline": "Decline",
-      "approve": "Approve"
+      "approve": "Approve",
+      "review": "Review the plan"
     },
     "connectAi": {
       "title": "Connect your AI assistant to CNP",
@@ -2685,7 +2686,8 @@
       "access_review_escalated": "Access review overdue: {count} undecided",
       "access_review_terraform_task": "Remove {user} from {group} in the K3s Terraform",
       "access_review_inactive": "{user} has not logged in for {days} days",
-      "access_review_disabled": "{user} was disabled after {days} days without login"
+      "access_review_disabled": "{user} was disabled after {days} days without login",
+      "import_rebuild_pending": "A rebuild of {repo} waits for an admin"
     }
   },
   "secretsPresence": {
@@ -3478,7 +3480,18 @@
           "failed": "Failed",
           "cancelled": "Cancelled"
         }
+      },
+      "autoRebuild": "Rebuild on push",
+      "autoRebuildOf": "Rebuild {repo} on every push",
+      "autoRebuildFailed": "The setting could not be saved: {message}",
+      "pending": "A push to {repo} waits for an admin: {reason}",
+      "confirmRebuild": "Confirm the rebuild",
+      "pendingReason": {
+        "not_admin": "{user}, who rebuilds it, is no longer admin of the project.",
+        "inactive": "the account of {user}, who rebuilds it, is disabled.",
+        "repo_access": "the CMP cannot check that {user}, who rebuilds it, can still read the repository."
       }
-    }
+    },
+    "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey."
   }
 }

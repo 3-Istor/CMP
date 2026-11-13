@@ -1051,6 +1051,9 @@ export interface AgentConfirmation {
   created_at: string;
   expires_at: string;
   decided_by: string | null;
+  /** Portal-only tools (import_repo): the page where the draft is applied. */
+  review_link?: string | null;
+  draft?: Partial<ImportPlanEdits> | null;
 }
 
 export type StakeLevel = "sandbox" | "demo" | "standard" | "critical";
@@ -1513,12 +1516,22 @@ export interface ImportRunDetail extends ImportRun {
   services: ImportServiceView[];
 }
 
+export interface ImportRebuildPending {
+  reason: "not_admin" | "inactive" | "repo_access";
+  user: string;
+  trigger: "push" | "reconcile";
+  since: string;
+  apps: string[] | null;
+}
+
 export interface ImportSourceView {
   id: string;
   repo_full_name: string;
   branch: string;
   created_by: string;
   created_at: string;
+  auto_rebuild: boolean;
+  rebuild_pending: ImportRebuildPending | null;
   runs: ImportRun[];
   services: ImportServiceView[];
 }

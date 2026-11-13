@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import cache
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from ruamel.yaml import YAML
@@ -23,6 +24,10 @@ LEVELS = ("sandbox", "demo", "standard", "critical")
 DEFAULT_LEVEL = "standard"
 DECISIONS = ("allow", "ask", "pr", "confirm", "deny")
 CONFIRMATION_TTL = timedelta(minutes=30)
+# Tools whose confirmation is a draft a person reviews and applies on its own
+# page in the CMP, with a passkey: approving it in /connect/confirm, or
+# calling the tool again, never runs it.
+PORTAL_TOOLS = frozenset({"import_repo"})
 MAX_AUTONOMOUS = timedelta(hours=8)
 
 
@@ -233,6 +238,38 @@ def decide_confirmation(
             row.decided_at = datetime.now(timezone.utc)
             db.commit()
         return _confirmation_view(row)
+
+
+def draft_review_link(view: ConfirmationView) -> str:
+    """The CMP page where a person reviews and applies an import draft."""
+    return (
+        f"/projects/{quote(view.project)}/import?run="
+        f"{quote(str(view.arguments.get('run_id', '')))}&draft={view.id}"
+    )
+
+
+def settle_draft(
+    confirmation_id: str, project: str, source_id: str, username: str
+) -> bool:
+    """
+    Mark the assistant's draft of an import used once a person applied the
+    import in the CMP. False when it is not a pending draft of this import.
+    """
+    with SessionLocal() as db:
+        row = db.get(AgentConfirmation, confirmation_id)
+        if (
+            row is None
+            or row.tool not in PORTAL_TOOLS
+            or row.project != project
+            or dict(row.arguments).get("source_id") != source_id
+            or _confirmation_view(row).status != "pending"
+        ):
+            return False
+        row.status = "used"
+        row.decided_by = username
+        row.decided_at = datetime.now(timezone.utc)
+        db.commit()
+        return True
 
 
 def consume_confirmation(

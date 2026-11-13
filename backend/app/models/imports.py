@@ -6,6 +6,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,6 +62,19 @@ class ImportSource(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()  # pylint: disable=not-callable
     )
+    # Who an automatic rebuild runs as: the creator, then the last admin who
+    # confirmed a rebuild with step-up. Their rights are checked again on
+    # every rebuild.
+    rebuild_user: Mapped[str | None] = mapped_column(String(255))
+    rebuild_user_sub: Mapped[str | None] = mapped_column(String(64))
+    auto_rebuild: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true()
+    )
+    # Last branch head the CMP resolved itself and found nothing to build at.
+    head_checked: Mapped[str | None] = mapped_column(String(40))
+    # Set when an automatic rebuild could not run as rebuild_user: an admin
+    # confirms it from the CMP.
+    rebuild_pending: Mapped[dict | None] = mapped_column(JSON)
 
     runs: Mapped[list["ImportRun"]] = relationship(
         back_populates="source",
@@ -134,3 +149,12 @@ class ImportService(Base):
     )
 
     source: Mapped[ImportSource] = relationship(back_populates="services")
+
+
+class ImportWebhookDelivery(Base):
+    """GitHub delivery ids seen, kept a day so a replay is ignored."""
+
+    __tablename__ = "import_webhook_deliveries"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, index=True)

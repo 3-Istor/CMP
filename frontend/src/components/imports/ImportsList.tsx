@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranch, RotateCw, Trash2 } from "lucide-react";
+import { GitBranch, RotateCw, ShieldAlert, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -8,7 +8,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { deleteImport, getImports, rebuildImport } from "@/lib/api";
+import { Switch } from "@/components/ui/switch";
+import { deleteImport, getImports, rebuildImport, updateImportSettings } from "@/lib/api";
 import type { ImportSourceView } from "@/types";
 
 const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
@@ -31,6 +32,7 @@ export function ImportsList({
   const t = useTranslations("imports.list");
   const [sources, setSources] = useState<ImportSourceView[]>([]);
   const [deleting, setDeleting] = useState<ImportSourceView | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     getImports(projectName)
@@ -62,11 +64,48 @@ export function ImportsList({
     }
   };
 
+  const setAutoRebuild = async (source: ImportSourceView, value: boolean) => {
+    setSaving(source.id);
+    try {
+      const updated = await updateImportSettings(projectName, source.id, { auto_rebuild: value });
+      setSources((all) => all.map((s) => (s.id === updated.id ? updated : s)));
+    } catch (err) {
+      toast.error(t("autoRebuildFailed", { message: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const pending = sources.filter((s) => s.rebuild_pending);
+
   return (
     <section aria-labelledby="imports-title" className="space-y-2">
       <h2 id="imports-title" className="text-sm font-semibold">
         {t("title")}
       </h2>
+      {pending.map((source) => (
+        <div
+          key={source.id}
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+        >
+          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden />
+          <span className="flex-1">
+            {t("pending", {
+              repo: source.repo_full_name,
+              reason: t(`pendingReason.${source.rebuild_pending?.reason ?? "not_admin"}`, {
+                user: source.rebuild_pending?.user ?? "",
+              }),
+            })}
+          </span>
+          {canManage && (
+            <Button size="sm" variant="outline" onClick={() => void rebuild(source)}>
+              <RotateCw aria-hidden />
+              {t("confirmRebuild")}
+            </Button>
+          )}
+        </div>
+      ))}
       <div className="overflow-x-auto rounded-xl border">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40">
@@ -76,6 +115,7 @@ export function ImportsList({
               <th scope="col" className={TH}>{t("sha")}</th>
               <th scope="col" className={TH}>{t("status")}</th>
               <th scope="col" className={TH}>{t("apps")}</th>
+              <th scope="col" className={TH}>{t("autoRebuild")}</th>
               {canManage && <th scope="col" className={TH}>{t("actions")}</th>}
             </tr>
           </thead>
@@ -105,6 +145,14 @@ export function ImportsList({
                     {run ? t(`runStatus.${run.kind}.${run.status}`) : t("never")}
                   </td>
                   <td className={TD}>{source.services.length}</td>
+                  <td className={TD}>
+                    <Switch
+                      checked={source.auto_rebuild}
+                      disabled={!canManage || saving === source.id}
+                      onCheckedChange={(value) => void setAutoRebuild(source, value)}
+                      aria-label={t("autoRebuildOf", { repo: source.repo_full_name })}
+                    />
+                  </td>
                   {canManage && (
                     <td className={TD}>
                       <div className="flex flex-wrap gap-1">

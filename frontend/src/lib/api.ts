@@ -1558,11 +1558,23 @@ export const applyImport = (
   project: string,
   sourceId: string,
   edits: import("@/types").ImportPlanEdits,
+  draft?: string | null,
 ) =>
   request<{ run: import("@/types").ImportRun }>(
-    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/apply`,
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/apply` +
+      (draft ? `?draft=${encodeURIComponent(draft)}` : ""),
     { method: "POST", body: JSON.stringify(edits) },
   ).then((r) => r.run);
+
+export const updateImportSettings = (
+  project: string,
+  sourceId: string,
+  settings: { auto_rebuild: boolean },
+) =>
+  request<import("@/types").ImportSourceView>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/settings`,
+    { method: "PUT", body: JSON.stringify(settings) },
+  );
 
 export const rebuildImport = (project: string, sourceId: string) =>
   request<{ run: import("@/types").ImportRun }>(
