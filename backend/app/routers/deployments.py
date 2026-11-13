@@ -43,6 +43,7 @@ from app.services.github_service import (
     get_org_installation_token,
     put_file_content,
 )
+from app.services.imports.service import imported_app_names
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
@@ -223,6 +224,13 @@ async def create_deployment(
             status_code=409,
             detail=f"'{payload.name}' is the name of a platform "
             "repository: choose another app name.",
+        )
+
+    if imported_app_names(db, payload.project_id) & {payload.name}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{payload.name}' is held by a repository import of the "
+            "project: choose another app name.",
         )
 
     fields = [f.model_dump() for f in template.fields]
@@ -408,6 +416,14 @@ async def delete_deployment(
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
     assert_step_up(token)
+    if deployment.template_id.startswith("import-"):
+        # Its values live in cnp-projects and its namespace outlives Argo CD:
+        # only removing the import cleans both up.
+        raise HTTPException(
+            status_code=409,
+            detail="This app comes from a repository import: delete the "
+            "import from the project's Imports tab.",
+        )
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,

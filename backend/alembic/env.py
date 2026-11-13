@@ -13,6 +13,7 @@ import app.models.agent  # noqa: F401
 import app.models.deployment  # noqa: F401
 import app.models.environment  # noqa: F401
 import app.models.finops  # noqa: F401
+import app.models.imports  # noqa: F401
 import app.models.notification  # noqa: F401
 import app.models.project  # noqa: F401
 import app.models.project_export  # noqa: F401

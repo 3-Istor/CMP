@@ -69,6 +69,11 @@ class ProtectedRecordError(RegistryError):
     """Raised when a write would reset a deletion-protected record."""
 
 
+# Written by repository imports (one commit with their values files): a
+# template app never replaces one.
+IMPORTED_APP_TYPES = frozenset({"service", "backing"})
+
+
 class NameCollisionError(RegistryError):
     """Raised when a record's derived names collide with another record's."""
 
@@ -161,9 +166,10 @@ async def read_record(project_name: str) -> tuple[dict, str] | None:
     return parsed, sha
 
 
-async def list_records() -> list[dict]:
+async def list_records(ref: str | None = None) -> list[dict]:
     """
-    Read every project record in the registry.
+    Read every project record in the registry, at *ref* (a commit) or at the
+    head of the registry branch.
 
     Records that are not a YAML mapping are skipped: one malformed file must
     not block every other project from being created.
@@ -171,13 +177,14 @@ async def list_records() -> list[dict]:
     Raises:
         RegistryError: If the registry is unreachable.
     """
+    ref = ref or settings.CNP_REGISTRY_BRANCH
     token = await _installation_token()
     try:
         names = await list_directory(
             token,
             settings.CNP_REGISTRY_REPO,
             settings.CNP_REGISTRY_PATH_PREFIX,
-            ref=settings.CNP_REGISTRY_BRANCH,
+            ref=ref,
         )
         contents = await asyncio.gather(
             *(
@@ -185,7 +192,7 @@ async def list_records() -> list[dict]:
                     token,
                     settings.CNP_REGISTRY_REPO,
                     f"{settings.CNP_REGISTRY_PATH_PREFIX}/{name}",
-                    ref=settings.CNP_REGISTRY_BRANCH,
+                    ref=ref,
                 )
                 for name in names
                 if name.endswith(".yaml")
@@ -399,6 +406,13 @@ async def register_app(
     }
     for i, app in enumerate(apps):
         if app.get("name") == app_name:
+            if app.get("type") in IMPORTED_APP_TYPES:
+                raise NameCollisionError(
+                    [
+                        f"App '{app_name}' of project '{project_name}' is "
+                        "an imported app: delete its import first"
+                    ]
+                )
             apps[i] = entry
             break
     else:

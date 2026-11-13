@@ -8,7 +8,7 @@ are applied here before a record is written. Keep both in sync.
 
 import re
 
-DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+DNS_LABEL = re.compile(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?")
 MAX_LABEL_LENGTH = 63
 FULLSTACK_COMPONENTS = ("frontend", "backend")
 HOSTNAME_DOMAIN = "3istor.com"
@@ -224,6 +224,11 @@ def project_name_of(record: dict) -> str | None:
     return name if isinstance(name, str) else None
 
 
+def app_hostname(project: str, app_name: str) -> str:
+    """The hostname the app modules give an app, whether or not it is set."""
+    return f"{app_name}-{project}.{HOSTNAME_DOMAIN}"
+
+
 def check_app_name(project: str, app_name: str) -> list[str]:
     errors: list[str] = []
     if app_name == "system":
@@ -231,6 +236,12 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             f"app 'system' is reserved: namespace '{project}-system' "
             "belongs to the project itself"
         )
+    for kind, name, source in project_names(project):
+        if kind == "hostname" and name == app_hostname(project, app_name):
+            errors.append(
+                f"app '{app_name}' is reserved: hostname '{name}' is "
+                f"{source} of project '{project}'"
+            )
     for role in app_vault_roles(project, app_name):
         if _is_reserved_vault_role(role):
             errors.append(
@@ -250,7 +261,7 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             f"app '{app_name}' gives staging namespace '{staging}' of "
             f"{len(staging)} characters, the limit is {MAX_LABEL_LENGTH}"
         )
-    elif not DNS_LABEL.match(namespace):
+    elif not DNS_LABEL.fullmatch(namespace):
         errors.append(
             f"app '{app_name}' gives namespace '{namespace}' which is "
             "not a valid DNS-1123 label (lowercase alphanumerics and '-' only)"
@@ -304,10 +315,13 @@ def check_app(project: str, app: dict, existing: list[dict]) -> list[str]:
     Check an app about to be added to, or refreshed in, ``project``.
 
     Apps already in the project's record are not re-checked: only the new
-    entry is, against every other project and against the project's other apps.
+    entry is, against every other project, the project's own names and the
+    project's other apps.
     """
     errors = check_app_name(project, app["name"])
     claims = _claims(existing, project)
+    for kind, name, source in project_names(project):
+        claims.setdefault((kind, name), (project, source))
     for record in existing:
         if project_name_of(record) != project:
             continue

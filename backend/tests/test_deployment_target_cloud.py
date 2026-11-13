@@ -147,3 +147,32 @@ def test_mcp_release_guard_uses_the_project_cloud(
         with pytest.raises(internal_api.ApiError) as exc:
             asyncio.run(caller.require_cluster_up("demo"))
     assert exc.value.status_code == 409
+
+
+def test_template_app_cannot_take_a_name_held_by_an_import(
+    session_factory,  # noqa: F811
+):
+    from app.models.imports import ImportService, ImportSource
+
+    with session_factory() as db:
+        source = ImportSource(
+            project_name="demo",
+            repo_full_name="acme/shop",
+            repo_id=1,
+            installation_id=2,
+            branch="main",
+            created_by="u",
+        )
+        db.add(source)
+        db.flush()
+        db.add(
+            ImportService(source_id=source.id, app_name="shop", kind="service")
+        )
+        db.commit()
+
+    response = _post_deploy(session_factory, TargetCloud.ONPREM, "up")
+
+    assert response.status_code == 409
+    assert "repository import" in response.json()["detail"]
+    with session_factory() as db:
+        assert db.query(Deployment).count() == 0

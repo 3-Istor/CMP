@@ -138,6 +138,34 @@ APP_CASES = [
         [record("foo", app("web", prod="web-foo.3istor.com"))],
         ["hostname 'web-foo.3istor.com'", "project 'foo'"],
     ),
+    (
+        "app named after the project's status page",
+        "foo",
+        app("status"),
+        [record("foo")],
+        ["app 'status' is reserved", "status hostname"],
+    ),
+    (
+        "app named after the project's auth hostname",
+        "foo",
+        app("auth"),
+        [],
+        ["app 'auth' is reserved"],
+    ),
+    (
+        "app named after the project's offhours page",
+        "foo",
+        app("offhours"),
+        [record("foo")],
+        ["app 'offhours' is reserved"],
+    ),
+    (
+        "app hostname set to the project's own status hostname",
+        "foo",
+        app("web", prod="status-foo.3istor.com"),
+        [record("foo")],
+        ["hostname 'status-foo.3istor.com'", "the status hostname"],
+    ),
 ]
 
 
@@ -242,7 +270,7 @@ def test_check_app_refuses_an_app_whose_namespace_is_a_platform_namespace(
 
 
 def test_check_app_accepts_an_app_whose_name_only_resembles_a_platform_one():
-    errors = check_app("demo", app("status"), [record("demo")])
+    errors = check_app("demo", app("infra"), [record("demo")])
 
     assert not errors
 
@@ -280,3 +308,11 @@ def test_is_platform_namespace_matches_the_reserved_names_and_families(
     namespace, expected
 ):
     assert is_platform_namespace(namespace) is expected
+
+
+def test_check_app_name_refuses_a_namespace_with_a_trailing_newline():
+    from app.services.registry_names import check_app_name
+
+    errors = check_app_name("foo", "web\n")
+
+    assert any("not a valid DNS-1123 label" in error for error in errors)

@@ -25,6 +25,7 @@ from app.routers import (
     environments,
     finops,
     finops_finance,
+    imports,
     infra,
     links,
     notifications,
@@ -261,6 +262,11 @@ async def lifespan(app: FastAPI):
     fail_interrupted_runs()
     project_export_runner.fail_interrupted()
 
+    if settings.IMPORT_ENABLED:
+        from app.services.imports.deploy import resume_interrupted
+
+        resume_interrupted()
+
     # Start background health poller
     logger.info("Starting health poller...")
     health_poller_task = asyncio.create_task(
@@ -397,6 +403,8 @@ app.include_router(app_icons.router, prefix="/api")
 app.include_router(app_overview.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
+app.include_router(imports.router, prefix="/api")
+app.include_router(imports.worker, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")

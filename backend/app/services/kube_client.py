@@ -202,6 +202,11 @@ def kube_delete_collection(
     _request("DELETE", path, params=params, cloud=cloud)
 
 
+def kube_delete(path: str, cloud: TargetCloud = TargetCloud.ONPREM) -> None:
+    """DELETE one object; already gone is not an error."""
+    _request("DELETE", path, cloud=cloud)
+
+
 def kube_merge_patch(
     path: str,
     body: dict[str, Any],
