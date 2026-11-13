@@ -282,6 +282,18 @@ async def _gate(
     if decision.outcome == "pr":
         return "pr", None
     if decision.outcome == "deny":
+        # A refused attempt is the trace worth having when an assistant
+        # goes off course: nothing else records it.
+        await to_thread.run_sync(
+            audit.record_agent_event,
+            caller.claims,
+            "agent.policy.denied",
+            project,
+            None,
+            tool,
+            False,
+            {"action": action, "policy": decision.reason},
+        )
         return "stop", {
             **base,
             "status": "not_allowed_for_assistants",
@@ -684,7 +696,12 @@ async def list_app_files(
         for p in await repo_ops.list_files(token, repo)
         if p.startswith(under)
     ]
-    return {"repository": repo, "count": len(paths), "files": paths[:800]}
+    return {
+        "repository": repo,
+        "note": UNTRUSTED,
+        "count": len(paths),
+        "files": paths[:800],
+    }
 
 
 @mcp.tool(annotations=READ_ONLY)

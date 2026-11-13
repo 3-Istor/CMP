@@ -45,6 +45,7 @@ from app.core.roles import (
     ProjectRole,
     rank,
 )
+from app.services.agents import internal_api
 from app.services.agents import store as agent_store
 
 logger = logging.getLogger(__name__)
@@ -688,6 +689,15 @@ def decode_platform_token(token: str) -> dict:
     if token.startswith(agent_store.ACCESS_PREFIX):
         # An assistant's token, issued by the CMP's own OAuth server. It
         # carries the user's identity, so every RBAC check below applies.
+        # Only MCP tools may present it: straight to /api it would skip the
+        # stake policy and the read-only scope, which the tools enforce.
+        if not internal_api.in_tool_call():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Assistant tokens are only accepted through the MCP "
+                "server.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         claims = agent_store.token_claims(token)
         if claims is None:
             raise HTTPException(

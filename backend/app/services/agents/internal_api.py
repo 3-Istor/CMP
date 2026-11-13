@@ -5,17 +5,24 @@ Tools go through the same endpoints as the web UI, so RBAC, validation and
 the audit journal apply to assistants without being written twice.
 """
 
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
 from starlette.types import ASGIApp
 
 _app: ASGIApp | None = None
+_in_tool_call: ContextVar[bool] = ContextVar("in_tool_call", default=False)
 
 
 def bind(app: ASGIApp) -> None:
     global _app  # pylint: disable=global-statement
     _app = app
+
+
+def in_tool_call() -> bool:
+    """Whether the current request is an MCP tool calling the API in-process."""
+    return _in_tool_call.get()
 
 
 class ApiError(Exception):
@@ -36,13 +43,19 @@ async def call(
     if _app is None:
         raise RuntimeError("internal_api.bind() was not called")
     transport = httpx.ASGITransport(app=_app, client=("agent", 0))
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://cmp.internal",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=60,
-    ) as client:
-        response = await client.request(method, path, json=json, params=params)
+    marker = _in_tool_call.set(True)
+    try:
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://cmp.internal",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        ) as client:
+            response = await client.request(
+                method, path, json=json, params=params
+            )
+    finally:
+        _in_tool_call.reset(marker)
     if response.status_code >= 400:
         try:
             detail = response.json().get("detail", response.text)
