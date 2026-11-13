@@ -25,7 +25,7 @@ from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
-from app.services import app_inputs, app_repo
+from app.services import app_config_policy, app_inputs, app_repo
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
 from app.services.authz import (
@@ -626,7 +626,7 @@ async def update_deployment_config(
                 "summary": "Enable database",
                 "value": {
                     "_sha": "abc123def456...",
-                    "database": {"enabled": True, "name": "my-app-db"},
+                    "db": {"enabled": True, "name": "my-app-db"},
                 },
             },
             "scale_replicas": {
@@ -647,6 +647,8 @@ async def update_deployment_config(
     - ``_sha`` *(required)*, the file SHA returned by ``GET /config``.
       GitHub uses this to prevent concurrent write conflicts (409 Conflict).
     - Any other keys to merge into the YAML file (supports nested objects).
+      Only the values in ``app_config_policy.EDITABLE_PREFIXES`` may change;
+      the others (project_name, secrets.*, ...) may only be echoed unchanged.
 
     **Merge strategy**: deep merge, existing keys not mentioned in the
     payload are preserved, including YAML comments.
@@ -660,6 +662,7 @@ async def update_deployment_config(
         403, Caller is not an admin of the application's project.
         404, Deployment not found.
         409, SHA conflict (another commit was pushed in between) or repo not linked.
+        422, The payload changes a value the platform manages.
         502, GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
@@ -715,6 +718,16 @@ async def update_deployment_config(
         raise HTTPException(
             status_code=500,
             detail=f"'{file_path}' does not contain a YAML mapping.",
+        )
+
+    forbidden = app_config_policy.forbidden_changes(parsed, payload)
+    if forbidden:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "These values are managed by the platform and cannot be "
+                f"changed here: {', '.join(forbidden)}."
+            ),
         )
 
     audit.note(request, file=file_path, changes=audit.changes(parsed, payload))

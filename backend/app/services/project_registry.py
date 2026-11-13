@@ -22,6 +22,7 @@ from ruamel.yaml import YAML
 
 from app.core.config import settings
 from app.models.project import ProjectStatus, TargetCloud
+from app.services import kube_client
 from app.services.github_service import (
     FileNotInRepoError,
     GitHubAppError,
@@ -31,11 +32,17 @@ from app.services.github_service import (
     list_directory,
     put_file_content,
 )
-from app.services.registry_names import check_app, check_new_project
+from app.services.registry_names import (
+    app_names,
+    check_app,
+    check_new_project,
+    project_names,
+)
 
 logger = logging.getLogger(__name__)
 
 RECORD_API_VERSION = "cnp.3istor.com/v1alpha1"
+PROJECT_LABEL = "cnp.3istor.com/project"
 RECORD_KIND = "ProjectRecord"
 
 _yaml = YAML()
@@ -206,14 +213,58 @@ async def list_records(ref: str | None = None) -> list[dict]:
     return records
 
 
+def foreign_namespaces(project_name: str, namespaces: list[str]) -> list[str]:
+    """
+    Problems for each of *namespaces* that already exists on the on-prem
+    cluster without the project's label: a platform namespace the reserved
+    list missed, or one created by hand. The project would get its
+    AppProjects and operator Role there.
+
+    Outside a cluster (local dev) nothing is checked.
+
+    Raises:
+        RegistryError: If the Kubernetes API cannot be read. A check that
+            cannot run is not a pass.
+    """
+    if not kube_client.in_cluster():
+        return []
+    problems: list[str] = []
+    for namespace in namespaces:
+        try:
+            found = kube_client.kube_get(f"/api/v1/namespaces/{namespace}")
+        except kube_client.KubeUnavailableError as exc:
+            raise RegistryError(
+                f"Could not check whether namespace '{namespace}' exists: {exc}"
+            ) from exc
+        if found is None:
+            continue
+        labels = (found.get("metadata") or {}).get("labels") or {}
+        if labels.get(PROJECT_LABEL) != project_name:
+            problems.append(
+                f"namespace '{namespace}' already exists and does not "
+                f"belong to project '{project_name}'"
+            )
+    return problems
+
+
+def _namespaces(names: list[tuple[str, str, str]]) -> list[str]:
+    return [name for kind, name, _ in names if kind == "namespace"]
+
+
 async def ensure_project_names_free(project_name: str) -> None:
     """
     Raises:
-        NameCollisionError: If a name derived from the project collides with
-            one derived from another project's record.
-        RegistryError: If the registry cannot be read.
+        NameCollisionError: If a name derived from the project is reserved by
+            the platform, collides with one derived from another project's
+            record, or names a namespace that exists outside the project.
+        RegistryError: If the registry or the cluster cannot be read.
     """
     problems = check_new_project(project_name, await list_records())
+    problems += await asyncio.to_thread(
+        foreign_namespaces,
+        project_name,
+        _namespaces(project_names(project_name)),
+    )
     if problems:
         raise NameCollisionError(
             [f"Project '{project_name}': {p}" for p in problems]
@@ -228,14 +279,20 @@ async def ensure_app_names_free(
 ) -> None:
     """
     Raises:
-        NameCollisionError: If the app's name is reserved or invalid, or a
-            name derived from it collides with another project's or app's.
-        RegistryError: If the registry cannot be read.
+        NameCollisionError: If the app's name is reserved or invalid, a name
+            derived from it collides with another project's or app's, or one
+            of its namespaces exists outside the project.
+        RegistryError: If the registry or the cluster cannot be read.
     """
     app: dict = {"name": app_name, "type": app_type}
     if hostname:
         app["hostnames"] = {"prod": hostname}
     problems = check_app(project_name, app, await list_records())
+    problems += await asyncio.to_thread(
+        foreign_namespaces,
+        project_name,
+        _namespaces(app_names(project_name, app)),
+    )
     if problems:
         raise NameCollisionError(
             [
