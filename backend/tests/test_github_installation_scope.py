@@ -1,12 +1,14 @@
 import asyncio
 import json
 import subprocess
+from types import SimpleNamespace
 from unittest import mock
 
 import httpx
 import pytest
 from fastapi import HTTPException
 
+from app import mcp_server
 from app.core.config import settings
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.user_github import UserGitHubInstallation
@@ -14,9 +16,10 @@ from app.routers import account as account_router
 from app.routers import deployments as deployments_router
 from app.routers import security as security_router
 from app.schemas.account import GitHubInstallationRequest
-from app.services import github_service
+from app.services import github_service, project_registry
 from app.services import terraform_orchestrator as orchestrator
-from app.services.environments import gitops
+from app.services.environments import activation, gitops
+from app.services.security import collector
 from app.services.terraform_executor import TerraformExecutor
 from tests.test_app_inputs import MANIFEST_VARIABLES, PORTAL_PAYLOAD
 from tests.test_app_inputs import _create as create_deployment
@@ -93,7 +96,7 @@ def test_terraform_token_is_minted_on_the_org_installation(
     with (
         mock.patch.object(orchestrator, "SessionLocal", session_factory),
         mock.patch.object(orchestrator, "get_repository", lambda: repo),
-        mock.patch.object(github_service, "get_installation_token", minted),
+        mock.patch.object(github_service, "_get_installation_token", minted),
         mock.patch.object(orchestrator, "_notify"),
         mock.patch.object(orchestrator.customer_identity, "apply_if_enabled"),
         mock.patch.object(TerraformExecutor, "init"),
@@ -101,6 +104,98 @@ def test_terraform_token_is_minted_on_the_org_installation(
         mock.patch.object(TerraformExecutor, "_run_command", run),
     ):
         orchestrator.run_deployment(7)
+
+    # Assert
+    minted.assert_awaited_once_with(ORG_INSTALLATION)
+
+
+def test_destroy_token_is_minted_on_the_org_installation(
+    session_factory, tmp_path, monkeypatch  # noqa: F811
+):
+    # Arrange
+    monkeypatch.chdir(tmp_path)
+    with session_factory() as db:
+        db.add(_foreign_installation_row())
+        db.commit()
+    repo = mock.Mock()
+    repo.get_template_by_id.return_value = {
+        "variables": MANIFEST_VARIABLES,
+        "_template_path": str(tmp_path),
+    }
+    executor = mock.Mock()
+    minted = mock.AsyncMock(return_value="ghs_org")
+
+    # Act
+    with (
+        mock.patch.object(orchestrator, "SessionLocal", session_factory),
+        mock.patch.object(orchestrator, "get_repository", lambda: repo),
+        mock.patch.object(
+            orchestrator, "create_executor", return_value=executor
+        ),
+        mock.patch.object(github_service, "_get_installation_token", minted),
+        mock.patch.object(orchestrator, "_notify"),
+        mock.patch.object(activation, "destroy_with_app"),
+        mock.patch.object(
+            project_registry, "unregister_app", mock.AsyncMock()
+        ),
+    ):
+        orchestrator.run_deletion(7)
+
+    # Assert
+    minted.assert_awaited_once_with(ORG_INSTALLATION)
+    assert executor.destroy.call_args.args[0]["github_token"] == "ghs_org"
+
+
+def test_mcp_create_app_does_not_send_an_installation(monkeypatch):
+    # Arrange
+    sent = []
+
+    async def api(method, path, **kwargs):
+        sent.append(kwargs.get("json"))
+        return {"id": 1, "name": "site", "status": "pending"}
+
+    caller = SimpleNamespace(require_write=lambda: None, api=api)
+    monkeypatch.setattr(mcp_server, "Caller", lambda: caller)
+    monkeypatch.setattr(
+        mcp_server, "_gate", mock.AsyncMock(return_value=("go", None))
+    )
+    monkeypatch.setattr(
+        mcp_server.policy,
+        "project_stake",
+        lambda project: SimpleNamespace(level="standard"),
+    )
+
+    # Act
+    result = asyncio.run(mcp_server.create_app("demo", "site"))
+
+    # Assert
+    assert result["ok"] is True
+    assert "github_installation_id" not in sent[0]["app_config"]
+
+
+def test_security_collector_collects_a_legacy_row_without_installation(
+    session_factory,  # noqa: F811
+):
+    # Arrange
+    with session_factory() as db:
+        db.add(_foreign_installation_row(app_config="{}"))
+        db.commit()
+    minted = mock.AsyncMock(return_value="tok")
+    patches = {
+        "get_default_branch": mock.AsyncMock(return_value="main"),
+        "get_latest_artifact": mock.AsyncMock(return_value=None),
+        "_read_exposure": mock.AsyncMock(return_value="project_members"),
+        "_read_optional": mock.AsyncMock(return_value=None),
+    }
+
+    # Act
+    with (
+        session_factory() as db,
+        mock.patch.object(github_service, "_get_installation_token", minted),
+        mock.patch.multiple(collector, **patches),
+    ):
+        entry = collector.kubernetes_projects(db)[0]
+        asyncio.run(collector.collect_github_app(db, entry, entry.apps[0]))
 
     # Assert
     minted.assert_awaited_once_with(ORG_INSTALLATION)
@@ -118,7 +213,7 @@ def test_terraform_token_is_minted_on_the_org_installation(
 def test_day2_tokens_use_the_org_installation_not_the_stored_one(mint):
     minted = mock.AsyncMock(return_value="tok")
 
-    with mock.patch.object(github_service, "get_installation_token", minted):
+    with mock.patch.object(github_service, "_get_installation_token", minted):
         asyncio.run(mint(_foreign_installation_row()))
 
     minted.assert_awaited_once_with(ORG_INSTALLATION)
@@ -163,9 +258,9 @@ class TestRecordInstallation:
     def test_nothing_is_accepted_when_the_org_installation_is_unset(self, db):
         with mock.patch.object(settings, "GITHUB_INSTALLATION_ID", ""):
             with pytest.raises(HTTPException) as exc:
-                self._save(db, "")
+                self._save(db, FOREIGN_INSTALLATION)
 
-        assert exc.value.status_code == 400
+        assert exc.value.status_code == 409
 
 
 class TestScopedInstallationToken:
@@ -219,8 +314,15 @@ class TestScopedInstallationToken:
             (["shop"], {}),
             (["owner/shop"], {"contents": "read"}),
             (["shop"], {"contents": "admin"}),
+            ([f"r{i}" for i in range(501)], {"contents": "read"}),
         ],
-        ids=["no-repo", "no-permission", "owner-in-name", "bad-level"],
+        ids=[
+            "no-repo",
+            "no-permission",
+            "owner-in-name",
+            "bad-level",
+            "too-many-repos",
+        ],
     )
     def test_unscoped_requests_are_refused_before_calling_github(
         self, repositories, permissions

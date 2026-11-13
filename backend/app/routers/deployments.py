@@ -501,7 +501,7 @@ def _deep_merge(base: Any, updates: Any) -> Any:
     return updates
 
 
-async def _get_github_token_for_deployment(deployment: Deployment) -> str:
+async def _get_github_token_for_deployment(_deployment: Deployment) -> str:
     """
     Retrieve a fresh GitHub installation token for the given deployment.
 
@@ -511,7 +511,6 @@ async def _get_github_token_for_deployment(deployment: Deployment) -> str:
     Raises:
         HTTPException 502, if GitHub token exchange fails.
     """
-    del deployment
     try:
         return await get_org_installation_token()
     except GitHubAppError as exc:

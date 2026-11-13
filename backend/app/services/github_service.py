@@ -85,7 +85,7 @@ def generate_jwt() -> str:
         raise GitHubAppError(f"Failed to generate JWT: {exc}") from exc
 
 
-async def get_installation_token(installation_id: str) -> str:
+async def _get_installation_token(installation_id: str) -> str:
     """
     Exchange the GitHub App JWT for an installation token with every
     permission the app holds on every repository of the installation.
@@ -113,10 +113,12 @@ async def get_org_installation_token() -> str:
     """
     if not settings.GITHUB_INSTALLATION_ID:
         raise GitHubAppError("GITHUB_INSTALLATION_ID is not configured")
-    return await get_installation_token(settings.GITHUB_INSTALLATION_ID)
+    return await _get_installation_token(settings.GITHUB_INSTALLATION_ID)
 
 
 _PERMISSION_LEVELS = frozenset({"read", "write"})
+# GitHub refuses more than 500 repositories in one token request.
+_MAX_SCOPED_REPOSITORIES = 500
 
 
 async def get_scoped_installation_token(
@@ -128,14 +130,20 @@ async def get_scoped_installation_token(
     Installation token limited to ``repositories`` (names, without owner) and
     ``permissions`` (e.g. ``{"contents": "read", "metadata": "read"}``).
 
-    Every token minted on an installation the user controls goes through
-    here, so a token never carries the app's full permission set.
+    Every token minted on an installation the user controls must go through
+    here, so a token never carries the app's full permission set. No caller
+    yet: groundwork for the GitHub OAuth linking flow (CNP-241).
 
     Raises:
         GitHubAppError: If the scope is empty or malformed, or the exchange fails
     """
     if not repositories:
         raise GitHubAppError("A scoped token needs at least one repository")
+    if len(repositories) > _MAX_SCOPED_REPOSITORIES:
+        raise GitHubAppError(
+            f"A scoped token covers at most {_MAX_SCOPED_REPOSITORIES} "
+            f"repositories, got {len(repositories)}"
+        )
     if not permissions:
         raise GitHubAppError("A scoped token needs explicit permissions")
     bad_names = [r for r in repositories if not r or "/" in r]

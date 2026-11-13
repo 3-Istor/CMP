@@ -33,7 +33,10 @@ from app.services import (
     vault_auth,
 )
 from app.services.environments import staging_realm
-from app.services.github_service import GitHubAppError, get_installation_token
+from app.services.github_service import (
+    GitHubAppError,
+    get_org_installation_token,
+)
 from app.services.project_status import delete_project_row, set_project_status
 from app.services.state_lock import (
     StateLockedError,
@@ -181,9 +184,7 @@ def run_project_bootstrap(
     # cnp-projects repository), minted once and reused for init + apply
     try:
         github_token = (
-            asyncio.run(
-                get_installation_token(settings.GITHUB_INSTALLATION_ID)
-            )
+            asyncio.run(get_org_installation_token())
             if settings.GITHUB_INSTALLATION_ID
             else ""
         )
@@ -333,9 +334,7 @@ def run_project_teardown(
     # provider can authenticate while destroying GitHub resources.
     try:
         github_token = (
-            asyncio.run(
-                get_installation_token(settings.GITHUB_INSTALLATION_ID)
-            )
+            asyncio.run(get_org_installation_token())
             if settings.GITHUB_INSTALLATION_ID
             else ""
         )

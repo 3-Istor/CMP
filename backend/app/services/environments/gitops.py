@@ -56,8 +56,7 @@ def repo_of(deployment: Deployment) -> str:
         raise GitOpsError(str(exc)) from exc
 
 
-async def token_for(deployment: Deployment) -> str:
-    del deployment
+async def token_for(_deployment: Deployment) -> str:
     try:
         return await get_org_installation_token()
     except GitHubAppError as exc:

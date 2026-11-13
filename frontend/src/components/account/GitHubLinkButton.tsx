@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,9 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
   ApiError,
   getGitHubStatus,
@@ -32,7 +28,6 @@ export function GitHubLinkButton() {
   const [installationId, setInstallationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [manualId, setManualId] = useState("");
 
   const searchParams = useSearchParams();
 
@@ -102,47 +97,7 @@ export function GitHubLinkButton() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleLink = () => {
-    // Open GitHub App installation in a new tab
-    // The callback URL should be set in the GitHub App settings to return to this page
-    window.open(
-      "https://github.com/apps/cnp-portal/installations/new",
-      "_blank",
-      "noopener,noreferrer",
-    );
-
-    // Show a message to the user
-    toast.info(t("opened"));
-  };
-
-  const handleManualSave = async () => {
-    const trimmedId = manualId.trim();
-
-    if (!trimmedId) {
-      toast.error(t("idRequired"));
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await saveGitHubInstallationId(trimmedId);
-
-      toast.success(t("idSaved"));
-      setManualId("");
-
-      // Refresh status
-      await fetchGitHubStatus();
-    } catch (error) {
-      console.error("Failed to save installation ID:", error);
-      toast.error(
-        isLinkingDisabled(error) ? t("linkingDisabled") : t("idSaveFailed"),
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
+  if (loading || saving) {
     return (
       <Card>
         <CardHeader>
@@ -187,68 +142,7 @@ export function GitHubLinkButton() {
             <p className="text-xs text-muted-foreground">{t("linkedHelp")}</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">{t("needApp")}</p>
-            <Button onClick={handleLink} className="w-full" disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t("linking")}
-                </>
-              ) : (
-                <>
-                  <GitBranch className="mr-2 h-4 w-4" />
-                  {t("linkButton")}
-                </>
-              )}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              {t("redirectNote")}
-            </p>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator className="w-full" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  {t("or")}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="manual-installation-id" className="text-sm">
-                {t("alreadyInstalled")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("alreadyHelp")}
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  id="manual-installation-id"
-                  type="text"
-                  placeholder="12345678"
-                  value={manualId}
-                  onChange={(e) => setManualId(e.target.value)}
-                  disabled={saving}
-                  className="flex-1"
-                />
-                <Button
-                  onClick={handleManualSave}
-                  disabled={saving || !manualId.trim()}
-                  variant="outline"
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    t("saveId")
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">{t("idHelp")}</p>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
         )}
       </CardContent>
     </Card>
