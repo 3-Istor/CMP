@@ -222,3 +222,29 @@ def apply_if_enabled(project: str) -> None:
             apply(project, mode)
     except Exception:
         logger.exception("Customer access not applied to '%s'", project)
+
+
+def export_realm(realm: str) -> tuple[dict, list[dict]] | None:
+    """
+    The realm's configuration and its users, or None when it does not exist.
+
+    Keycloak's partial export masks every client and identity provider secret
+    and never includes users; users come from the users endpoint, which never
+    returns credentials. Paged, as the listing caps at ``max``.
+    """
+    if _realm(realm) is None:
+        return None
+    base = _base(realm)
+    config = _admin(
+        "POST",
+        f"{base}/partial-export?exportClients=true&exportGroupsAndRoles=true",
+    )
+    users: list[dict] = []
+    page = 100
+    while True:
+        batch = _admin(
+            "GET", f"{base}/users?first={len(users)}&max={page}&brief=false"
+        )
+        users.extend(batch or [])
+        if not batch or len(batch) < page:
+            return config, users
