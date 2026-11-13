@@ -199,6 +199,20 @@ def _result(response) -> dict:
     return json.loads(response.json()["result"]["content"][0]["text"])
 
 
+def _as_a_tool(client, token: str, method: str, path: str, **kwargs) -> int:
+    """
+    Status of an API call made the way MCP tools make it, in-process: the
+    only way an assistant token reaches the REST API.
+    """
+    try:
+        client.portal.call(
+            lambda: internal_api.call(token, method, path, **kwargs)
+        )
+    except internal_api.ApiError as exc:
+        return exc.status_code
+    return 200
+
+
 def _call(client, token: str, tool: str, arguments: dict | None = None):
     return client.post(
         "/mcp",
@@ -486,12 +500,11 @@ def test_admin_grant_endpoints_refuse_a_caller_outside_infra(
 def test_admin_grant_endpoints_refuse_an_assistant_token(platform):
     tokens = _connect(platform)
 
-    response = platform.get(
-        "/api/agents/admin/grants",
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    status = _as_a_tool(
+        platform, tokens["access_token"], "GET", "/api/agents/admin/grants"
     )
 
-    assert response.status_code == 403
+    assert status == 403
 
 
 def test_infra_lists_the_grants_of_every_user(platform):
@@ -562,13 +575,15 @@ def test_an_assistant_cannot_approve_a_connection(platform):
         "request"
     ][0]
 
-    response = platform.post(
+    status = _as_a_tool(
+        platform,
+        tokens["access_token"],
+        "POST",
         f"/api/agents/requests/{request_id}/approve",
         json={"scopes": store.SCOPES},
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
 
-    assert response.status_code == 403
+    assert status == 403
 
 
 def test_read_only_assistant_cannot_create_an_app(platform):
@@ -654,12 +669,14 @@ def test_assistant_cannot_approve_its_own_sensitive_action(platform):
     )
     confirmation = asked["approval_link"].rsplit("/", 1)[1]
 
-    response = platform.post(
+    status = _as_a_tool(
+        platform,
+        tokens["access_token"],
+        "POST",
         f"/api/agents/confirmations/{confirmation}/approve",
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
 
-    assert response.status_code == 403
+    assert status == 403
 
 
 # ---------------------------------------------------------------------------
