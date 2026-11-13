@@ -1,0 +1,75 @@
+name: Export restore drill
+
+# Evidence for the EU Data Act reversibility commitment (cnp-docs,
+# "Réversibilité et portabilité"): a project export made by the CMP code is
+# downloaded through its presigned link and restored into a blank cluster,
+# with every checksum and row count checked. No platform secret is used.
+
+on:
+  pull_request:
+    paths:
+      - backend/app/services/project_export/**
+      - backend/app/models/**
+      - backend/tests/export_drill/**
+      - backend/tests/project_export_fakes.py
+      - scripts/export-drill/**
+      - .github/workflows/export-restore-drill.yml
+  push:
+    branches: [main]
+    paths:
+      - backend/app/services/project_export/**
+      - backend/app/models/**
+      - scripts/export-drill/**
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: poetry install --no-interaction
+
+      - name: Unit tests of the export
+        working-directory: ./backend
+        run: poetry run pytest -q tests/test_project_export.py
+
+      - name: Create a blank kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: export-drill
+
+      - name: Export, download and restore
+        env:
+          DRILL_OUT: ${{ runner.temp }}/drill
+        run: scripts/export-drill/run.sh
+
+      - name: Keep the manifest and the drill report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: export-restore-drill
+          path: |
+            ${{ runner.temp }}/drill/manifest.json
+            ${{ runner.temp }}/drill/drill-report.json
+          if-no-files-found: ignore

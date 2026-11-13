@@ -33,6 +33,11 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/projects/"): "project.create",
     ("DELETE", "/api/projects/{project_name}"): "project.delete",
     ("POST", "/api/projects/{project_name}/members"): "project.member.add",
+    ("POST", "/api/projects/{project_name}/export"): "project.export",
+    (
+        "POST",
+        "/api/projects/{project_name}/exports/{export_id}/link",
+    ): "project.export.link",
     (
         "DELETE",
         "/api/projects/{project_name}/members/{username}",
