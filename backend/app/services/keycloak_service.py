@@ -221,6 +221,27 @@ def _find_user_by_username(username: str, admin_token: str) -> dict | None:
     return users[0] if users else None
 
 
+def get_user_by_id(user_id: str) -> dict | None:
+    """
+    The Keycloak user behind a ``sub``, None when it no longer exists.
+
+    Raises:
+        requests.RequestException: Keycloak could not say, which callers
+            must not read as "gone".
+    """
+    admin_token = _get_admin_token()
+    response = requests.get(
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+        f"/users/{user_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        timeout=10,
+    )
+    if response.status_code == 404:
+        return None
+    response.raise_for_status()
+    return response.json()
+
+
 def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     """
     Search for a Keycloak group by exact name.

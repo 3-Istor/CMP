@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from mcp.server.auth.provider import construct_redirect_uri
 from pydantic import BaseModel, Field
@@ -24,7 +24,8 @@ from app.models.agent import AgentConfirmation, AgentGrant
 from app.models.audit import AuditEvent
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services.agents import policy, store
-from app.services.authz import assert_project_role
+from app.services.audit import note
+from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.keycloak_service import get_current_user
 
 router = APIRouter(prefix="/agents", tags=["AI assistants"])
@@ -48,6 +49,18 @@ def require_human(token: CurrentUser) -> dict:
 
 
 Human = Annotated[dict, Depends(require_human)]
+
+
+def require_infra_human(token: Human) -> dict:
+    if not is_cnp_admin(token):
+        raise HTTPException(
+            status_code=403,
+            detail="Only infra manages other people's assistants.",
+        )
+    return token
+
+
+InfraHuman = Annotated[dict, Depends(require_infra_human)]
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +169,46 @@ def list_my_grants(token: CurrentUser) -> list[GrantRead]:
 def revoke_my_grant(grant_id: int, token: CurrentUser) -> None:
     if not store.revoke_grant(grant_id, token.get("preferred_username", "")):
         raise HTTPException(status_code=404, detail="No such assistant.")
+
+
+class AdminGrantRead(GrantRead):
+    username: str
+    subject: str
+
+
+class RevokedGrants(BaseModel):
+    revoked: list[int]
+
+
+@router.get("/admin/grants", response_model=list[AdminGrantRead])
+def list_all_grants(
+    _: InfraHuman, username: str | None = None
+) -> list[AdminGrantRead]:
+    return [
+        AdminGrantRead(**g.__dict__) for g in store.list_all_grants(username)
+    ]
+
+
+@router.delete("/admin/grants/{grant_id}", status_code=204)
+def revoke_any_grant(grant_id: int, request: Request, _: InfraHuman) -> None:
+    grant = store.revoke_any_grant(grant_id)
+    if grant is None:
+        raise HTTPException(status_code=404, detail="No such assistant.")
+    note(
+        request,
+        target=grant.username,
+        grant_id=grant.id,
+        client=grant.client_name,
+    )
+
+
+@router.delete("/admin/users/{username}/grants", response_model=RevokedGrants)
+def revoke_user_grants(
+    username: str, request: Request, _: InfraHuman
+) -> RevokedGrants:
+    revoked = [g.id for g in store.revoke_user(username)]
+    note(request, target=username, grant_ids=revoked)
+    return RevokedGrants(revoked=revoked)
 
 
 class AgentSummary(BaseModel):

@@ -132,6 +132,14 @@ ACTIONS: dict[tuple[str, str], str] = {
     ): "agent.connect",
     ("DELETE", "/api/agents/grants/{grant_id}"): "agent.disconnect",
     (
+        "DELETE",
+        "/api/agents/admin/grants/{grant_id}",
+    ): "agent.admin.revoke",
+    (
+        "DELETE",
+        "/api/agents/admin/users/{username}/grants",
+    ): "agent.admin.revoke_user",
+    (
         "POST",
         "/api/agents/confirmations/{confirmation_id}/{decision}",
     ): "agent.confirmation.decide",
@@ -213,6 +221,8 @@ NOTABLE = {
     "release.abort",
     "release.settings.update",
     "agent.connect",
+    "agent.admin.revoke",
+    "agent.admin.revoke_user",
     "project.agents.update",
     "access.request",
     "access.approve",

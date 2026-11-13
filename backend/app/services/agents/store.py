@@ -7,12 +7,14 @@ on the next call without any key to rotate.
 """
 
 import hashlib
+import logging
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatch
 from urllib.parse import urlparse
 
+import requests
 from sqlalchemy import delete, select
 
 from app.core.config import settings
@@ -24,6 +26,8 @@ from app.models.agent import (
     AgentClient,
     AgentGrant,
 )
+
+logger = logging.getLogger(__name__)
 
 ACCESS_PREFIX = "cnp_at_"
 REFRESH_PREFIX = "cnp_rt_"
@@ -334,17 +338,58 @@ def load_refresh(refresh_token: str) -> GrantView | None:
         return _view(grant) if grant else None
 
 
+def _account_enabled(subject: str) -> bool:
+    """
+    False when the Keycloak account behind a grant is gone or disabled.
+    Raises requests.RequestException when Keycloak cannot say.
+    """
+    # keycloak_service imports this module to decode assistant tokens.
+    # pylint: disable-next=import-outside-toplevel
+    from app.services import keycloak_service
+
+    user = keycloak_service.get_user_by_id(subject)
+    return bool(user and user.get("enabled", False))
+
+
 def rotate_refresh(
     refresh_token: str, client_id: str, scopes: list[str]
 ) -> IssuedTokens | None:
     """
     Rotation: the old refresh token stops working as soon as the new one is
     issued, so a stolen one is only good until its owner refreshes. The
-    sliding expiry keeps an assistant in daily use connected.
+    sliding expiry keeps an assistant in daily use connected, so every
+    refresh first asks Keycloak whether the account still exists and is
+    enabled: a grant must not outlive the person who gave it.
     """
     with SessionLocal() as db:
         grant = _active_grant_by_refresh(db, refresh_token)
         if grant is None or grant.client_id != client_id:
+            return None
+        grant_id, subject, username = grant.id, grant.subject, grant.username
+    try:
+        enabled = _account_enabled(subject)
+    except requests.RequestException as exc:
+        logger.warning(
+            "Refresh of assistant grant %s refused, account of %s "
+            "unknown: %s",
+            grant_id,
+            username,
+            exc,
+        )
+        return None
+    with SessionLocal() as db:
+        grant = _active_grant_by_refresh(db, refresh_token)
+        if grant is None or grant.id != grant_id:
+            return None
+        if not enabled:
+            _revoke(db, grant)
+            db.commit()
+            logger.warning(
+                "Assistant grant %s revoked: account of %s is gone or "
+                "disabled",
+                grant_id,
+                username,
+            )
             return None
         if scopes:
             grant.scopes = [s for s in grant.scopes if s in scopes]
@@ -457,6 +502,76 @@ def list_grants(username: str) -> list[GrantSummary]:
                     _aware(g.last_used_at) if g.last_used_at else None
                 ),
                 expires_at=_aware(g.expires_at),
+            )
+            for g in rows
+        ]
+
+
+def _revoke_where(*conditions) -> list[GrantView]:
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(AgentGrant).where(
+                AgentGrant.revoked_at.is_(None), *conditions
+            )
+        ).all()
+        views = [_view(g) for g in rows]
+        for grant in rows:
+            _revoke(db, grant)
+        db.commit()
+        return views
+
+
+def revoke_subject(subject: str) -> list[GrantView]:
+    """Revoke every live grant of a Keycloak account, by its ``sub``."""
+    return _revoke_where(AgentGrant.subject == subject)
+
+
+def revoke_user(username: str) -> list[GrantView]:
+    """Revoke every live grant of ``username``, whoever asks."""
+    return _revoke_where(AgentGrant.username == username)
+
+
+def revoke_any_grant(grant_id: int) -> GrantView | None:
+    """Revoke one grant, whoever it belongs to; None when it does not exist."""
+    with SessionLocal() as db:
+        grant = db.get(AgentGrant, grant_id)
+        if grant is None:
+            return None
+        if grant.revoked_at is None:
+            _revoke(db, grant)
+            db.commit()
+        return _view(grant)
+
+
+@dataclass
+class AdminGrantSummary(GrantSummary):
+    username: str
+    subject: str
+
+
+def list_all_grants(username: str | None = None) -> list[AdminGrantSummary]:
+    """Every live grant, of every user unless ``username`` narrows it."""
+    query = select(AgentGrant).where(
+        AgentGrant.revoked_at.is_(None), AgentGrant.expires_at > now()
+    )
+    if username:
+        query = query.where(AgentGrant.username == username)
+    with SessionLocal() as db:
+        rows = db.scalars(
+            query.order_by(AgentGrant.username, AgentGrant.id)
+        ).all()
+        return [
+            AdminGrantSummary(
+                id=g.id,
+                client_name=g.client_name,
+                scopes=list(g.scopes),
+                created_at=_aware(g.created_at),
+                last_used_at=(
+                    _aware(g.last_used_at) if g.last_used_at else None
+                ),
+                expires_at=_aware(g.expires_at),
+                username=g.username,
+                subject=g.subject,
             )
             for g in rows
         ]
