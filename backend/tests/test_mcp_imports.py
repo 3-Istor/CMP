@@ -183,7 +183,7 @@ def test_applying_the_import_in_the_cmp_settles_the_draft(cmp):
         {"project": "demo", "run_id": "run-1"},
     )
     confirmation_id = _confirmation_id(asked)
-    policy.settle_draft(confirmation_id, "demo", "src-1", "alice")
+    policy.settle_draft(confirmation_id, "demo", "src-1", "run-1", "alice")
 
     result = _call(
         cmp,
@@ -209,10 +209,43 @@ def test_a_draft_of_another_import_is_not_settled(cmp):
     )
 
     settled = policy.settle_draft(
-        _confirmation_id(asked), "demo", "another-source", "alice"
+        _confirmation_id(asked), "demo", "another-source", "run-1", "alice"
     )
 
     assert settled is False
+
+
+def test_a_draft_proposed_for_another_analysis_is_not_settled(cmp):
+    tokens = _connect(cmp)
+    asked = _call(
+        cmp,
+        tokens["access_token"],
+        "import_repo",
+        {"project": "demo", "run_id": "run-1"},
+    )
+
+    settled = policy.settle_draft(
+        _confirmation_id(asked), "demo", "src-1", "run-2", "alice"
+    )
+
+    assert settled is False
+
+
+def test_the_confirmation_page_names_the_analysis_a_draft_was_made_for(cmp):
+    tokens = _connect(cmp)
+    asked = _call(
+        cmp,
+        tokens["access_token"],
+        "import_repo",
+        {"project": "demo", "run_id": "run-1"},
+    )
+
+    shown = cmp.get(
+        f"/api/agents/confirmations/{_confirmation_id(asked)}",
+        headers={"Authorization": "Bearer human"},
+    ).json()
+
+    assert shown["draft_run_id"] == "run-1"
 
 
 def test_link_apps_waits_for_a_cmp_approval_and_links_nothing(cmp):

@@ -228,7 +228,7 @@ def test_apply_on_an_import_of_another_project_is_not_found(client, world):
     source = _source(world, project="other")
 
     response = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply", json={}
+        f"/api/projects/shop/imports/{source.id}/apply?run_id=r-1", json={}
     )
 
     assert response.status_code == 404
@@ -237,11 +237,12 @@ def test_apply_on_an_import_of_another_project_is_not_found(client, world):
 def test_member_reads_imports_but_cannot_apply(client, world):
     world.roles["shop"] = ProjectRole.MEMBER
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
 
     listed = client.get("/api/projects/shop/imports")
     applied = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply", json={}
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
     )
 
     assert listed.status_code == 200
@@ -251,10 +252,11 @@ def test_member_reads_imports_but_cannot_apply(client, world):
 def test_apply_needs_step_up(client, world, monkeypatch):
     monkeypatch.setattr(settings, "STEP_UP_ENABLED", True)
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
 
     response = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply", json={}
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
     )
 
     assert response.status_code == 401
@@ -262,10 +264,10 @@ def test_apply_needs_step_up(client, world, monkeypatch):
 
 def test_apply_stores_the_apps_and_starts_a_build(client, world):
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
 
     response = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply",
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
         json={"exclude": ["search-service", "elasticsearch"]},
     )
 
@@ -278,10 +280,10 @@ def test_apply_stores_the_apps_and_starts_a_build(client, world):
 
 def test_apply_takes_port_probe_and_link_edits(client, world):
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
 
     response = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply",
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
         json={
             "port": {"user-service": 9090},
             "probe": {
@@ -308,8 +310,11 @@ def test_apply_takes_port_probe_and_link_edits(client, world):
 
 def test_links_drawn_on_the_map_survive_a_new_apply(client, world):
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
-    client.post(f"/api/projects/shop/imports/{source.id}/apply", json={})
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
+    client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
+    )
     with world.db() as db:
         row = db.query(ImportService).filter_by(app_name="frontend").one()
         drawn = {
@@ -324,7 +329,10 @@ def test_links_drawn_on_the_map_survive_a_new_apply(client, world):
         )
         db.commit()
 
-    client.post(f"/api/projects/shop/imports/{source.id}/apply", json={})
+    client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
+    )
 
     with world.db() as db:
         row = db.query(ImportService).filter_by(app_name="frontend").one()
@@ -345,7 +353,7 @@ def test_run_view_carries_the_capacity_the_plan_is_held_to(client, world):
 
 def test_apply_refuses_a_name_held_by_an_app_of_the_project(client, world):
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
     with world.db() as db:
         db.add(
             Deployment(
@@ -355,7 +363,8 @@ def test_apply_refuses_a_name_held_by_an_app_of_the_project(client, world):
         db.commit()
 
     response = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply", json={}
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
     )
 
     assert response.status_code == 422
@@ -364,14 +373,67 @@ def test_apply_refuses_a_name_held_by_an_app_of_the_project(client, world):
 
 def test_apply_refuses_while_a_run_is_in_progress(client, world):
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
     _run(world, source, kind="build", status="claimed")
 
     response = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply", json={}
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
     )
 
     assert response.status_code == 409
+
+
+def test_apply_of_an_analysis_that_is_no_longer_the_latest_is_refused(
+    client, world
+):
+    source = _source(world)
+    reviewed = _run(world, source, status="succeeded", plan=PLAN)
+    _run(world, source, status="succeeded", plan=PLAN)
+
+    response = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={reviewed.id}",
+        json={},
+    )
+
+    assert response.status_code == 409
+    assert "review again" in response.text
+    assert world.dispatched == []
+
+
+def test_a_re_analysis_between_review_and_apply_is_never_applied(
+    client, world
+):
+    source = _source(world)
+    reviewed = _run(world, source, status="succeeded", plan=PLAN)
+    newer = _run(world, source, status="queued")
+    with world.db() as db:
+        db.get(ImportRun, newer.id).status = "succeeded"
+        db.get(ImportRun, newer.id).plan = PLAN
+        db.commit()
+
+    stale = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={reviewed.id}",
+        json={},
+    )
+
+    assert stale.status_code == 409
+    with world.db() as db:
+        assert db.query(ImportService).count() == 0
+
+
+def test_a_second_active_run_of_an_import_is_refused_by_the_database(world):
+    source = _source(world)
+    _run(world, source, kind="build", status="claimed")
+
+    with world.db() as db, pytest.raises(service.ImportRefused):
+        service._new_run(
+            db,
+            db.get(ImportSource, source.id),
+            service.RunKind.ANALYZE,
+            SHA,
+            "alice",
+        )
 
 
 def test_secret_env_values_are_hidden_from_users(client, world):
@@ -701,11 +763,12 @@ def test_rebuild_is_refused_once_the_caller_is_no_longer_project_admin(
 
 def test_apply_is_refused_once_the_caller_lost_the_repository(client, world):
     source = _source(world)
-    _run(world, source, status="succeeded", plan=PLAN)
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
     world.repos = []
 
     response = client.post(
-        f"/api/projects/shop/imports/{source.id}/apply", json={}
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
     )
 
     assert response.status_code == 403

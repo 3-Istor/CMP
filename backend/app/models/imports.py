@@ -9,11 +9,13 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -42,6 +44,7 @@ class RunStatus(str, enum.Enum):
 TERMINAL_STATUSES = frozenset(
     {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED}
 )
+ACTIVE_RUN = text("status IN ('queued', 'claimed', 'running')")
 
 
 class ImportSource(Base):
@@ -88,6 +91,17 @@ class ImportSource(Base):
 
 class ImportRun(Base):
     __tablename__ = "import_runs"
+    # At most one active run per import, enforced by the database: two
+    # requests that both saw no active run cannot both start one.
+    __table_args__ = (
+        Index(
+            "uq_import_runs_active_source",
+            "source_id",
+            unique=True,
+            sqlite_where=ACTIVE_RUN,
+            postgresql_where=ACTIVE_RUN,
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=_uuid
@@ -142,6 +156,9 @@ class ImportService(Base):
     spec: Mapped[dict] = mapped_column(JSON, default=dict)
     last_sha: Mapped[str | None] = mapped_column(String(40))
     last_digest: Mapped[str | None] = mapped_column(String(71))
+    # The commit last_digest was built from. last_sha is the commit of the
+    # last registry change, which a partial build moves for every service.
+    built_sha: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(16), default="pending")
     message: Mapped[str] = mapped_column(Text, default="")
     deployment_id: Mapped[int | None] = mapped_column(

@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -248,7 +249,15 @@ def _new_run(
         expires_at=_now() + timedelta(hours=settings.IMPORT_RUN_TTL_HOURS),
     )
     db.add(run)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # uq_import_runs_active_source: another request started a run
+        # since this one checked.
+        db.rollback()
+        raise ImportRefused(
+            "A run of this import is already in progress"
+        ) from exc
     db.refresh(run)
     return run
 
@@ -380,19 +389,28 @@ def capacity_view(db: Session, project: str, source: ImportSource) -> dict:
     }
 
 
-async def approve(
+async def approve(  # pylint: disable=too-many-arguments
     db: Session,
     project: str,
     user: str,
     source: ImportSource,
     edits: dict,
+    run_id: str,
 ) -> ImportRun:
-    """Validate the edited plan and start the build."""
+    """
+    Validate the edited plan and start the build. *run_id* is the analysis
+    the person reviewed: a newer one, an assistant's re-analysis say, is
+    never applied in its place.
+    """
     if _active_run(source) is not None:
         raise ImportRefused("A run of this import is already in progress")
     analysis = _last_run(source, RunKind.ANALYZE)
     if analysis is None or analysis.status != RunStatus.SUCCEEDED.value:
         raise ImportRefused("This import has no finished analysis to apply")
+    if analysis.id != run_id:
+        raise ImportRefused(
+            "The analysis changed since you reviewed it: review again"
+        )
     try:
         specs = generate.resolve(analysis.plan, edits)
     except PlanError as exc:
@@ -433,7 +451,8 @@ async def approve(
     if problems:
         raise ImportRefused("; ".join(sorted(set(problems))), 422)
 
-    _store_specs(db, source, specs)
+    # The run first: a request that loses the race to start it must not
+    # leave its specs behind for the winner's build.
     run = _new_run(
         db,
         source,
@@ -442,6 +461,7 @@ async def approve(
         user,
         plan={"plan": analysis.plan, "edits": edits},
     )
+    _store_specs(db, source, specs)
     await _dispatch(db, run)
     return run
 
@@ -500,18 +520,19 @@ async def rebuild(
     user: str,
     source: ImportSource,
     apps: set[str] | None = None,
+    sha: str | None = None,
 ) -> ImportRun:
     """
-    Build the branch head, resolved here, never taken from a caller. *apps*
-    limits the build to those services; a service never built is always
-    part of it.
+    Build the branch head, *sha* when the CMP resolved it already, never a
+    commit a caller named. *apps* limits the build to those services; a
+    service never built is always part of it.
     """
     if _active_run(source) is not None:
         raise ImportRefused("A run of this import is already in progress")
     build = _last_run(source, RunKind.BUILD)
     if build is None or not source.services:
         raise ImportRefused("Apply the analysis before rebuilding")
-    sha = await _head(source)
+    sha = sha or await _head(source)
     plan = {k: v for k, v in (build.plan or {}).items() if k != "apps"}
     if apps is not None:
         unbuilt = {

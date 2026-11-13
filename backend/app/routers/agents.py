@@ -310,8 +310,10 @@ class ConfirmationRead(BaseModel):
     # Where a person reviews a draft of a portal-only tool (policy
     # PORTAL_TOOLS) instead of approving it here.
     review_link: str | None = None
-    # The plan edits the assistant proposed, prefilled on that page.
+    # The plan edits the assistant proposed, prefilled on that page only
+    # for the analysis they were proposed for.
     draft: dict | None = None
+    draft_run_id: str | None = None
 
 
 def _confirmation_read(view: policy.ConfirmationView) -> ConfirmationRead:
@@ -320,6 +322,7 @@ def _confirmation_read(view: policy.ConfirmationView) -> ConfirmationRead:
         **{k: v for k, v in view.__dict__.items() if k != "arguments"},
         review_link=policy.draft_review_link(view) if portal else None,
         draft=view.arguments.get("edits") if portal else None,
+        draft_run_id=view.arguments.get("run_id") if portal else None,
     )
 
 

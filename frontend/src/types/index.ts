@@ -1054,6 +1054,7 @@ export interface AgentConfirmation {
   /** Portal-only tools (import_repo): the page where the draft is applied. */
   review_link?: string | null;
   draft?: Partial<ImportPlanEdits> | null;
+  draft_run_id?: string | null;
 }
 
 export type StakeLevel = "sandbox" | "demo" | "standard" | "critical";
@@ -1517,7 +1518,7 @@ export interface ImportRunDetail extends ImportRun {
 }
 
 export interface ImportRebuildPending {
-  reason: "not_admin" | "inactive" | "repo_access";
+  reason: "not_admin" | "inactive" | "repo_access" | "unknown_user";
   user: string;
   trigger: "push" | "reconcile";
   since: string;

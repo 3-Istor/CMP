@@ -3489,7 +3489,8 @@
       "pendingReason": {
         "not_admin": "{user}, qui le reconstruit, n'est plus admin du projet.",
         "inactive": "le compte de {user}, qui le reconstruit, est désactivé.",
-        "repo_access": "le CMP ne peut pas vérifier que {user}, qui le reconstruit, peut encore lire le dépôt."
+        "repo_access": "le CMP ne peut pas vérifier que {user}, qui le reconstruit, peut encore lire le dépôt.",
+        "unknown_user": "le CMP ne trouve pas le compte de {user}, qui le reconstruit."
       }
     },
     "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey."

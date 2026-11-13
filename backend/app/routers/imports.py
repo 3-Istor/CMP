@@ -177,9 +177,14 @@ async def apply_import(  # pylint: disable=too-many-arguments
     ctx: RequireAdmin,
     db: DbSession,
     request: Request,
+    run_id: Annotated[str, Query(max_length=64)],
     draft: Annotated[str | None, Query(max_length=64)] = None,
 ):
-    """*draft*: the assistant's proposal (import_repo) this review started from."""
+    """
+    *run_id*: the analysis the person reviewed, refused unless it is still
+    the latest one. *draft*: the assistant's proposal (import_repo) this
+    review started from, settled only when it proposed that same analysis.
+    """
     _enabled()
     assert_step_up(ctx.token)
     try:
@@ -195,11 +200,17 @@ async def apply_import(  # pylint: disable=too-many-arguments
             ctx.username,
             source,
             edits.model_dump(mode="json", by_alias=True),
+            run_id,
         )
     except ImportRefused as exc:
         raise _refused(exc) from exc
     if draft and await run_in_threadpool(
-        policy.settle_draft, draft, ctx.project_name, source.id, ctx.username
+        policy.settle_draft,
+        draft,
+        ctx.project_name,
+        source.id,
+        run_id,
+        ctx.username,
     ):
         audit.note(request, target=source.repo_full_name, draft=draft)
     else:
@@ -236,8 +247,13 @@ async def update_import_settings(
     db: DbSession,
     request: Request,
 ):
-    """Rebuild on push. No step-up: it only stops or resumes rebuilds."""
+    """
+    Rebuild on push. Turning it on lets later commits deploy without anyone
+    looking, so it needs step-up; turning it off does not.
+    """
     _enabled()
+    if body.auto_rebuild:
+        assert_step_up(ctx.token)
     try:
         source = service.get_source(db, ctx.project_name, source_id)
     except ImportRefused as exc:
@@ -423,7 +439,9 @@ async def github_webhook(request: Request, db: DbSession):
     _enabled()
     remote = request.client.host if request.client else None
     if not settings.GITHUB_WEBHOOK_SECRET:
-        rebuilds.note_refused("no webhook secret configured", remote)
+        await run_in_threadpool(
+            rebuilds.note_refused, "no webhook secret configured", remote
+        )
         raise HTTPException(503, "Webhook not configured")
     raw = await _read_body(request, settings.IMPORT_WEBHOOK_MAX_BODY_BYTES)
     if not rebuilds.verify_signature(
@@ -436,7 +454,7 @@ async def github_webhook(request: Request, db: DbSession):
     delivery = request.headers.get("x-github-delivery", "")
     if not rebuilds.DELIVERY.fullmatch(delivery):
         raise HTTPException(400, "Missing delivery id")
-    if not await run_in_threadpool(rebuilds.remember_delivery, db, delivery):
+    if await run_in_threadpool(rebuilds.seen_delivery, db, delivery):
         return {"status": "duplicate"}
     event = request.headers.get("x-github-event", "")
     if event == "ping":
@@ -449,5 +467,15 @@ async def github_webhook(request: Request, db: DbSession):
         raise HTTPException(400, "Malformed payload") from exc
     if not isinstance(payload, dict):
         raise HTTPException(400, "Malformed payload")
-    started = rebuilds.on_push(db, payload, delivery)
-    return {"status": "accepted", "rebuilds": len(started)}
+    matched = await run_in_threadpool(rebuilds.on_push, db, payload, delivery)
+    # Recorded only once processed: a delivery that failed with a 500 is
+    # processed again when GitHub redelivers it. Two copies processed at
+    # once are harmless, auto_rebuild does nothing for a head already built
+    # or being built.
+    if not await run_in_threadpool(rebuilds.remember_delivery, db, delivery):
+        return {"status": "duplicate"}
+    for source_id in matched:
+        service._spawn(  # pylint: disable=protected-access
+            rebuilds.auto_rebuild(source_id, "push")
+        )
+    return {"status": "accepted", "rebuilds": len(matched)}

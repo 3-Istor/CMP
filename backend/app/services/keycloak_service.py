@@ -243,6 +243,19 @@ def get_user_by_id(user_id: str) -> dict | None:
     return response.json()
 
 
+def get_user_by_username(username: str) -> dict | None:
+    """
+    The Keycloak user with exactly this username, None when there is none.
+
+    Raises:
+        requests.RequestException: Keycloak could not say.
+    """
+    found = _find_user_by_username(username, _get_admin_token())
+    if found is None or found.get("username") != username:
+        return None
+    return found
+
+
 def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
     """
     Search for a Keycloak group by exact name.

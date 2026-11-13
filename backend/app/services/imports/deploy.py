@@ -308,6 +308,8 @@ async def _deploy(db: Session, run: ImportRun) -> None:
                 continue
             row.last_digest = digests[app]
             row.last_sha = run.sha
+            if app in images:
+                row.built_sha = run.sha
             expected[app] = f"{image_name(project, app)}@{digests[app]}"
         else:
             preset = generate.load_preset(spec.backing_kind)["image"]

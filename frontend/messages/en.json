@@ -3489,7 +3489,8 @@
       "pendingReason": {
         "not_admin": "{user}, who rebuilds it, is no longer admin of the project.",
         "inactive": "the account of {user}, who rebuilds it, is disabled.",
-        "repo_access": "the CMP cannot check that {user}, who rebuilds it, can still read the repository."
+        "repo_access": "the CMP cannot check that {user}, who rebuilds it, can still read the repository.",
+        "unknown_user": "the CMP cannot find the account of {user}, who rebuilds it."
       }
     },
     "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey."

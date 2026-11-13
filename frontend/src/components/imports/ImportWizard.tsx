@@ -162,14 +162,21 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
     if (!draftId || step !== "review") return;
     getAgentConfirmation(draftId)
       .then((found) => {
-        if (found.status !== "pending" || found.tool !== "import_repo") return;
+        // A draft proposed for another project or analysis is never shown here.
+        if (
+          found.status !== "pending" ||
+          found.tool !== "import_repo" ||
+          found.project !== projectName ||
+          found.draft_run_id !== runId
+        )
+          return;
         setDraft(found);
         if (!keptEdits.current && found.draft) {
           rawDispatch({ type: "reset", edits: { ...emptyEdits(), ...found.draft } });
         }
       })
       .catch(() => setDraft(null));
-  }, [draftId, step]);
+  }, [draftId, step, projectName, runId]);
 
   const start = async (repo: string, branch: string | null) => {
     try {
@@ -184,7 +191,7 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
     if (!run) return;
     setApplying(true);
     try {
-      const build = await applyImport(projectName, run.source_id, edits, draft?.id);
+      const build = await applyImport(projectName, run.source_id, run.id, edits, draft?.id);
       toast.success(t("applied"));
       go(build.id);
     } catch (err) {

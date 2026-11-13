@@ -249,19 +249,26 @@ def draft_review_link(view: ConfirmationView) -> str:
 
 
 def settle_draft(
-    confirmation_id: str, project: str, source_id: str, username: str
+    confirmation_id: str,
+    project: str,
+    source_id: str,
+    run_id: str,
+    username: str,
 ) -> bool:
     """
     Mark the assistant's draft of an import used once a person applied the
-    import in the CMP. False when it is not a pending draft of this import.
+    import in the CMP. False when it is not a pending draft of this import
+    and of the analysis they applied.
     """
     with SessionLocal() as db:
         row = db.get(AgentConfirmation, confirmation_id)
+        arguments = dict(row.arguments) if row is not None else {}
         if (
             row is None
             or row.tool not in PORTAL_TOOLS
             or row.project != project
-            or dict(row.arguments).get("source_id") != source_id
+            or (arguments.get("source_id"), arguments.get("run_id"))
+            != (source_id, run_id)
             or _confirmation_view(row).status != "pending"
         ):
             return False

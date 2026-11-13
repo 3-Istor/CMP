@@ -1557,12 +1557,14 @@ export const getImportRun = (project: string, runId: string) =>
 export const applyImport = (
   project: string,
   sourceId: string,
+  runId: string,
   edits: import("@/types").ImportPlanEdits,
   draft?: string | null,
 ) =>
   request<{ run: import("@/types").ImportRun }>(
     `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/apply` +
-      (draft ? `?draft=${encodeURIComponent(draft)}` : ""),
+      `?run_id=${encodeURIComponent(runId)}` +
+      (draft ? `&draft=${encodeURIComponent(draft)}` : ""),
     { method: "POST", body: JSON.stringify(edits) },
   ).then((r) => r.run);
 
