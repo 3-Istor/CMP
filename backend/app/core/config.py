@@ -238,6 +238,51 @@ class Settings(BaseSettings):
 
     GRAFANA_ADMIN_PASSWORD: str = ""
 
+    # Repository import (CNP-238, CNP-241). Off until the central workflow,
+    # the OIDC trust below and the GitHub linking keys are in place.
+    IMPORT_ENABLED: bool = False
+    # Repository running .github/workflows/import.yml, pinned by name and by
+    # the numeric ids GitHub puts in the OIDC token (a renamed or recreated
+    # repository gets new ids).
+    IMPORT_WORKFLOW_REPO: str = "3-Istor/extern-project-analyzer"
+    IMPORT_WORKFLOW_REPO_ID: str = ""
+    IMPORT_WORKFLOW_OWNER_ID: str = ""
+    IMPORT_WORKFLOW_FILE: str = "import.yml"
+    IMPORT_WORKFLOW_REF: str = "refs/heads/main"
+    # Comma-separated commits of import.yml allowed to call the worker API:
+    # a change to the workflow is live only once its commit is listed here.
+    IMPORT_WORKFLOW_SHAS: str = ""
+    # Audience the workflow asks GitHub for; must match import.yml.
+    IMPORT_OIDC_AUDIENCE: str = "cmp-import"
+    IMPORT_RUN_TTL_HOURS: int = 24
+    IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/imports"
+    # Platform repositories nobody imports, owner/name, comma separated.
+    IMPORT_DENY_REPOS: str = (
+        "3-Istor/K3s,3-Istor/CMP,3-Istor/Cloud,3-Istor/cnp-projects,"
+        "3-Istor/cnp-project-base,3-Istor/infra-templates,"
+        "3-Istor/app-templates,3-Istor/extern-project-analyzer,"
+        "3-Istor/keycloak-theme,3-Istor/cnp-docs,3-Istor/offhours-guard"
+    )
+    # Sum of the memory requests of one project's imported apps.
+    IMPORT_MAX_PROJECT_REQUESTS_MIB: int = 6144
+    # Per-namespace quota of cnp-project-base (requests.memory, requests.cpu).
+    IMPORT_NAMESPACE_REQUESTS_MIB: int = 2048
+    IMPORT_NAMESPACE_REQUESTS_MILLICPU: int = 1000
+    # Argo CD API for the post-deploy wait; empty reads the Applications
+    # through the Kubernetes API instead.
+    IMPORT_ARGO_TIMEOUT_SECONDS: int = 900
+
+    # GitHub user OAuth (account linking). The client of the CNP-Portal app.
+    GITHUB_OAUTH_CLIENT_ID: str = ""
+    GITHUB_OAUTH_CLIENT_SECRET: str = ""
+    GITHUB_OAUTH_REDIRECT_URI: str = (
+        "https://cmp.3istor.com/api/auth/github/callback"
+    )
+    GITHUB_APP_SLUG: str = "cnp-portal"
+    # Fernet keys encrypting stored GitHub user tokens, comma separated,
+    # newest first: older keys only decrypt, so a rotation is adding a key.
+    GITHUB_TOKEN_ENCRYPTION_KEYS: str = ""
+
     # AI assistants (MCP server on /mcp, OAuth served by the CMP itself)
     AGENT_ACCESS_TOKEN_TTL_SECONDS: int = 900
     AGENT_REFRESH_TTL_DAYS: int = 30

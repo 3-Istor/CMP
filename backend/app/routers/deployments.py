@@ -409,6 +409,14 @@ async def delete_deployment(
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
     # Assistants may delete only where policy.yaml lets them (sandbox, demo).
     assert_step_up(token, agents_allowed=True)
+    if deployment.template_id.startswith("import-"):
+        # Its values live in cnp-projects and its namespace outlives Argo CD:
+        # only removing the import cleans both up.
+        raise HTTPException(
+            status_code=409,
+            detail="This app comes from a repository import: delete the "
+            "import from the project's Imports tab.",
+        )
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,

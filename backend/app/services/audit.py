@@ -125,6 +125,19 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/deployments/{deployment_id}/restart"): "app.restart",
     ("PUT", "/api/alerting/{alert_id}"): "alerting.update",
     ("POST", "/api/catalog/sync"): "catalog.sync",
+    ("POST", "/api/projects/{project_name}/imports"): "import.create",
+    (
+        "POST",
+        "/api/projects/{project_name}/imports/{source_id}/apply",
+    ): "import.apply",
+    (
+        "POST",
+        "/api/projects/{project_name}/imports/{source_id}/rebuild",
+    ): "import.rebuild",
+    (
+        "DELETE",
+        "/api/projects/{project_name}/imports/{source_id}",
+    ): "import.delete",
     ("POST", "/api/account/picture"): "account.picture.update",
     (
         "POST",
@@ -380,6 +393,8 @@ def record_system_event(
     details: dict,
     actor: str = "cmp",
     succeeded: bool = True,
+    project: str | None = None,
+    app: str | None = None,
 ) -> None:
     """
     Journal a change the CMP made on its own, such as a grant removed at
@@ -389,8 +404,8 @@ def record_system_event(
         AuditEvent(
             actor=actor,
             action=action,
-            project=None,
-            app=None,
+            project=project,
+            app=app,
             target=target,
             outcome="success" if succeeded else "failure",
             status_code=200 if succeeded else 500,
