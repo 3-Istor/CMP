@@ -183,7 +183,7 @@ brew install act  # macOS
 # or download from GitHub releases
 
 # Test build workflow
-act push -j build-backend
+act push -j build
 
 # Test with specific tag
 act push --eventpath test-event.json
