@@ -4,8 +4,9 @@ Login tracking and inactive accounts.
 An account without a login for INACTIVE_AFTER_DAYS is reported once; if it
 is still inactive INACTIVE_GRACE_DAYS later and INACTIVE_DISABLE_ENABLED is
 on, it is disabled (``enabled=false``: groups, credentials and history are
-kept, enabling it again restores everything). Demo, break-glass and service
-accounts are never touched, see :func:`excluded`.
+kept, enabling it again restores everything but its AI assistant
+connections, which are revoked). Demo, break-glass and service accounts are
+never touched, see :func:`excluded`.
 """
 
 import logging
@@ -17,6 +18,7 @@ from app.core.config import settings
 from app.models.access_review import AccountActivity
 from app.services.access_review import directory
 from app.services.access_review.notices import Inbox, Notice
+from app.services.agents import store as agent_store
 from app.services.audit import record_system_event
 
 logger = logging.getLogger(__name__)
@@ -155,10 +157,15 @@ def check_inactive(db: Session, now: datetime) -> list[Notice]:
                 )
                 continue
             row.disabled_at = now
+            revoked = agent_store.revoke_subject(row.user_id)
             record_system_event(
                 "access_review.account.disable",
                 row.username,
-                {"user_id": row.user_id, "last_seen": seen},
+                {
+                    "user_id": row.user_id,
+                    "last_seen": seen,
+                    "assistant_grants_revoked": [g.id for g in revoked],
+                },
             )
             out.append(_inactive_notice("disabled", row.username, seen, now))
     db.commit()

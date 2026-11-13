@@ -23,6 +23,7 @@ from app import mcp_server
 from app.core.database import Base, get_db
 from app.models.project import TargetCloud
 from app.routers import agents as agents_router
+from app.services import audit, keycloak_service
 from app.services.agents import (
     internal_api,
     policy,
@@ -38,6 +39,7 @@ from app.services.keycloak_service import (
 )
 
 HUMAN = {"sub": "user-1", "preferred_username": "alice", "name": "Alice"}
+INFRA = {"sub": "user-9", "preferred_username": "ivan", "groups": ["infra"]}
 REDIRECT = "http://localhost:4567/callback"
 
 
@@ -82,7 +84,7 @@ def platform():
         token = credentials.credentials
         if token.startswith(store.ACCESS_PREFIX):
             return decode_platform_token(token)
-        return HUMAN
+        return INFRA if token == "infra" else HUMAN
 
     def db():
         with factory() as session:
@@ -96,6 +98,11 @@ def platform():
     patches = [
         mock.patch.object(store, "SessionLocal", factory),
         mock.patch.object(policy, "SessionLocal", factory),
+        mock.patch.object(
+            keycloak_service,
+            "get_user_by_id",
+            lambda sub: {"id": sub, "enabled": True},
+        ),
         mock.patch.object(
             skills,
             "list_skills",
@@ -329,6 +336,211 @@ def test_revoked_assistant_is_refused_on_its_next_call(platform):
     response = _call(platform, tokens["access_token"], "whoami")
 
     assert response.status_code == 401
+
+
+def _refresh(client, tokens):
+    return client.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": tokens["refresh_token"],
+            "client_id": tokens["client_id"],
+        },
+    )
+
+
+def _live_grants(client) -> list[dict]:
+    return client.get(
+        "/api/agents/admin/grants", headers={"Authorization": "Bearer infra"}
+    ).json()
+
+
+def test_refresh_revokes_the_grant_of_a_disabled_account(
+    platform, monkeypatch
+):
+    # Arrange
+    tokens = _connect(platform)
+    monkeypatch.setattr(
+        keycloak_service,
+        "get_user_by_id",
+        lambda sub: {"id": sub, "enabled": False},
+    )
+
+    # Act
+    issued = store.rotate_refresh(
+        tokens["refresh_token"], tokens["client_id"], []
+    )
+
+    # Assert
+    assert issued is None
+    assert _live_grants(platform) == []
+
+
+def test_refresh_revokes_the_grant_of_a_deleted_account(platform, monkeypatch):
+    tokens = _connect(platform)
+    monkeypatch.setattr(keycloak_service, "get_user_by_id", lambda sub: None)
+
+    response = _refresh(platform, tokens)
+
+    assert response.json()["error"] == "invalid_grant"
+    assert store.token_claims(tokens["access_token"]) is None
+
+
+def test_refresh_is_refused_but_the_grant_kept_when_keycloak_is_down(
+    platform, monkeypatch
+):
+    # Arrange
+    tokens = _connect(platform)
+
+    def down(sub):
+        raise keycloak_service.requests.ConnectionError("down")
+
+    monkeypatch.setattr(keycloak_service, "get_user_by_id", down)
+
+    # Act
+    issued = store.rotate_refresh(
+        tokens["refresh_token"], tokens["client_id"], []
+    )
+
+    # Assert
+    assert issued is None
+    assert len(_live_grants(platform)) == 1
+
+
+def test_refresh_works_again_once_keycloak_is_back(platform, monkeypatch):
+    tokens = _connect(platform)
+    monkeypatch.setattr(
+        keycloak_service,
+        "get_user_by_id",
+        mock.Mock(side_effect=keycloak_service.requests.Timeout("slow")),
+    )
+    _refresh(platform, tokens)
+    monkeypatch.setattr(
+        keycloak_service,
+        "get_user_by_id",
+        lambda sub: {"id": sub, "enabled": True},
+    )
+
+    response = _refresh(platform, tokens)
+
+    assert response.status_code == 200
+
+
+def _keycloak_answers(monkeypatch, status_code):
+    response = keycloak_service.requests.Response()
+    response.status_code = status_code
+    monkeypatch.setattr(keycloak_service, "_get_admin_token", lambda: "t")
+    monkeypatch.setattr(
+        keycloak_service.requests, "get", lambda *a, **k: response
+    )
+
+
+def test_account_lookup_reads_a_404_as_gone(monkeypatch):
+    _keycloak_answers(monkeypatch, 404)
+
+    user = keycloak_service.get_user_by_id("user-1")
+
+    assert user is None
+
+
+@pytest.mark.parametrize("status_code", [500, 401])
+def test_account_lookup_raises_when_keycloak_cannot_say(
+    monkeypatch, status_code
+):
+    _keycloak_answers(monkeypatch, status_code)
+
+    with pytest.raises(keycloak_service.requests.HTTPError):
+        keycloak_service.get_user_by_id("user-1")
+
+
+def test_disabling_an_account_revokes_all_its_grants(platform):
+    tokens = _connect(platform)
+    _connect(platform)
+
+    revoked = store.revoke_subject(HUMAN["sub"])
+
+    assert len(revoked) == 2
+    assert store.token_claims(tokens["access_token"]) is None
+
+
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("get", "/api/agents/admin/grants"),
+        ("delete", "/api/agents/admin/grants/1"),
+        ("delete", "/api/agents/admin/users/alice/grants"),
+    ],
+)
+def test_admin_grant_endpoints_refuse_a_caller_outside_infra(
+    platform, method, path
+):
+    _connect(platform)
+
+    response = platform.request(
+        method, path, headers={"Authorization": "Bearer human"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_grant_endpoints_refuse_an_assistant_token(platform):
+    tokens = _connect(platform)
+
+    response = platform.get(
+        "/api/agents/admin/grants",
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_infra_lists_the_grants_of_every_user(platform):
+    _connect(platform)
+
+    grants = _live_grants(platform)
+
+    assert [(g["username"], g["subject"]) for g in grants] == [
+        ("alice", "user-1")
+    ]
+
+
+def test_infra_revokes_another_users_grant(platform):
+    tokens = _connect(platform)
+    grant_id = _live_grants(platform)[0]["id"]
+
+    response = platform.delete(
+        f"/api/agents/admin/grants/{grant_id}",
+        headers={"Authorization": "Bearer infra"},
+    )
+
+    assert response.status_code == 204
+    assert _call(platform, tokens["access_token"], "whoami").status_code == 401
+
+
+def test_infra_revokes_every_grant_of_a_user(platform):
+    _connect(platform)
+    _connect(platform)
+
+    response = platform.delete(
+        "/api/agents/admin/users/alice/grants",
+        headers={"Authorization": "Bearer infra"},
+    )
+
+    assert len(response.json()["revoked"]) == 2
+    assert _live_grants(platform) == []
+
+
+@pytest.mark.parametrize(
+    "path,action",
+    [
+        ("/api/agents/admin/grants/7", "agent.admin.revoke"),
+        ("/api/agents/admin/users/alice/grants", "agent.admin.revoke_user"),
+    ],
+)
+def test_admin_revocations_are_journaled(path, action):
+    found, _ = audit.match_action("DELETE", path)
+
+    assert found == action
 
 
 def test_an_assistant_cannot_approve_a_connection(platform):

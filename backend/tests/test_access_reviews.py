@@ -14,11 +14,13 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models.access_review import AccessReviewItem, AccountActivity
+from app.models.agent import AgentGrant
 from app.models.audit import AuditEvent
 from app.models.project import Project
 from app.routers import access_reviews
 from app.services import audit, grafana_service, keycloak_service
 from app.services.access_review import accounts, campaigns, directory
+from app.services.agents import store as agent_store
 from app.services.keycloak_service import get_current_user
 
 NOW = datetime(2026, 11, 11, 10, 0, 0)
@@ -117,7 +119,10 @@ def factory():
     with session_factory() as db:
         db.add(Project(project_name="shop", owner_username="olga"))
         db.commit()
-    with mock.patch.object(audit, "SessionLocal", session_factory):
+    with (
+        mock.patch.object(audit, "SessionLocal", session_factory),
+        mock.patch.object(agent_store, "SessionLocal", session_factory),
+    ):
         yield session_factory
 
 
@@ -626,6 +631,35 @@ class TestInactiveAccounts:
 
         assert (early, [n.kind for n in late]) == ([], ["disabled"])
         assert tracked.users["dan"]["enabled"] is False
+
+    def test_disabling_an_account_revokes_its_assistant_grants(
+        self, factory, tracked
+    ):
+        # Arrange
+        tracked.logins = {u: NOW - DAY for u in tracked.users if u != "dan"}
+        with factory() as db:
+            db.add(
+                AgentGrant(
+                    client_id="c1",
+                    client_name="Claude Code",
+                    subject="id-dan",
+                    username="dan",
+                    claims={"sub": "id-dan"},
+                    scopes=["cnp:read"],
+                    refresh_token_hash="h",
+                    expires_at=NOW + 30 * DAY,
+                )
+            )
+            db.commit()
+
+        # Act
+        with mock.patch.object(settings, "INACTIVE_DISABLE_ENABLED", True):
+            inactivity(factory, NOW)
+            inactivity(factory, NOW + 14 * DAY)
+
+        # Assert
+        with factory() as db:
+            assert db.query(AgentGrant).one().revoked_at is not None
 
     def test_never_disables_while_the_setting_is_off(self, factory, tracked):
         tracked.logins = {u: NOW - DAY for u in tracked.users if u != "dan"}
