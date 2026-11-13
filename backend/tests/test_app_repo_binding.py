@@ -142,6 +142,42 @@ def test_mcp_refuses_to_push_to_a_repository_owned_by_another_org(
     repo_ops.commit_files.assert_not_awaited()
 
 
+def test_member_cannot_push_deploy_values_through_mcp(mcp_caller):
+    mcp_caller.app = _app("running")
+
+    result = asyncio.run(
+        mcp_server.push_files(
+            5, {"deploy/values.yaml": "replicas: 9\n"}, "chore: scale"
+        )
+    )
+
+    assert result.get("status") == 403
+    repo_ops.commit_files.assert_not_awaited()
+
+
+def test_admin_can_push_deploy_values_through_mcp(mcp_caller):
+    mcp_caller.app = _app("running")
+    mcp_caller.role = ProjectRole.ADMIN
+
+    result = asyncio.run(
+        mcp_server.push_files(
+            5, {"deploy/values.yaml": "replicas: 9\n"}, "chore: scale"
+        )
+    )
+
+    assert result["ok"] is True
+
+
+def test_member_can_still_push_application_code_through_mcp(mcp_caller):
+    mcp_caller.app = _app("running")
+
+    result = asyncio.run(
+        mcp_server.push_files(5, {"src/index.html": "<p>hi</p>"}, "feat: x")
+    )
+
+    assert result["ok"] is True
+
+
 def _post_app(factory, name: str, app_config: dict | None = None):
     with factory() as db:
         db.add(Project(project_name="demo", owner_username="u"))

@@ -731,6 +731,9 @@ async def push_files(
     normalized = {repo_ops.normalize_path(p): c for p, c in files.items()}
     repo_ops.check_size(normalized)
     kind = repo_ops.classify(list(normalized))
+    if kind == "sensitive":
+        # Same bar as the CMP's config, security-data and release settings.
+        await caller.require_role(project, ProjectRole.ADMIN)
     leaks = repo_ops.find_secrets(normalized)
     if leaks:
         return {
