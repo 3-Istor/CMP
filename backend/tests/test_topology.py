@@ -196,14 +196,15 @@ def client(world):
     return TestClient(app)
 
 
-def _flow(source, target, verdict, value):
+def _flow(source, target, verdict, value, kind="Trace"):
     return {
         "metric": {
-            "source_namespace": f"shop-{source}",
-            "destination_namespace": f"shop-{target}",
-            "source_workload": source,
-            "destination_workload": target,
+            "source_namespace": source if "/" in source else f"shop-{source}",
+            "destination_namespace": (
+                target if "/" in target else f"shop-{target}"
+            ),
             "verdict": verdict,
+            "type": kind,
         },
         "value": [0, str(value)],
     }
@@ -461,3 +462,43 @@ def test_unlinking_a_link_that_does_not_exist_is_not_found(client, world):
     )
 
     assert (response.status_code, world.commits) == (404, [])
+
+
+def test_replies_do_not_draw_an_edge_back_to_the_caller(client, world):
+    world.flows = [
+        _flow("api", "mongodb", "FORWARDED", 5),
+        _flow("mongodb", "api", "FORWARDED", 5),
+        _flow("worker", "cache", "FORWARDED", 8),
+        _flow("cache", "worker", "FORWARDED", 3),
+    ]
+
+    edges = _edges(client.get("/api/projects/shop/topology"))
+
+    assert sorted(edges) == [
+        ("api", "cache"),
+        ("api", "mongodb"),
+        ("worker", "cache"),
+    ]
+
+
+def test_policy_verdicts_give_the_direction_of_a_conversation(client, world):
+    world.flows = [
+        _flow("cache", "worker", "FORWARDED", 9),
+        _flow("worker", "cache", "FORWARDED", 1),
+        _flow("worker", "cache", "FORWARDED", 1, kind="PolicyVerdict"),
+    ]
+
+    edges = _edges(client.get("/api/projects/shop/topology"))
+
+    assert ("worker", "cache") in edges and ("cache", "worker") not in edges
+
+
+def test_system_and_unknown_namespaces_are_left_out(client, world):
+    world.flows = [
+        _flow("shop-system/x", "api", "FORWARDED", 2),
+        _flow("api", "reserved:world/", "FORWARDED", 2),
+    ]
+
+    edges = _edges(client.get("/api/projects/shop/topology"))
+
+    assert set(edges) == {("api", "mongodb"), ("api", "cache")}

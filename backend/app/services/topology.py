@@ -35,10 +35,9 @@ from app.services.project_registry import read_record
 logger = logging.getLogger(__name__)
 
 FLOW_METRIC = "hubble_flows_processed_total"
-FLOW_LABELS = (
-    "source_workload, source_namespace, destination_workload, "
-    "destination_namespace, verdict"
-)
+# Workload labels are often empty and destinations outside the cluster have
+# no namespace: apps are told apart by namespace only.
+FLOW_LABELS = "source_namespace, destination_namespace, verdict, type"
 RATE_WINDOW = "5m"
 COUNT_WINDOW = "1h"
 IMPORTED_TYPES = ("service", "backing")
@@ -113,11 +112,14 @@ async def _vm_query(
         raise MetricsUnavailableError(str(exc)) from exc
 
 
+Flows = dict[tuple[str, str], dict[str, float]]
+
+
 def _by_pair(
     results: list[dict[str, Any]], namespace_app: dict[str, str]
-) -> dict[tuple[str, str], dict[str, float]]:
-    """{(from app, to app): {verdict: value}}, flows inside an app left out."""
-    pairs: dict[tuple[str, str], dict[str, float]] = {}
+) -> dict[tuple[str, str, str], dict[str, float]]:
+    """{(from app, to app, type): {verdict: value}}, flows inside an app left out."""
+    pairs: dict[tuple[str, str, str], dict[str, float]] = {}
     for item in results:
         labels = item.get("metric") or {}
         source = namespace_app.get(labels.get("source_namespace", ""))
@@ -129,19 +131,69 @@ def _by_pair(
         except (KeyError, IndexError, TypeError, ValueError):
             continue
         verdict = str(labels.get("verdict", "")).upper()
-        bucket = pairs.setdefault((source, target), {})
+        kind = str(labels.get("type", "")) or "Trace"
+        bucket = pairs.setdefault((source, target, kind), {})
         bucket[verdict] = bucket.get(verdict, 0.0) + value
     return pairs
 
 
+def initiated(
+    typed: dict[tuple[str, str, str], dict[str, float]],
+    declared: set[tuple[str, str]],
+) -> Flows:
+    """
+    One direction per conversation: the flow metric counts replies too.
+
+    Heuristic, per unordered pair of apps:
+    - when PolicyVerdict flows exist for the pair, only they count: Cilium
+      emits them for the side that opens the connection;
+    - otherwise Trace (and Drop) flows count, and forwarded traffic seen in
+      both directions is kept only in the declared direction(s), or else in
+      the busier one (both on a tie, as nothing tells them apart).
+    Drops are never replies and always count in their own direction.
+    """
+    unordered: dict[frozenset, list[tuple[str, str, str]]] = {}
+    for key in typed:
+        unordered.setdefault(frozenset(key[:2]), []).append(key)
+    flows: Flows = {}
+    for keys in unordered.values():
+        verdict_keys = [k for k in keys if k[2] == "PolicyVerdict"]
+        chosen = verdict_keys or [k for k in keys if k[2] != "PolicyVerdict"]
+        directed: Flows = {}
+        for source, target, kind in chosen:
+            bucket = directed.setdefault((source, target), {})
+            for verdict, value in typed[(source, target, kind)].items():
+                bucket[verdict] = bucket.get(verdict, 0.0) + value
+        forwarded = {
+            pair: v.get("FORWARDED", 0.0)
+            for pair, v in directed.items()
+            if v.get("FORWARDED", 0.0) > 0
+        }
+        if not verdict_keys and len(forwarded) == 2:
+            keep = {pair for pair in forwarded if pair in declared}
+            if not keep:
+                top = max(forwarded.values())
+                keep = {p for p, v in forwarded.items() if v == top}
+            for pair in forwarded:
+                if pair not in keep:
+                    directed[pair]["FORWARDED"] = 0.0
+        flows.update(directed)
+    return flows
+
+
 async def observed_flows(
-    project: str, apps: list[str], cloud: str
+    project: str,
+    apps: list[str],
+    cloud: str,
+    declared: set[tuple[str, str]] | None = None,
 ) -> tuple[bool, dict[tuple[str, str], dict[str, float]]]:
     """
     ``(available, {(from, to): {rps, count, forwarded, dropped}})``.
 
-    Not available when the Hubble flow metric does not exist yet (enabled
-    separately in K3s) or VictoriaMetrics cannot be read.
+    The Hubble series carry no ``namespace`` label, so the per-project vmauth
+    users cannot read them: the CMP asks vmselect itself, with a query naming
+    the project's namespaces only. Not available when the metric is missing
+    from VictoriaMetrics or VictoriaMetrics cannot be read.
     """
     namespace_app = {}
     for app in apps:
@@ -169,8 +221,8 @@ async def observed_flows(
     except MetricsUnavailableError as exc:
         logger.warning("Flows of %s not readable: %s", project, exc)
         return False, {}
-    rate_pairs = _by_pair(rates, namespace_app)
-    count_pairs = _by_pair(counts, namespace_app)
+    rate_pairs = initiated(_by_pair(rates, namespace_app), declared or set())
+    count_pairs = initiated(_by_pair(counts, namespace_app), declared or set())
     flows = {}
     for pair in set(rate_pairs) | set(count_pairs):
         rate = rate_pairs.get(pair, {})
@@ -180,8 +232,10 @@ async def observed_flows(
         if forwarded <= 0 and dropped <= 0:
             continue
         flows[pair] = {
-            "rps": round(sum(rate.values()), 3),
-            "count": round(sum(count.values())),
+            "rps": round(rate.get("FORWARDED", 0.0), 3),
+            "count": round(
+                count.get("FORWARDED", 0.0) + count.get("DROPPED", 0.0)
+            ),
             "forwarded": forwarded,
             "dropped": dropped,
         }
@@ -367,11 +421,14 @@ async def build(db: Session, project: str) -> dict:
         for name in names
     ]
 
+    declared = _declared({n: record_apps[n] for n in record_apps})
     available, flows = await observed_flows(
-        project, names, TargetCloud(cloud).value
+        project,
+        names,
+        TargetCloud(cloud).value,
+        {(source, target) for source, target, _ in declared},
     )
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    declared = _declared({n: record_apps[n] for n in record_apps})
     edges = []
     seen_pairs = set()
     for (source, target, _alias), link in sorted(declared.items()):
