@@ -1,6 +1,10 @@
 import pytest
 
-from app.services.registry_names import check_app, check_new_project
+from app.services.registry_names import (
+    check_app,
+    check_new_project,
+    is_platform_namespace,
+)
 
 
 def record(name: str, *apps: dict) -> dict:
@@ -240,7 +244,70 @@ def test_check_app_rejects_an_app_whose_vault_role_is_reserved(
 def test_check_app_accepts_an_app_whose_vault_roles_are_free():
     errors = check_app("shop", app("web"), [record("shop")])
 
-    assert errors == []
+    assert not errors
+
+
+@pytest.mark.parametrize(
+    "project,app_name",
+    [
+        ("envoy", "gateway-system"),
+        ("gateway", "infra"),
+        ("cnp", "projects-db"),
+        ("cnp-projects", "db"),
+        ("argo", "rollouts"),
+        ("garage", "s3"),
+        ("cnp", "vpn"),
+        ("kube", "public"),
+        ("rook", "anything"),
+    ],
+)
+def test_check_app_refuses_an_app_whose_namespace_is_a_platform_namespace(
+    project, app_name
+):
+    errors = check_app(project, app(app_name), [record(project)])
+
+    assert any("a namespace of the platform" in error for error in errors)
+
+
+def test_check_app_accepts_an_app_whose_name_only_resembles_a_platform_one():
+    errors = check_app("demo", app("infra"), [record("demo")])
+
+    assert not errors
+
+
+@pytest.mark.parametrize(
+    "project", ["kube", "cnpg", "trivy", "envoy-gateway", "default"]
+)
+def test_check_new_project_refuses_a_project_reserved_by_the_platform(project):
+    errors = check_new_project(project, [])
+
+    assert errors != []
+
+
+@pytest.mark.parametrize(
+    "project", ["iot", "self-runner", "test-link", "joetest"]
+)
+def test_check_new_project_accepts_the_projects_that_exist_today(project):
+    errors = check_new_project(project, [])
+
+    assert not errors
+
+
+@pytest.mark.parametrize(
+    "namespace,expected",
+    [
+        ("envoy-gateway-system", True),
+        ("kube-system", True),
+        ("cnpg-anything", True),
+        ("vault", True),
+        ("vaulty-web", False),
+        ("iot-landing", False),
+    ],
+)
+def test_is_platform_namespace_matches_the_reserved_names_and_families(
+    namespace, expected
+):
+    assert is_platform_namespace(namespace) is expected
 
 
 def test_check_app_name_refuses_a_namespace_with_a_trailing_newline():
