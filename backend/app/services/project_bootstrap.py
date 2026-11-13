@@ -545,7 +545,7 @@ def _run_once(
     env["TF_DATA_DIR"] = str(work_dir / ".terraform")
 
     # ── S3 backend credentials ────────────────────────────────────────────
-    if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
+    if settings.TF_BACKEND_AWS_ACCESS_KEY_ID and not aws_tfstate.enabled():
         env["AWS_ACCESS_KEY_ID"] = settings.TF_BACKEND_AWS_ACCESS_KEY_ID
         env["AWS_SECRET_ACCESS_KEY"] = (
             settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY

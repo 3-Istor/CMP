@@ -153,11 +153,12 @@ class TerraformExecutor:
         if settings.OS_PROJECT_DOMAIN_NAME:
             env["OS_PROJECT_DOMAIN_NAME"] = settings.OS_PROJECT_DOMAIN_NAME
 
-        # Pass AWS credentials to Terraform (for AWS provider)
-        if settings.AWS_ACCESS_KEY_ID:
-            env["AWS_ACCESS_KEY_ID"] = settings.AWS_ACCESS_KEY_ID
-        if settings.AWS_SECRET_ACCESS_KEY:
-            env["AWS_SECRET_ACCESS_KEY"] = settings.AWS_SECRET_ACCESS_KEY
+        # Federated runs give the AWS provider the cnp-tfstate profile.
+        if not aws_tfstate.enabled():
+            if settings.AWS_ACCESS_KEY_ID:
+                env["AWS_ACCESS_KEY_ID"] = settings.AWS_ACCESS_KEY_ID
+            if settings.AWS_SECRET_ACCESS_KEY:
+                env["AWS_SECRET_ACCESS_KEY"] = settings.AWS_SECRET_ACCESS_KEY
         if settings.AWS_DEFAULT_REGION:
             env["AWS_DEFAULT_REGION"] = settings.AWS_DEFAULT_REGION
 
