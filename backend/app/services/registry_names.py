@@ -43,7 +43,94 @@ PLATFORM_VAULT_ROLES = frozenset(
     }
 )
 
+# Namespaces the platform runs on the on-prem cluster (kubectl get ns, K3s
+# k8s/) and on the EKS/GKE clusters (Cloud). cnp-project-base gives a project
+# the Namespace, both AppProjects and an operator Role (secrets, pods/exec) in
+# every namespace its names derive, so none may be one of these. The list goes
+# stale as the platform grows: PLATFORM_NAMESPACE_PREFIXES catches the usual
+# families, the CMP also refuses a derived namespace that already exists
+# without the project's label, and the project ApplicationSets run with
+# FailOnSharedResource. Keep in sync with cnp-projects validate-registry.py.
+PLATFORM_NAMESPACES = frozenset(
+    {
+        "3istor-sessions",
+        "argo-rollouts",
+        "argocd",
+        "arcl-cmp",
+        "cert-manager",
+        "cilium-secrets",
+        "cloudflared",
+        "cnp-projects-db",
+        "cnp-vpn",
+        "cnpg-system",
+        "compliance",
+        "default",
+        "demo-app",
+        "dev-sandbox",
+        "envoy-gateway-system",
+        "finops",
+        "garage",
+        "garage-s3",
+        "gateway-infra",
+        "keycloak",
+        "kolla",
+        "kube-node-lease",
+        "kube-public",
+        "kube-system",
+        "kyverno",
+        "linmap-bot",
+        "local-path-storage",
+        "mepa-app",
+        "n8n",
+        "observability",
+        "offhours-guard",
+        "opencost",
+        "qcm",
+        "release-lab",
+        "roadmap",
+        "rook-ceph",
+        "status",
+        "trivy-system",
+        "vault",
+        "vault-secrets-operator",
+        "wireguard",
+    }
+)
+PLATFORM_NAMESPACE_PREFIXES = (
+    "argo-",
+    "argocd-",
+    "arcl-",
+    "cert-manager-",
+    "cilium-",
+    "cnpg-",
+    "envoy-",
+    "gateway-",
+    "keycloak-",
+    "kube-",
+    "kyverno-",
+    "observability-",
+    "rook-",
+    "trivy-",
+    "vault-",
+)
+# AppProjects the platform owns: a project's tenant AppProject takes its name.
+PLATFORM_PROJECT_NAMES = frozenset({"default"})
+
 DerivedName = tuple[str, str, str]
+
+
+def is_platform_namespace(namespace: str) -> bool:
+    return namespace in PLATFORM_NAMESPACES or namespace.startswith(
+        PLATFORM_NAMESPACE_PREFIXES
+    )
+
+
+def _platform_namespace_errors(names: list[DerivedName]) -> list[str]:
+    return [
+        f"{source} would be '{name}', a namespace of the platform"
+        for kind, name, source in names
+        if kind == "namespace" and is_platform_namespace(name)
+    ]
 
 
 def app_vault_roles(project: str, app_name: str) -> list[str]:
@@ -152,6 +239,12 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             )
     namespace = f"{project}-{app_name}"
     staging = f"{namespace}{ENVIRONMENT_SUFFIX['staging']}"
+    for environment, candidate in (("prod", namespace), ("staging", staging)):
+        if is_platform_namespace(candidate):
+            errors.append(
+                f"app '{app_name}' gives {environment} namespace "
+                f"'{candidate}', a namespace of the platform"
+            )
     if len(staging) > MAX_LABEL_LENGTH:
         errors.append(
             f"app '{app_name}' gives staging namespace '{staging}' of "
@@ -199,7 +292,11 @@ def _collisions(
 
 
 def check_new_project(project: str, existing: list[dict]) -> list[str]:
-    return _collisions(project_names(project), _claims(existing, project))
+    names = project_names(project)
+    errors = _platform_namespace_errors(names)
+    if project in PLATFORM_PROJECT_NAMES:
+        errors.append(f"project '{project}' is an AppProject of the platform")
+    return errors + _collisions(names, _claims(existing, project))
 
 
 def check_app(project: str, app: dict, existing: list[dict]) -> list[str]:
