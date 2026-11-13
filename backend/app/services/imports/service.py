@@ -338,6 +338,35 @@ async def _taken_names(
     return taken
 
 
+def _other_imports_mib(db: Session, project: str, source: ImportSource) -> int:
+    """Memory the project's other imports already request."""
+    return sum(
+        int(s.spec.get("requests_mem_mib") or 0)
+        for s in db.query(ImportService)
+        .join(ImportSource)
+        .filter(
+            ImportSource.project_name == project,
+            ImportService.source_id != source.id,
+        )
+        .all()
+    )
+
+
+def capacity_view(db: Session, project: str, source: ImportSource) -> dict:
+    """What check_capacity will hold the reviewed plan to, for the gauge."""
+    return {
+        "project_max_mib": settings.IMPORT_MAX_PROJECT_REQUESTS_MIB,
+        "namespace_max_mib": settings.IMPORT_NAMESPACE_REQUESTS_MIB,
+        "other_imports_mib": _other_imports_mib(db, project, source),
+        # resolve() deploys catalogue backing apps with the preset, not with
+        # what the analyzer guessed from the compose file.
+        "backing_requests_mib": {
+            kind: generate.preset_requests_mib(kind)
+            for kind in generate.SUPPORTED_BACKING
+        },
+    }
+
+
 async def approve(
     db: Session,
     project: str,
@@ -367,22 +396,12 @@ async def approve(
     for spec in specs:
         if spec.name in taken:
             problems.append(f"'{spec.name}' is already {taken[spec.name]}")
-    other_mib = sum(
-        int(s.spec.get("requests_mem_mib") or 0)
-        for s in db.query(ImportService)
-        .join(ImportSource)
-        .filter(
-            ImportSource.project_name == project,
-            ImportService.source_id != source.id,
-        )
-        .all()
-    )
     problems += generate.check_capacity(
         specs,
         settings.IMPORT_MAX_PROJECT_REQUESTS_MIB,
         settings.IMPORT_NAMESPACE_REQUESTS_MIB,
         settings.IMPORT_NAMESPACE_REQUESTS_MILLICPU,
-        other_mib,
+        _other_imports_mib(db, project, source),
     )
     try:
         records = await list_records()
@@ -433,11 +452,22 @@ def _store_specs(
         if row is None:
             row = ImportService(source=source, app_name=spec.name)
             db.add(row)
+        else:
+            _keep_manual_links(spec, row.spec)
         row.kind = spec.kind
         row.path = spec.path
         row.spec = spec.to_dict()
         row.status = "pending" if row.last_digest is None else row.status
     db.commit()
+
+
+def _keep_manual_links(spec: AppSpec, previous: dict) -> None:
+    """Links drawn on the topology survive a new analysis of the repo."""
+    aliases = {link["alias"] for link in spec.depends_on}
+    for link in previous.get("depends_on") or []:
+        if link.get("manual") and link["alias"] not in aliases:
+            spec.depends_on.append(dict(link))
+            aliases.add(link["alias"])
 
 
 async def rebuild(db: Session, user: str, source: ImportSource) -> ImportRun:

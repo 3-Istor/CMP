@@ -276,6 +276,73 @@ def test_apply_stores_the_apps_and_starts_a_build(client, world):
     assert len(names) == 9 and "search-service" not in names
 
 
+def test_apply_takes_port_probe_and_link_edits(client, world):
+    source = _source(world)
+    _run(world, source, status="succeeded", plan=PLAN)
+
+    response = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply",
+        json={
+            "port": {"user-service": 9090},
+            "probe": {
+                "user-service": {
+                    "kind": "http",
+                    "path": "/health",
+                    "port": 9090,
+                }
+            },
+            "drop_links": [{"from": "user-service", "to": "redis"}],
+        },
+    )
+
+    assert response.status_code == 202
+    with world.db() as db:
+        spec = (
+            db.query(ImportService).filter_by(app_name="user-service").one()
+        ).spec
+    assert (spec["probe"], [d["app"] for d in spec["depends_on"]]) == (
+        {"kind": "http", "path": "/health", "port": 9090},
+        ["mongodb"],
+    )
+
+
+def test_links_drawn_on_the_map_survive_a_new_apply(client, world):
+    source = _source(world)
+    _run(world, source, status="succeeded", plan=PLAN)
+    client.post(f"/api/projects/shop/imports/{source.id}/apply", json={})
+    with world.db() as db:
+        row = db.query(ImportService).filter_by(app_name="frontend").one()
+        drawn = {
+            "app": "neo4j",
+            "port": 7687,
+            "alias": "graph",
+            "manual": True,
+        }
+        row.spec = {**row.spec, "depends_on": [*row.spec["depends_on"], drawn]}
+        db.query(ImportRun).filter_by(kind="build").update(
+            {"status": "succeeded"}
+        )
+        db.commit()
+
+    client.post(f"/api/projects/shop/imports/{source.id}/apply", json={})
+
+    with world.db() as db:
+        row = db.query(ImportService).filter_by(app_name="frontend").one()
+        assert drawn in row.spec["depends_on"]
+
+
+def test_run_view_carries_the_capacity_the_plan_is_held_to(client, world):
+    source = _source(world)
+    run = _run(world, source, status="succeeded", plan=PLAN)
+
+    body = client.get(f"/api/projects/shop/imports/runs/{run.id}").json()
+
+    assert body["capacity"]["project_max_mib"] == (
+        settings.IMPORT_MAX_PROJECT_REQUESTS_MIB
+    )
+    assert body["capacity"]["backing_requests_mib"]["mongodb"] > 0
+
+
 def test_apply_refuses_a_name_held_by_an_app_of_the_project(client, world):
     source = _source(world)
     _run(world, source, status="succeeded", plan=PLAN)

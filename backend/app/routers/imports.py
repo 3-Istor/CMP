@@ -7,12 +7,12 @@ authenticated by its GitHub OIDC token only.
 """
 
 import logging
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -57,11 +57,27 @@ class MemoryEdit(BaseModel):
     limits_mem_mib: int = Field(ge=16, le=8192)
 
 
+class ProbeEdit(BaseModel):
+    kind: Literal["tcp", "http"]
+    path: str | None = Field(default=None, max_length=200)
+    port: int = Field(ge=1, le=65535)
+
+
+class LinkRef(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: str = Field(alias="from", max_length=40)
+    to: str = Field(max_length=40)
+
+
 class PlanEdits(BaseModel):
     exclude: list[str] = Field(default_factory=list, max_length=100)
     rename: dict[str, str] = Field(default_factory=dict)
     public: dict[str, bool] = Field(default_factory=dict)
     memory: dict[str, MemoryEdit] = Field(default_factory=dict)
+    port: dict[str, int] = Field(default_factory=dict)
+    probe: dict[str, ProbeEdit] = Field(default_factory=dict)
+    drop_links: list[LinkRef] = Field(default_factory=list, max_length=200)
 
 
 async def _recheck_repository(db: Session, claims: dict, source) -> None:
@@ -138,7 +154,11 @@ async def get_import_run(run_id: str, ctx: RequireMember, db: DbSession):
         run = service.get_run(db, ctx.project_name, run_id)
     except ImportRefused as exc:
         raise _refused(exc) from exc
-    return service.run_view(run)
+    return {
+        **service.run_view(run),
+        "capacity": service.capacity_view(db, ctx.project_name, run.source),
+        "services": [service.service_view(s) for s in run.source.services],
+    }
 
 
 @router.post("/{project_name}/imports/{source_id}/apply", status_code=202)
@@ -162,7 +182,7 @@ async def apply_import(
             ctx.project_name,
             ctx.username,
             source,
-            edits.model_dump(mode="json"),
+            edits.model_dump(mode="json", by_alias=True),
         )
     except ImportRefused as exc:
         raise _refused(exc) from exc

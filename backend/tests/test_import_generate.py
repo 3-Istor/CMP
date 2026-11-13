@@ -441,3 +441,84 @@ def test_credential_values_never_reach_the_spec():
     spec = next(s for s in specs if s.plan_name == plan["services"][0]["name"])
     assert "MONGO_URL" not in {e["name"] for e in spec.env}
     assert any("MONGO_URL looks like a credential" in w for w in spec.warnings)
+
+
+def test_port_edit_moves_the_probe_and_the_links_to_the_new_port():
+    specs = {
+        s.name: s
+        for s in generate.resolve(_plan(), {"port": {"user-service": 9090}})
+    }
+
+    user = specs["user-service"]
+    to_user = [
+        d
+        for d in specs["timeline-service"].depends_on
+        if d["app"] == "user-service"
+    ]
+    assert (user.ports[0]["port"], user.probe["port"], to_user[0]["port"]) == (
+        9090,
+        9090,
+        9090,
+    )
+
+
+def test_probe_edit_sets_an_http_probe_on_a_port_of_the_app():
+    edits = {
+        "probe": {
+            "user-service": {"kind": "http", "path": "/q/health", "port": 8081}
+        }
+    }
+
+    specs = {s.name: s for s in generate.resolve(_plan(), edits)}
+
+    assert specs["user-service"].probe == {
+        "kind": "http",
+        "path": "/q/health",
+        "port": 8081,
+    }
+
+
+def test_dropped_link_is_not_deployed():
+    edits = {"drop_links": [{"from": "user-service", "to": "redis"}]}
+
+    specs = {s.name: s for s in generate.resolve(_plan(), edits)}
+
+    assert [d["app"] for d in specs["user-service"].depends_on] == ["mongodb"]
+
+
+@pytest.mark.parametrize(
+    "edits, problem",
+    [
+        ({"port": {"user-service": 70000}}, "port must be 1 to 65535"),
+        ({"port": {"redis": 6380}}, "only an imported service has an"),
+        (
+            {"probe": {"user-service": {"kind": "http", "port": 8081}}},
+            "an HTTP probe needs a path",
+        ),
+        (
+            {
+                "probe": {
+                    "user-service": {
+                        "kind": "http",
+                        "path": "http://evil/",
+                        "port": 8081,
+                    }
+                }
+            },
+            "an HTTP probe needs a path",
+        ),
+        (
+            {"probe": {"user-service": {"kind": "tcp", "port": 22}}},
+            "the probe port is not a port of it",
+        ),
+        (
+            {"drop_links": [{"from": "redis", "to": "frontend"}]},
+            "is not a link of the plan",
+        ),
+    ],
+)
+def test_resolve_refuses_bad_port_probe_and_link_edits(edits, problem):
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_plan(), edits)
+
+    assert any(problem in p for p in error.value.problems)
