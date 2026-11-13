@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,7 +7,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.staticfiles import StaticFiles
 
 from app import mcp_server
 from app.core.config import settings
@@ -38,6 +36,7 @@ from app.routers import (
     security,
     security_alerts,
     security_databases,
+    template_assets,
 )
 from app.services import health_poller, keycloak_admin, vault_auth
 from app.services.access.grants import access_sweep_loop
@@ -259,16 +258,6 @@ async def lifespan(app: FastAPI):
     # Before anything can start a new Terraform run.
     fail_interrupted_runs()
 
-    # Mount static files after repository is cloned
-    if os.path.exists("data/templates/templates"):
-        logger.info("Mounting static files...")
-        app.mount(
-            "/static/templates",
-            StaticFiles(directory="data/templates/templates"),
-            name="templates",
-        )
-        logger.info("Static files mounted")
-
     # Start background health poller
     logger.info("Starting health poller...")
     health_poller_task = asyncio.create_task(
@@ -388,6 +377,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(template_assets.router)
 app.include_router(access.router, prefix="/api")
 app.include_router(access_reviews.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
