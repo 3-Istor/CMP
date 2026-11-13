@@ -247,7 +247,7 @@ class TestDeploymentsAuthorization:
                 )
             )
 
-        assert exc.value.status_code == 400
+        assert exc.value.status_code == 422
 
     def test_refuses_a_deployment_outside_any_project(self, db, roles):
         payload = DeploymentCreate(name="vm", template_id="k3s-gitops-app")

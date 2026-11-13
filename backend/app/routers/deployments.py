@@ -24,6 +24,7 @@ from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
+from app.services import app_inputs
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
 from app.services.authz import (
@@ -213,19 +214,17 @@ async def create_deployment(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
+    fields = [f.model_dump() for f in template.fields]
+    try:
+        app_config = app_inputs.validate_request(
+            fields, payload.app_config, payload.project_id
+        )
+    except app_inputs.InvalidAppConfig as exc:
+        raise HTTPException(status_code=422, detail=exc.problems) from exc
+    app_config.update(app_inputs.platform_values(fields))
+    app_config["project_name"] = project_name = payload.project_id
+
     if payload.template_id == "k3s-gitops-app":
-        # Terraform deploys into app_config.project_name, not project_id: the
-        # two must agree or an admin of one project could deploy into another.
-        project_name = payload.app_config.get("project_name")
-        if project_name and project_name != payload.project_id:
-            raise HTTPException(
-                status_code=400,
-                detail="app_config.project_name must match project_id.",
-            )
-        if payload.project_id:
-            payload.app_config["project_name"] = project_name = (
-                payload.project_id
-            )
         # Forced from the DB: the Vault role mount depends on it, and a project
         # admin must not pick another cloud's mount.
         project_row = (
@@ -235,21 +234,25 @@ async def create_deployment(
         )
         cloud = project_row.target_cloud if project_row else TargetCloud.ONPREM
         await ensure_cluster_up(cloud)
-        payload.app_config["target_cloud"] = cloud.value
-        if project_name:
-            try:
-                await ensure_app_names_free(
-                    project_name,
-                    payload.name,
-                    payload.app_config.get("app_type", "static"),
-                )
-            except NameCollisionError as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
-            except RegistryError as exc:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Could not check the project registry: {exc}",
-                ) from exc
+        app_config["target_cloud"] = cloud.value
+        try:
+            await ensure_app_names_free(
+                project_name,
+                payload.name,
+                (
+                    "fullstack"
+                    if app_config.get("template_repo_name")
+                    == app_inputs.FULLSTACK_TEMPLATE_REPO
+                    else "static"
+                ),
+            )
+        except NameCollisionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except RegistryError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not check the project registry: {exc}",
+            ) from exc
 
     deployment = Deployment(
         name=payload.name,
@@ -264,7 +267,7 @@ async def create_deployment(
             else payload.provider_type
         ),
         project_id=payload.project_id,
-        app_config=json.dumps(payload.app_config),
+        app_config=json.dumps(app_config),
         status=DeploymentStatus.PENDING,
         step_message="Queued...",
         created_via=(token.get("cnp_agent") or {}).get("client"),
