@@ -5,13 +5,14 @@ import { PageBody, PageHeader } from "@/components/layout/PageHeader";
 import { ProjectAccessReviewCard } from "@/components/access-reviews/ProjectAccessReviewCard";
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
+import { ImportsList } from "@/components/imports/ImportsList";
 import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { NotConnected } from "@/components/clusters/NotConnected";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -28,7 +29,9 @@ import {
   Plus,
   Rocket,
   RefreshCw,
+  Upload,
 } from "lucide-react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
@@ -77,6 +80,7 @@ export default function ProjectPage() {
   // disappearing.
   const canDeploy = can("app.deploy");
   const canViewObservability = can("app.viewObservability");
+  const canImport = can("import.manage");
 
   const [links, setLinks] = useState<ProjectLink[]>([]);
   useEffect(() => {
@@ -164,6 +168,15 @@ export default function ProjectPage() {
                 {t("appCount", { count: apps.length })}
               </Badge>
               {canViewObservability && <ToolsMenu links={links} />}
+              {canImport && (
+                <Link
+                  href={`/projects/${encodeURIComponent(projectName)}/import`}
+                  className={buttonVariants({ size: "sm", variant: "outline" })}
+                >
+                  <Upload aria-hidden />
+                  {t("importRepo")}
+                </Link>
+              )}
               {canDeploy && (
                 <Button size="sm" onClick={handleOpenCatalog}>
                   <Plus aria-hidden />
@@ -317,6 +330,10 @@ export default function ProjectPage() {
                 ))}
               </div>
             </>
+          )}
+
+          {can("topology.view") && (
+            <ImportsList projectName={projectName} canManage={canImport} />
           )}
 
           <GettingStarted />

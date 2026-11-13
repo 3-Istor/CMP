@@ -176,6 +176,7 @@ export function ProjectNav({
         </div>
       )}
 
+      {renderSection(PROJECT_SECTIONS.topology)}
       {renderSection(PROJECT_SECTIONS.members)}
 
       <div className="mx-2 my-2 border-t" role="separator" />

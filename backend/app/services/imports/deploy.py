@@ -24,7 +24,7 @@ from app.models.imports import (
     ImportSource,
     RunStatus,
 )
-from app.services import kube_client, vault_client
+from app.services import kube_client, topology_cache, vault_client
 from app.services.imports import dns, generate
 from app.services.imports.generate import AppSpec, PlanError
 from app.services.imports.registry_commit import commit_record_change
@@ -315,6 +315,7 @@ async def _deploy(db: Session, run: ImportRun) -> None:
         row.status = "deploying"
         _upsert_deployment(db, project, row)
     run.report = {**(run.report or {}), "commit": commit}
+    topology_cache.invalidate(project)
     # Committed before DNS: a failure from here on must still let remove()
     # recognise these apps as the import's and clean them up.
     db.commit()
@@ -349,6 +350,7 @@ async def _deploy(db: Session, run: ImportRun) -> None:
     )
     run.report = {**(run.report or {}), "states": states}
     db.commit()
+    topology_cache.invalidate(project)
     _system_event(
         run, "import.deploy", not failed, commit=commit, failed=failed
     )
@@ -408,6 +410,7 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
             f"feat(registry): remove import {source.repo_full_name} "
             f"from {project}",
         )
+        topology_cache.invalidate(project)
     for service in source.services:
         if service.app_name in removed and service.spec.get("public"):
             app = service.app_name

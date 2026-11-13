@@ -1,0 +1,14 @@
+{
+  "repositories": [
+    {
+      "full_name": "3-Istor/epitweet",
+      "default_branch": "main",
+      "private": true
+    },
+    {
+      "full_name": "3-Istor/demo-app",
+      "default_branch": "main",
+      "private": false
+    }
+  ]
+}

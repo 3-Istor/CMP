@@ -60,6 +60,10 @@ jobs:
       - name: Check i18n keys
         run: node scripts/check-i18n-keys.mjs
 
+      - name: Run unit tests
+        working-directory: ./frontend
+        run: node --test tests/*.test.mjs
+
       - name: Run linting
         working-directory: ./frontend
         run: npm run lint

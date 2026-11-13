@@ -98,7 +98,8 @@
       "appsLoadFailed": "Impossible de charger les applications",
       "noApps": "Aucune application pour l'instant",
       "deployFirst": "Déployez votre première application dans ce projet.",
-      "noAppsReadOnly": "Rien n'a encore été déployé ici."
+      "noAppsReadOnly": "Rien n'a encore été déployé ici.",
+      "importRepo": "Importer un repo"
     },
     "logs": {
       "title": "Logs"
@@ -1377,7 +1378,8 @@
       "installationSelected": "Installation vérifiée et sélectionnée",
       "installationFailed": "Cette installation ne peut pas être vérifiée avec votre compte GitHub.",
       "unlinked": "Compte GitHub délié",
-      "unlinkFailed": "Échec de la suppression de la liaison GitHub."
+      "unlinkFailed": "Échec de la suppression de la liaison GitHub.",
+      "backToImport": "Revenir à l'import"
     }
   },
   "common": {
@@ -1435,7 +1437,8 @@
     },
     "appFilter": "Application",
     "allApps": "Toutes les applications",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "topology": "Topologie"
   },
   "catalog": {
     "iconAlt": "Icône de {name}",
@@ -3177,6 +3180,305 @@
       "description": "{count, plural, =0 {Tous les membres sont revus.} one {1 membre à revoir} other {# membres à revoir}}, échéance le {due}. Conservez, retirez ou changez le rôle de chacun.",
       "open": "Revoir",
       "hide": "Masquer"
+    }
+  },
+  "topology": {
+    "internet": "Internet",
+    "health": {
+      "healthy": "En bonne santé",
+      "progressing": "En cours",
+      "suspended": "Suspendue",
+      "unknown": "Santé inconnue",
+      "missing": "Absente",
+      "degraded": "Dégradée"
+    },
+    "kind": {
+      "internet": "Entrée publique",
+      "static": "Site statique",
+      "fullstack": "App full-stack",
+      "service": "Service",
+      "backing": "Base de données"
+    },
+    "asleep": "En veille",
+    "imported": "Importée",
+    "staged": "Prévue",
+    "confidence": {
+      "high": "Sûr",
+      "medium": "Probable",
+      "low": "Incertain"
+    },
+    "unsupported": "Non supporté",
+    "nameTaken": "Nom déjà pris",
+    "rps": "{value} req/s",
+    "declare": "Déclarer ce lien",
+    "nodeLabel": "{name}, {kind}, {health}",
+    "edgeLabel": "{from} vers {to} : {state}",
+    "edgeState": {
+      "declared_observed": "Déclaré, trafic observé",
+      "declared_only": "Déclaré, sans trafic",
+      "observed_only": "Trafic non déclaré",
+      "denied": "Refusé par une politique",
+      "draft": "Proposé par l'import",
+      "entry": "Entrée publique"
+    },
+    "closeDetails": "Fermer le détail du lien",
+    "action": {
+      "declare": "Déclarer ce lien",
+      "unlink": "Délier",
+      "remove": "Retirer du plan",
+      "restore": "Garder dans le plan",
+      "declareOf": "Déclarer le lien de {from} vers {to}",
+      "unlinkOf": "Délier {from} de {to}",
+      "removeOf": "Retirer le lien de {from} vers {to}",
+      "restoreOf": "Garder le lien de {from} vers {to}"
+    },
+    "a11y": {
+      "node": "Entrée pour sélectionner cette app, puis Tab pour passer à l'élément suivant.",
+      "edge": "Entrée pour sélectionner ce lien et afficher ses actions.",
+      "controls": "Commandes de la carte",
+      "zoomIn": "Zoomer",
+      "zoomOut": "Dézoomer",
+      "fitView": "Afficher toute la carte",
+      "interactive": "Verrouiller la carte",
+      "handle": "Poignée de lien"
+    },
+    "legend": "Légende des liens",
+    "observedUnavailable": "Le trafic n'est pas encore mesuré pour ce projet : seuls les liens déclarés sont affichés.",
+    "table": {
+      "apps": "Applications",
+      "name": "Nom",
+      "kind": "Type",
+      "health": "Santé",
+      "exposure": "Exposition",
+      "image": "Image",
+      "links": "Liens",
+      "from": "De",
+      "to": "Vers",
+      "target": "Nom utilisé:port",
+      "state": "État",
+      "traffic": "Trafic",
+      "actions": "Actions",
+      "noLinks": "Aucun lien déclaré ni observé."
+    },
+    "internal": "Interne",
+    "viewLabel": "Affichage",
+    "mapView": "Vue carte",
+    "listView": "Vue liste",
+    "linkMode": "Relier deux apps",
+    "linkDialog": "Nouveau lien",
+    "refresh": "Actualiser la carte",
+    "loadFailed": "La carte n'a pas pu être chargée",
+    "retry": "Réessayer",
+    "empty": "Rien à cartographier pour l'instant",
+    "emptyBody": "Déployez une app ou importez un repo : ses services, ses bases et ses liens apparaîtront ici.",
+    "importRepo": "Importer un repo",
+    "staleData": "La dernière actualisation a échoué : la carte peut ne pas être à jour.",
+    "linkModeHelp": "Tirez depuis le point à droite d'une app jusqu'au point à gauche de l'app qu'elle appelle. Pour l'instant, seuls les services importés et les bases peuvent être reliés.",
+    "canvasLabel": "Carte du projet {project}",
+    "canvasHelp": "Actualisée toutes les 30 secondes. La vue liste montre les mêmes apps et liens sous forme de tableaux.",
+    "linked": "{from} joint maintenant {to}",
+    "unlinked": "Lien supprimé",
+    "unlink": {
+      "title": "Délier {from} de {to} ?",
+      "description": "Le nom {alias} cesse de répondre dans l'app appelante dès la synchro d'Argo CD. Le code qui l'utilise encore échouera.",
+      "confirm": "Délier"
+    },
+    "link": {
+      "title": "Relier deux apps",
+      "description": "L'app appelante joint la cible sous le nom choisi, sans toucher à son code.",
+      "from": "App appelante",
+      "to": "App cible",
+      "port": "Port",
+      "noPort": "Cette app n'expose aucun port connu.",
+      "alias": "Nom utilisé par le code",
+      "aliasHelp": "Le code la joint à {alias}:{port}.",
+      "cancel": "Annuler",
+      "submit": "Relier"
+    },
+    "alias": {
+      "format": "Minuscules, chiffres et tirets, en commençant par une lettre, 63 caractères au plus.",
+      "reserved": "Ce nom est réservé par la plateforme.",
+      "own": "Ce nom est un Service de l'app appelante elle-même."
+    }
+  },
+  "imports": {
+    "title": "Importer un repo",
+    "loadFailed": "L'import n'a pas pu être chargé : {message}",
+    "startFailed": "Le lancement a échoué : {message}",
+    "applied": "Import approuvé : le build démarre",
+    "applyFailed": "L'import a été refusé : {message}",
+    "stepsLabel": "Étapes de l'import",
+    "step": {
+      "repo": "Repo",
+      "analysis": "Analyse",
+      "review": "Relecture du plan",
+      "progress": "Déploiement"
+    },
+    "sourceLine": "{repo}, branche {branch}",
+    "repo": {
+      "disabled": "L'import de repo n'est pas activé sur cette plateforme.",
+      "loadFailed": "Vos repos n'ont pas pu être lus sur GitHub.",
+      "connectFailed": "GitHub n'a pas pu être joint. Réessayez.",
+      "loading": "Lecture de vos repos...",
+      "installTitle": "Installer CNP-Portal sur vos repos",
+      "connectTitle": "Connecter GitHub",
+      "installBody": "Votre compte GitHub est relié, mais CNP-Portal n'est installé sur aucun repo importable. Installez-le sur les repos de votre choix.",
+      "connectBody": "Reliez votre compte GitHub, puis installez CNP-Portal sur les repos de votre choix. Vous revenez ici ensuite.",
+      "oauthUnavailable": "La liaison GitHub n'est pas configurée sur cette plateforme.",
+      "installButton": "Installer CNP-Portal",
+      "connectButton": "Connecter GitHub",
+      "readOnlyNote": "La plateforme ne fait que lire votre code, un repo à la fois, à un commit figé.",
+      "search": "Chercher un repo",
+      "choose": "Repo",
+      "private": "Privé",
+      "noMatch": "Aucun repo ne correspond.",
+      "branch": "Branche",
+      "branchHelp": "L'analyse lit la tête de la branche et garde ce commit pour toutes les étapes suivantes.",
+      "analyze": "Analyser",
+      "moreRepos": "Ajouter des repos"
+    },
+    "stageState": {
+      "pending": "En attente",
+      "active": "En cours",
+      "done": "Terminé",
+      "failed": "Échec",
+      "skipped": "Sans objet"
+    },
+    "analysis": {
+      "intro": "Analyse de {repo} au commit {sha}. Rien n'est créé avant que vous approuviez le plan.",
+      "stage": {
+        "queued": "En attente du workflow d'analyse",
+        "fetch": "Code téléchargé, en lecture seule",
+        "analyze": "Détection des services, bases et liens",
+        "plan": "Plan prêt"
+      },
+      "failed": "L'analyse a échoué",
+      "retry": "Relancer l'analyse",
+      "otherRepo": "Choisir un autre repo"
+    },
+    "stage": {
+      "build": "Build",
+      "scan": "Scan",
+      "publish": "Publication",
+      "deploy": "Déploiement",
+      "smoke": "Test fonctionnel"
+    },
+    "progress": {
+      "rebuild": "Reconstruire",
+      "reanalyze": "Revoir le plan",
+      "logs": "Journaux de {app}",
+      "status": {
+        "queued": "En attente du workflow de build, commit {sha}.",
+        "claimed": "Build et scan des images du commit {sha}.",
+        "running": "Images publiées, déploiement du commit {sha}.",
+        "succeeded": "Le commit {sha} est déployé.",
+        "failed": "L'import du commit {sha} s'est arrêté. Une app en échec n'arrête pas les autres.",
+        "cancelled": "L'import du commit {sha} a été annulé."
+      },
+      "failedAt": "Arrêté à l'étape {stage}",
+      "caption": "Avancement de chaque app",
+      "app": "App",
+      "next": "Que faire",
+      "seeTopology": "Voir la topologie"
+    },
+    "review": {
+      "capacity": "Mémoire",
+      "capacityText": "{requested} Mio demandés par cet import, {other} Mio par les autres imports, sur {max} Mio pour le projet.",
+      "namespaceTooSmall": "{apps} : plus que les {max} Mio qu'une app peut demander.",
+      "canvasLabel": "Plan d'import sur la carte du projet {project}",
+      "canvasHelp": "Les apps et liens en pointillé viennent du plan. Sélectionnez une app pour la modifier, ou un lien pour le retirer.",
+      "editorLabel": "Modifier le plan",
+      "selectHint": "Sélectionnez une app sur la carte ou dans la liste ci-dessous pour la modifier.",
+      "apps": "Apps du plan",
+      "confidenceShort": {
+        "high": "sûr",
+        "medium": "probable",
+        "low": "incertain"
+      },
+      "secrets": "Secrets détectés",
+      "noSecrets": "Aucun secret écrit dans le repo.",
+      "secretsBody": "Ces valeurs restent hors de la plateforme : chacune est remplacée par un secret généré dans Vault, que seule l'app peut lire.",
+      "unsupported": "Non supporté",
+      "allSupported": "Tout ce qui a été trouvé dans le repo peut être déployé.",
+      "backingNotInCatalogue": "{kind} n'est pas dans le catalogue de bases : excluez-la pour importer le reste.",
+      "warnings": "Avertissements",
+      "noWarnings": "Aucun avertissement.",
+      "blocked": "Corrigez ces points avant d'appliquer :",
+      "abandon": "Abandonner, rien n'a été créé",
+      "stepUpNote": "Appliquer demande votre passkey.",
+      "apply": "Appliquer",
+      "editor": {
+        "include": "Garder",
+        "exclude": "Exclure",
+        "renamedFrom": "Nommée {name} dans le repo.",
+        "name": "Nom de l'app",
+        "catalogue": "Déployée depuis le catalogue de la plateforme ({kind}), avec des identifiants générés.",
+        "notCatalogue": "{kind} n'est pas dans le catalogue.",
+        "public": "Publique sur internet",
+        "port": "Port",
+        "probe": "Sonde de santé",
+        "probeKind": "Type",
+        "probePort": "Port",
+        "probePath": "Chemin",
+        "memory": "Mémoire (Mio)",
+        "requests": "Demandée",
+        "limits": "Limite",
+        "links": "Liens",
+        "removeLink": "Retirer",
+        "restoreLink": "Garder",
+        "removeLinkOf": "Retirer le lien de {from} vers {to}",
+        "restoreLinkOf": "Garder le lien de {from} vers {to}"
+      }
+    },
+    "problem": {
+      "unsupported": "{app} n'est pas dans le catalogue : excluez-la.",
+      "name": "{app} n'est pas un nom valide : minuscules, chiffres et tirets, en commençant par une lettre, 40 caractères au plus.",
+      "duplicate": "{app} est déjà utilisé par une autre app.",
+      "memory": "{app} : la mémoire demandée doit valoir au moins 16 Mio et au plus la limite.",
+      "probePath": "{app} : une sonde HTTP a besoin d'un chemin, par exemple /health.",
+      "probePort": "{app} : une sonde HTTP doit utiliser le premier port, celui que la supervision vérifie.",
+      "nothing": "Toutes les apps sont exclues : il n'y a rien à importer."
+    },
+    "list": {
+      "title": "Repos importés",
+      "repo": "Repo",
+      "branch": "Branche",
+      "sha": "Dernier commit",
+      "status": "État",
+      "apps": "Apps",
+      "actions": "Actions",
+      "never": "Jamais lancé",
+      "rebuildStarted": "Reconstruction de {repo}",
+      "rebuildFailed": "La reconstruction n'a pas pu démarrer : {message}",
+      "rebuildOf": "Reconstruire {repo}",
+      "rebuild": "Reconstruire",
+      "deleteOf": "Supprimer l'import de {repo}",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer l'import de {repo} ?",
+      "deleteDescription": "Ses apps quittent le projet. C'est définitif.",
+      "deleteApps": "{count, plural, one {# app et son déploiement} other {# apps et leurs déploiements}}",
+      "deleteData": "Les données de ses bases, supprimées une fois les apps parties",
+      "deleteLinks": "Les liens des autres apps vers elles",
+      "deleteConfirm": "Supprimer l'import",
+      "deleteStarted": "Suppression lancée",
+      "runStatus": {
+        "analyze": {
+          "queued": "Analyse en attente",
+          "claimed": "Analyse en cours",
+          "running": "Analyse en cours",
+          "succeeded": "Plan à relire",
+          "failed": "Analyse en échec",
+          "cancelled": "Analyse annulée"
+        },
+        "build": {
+          "queued": "Build en attente",
+          "claimed": "Build en cours",
+          "running": "Déploiement en cours",
+          "succeeded": "Déployé",
+          "failed": "Échec",
+          "cancelled": "Annulé"
+        }
+      }
     }
   }
 }

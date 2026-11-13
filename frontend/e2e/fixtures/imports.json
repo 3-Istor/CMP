@@ -1,0 +1,27 @@
+{
+  "imports": [
+    {
+      "id": "s1",
+      "repo_full_name": "3-Istor/epitweet",
+      "branch": "main",
+      "created_by": "demo",
+      "created_at": "2026-11-13T09:00:00",
+      "runs": [
+        {
+          "id": "r1",
+          "source_id": "s1",
+          "kind": "analyze",
+          "sha": "0123456789abcdef0123456789abcdef01234567",
+          "status": "succeeded",
+          "report": null,
+          "requested_by": "demo",
+          "approved_by": null,
+          "created_at": "2026-11-13T09:00:00",
+          "updated_at": "2026-11-13T09:05:00",
+          "plan": null
+        }
+      ],
+      "services": []
+    }
+  ]
+}

@@ -39,6 +39,7 @@ from app.routers import (
     security_alerts,
     security_databases,
     template_assets,
+    topology,
 )
 from app.services import health_poller, keycloak_admin, vault_auth
 from app.services.access.grants import access_sweep_loop
@@ -423,6 +424,7 @@ app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")
 app.include_router(secrets_presence.router, prefix="/api")
 app.include_router(scorecard.router, prefix="/api")
+app.include_router(topology.router, prefix="/api")
 
 
 internal_api.bind(app)

@@ -214,7 +214,9 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
 
     Edits: ``exclude`` (plan names), ``rename`` ({plan name: app name}),
     ``public`` ({app: bool}, services only), ``memory`` ({app:
-    {requests_mem_mib, limits_mem_mib}}).
+    {requests_mem_mib, limits_mem_mib}}), ``port`` ({app: port}, the
+    service's first port), ``probe`` ({app: {kind, path, port}}) and
+    ``drop_links`` ([{from, to}], plan names).
 
     Raises:
         PlanError: With every problem found, not only the first.
@@ -225,6 +227,12 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     rename: dict[str, str] = dict(edits.get("rename") or {})
     public_edits: dict[str, bool] = dict(edits.get("public") or {})
     memory_edits: dict[str, dict] = dict(edits.get("memory") or {})
+    port_edits: dict[str, int] = dict(edits.get("port") or {})
+    probe_edits: dict[str, dict] = dict(edits.get("probe") or {})
+    dropped = {
+        (link.get("from"), link.get("to"))
+        for link in edits.get("drop_links") or []
+    }
 
     plan_names = {s["name"] for s in plan["services"]} | {
         b["name"] for b in plan["backing"]
@@ -232,11 +240,16 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     for name in excluded | set(rename):
         if name not in plan_names:
             problems.append(f"'{name}' is not an app of the plan")
+    planned_links = {(link["from"], link["to"]) for link in plan["links"]}
+    for source, target in dropped - planned_links:
+        problems.append(f"'{source}' to '{target}' is not a link of the plan")
 
     def final(name: str) -> str:
         return rename.get(name, name)
 
     specs: list[AppSpec] = []
+    # plan name -> (old port, new port) of a service whose port was edited.
+    port_moves: dict[str, tuple[int, int]] = {}
     for backing in plan["backing"]:
         if backing["name"] in excluded:
             continue
@@ -303,12 +316,26 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
             [dict(e) for e in service.get("env") or []]
         )
         warnings += env_warnings
+        probe = service.get("probes")
+        if name in port_edits and ports:
+            moved = _move_port(ports, int(port_edits[name]))
+            if moved is None:
+                problems.append(f"app '{name}': port must be 1 to 65535")
+            else:
+                port_moves[service["name"]] = moved
+                if probe and probe.get("port") == moved[0]:
+                    probe = {**probe, "port": moved[1]}
+        if name in probe_edits:
+            probe, probe_problems = _edited_probe(
+                name, probe_edits[name], ports
+            )
+            problems += probe_problems
         run_as = _run_as_user(service["build"])
         if run_as is None:
             warnings.append(
                 "image runs as root: kept, with privilege escalation off"
             )
-        probe = _checked_probe(service.get("probes"), ports, warnings)
+        probe = _checked_probe(probe, ports, warnings)
         specs.append(
             AppSpec(
                 name=name,
@@ -327,9 +354,14 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
                 warnings=warnings,
             )
         )
-    for name in public_edits:
-        if not any(s.name == name and s.kind == "service" for s in specs):
-            problems.append(f"'{name}': only an imported service is public")
+    for edited, what in (
+        (public_edits, "is public"),
+        (port_edits, "has an editable port"),
+        (probe_edits, "has an editable probe"),
+    ):
+        for name in edited:
+            if not any(s.name == name and s.kind == "service" for s in specs):
+                problems.append(f"'{name}': only an imported service {what}")
 
     names = [s.name for s in specs]
     for spec in specs:
@@ -337,15 +369,64 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
         if names.count(spec.name) > 1:
             problems.append(f"two apps are named '{spec.name}'")
     by_plan_name = {s.plan_name: s for s in specs}
-    _link(plan, specs, by_plan_name, final)
+    links = [
+        link
+        for link in plan["links"]
+        if (link["from"], link["to"]) not in dropped
+    ]
+    _link(links, specs, by_plan_name, final, port_moves)
     _wire_credentials(specs, by_plan_name)
     if problems:
         raise PlanError(sorted(set(problems)))
     return specs
 
 
-def _link(plan: dict, specs: list[AppSpec], by_plan_name: dict, final) -> None:
-    for link in plan["links"]:
+def _move_port(ports: list[dict], new: int) -> tuple[int, int] | None:
+    if not 1 <= new <= 65535:
+        return None
+    old = ports[0]["port"]
+    ports[0] = {"name": ports[0]["name"], "port": new}
+    return old, new
+
+
+def _edited_probe(
+    name: str, edit: dict, ports: list[dict]
+) -> tuple[dict | None, list[str]]:
+    """The probe a user set; only a path and a port, never a host (D16)."""
+    kind = edit.get("kind")
+    port = edit.get("port")
+    path = edit.get("path") or None
+    problems = []
+    if kind not in ("tcp", "http"):
+        problems.append(f"app '{name}': probe kind must be tcp or http")
+    if port not in {p["port"] for p in ports}:
+        problems.append(f"app '{name}': the probe port is not a port of it")
+    if kind == "http" and (path is None or not PROBE_PATH.fullmatch(path)):
+        problems.append(
+            f"app '{name}': an HTTP probe needs a path such as /health"
+        )
+    if kind == "http" and ports and port != ports[0]["port"]:
+        problems.append(
+            f"app '{name}': an HTTP probe must use the first port "
+            f"({ports[0]['port']}), the one the monitoring checks"
+        )
+    if problems:
+        return None, problems
+    return {
+        "kind": kind,
+        "path": path if kind == "http" else None,
+        "port": port,
+    }, []
+
+
+def _link(
+    links: list[dict],
+    specs: list[AppSpec],
+    by_plan_name: dict,
+    final,
+    port_moves: dict[str, tuple[int, int]],
+) -> None:
+    for link in links:
         source = by_plan_name.get(link["from"])
         target = by_plan_name.get(link["to"])
         if source is None or source.kind != "service":
@@ -356,6 +437,9 @@ def _link(plan: dict, specs: list[AppSpec], by_plan_name: dict, final) -> None:
             )
             continue
         port = link.get("port") or target.ports[0]["port"]
+        moved = port_moves.get(link["to"])
+        if moved and port == moved[0]:
+            port = moved[1]
         # The code resolves the alias it was written with; the link points it
         # at the app under its final name.
         alias = str(link.get("alias") or link["to"])

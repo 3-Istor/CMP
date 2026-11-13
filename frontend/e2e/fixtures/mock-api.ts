@@ -5,6 +5,10 @@ import accessReviewMine from "./access-review-mine.json";
 import accessReviews from "./access-reviews.json";
 import appHealth from "./app-health.json";
 import finopsOverview from "./finops-overview.json";
+import githubStatus from "./github-status.json";
+import importRepos from "./import-repos.json";
+import importRun from "./import-run.json";
+import imports from "./imports.json";
 import infraHealth from "./infra-health.json";
 import me from "./me.json";
 import platformStatus from "./platform-status.json";
@@ -12,6 +16,7 @@ import projectApps from "./project-apps.json";
 import projectLinks from "./project-links.json";
 import projects from "./projects.json";
 import session from "./session.json";
+import topology from "./topology.json";
 
 const ROUTES: Record<string, unknown> = {
   "/account/me": me,
@@ -29,6 +34,11 @@ const ROUTES: Record<string, unknown> = {
   "/infra/deployments/1/health": appHealth,
   "/activity/platform": platformStatus,
   "/finops/overview": finopsOverview,
+  "/account/github": githubStatus,
+  "/projects/demo/topology": topology,
+  "/projects/demo/imports": imports,
+  "/projects/demo/import/repos": importRepos,
+  "/projects/demo/imports/runs/r1": importRun,
 };
 
 export const unmockedRequests = new Set<string>();

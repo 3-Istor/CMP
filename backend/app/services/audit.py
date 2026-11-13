@@ -131,6 +131,8 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("PUT", "/api/alerting/{alert_id}"): "alerting.update",
     ("POST", "/api/catalog/sync"): "catalog.sync",
     ("POST", "/api/projects/{project_name}/imports"): "import.create",
+    ("POST", "/api/projects/{project_name}/topology/links"): "app.link",
+    ("DELETE", "/api/projects/{project_name}/topology/links"): "app.unlink",
     (
         "POST",
         "/api/projects/{project_name}/imports/{source_id}/apply",
