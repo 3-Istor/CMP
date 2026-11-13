@@ -55,25 +55,18 @@ def is_stepped_up(token: dict, max_age: int, now: float | None = None) -> bool:
     return 0 <= current - auth_time <= max_age
 
 
-def assert_step_up(
-    token: dict,
-    max_age: int | None = None,
-    *,
-    agents_allowed: bool = False,
-) -> None:
+def assert_step_up(token: dict, max_age: int | None = None) -> None:
     """
     Raise unless *token* is stepped up. *max_age* defaults to
     ``STEP_UP_MAX_AGE``.
 
     Raises:
         HTTPException 401: step-up needed, with the challenge described above.
-        HTTPException 403: an assistant token on a route that refuses them.
+        HTTPException 403: an assistant token, which cannot hold a passkey.
     """
     if not settings.STEP_UP_ENABLED:
         return
     if "cnp_agent" in token:
-        if agents_allowed:
-            return
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -86,9 +79,7 @@ def assert_step_up(
         raise _challenge(limit)
 
 
-def require_step_up(
-    max_age: int | None = None, *, agents_allowed: bool = False
-) -> Callable[..., dict]:
+def require_step_up(max_age: int | None = None) -> Callable[..., dict]:
     """
     FastAPI dependency factory: the verified claims, once stepped up.
 
@@ -96,7 +87,7 @@ def require_step_up(
     """
 
     def _dep(token: Annotated[dict, Depends(get_current_user)]) -> dict:
-        assert_step_up(token, max_age, agents_allowed=agents_allowed)
+        assert_step_up(token, max_age)
         return token
 
     return _dep

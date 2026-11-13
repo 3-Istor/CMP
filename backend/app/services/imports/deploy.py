@@ -299,11 +299,6 @@ async def _deploy(db: Session, run: ImportRun) -> None:
         f"feat(registry): import {source.repo_full_name}@{run.sha[:12]} "
         f"into {project}",
     )
-    for spec in specs:
-        if spec.public:
-            await dns.ensure_cname(
-                project, spec.name, generate.hostname(project, spec.name)
-            )
 
     expected: dict[str, str] = {}
     for app, row in rows.items():
@@ -320,7 +315,15 @@ async def _deploy(db: Session, run: ImportRun) -> None:
         row.status = "deploying"
         _upsert_deployment(db, project, row)
     run.report = {**(run.report or {}), "commit": commit}
+    # Committed before DNS: a failure from here on must still let remove()
+    # recognise these apps as the import's and clean them up.
     db.commit()
+
+    for spec in specs:
+        if spec.public:
+            await dns.ensure_cname(
+                project, spec.name, generate.hostname(project, spec.name)
+            )
 
     states = await _wait_for_argo(
         project, expected, settings.IMPORT_ARGO_TIMEOUT_SECONDS
@@ -370,8 +373,8 @@ def resume_interrupted() -> None:
 async def remove(db: Session, user: str, source: ImportSource) -> None:
     """
     Take the import's apps out of the registry (one commit), then delete
-    the namespaces, volumes included, of the apps it deployed (D17: the user
-    confirmed with step-up). An app of the record under the same name that
+    the namespaces, volumes included, of the apps that commit took out (D17:
+    the user confirmed with step-up). An app of the record under the same name that
     this import did not put there stays, with its namespace.
     """
     if _active_run(source) is not None:
@@ -421,7 +424,7 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
                 row.status = DeploymentStatus.DELETING
                 row.step_message = "Removing"
     db.commit()
-    _spawn(_cleanup_namespaces(project, sorted(deployed), source.id))
+    _spawn(_cleanup_namespaces(project, sorted(removed), source.id))
     logger.info(
         "%s removes import %s (registry entries: %s)",
         user,

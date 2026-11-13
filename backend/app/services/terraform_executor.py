@@ -37,7 +37,11 @@ class TerraformExecutor:
         self.working_dir = working_dir
         self.deployment_name = deployment_name
         self.s3_key_path = s3_key_path  # Custom S3 key path (e.g., "cnp/projects/my-project/my-app")
-        self.state_dir = Path("./data/terraform_states") / deployment_name
+        # TF_DATA_DIR holds the backend binding written by init: it must be as
+        # unique as the state key, and app names are only unique per project.
+        self.state_dir = Path("./data/terraform_states") / (
+            s3_key_path or deployment_name
+        )
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.use_s3_backend = settings.TF_BACKEND_S3_ENABLED
         self.log_file = log_file

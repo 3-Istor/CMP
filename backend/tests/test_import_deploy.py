@@ -417,6 +417,52 @@ def test_removal_keeps_a_backing_app_it_never_deployed(removal):
     assert calls["namespaces"] == [[]]
 
 
+def _dns_fails_on_first_deploy(Session, monkeypatch) -> None:
+    async def refuse(project, app, hostname):
+        raise deploy.dns.DnsError("cloudflare down")
+
+    monkeypatch.setattr(deploy.dns, "ensure_cname", refuse)
+    run_id = _published_run(Session)
+    _deploy(run_id)
+    with Session() as db:
+        assert db.get(ImportRun, run_id).status == "failed"
+
+
+def test_removal_after_a_dns_failure_takes_out_the_backing_apps(
+    removal, monkeypatch
+):
+    Session, cluster, calls = removal
+    _dns_fails_on_first_deploy(Session, monkeypatch)
+    backing = {s.name for s in generate.resolve(PLAN) if s.kind == "backing"}
+
+    _remove(Session)
+
+    assert _names(cluster.record) & backing == set()
+    assert backing <= set(calls["namespaces"][0])
+
+
+def test_removal_after_a_dns_failure_keeps_a_template_app_of_that_name(
+    removal, monkeypatch
+):
+    Session, cluster, calls = removal
+    _dns_fails_on_first_deploy(Session, monkeypatch)
+    cluster.record["spec"]["apps"] = [
+        a for a in cluster.record["spec"]["apps"] if a["name"] != "frontend"
+    ] + [
+        {
+            "name": "frontend",
+            "type": "static",
+            "repoURL": "https://github.com/3-Istor/frontend",
+        }
+    ]
+
+    _remove(Session)
+
+    assert _names(cluster.record) == {"frontend"}
+    assert "frontend" not in calls["namespaces"][0]
+    assert calls["dns"] == []
+
+
 def test_deploy_refuses_to_overwrite_a_service_of_another_repository(world):
     Session, cluster = world
     cluster.record["spec"]["apps"] = [
