@@ -7,7 +7,9 @@ Life of an access review campaign.
 At the start every project member (the owner aside, who cannot be removed)
 and every member of the platform groups becomes an item. A project item is
 decided by the project owner, or by its admins when the owner is gone, or by
-infra when nobody is left. A platform item is decided by an infra member
+infra when nobody is left. That list is frozen at the start, but the
+authority behind it is checked again on every decision, so someone demoted
+since then no longer decides. A platform item is decided by an infra member
 other than the person concerned. Nobody decides on their own access.
 
 Project decisions apply at once through the CMP membership code. Platform
@@ -330,6 +332,51 @@ def _authorize(
             "Only the project owner (or its admins when the owner is gone) "
             "reviews this access.",
         )
+    if item.scope == PROJECT:
+        _authorize_live(db, item, actor, actor_is_infra)
+
+
+def _authorize_live(
+    db: Session, item: AccessReviewItem, actor: str, actor_is_infra: bool
+) -> None:
+    """
+    The reviewer list is frozen at the start, authority is not: someone
+    demoted or removed since then no longer decides. Same order as at the
+    start: the owner, else a current admin, else current infra.
+    """
+    project = (
+        db.query(Project).filter(Project.project_name == item.subject).first()
+    )
+    owner = project.owner_username if project else None
+    if actor == owner:
+        return
+    refused = ReviewError(
+        403,
+        "You no longer hold the role that made you a reviewer of this "
+        "access.",
+    )
+    if owner and owner in reviewers_of(item):
+        raise refused
+    try:
+        # Live group roles only: platform_project_role would make every
+        # infra member a project admin here.
+        admins = {
+            m["username"]
+            for m in keycloak_service.list_project_members(item.subject)
+            if m["role"] == ProjectRole.ADMIN.value
+        }
+    except requests.RequestException as exc:
+        logger.error("Reviewer %s not verified: %s", actor, exc)
+        raise ReviewError(
+            503, "Keycloak could not confirm your role, try again."
+        ) from exc
+    if actor in admins:
+        return
+    # Infra decides only where no reviewer is a project admin any more,
+    # which is the start rule's fallback applied today.
+    if actor_is_infra and not admins & set(reviewers_of(item)):
+        return
+    raise refused
 
 
 def _apply_project(item: AccessReviewItem, decision: str) -> str:

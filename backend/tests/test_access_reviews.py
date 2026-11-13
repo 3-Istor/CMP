@@ -328,6 +328,94 @@ class TestOwnerOnlyDecisions:
 
         assert response.status_code == 200
 
+    def test_refuses_an_admin_reviewer_demoted_after_the_start(
+        self, client, factory, keycloak
+    ):
+        # Arrange
+        keycloak.users["olga"]["enabled"] = False
+        start(client)
+        item = item_of(factory, "dan", "shop")
+        keycloak.projects["shop"]["adam"] = "member"
+
+        # Act
+        response = decide(client, item.id, "adam")
+
+        # Assert
+        assert response.status_code == 403
+        assert "dan" in keycloak.projects["shop"]
+
+    def test_refuses_an_admin_reviewer_removed_after_the_start(
+        self, client, factory, keycloak
+    ):
+        keycloak.users["olga"]["enabled"] = False
+        start(client)
+        item = item_of(factory, "dan", "shop")
+        del keycloak.projects["shop"]["adam"]
+
+        response = decide(client, item.id, "adam", decision="keep")
+
+        assert response.status_code == 403
+
+    def test_lets_infra_decide_an_item_that_fell_back_to_infra(
+        self, client, factory, keycloak
+    ):
+        keycloak.users["olga"]["enabled"] = False
+        keycloak.projects["shop"] = {"dan": "member"}
+        start(client)
+        item = item_of(factory, "dan", "shop")
+
+        response = decide(client, item.id, "alice", decision="keep")
+
+        assert response.status_code == 200
+
+    def test_refuses_an_infra_reviewer_who_left_infra_after_the_start(
+        self, client, factory, keycloak
+    ):
+        # Arrange
+        keycloak.users["olga"]["enabled"] = False
+        keycloak.projects["shop"] = {"dan": "member"}
+        start(client)
+        item = item_of(factory, "dan", "shop")
+
+        # Act
+        with mock.patch.dict(
+            TOKENS, {"bob": {"preferred_username": "bob", "groups": []}}
+        ):
+            response = decide(client, item.id, "bob", decision="keep")
+
+        # Assert
+        assert response.status_code == 403
+
+    def test_refuses_infra_once_a_reviewer_became_project_admin(
+        self, client, factory, keycloak
+    ):
+        keycloak.users["olga"]["enabled"] = False
+        keycloak.projects["shop"] = {"dan": "member"}
+        start(client)
+        item = item_of(factory, "dan", "shop")
+        keycloak.projects["shop"]["alice"] = "admin"
+
+        response = decide(client, item.id, "bob", decision="keep")
+
+        assert response.status_code == 403
+
+    def test_refuses_an_admin_decision_when_keycloak_cannot_confirm_the_role(
+        self, client, factory, keycloak
+    ):
+        keycloak.users["olga"]["enabled"] = False
+        start(client)
+        item = item_of(factory, "dan", "shop")
+
+        with mock.patch.object(
+            keycloak_service,
+            "list_project_members",
+            side_effect=keycloak_service.requests.ConnectionError("down"),
+        ):
+            response = decide(client, item.id, "adam")
+
+        assert response.status_code == 503
+        assert "dan" in keycloak.projects["shop"]
+
     def test_refuses_an_admin_reviewing_their_own_access(
         self, client, factory, keycloak
     ):
