@@ -1,7 +1,7 @@
 """add_repository_imports
 
 Revision ID: a4f1c7e9b3d2
-Revises: e2c7a4f9d1b6
+Revises: a3f7c1e9d2b4
 Create Date: 2026-11-13 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "a4f1c7e9b3d2"
-down_revision: Union[str, Sequence[str], None] = "e2c7a4f9d1b6"
+down_revision: Union[str, Sequence[str], None] = "a3f7c1e9d2b4"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
