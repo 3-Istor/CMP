@@ -57,6 +57,14 @@ jobs:
         working-directory: ./backend
         run: poetry run pytest -q tests/test_project_export.py
 
+      # Same major as the platform's CNPG clusters; the runner image already
+      # has the PGDG apt source.
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> $GITHUB_PATH
+
       - name: Create a blank kind cluster
         uses: helm/kind-action@v1
         with:

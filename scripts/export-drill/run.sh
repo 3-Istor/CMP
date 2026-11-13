@@ -8,7 +8,7 @@
 #   scripts/export-drill/run.sh            # from the repository root
 #
 # Needs docker, a kind/k3d cluster as current context, the backend's Python
-# environment (PYTHON, default "poetry run python"), pg_dump/psql 16+, jq,
+# environment (PYTHON, default "poetry run python"), pg_dump/psql 18+, jq,
 # aws CLI v2.
 set -euo pipefail
 
@@ -16,7 +16,9 @@ here=$(cd "$(dirname "$0")" && pwd)
 backend="$here/../../backend"
 python=${PYTHON:-poetry run python}
 garage_image=dxflrs/amd64_garage:v2.2.0
-pg_image=postgres:16
+# The platform's CNPG major version. pg_dump must be at least as new as the
+# server, and the target at least as new as pg_dump.
+pg_image=postgres:18
 out=${DRILL_OUT:-$PWD/drill-out}
 mkdir -p "$out"
 
