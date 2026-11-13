@@ -307,6 +307,23 @@ class ConfirmationRead(BaseModel):
     created_at: datetime
     expires_at: datetime
     decided_by: str | None
+    # Where a person reviews a draft of a portal-only tool (policy
+    # PORTAL_TOOLS) instead of approving it here.
+    review_link: str | None = None
+    # The plan edits the assistant proposed, prefilled on that page only
+    # for the analysis they were proposed for.
+    draft: dict | None = None
+    draft_run_id: str | None = None
+
+
+def _confirmation_read(view: policy.ConfirmationView) -> ConfirmationRead:
+    portal = view.tool in policy.PORTAL_TOOLS
+    return ConfirmationRead(
+        **{k: v for k, v in view.__dict__.items() if k != "arguments"},
+        review_link=policy.draft_review_link(view) if portal else None,
+        draft=view.arguments.get("edits") if portal else None,
+        draft_run_id=view.arguments.get("run_id") if portal else None,
+    )
 
 
 def _confirmations_for(
@@ -345,9 +362,7 @@ def get_confirmation(
     if view is None:
         raise HTTPException(status_code=404, detail="No such request.")
     assert_project_role(db, token, view.project, ProjectRole.MEMBER)
-    return ConfirmationRead(
-        **{k: v for k, v in view.__dict__.items() if k != "arguments"}
-    )
+    return _confirmation_read(view)
 
 
 @router.post(
@@ -364,6 +379,11 @@ def decide_confirmation(
     if view is None:
         raise HTTPException(status_code=404, detail="No such request.")
     _may_decide(db, token, view)
+    if decision == "approve" and view.tool in policy.PORTAL_TOOLS:
+        raise HTTPException(
+            status_code=409,
+            detail="Review and apply this import from its page in the CMP.",
+        )
     if decision == "approve":
         assert_step_up(token)
     if view.status != "pending":
@@ -375,9 +395,7 @@ def decide_confirmation(
         decision == "approve",
         token.get("preferred_username", ""),
     )
-    return ConfirmationRead(
-        **{k: v for k, v in decided.__dict__.items() if k != "arguments"}
-    )
+    return _confirmation_read(decided)
 
 
 @router.get("/confirmations", response_model=list[ConfirmationRead])
@@ -392,9 +410,7 @@ def list_confirmations(
         db, token.get("preferred_username", ""), project
     )
     return [
-        ConfirmationRead(
-            **{k: v for k, v in view.__dict__.items() if k != "arguments"}
-        )
+        _confirmation_read(view)
         for view in sorted(views, key=lambda v: v.created_at, reverse=True)
     ]
 

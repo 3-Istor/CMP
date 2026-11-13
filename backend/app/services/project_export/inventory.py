@@ -110,6 +110,10 @@ EXCLUDED_TABLES: dict[str, tuple[str, str]] = {
     ),
     "agent_auth_requests": (PLATFORM, "Short-lived OAuth state."),
     "agent_auth_codes": (PLATFORM, "Short-lived OAuth codes."),
+    "import_webhook_deliveries": (
+        PLATFORM,
+        "GitHub delivery ids kept a day against replays.",
+    ),
     "agent_grants": (
         PERSONAL,
         "An assistant connected to one person's account, across projects; "

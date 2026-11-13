@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -150,6 +151,8 @@ def source_view(source: ImportSource) -> dict:
         "branch": source.branch,
         "created_by": source.created_by,
         "created_at": source.created_at,
+        "auto_rebuild": source.auto_rebuild,
+        "rebuild_pending": source.rebuild_pending,
         "runs": [run_view(r) for r in source.runs[-5:]],
         "services": [service_view(s) for s in source.services],
     }
@@ -222,6 +225,11 @@ async def _head(source: ImportSource) -> str:
         ) from exc
 
 
+async def branch_head(source: ImportSource) -> str:
+    """The head of the import's branch, read with its scoped token."""
+    return await _head(source)
+
+
 def _new_run(
     db: Session,
     source: ImportSource,
@@ -241,7 +249,15 @@ def _new_run(
         expires_at=_now() + timedelta(hours=settings.IMPORT_RUN_TTL_HOURS),
     )
     db.add(run)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # uq_import_runs_active_source: another request started a run
+        # since this one checked.
+        db.rollback()
+        raise ImportRefused(
+            "A run of this import is already in progress"
+        ) from exc
     db.refresh(run)
     return run
 
@@ -265,8 +281,13 @@ async def _dispatch(db: Session, run: ImportRun) -> None:
         ) from exc
 
 
-async def start_analysis(
-    db: Session, project: str, user: str, repo: RepoRef, branch: str | None
+async def start_analysis(  # pylint: disable=too-many-arguments
+    db: Session,
+    project: str,
+    user: str,
+    repo: RepoRef,
+    branch: str | None,
+    user_sub: str | None = None,
 ) -> ImportRun:
     branch = branch or repo.default_branch
     if not BRANCH.fullmatch(branch) or ".." in branch:
@@ -286,6 +307,7 @@ async def start_analysis(
             created_by=user,
         )
         db.add(source)
+        set_rebuild_user(source, user, user_sub)
     else:
         if _active_run(source) is not None:
             raise ImportRefused("A run of this import is already in progress")
@@ -367,19 +389,28 @@ def capacity_view(db: Session, project: str, source: ImportSource) -> dict:
     }
 
 
-async def approve(
+async def approve(  # pylint: disable=too-many-arguments
     db: Session,
     project: str,
     user: str,
     source: ImportSource,
     edits: dict,
+    run_id: str,
 ) -> ImportRun:
-    """Validate the edited plan and start the build."""
+    """
+    Validate the edited plan and start the build. *run_id* is the analysis
+    the person reviewed: a newer one, an assistant's re-analysis say, is
+    never applied in its place.
+    """
     if _active_run(source) is not None:
         raise ImportRefused("A run of this import is already in progress")
     analysis = _last_run(source, RunKind.ANALYZE)
     if analysis is None or analysis.status != RunStatus.SUCCEEDED.value:
         raise ImportRefused("This import has no finished analysis to apply")
+    if analysis.id != run_id:
+        raise ImportRefused(
+            "The analysis changed since you reviewed it: review again"
+        )
     try:
         specs = generate.resolve(analysis.plan, edits)
     except PlanError as exc:
@@ -420,7 +451,8 @@ async def approve(
     if problems:
         raise ImportRefused("; ".join(sorted(set(problems))), 422)
 
-    _store_specs(db, source, specs)
+    # The run first: a request that loses the race to start it must not
+    # leave its specs behind for the winner's build.
     run = _new_run(
         db,
         source,
@@ -429,6 +461,7 @@ async def approve(
         user,
         plan={"plan": analysis.plan, "edits": edits},
     )
+    _store_specs(db, source, specs)
     await _dispatch(db, run)
     return run
 
@@ -470,16 +503,55 @@ def _keep_manual_links(spec: AppSpec, previous: dict) -> None:
             aliases.add(link["alias"])
 
 
-async def rebuild(db: Session, user: str, source: ImportSource) -> ImportRun:
+def set_rebuild_user(
+    source: ImportSource, user: str, user_sub: str | None
+) -> None:
+    """Who automatic rebuilds run as from now on, once they proved it."""
+    source.rebuild_user = user
+    source.rebuild_user_sub = user_sub
+
+
+def last_build(source: ImportSource) -> ImportRun | None:
+    return _last_run(source, RunKind.BUILD)
+
+
+async def rebuild(
+    db: Session,
+    user: str,
+    source: ImportSource,
+    apps: set[str] | None = None,
+    sha: str | None = None,
+) -> ImportRun:
+    """
+    Build the branch head, *sha* when the CMP resolved it already, never a
+    commit a caller named. *apps* limits the build to those services; a
+    service never built is always part of it.
+    """
     if _active_run(source) is not None:
         raise ImportRefused("A run of this import is already in progress")
     build = _last_run(source, RunKind.BUILD)
     if build is None or not source.services:
         raise ImportRefused("Apply the analysis before rebuilding")
-    sha = await _head(source)
-    run = _new_run(db, source, RunKind.BUILD, sha, user, plan=build.plan)
+    sha = sha or await _head(source)
+    plan = {k: v for k, v in (build.plan or {}).items() if k != "apps"}
+    if apps is not None:
+        unbuilt = {
+            s.app_name
+            for s in source.services
+            if s.kind == "service" and s.last_digest is None
+        }
+        plan["apps"] = sorted(apps | unbuilt)
+    source.rebuild_pending = None
+    run = _new_run(db, source, RunKind.BUILD, sha, user, plan=plan)
     await _dispatch(db, run)
     return run
+
+
+def built_apps(run: ImportRun) -> set[str]:
+    """The services a build run builds."""
+    services = {s.app_name for s in run.source.services if s.kind == "service"}
+    only = (run.plan or {}).get("apps")
+    return services if only is None else services & set(only)
 
 
 # ── Worker protocol ─────────────────────────────────────────────────────────
@@ -549,10 +621,11 @@ def _system_event(run: ImportRun, action: str, ok: bool, **details) -> None:
 def _recipes(run: ImportRun) -> list[dict]:
     plan = run.plan["plan"]
     builds = {s["name"]: s["build"] for s in plan["services"]}
+    wanted = built_apps(run)
     groups: dict[tuple, str] = {}
     recipes = []
     for service in sorted(run.source.services, key=lambda s: s.app_name):
-        if service.kind != "service":
+        if service.app_name not in wanted:
             continue
         build = builds[service.spec["plan_name"]]
         for path in (build.get("context"), build.get("dockerfile")):
@@ -673,7 +746,7 @@ def receive_plan(db: Session, run: ImportRun, plan: dict) -> None:
 def receive_publish(db: Session, run: ImportRun, services: list[dict]) -> None:
     if run.kind != RunKind.BUILD.value:
         raise ImportRefused("Only a build run publishes images", 409)
-    expected = {s.app_name for s in run.source.services if s.kind == "service"}
+    expected = built_apps(run)
     digests: dict[str, dict] = {}
     for item in services:
         app = item.get("app")

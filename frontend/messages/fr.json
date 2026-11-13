@@ -1681,7 +1681,8 @@
       "action": "Action",
       "expires": "Expire le",
       "decline": "Refuser",
-      "approve": "Approuver"
+      "approve": "Approuver",
+      "review": "Relire le plan"
     },
     "connectAi": {
       "title": "Connectez votre assistant IA à CNP",
@@ -2685,7 +2686,8 @@
       "access_review_escalated": "Revue d'accès en retard : {count} non décidés",
       "access_review_terraform_task": "Retirer {user} de {group} dans le Terraform K3s",
       "access_review_inactive": "{user} ne s'est pas connecté depuis {days} jours",
-      "access_review_disabled": "{user} a été désactivé après {days} jours sans connexion"
+      "access_review_disabled": "{user} a été désactivé après {days} jours sans connexion",
+      "import_rebuild_pending": "Une reconstruction de {repo} attend un admin"
     }
   },
   "secretsPresence": {
@@ -3478,7 +3480,19 @@
           "failed": "Échec",
           "cancelled": "Annulé"
         }
+      },
+      "autoRebuild": "Reconstruire au push",
+      "autoRebuildOf": "Reconstruire {repo} à chaque push",
+      "autoRebuildFailed": "Le réglage n'a pas pu être enregistré : {message}",
+      "pending": "Un push sur {repo} attend un admin : {reason}",
+      "confirmRebuild": "Confirmer la reconstruction",
+      "pendingReason": {
+        "not_admin": "{user}, qui le reconstruit, n'est plus admin du projet.",
+        "inactive": "le compte de {user}, qui le reconstruit, est désactivé.",
+        "repo_access": "le CMP ne peut pas vérifier que {user}, qui le reconstruit, peut encore lire le dépôt.",
+        "unknown_user": "le CMP ne trouve pas le compte de {user}, qui le reconstruit."
       }
-    }
+    },
+    "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey."
   }
 }

@@ -263,10 +263,13 @@ async def lifespan(app: FastAPI):
     fail_interrupted_runs()
     project_export_runner.fail_interrupted()
 
+    import_reconcile_task = None
     if settings.IMPORT_ENABLED:
         from app.services.imports.deploy import resume_interrupted
+        from app.services.imports.rebuilds import reconcile_loop
 
         resume_interrupted()
+        import_reconcile_task = asyncio.create_task(reconcile_loop())
 
     # Start background health poller
     logger.info("Starting health poller...")
@@ -334,6 +337,8 @@ async def lifespan(app: FastAPI):
     export_retention_task.cancel()
     grafana_sync_task.cancel()
     grafana_platform_task.cancel()
+    if import_reconcile_task:
+        import_reconcile_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
@@ -406,6 +411,7 @@ app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
 app.include_router(imports.router, prefix="/api")
 app.include_router(imports.worker, prefix="/api")
+app.include_router(imports.webhooks, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")

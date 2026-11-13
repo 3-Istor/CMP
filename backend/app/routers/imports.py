@@ -1,15 +1,18 @@
 """
-Repository import API (CNP-238, CNP-241).
+Repository import API (CNP-238, CNP-241, CNP-244).
 
 Users: /api/projects/{project_name}/import... (authz.py roles, step-up on
-apply and delete). The central workflow: /api/import/worker/{run_id}/...,
-authenticated by its GitHub OIDC token only.
+apply, rebuild and delete). The central workflow:
+/api/import/worker/{run_id}/..., authenticated by its GitHub OIDC token
+only. GitHub: /api/import/webhooks/github, authenticated by the webhook
+signature only.
 """
 
+import json
 import logging
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -18,9 +21,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.services import audit
+from app.services.agents import policy
 from app.services.authz import RequireAdmin, RequireMember
 from app.services.github_service import GitHubAppError
-from app.services.imports import access, deploy, service
+from app.services.imports import access, deploy, rebuilds, service
 from app.services.imports.oidc import WorkerTokenError, verify_worker_token
 from app.services.imports.service import ImportRefused
 from app.services.project_registry import RegistryError
@@ -30,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["Imports"])
 worker = APIRouter(prefix="/import/worker", tags=["Import worker"])
+webhooks = APIRouter(prefix="/import/webhooks", tags=["Import webhooks"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -80,6 +85,10 @@ class PlanEdits(BaseModel):
     drop_links: list[LinkRef] = Field(default_factory=list, max_length=200)
 
 
+class SourceSettings(BaseModel):
+    auto_rebuild: bool
+
+
 async def _recheck_repository(db: Session, claims: dict, source) -> None:
     """
     The caller must still be able to import the bound repository, the same
@@ -126,7 +135,7 @@ async def create_import(
         raise HTTPException(502, f"GitHub could not be read: {exc}") from exc
     try:
         run = await service.start_analysis(
-            db, ctx.project_name, ctx.username, repo, body.branch
+            db, ctx.project_name, ctx.username, repo, body.branch, ctx.user_id
         )
     except ImportRefused as exc:
         raise _refused(exc) from exc
@@ -162,13 +171,20 @@ async def get_import_run(run_id: str, ctx: RequireMember, db: DbSession):
 
 
 @router.post("/{project_name}/imports/{source_id}/apply", status_code=202)
-async def apply_import(
+async def apply_import(  # pylint: disable=too-many-arguments
     source_id: str,
     edits: PlanEdits,
     ctx: RequireAdmin,
     db: DbSession,
     request: Request,
+    run_id: Annotated[str, Query(max_length=64)],
+    draft: Annotated[str | None, Query(max_length=64)] = None,
 ):
+    """
+    *run_id*: the analysis the person reviewed, refused unless it is still
+    the latest one. *draft*: the assistant's proposal (import_repo) this
+    review started from, settled only when it proposed that same analysis.
+    """
     _enabled()
     assert_step_up(ctx.token)
     try:
@@ -176,6 +192,7 @@ async def apply_import(
     except ImportRefused as exc:
         raise _refused(exc) from exc
     await _recheck_repository(db, ctx.token, source)
+    service.set_rebuild_user(source, ctx.username, ctx.user_id)
     try:
         run = await service.approve(
             db,
@@ -183,10 +200,21 @@ async def apply_import(
             ctx.username,
             source,
             edits.model_dump(mode="json", by_alias=True),
+            run_id,
         )
     except ImportRefused as exc:
         raise _refused(exc) from exc
-    audit.note(request, target=source.repo_full_name)
+    if draft and await run_in_threadpool(
+        policy.settle_draft,
+        draft,
+        ctx.project_name,
+        source.id,
+        run_id,
+        ctx.username,
+    ):
+        audit.note(request, target=source.repo_full_name, draft=draft)
+    else:
+        audit.note(request, target=source.repo_full_name)
     return {"run": service.run_view(run)}
 
 
@@ -201,12 +229,43 @@ async def rebuild_import(
     except ImportRefused as exc:
         raise _refused(exc) from exc
     await _recheck_repository(db, ctx.token, source)
+    # The admin who confirms a rebuild is who later ones run as.
+    service.set_rebuild_user(source, ctx.username, ctx.user_id)
     try:
         run = await service.rebuild(db, ctx.username, source)
     except ImportRefused as exc:
         raise _refused(exc) from exc
     audit.note(request, target=source.repo_full_name)
     return {"run": service.run_view(run)}
+
+
+@router.put("/{project_name}/imports/{source_id}/settings")
+async def update_import_settings(
+    source_id: str,
+    body: SourceSettings,
+    ctx: RequireAdmin,
+    db: DbSession,
+    request: Request,
+):
+    """
+    Rebuild on push. Turning it on lets later commits deploy without anyone
+    looking, so it needs step-up; turning it off does not.
+    """
+    _enabled()
+    if body.auto_rebuild:
+        assert_step_up(ctx.token)
+    try:
+        source = service.get_source(db, ctx.project_name, source_id)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    source.auto_rebuild = body.auto_rebuild
+    if not body.auto_rebuild:
+        source.rebuild_pending = None
+    db.commit()
+    audit.note(
+        request, target=source.repo_full_name, enabled=body.auto_rebuild
+    )
+    return service.source_view(source)
 
 
 @router.delete("/{project_name}/imports/{source_id}", status_code=202)
@@ -365,3 +424,58 @@ async def worker_fail(
     except ImportRefused as exc:
         raise _refused(exc) from exc
     return Response(status_code=204)
+
+
+# ── GitHub webhook ──────────────────────────────────────────────────────────
+
+
+@webhooks.post("/github", status_code=202)
+async def github_webhook(request: Request, db: DbSession):
+    """
+    Push events of CNP-Portal. Nothing of the payload is trusted for the
+    build: it only says which import to rebuild, and the CMP reads the
+    branch head itself.
+    """
+    _enabled()
+    remote = request.client.host if request.client else None
+    if not settings.GITHUB_WEBHOOK_SECRET:
+        await run_in_threadpool(
+            rebuilds.note_refused, "no webhook secret configured", remote
+        )
+        raise HTTPException(503, "Webhook not configured")
+    raw = await _read_body(request, settings.IMPORT_WEBHOOK_MAX_BODY_BYTES)
+    if not rebuilds.verify_signature(
+        settings.GITHUB_WEBHOOK_SECRET,
+        raw,
+        request.headers.get("x-hub-signature-256"),
+    ):
+        await run_in_threadpool(rebuilds.note_refused, "bad signature", remote)
+        raise HTTPException(401, "Invalid signature")
+    delivery = request.headers.get("x-github-delivery", "")
+    if not rebuilds.DELIVERY.fullmatch(delivery):
+        raise HTTPException(400, "Missing delivery id")
+    if await run_in_threadpool(rebuilds.seen_delivery, db, delivery):
+        return {"status": "duplicate"}
+    event = request.headers.get("x-github-event", "")
+    if event == "ping":
+        return {"status": "pong"}
+    if event != "push":
+        return {"status": "ignored"}
+    try:
+        payload = json.loads(raw)
+    except ValueError as exc:
+        raise HTTPException(400, "Malformed payload") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Malformed payload")
+    matched = await run_in_threadpool(rebuilds.on_push, db, payload, delivery)
+    # Recorded only once processed: a delivery that failed with a 500 is
+    # processed again when GitHub redelivers it. Two copies processed at
+    # once are harmless, auto_rebuild does nothing for a head already built
+    # or being built.
+    if not await run_in_threadpool(rebuilds.remember_delivery, db, delivery):
+        return {"status": "duplicate"}
+    for source_id in matched:
+        service._spawn(  # pylint: disable=protected-access
+            rebuilds.auto_rebuild(source_id, "push")
+        )
+    return {"status": "accepted", "rebuilds": len(matched)}

@@ -145,6 +145,10 @@ ACTIONS: dict[tuple[str, str], str] = {
         "DELETE",
         "/api/projects/{project_name}/imports/{source_id}",
     ): "import.delete",
+    (
+        "PUT",
+        "/api/projects/{project_name}/imports/{source_id}/settings",
+    ): "import.settings.update",
     ("POST", "/api/account/picture"): "account.picture.update",
     (
         "POST",
@@ -463,6 +467,12 @@ class AuditMiddleware:
         ):
             await self.app(scope, receive, send)
             return
+        action, params = match_action(scope["method"], scope["path"])
+        if action is None:
+            # Nothing to journal: the body is not buffered here, so routes
+            # that cap it (webhooks, worker calls) stream it themselves.
+            await self.app(scope, receive, send)
+            return
 
         chunks = []
         while True:
@@ -493,13 +503,8 @@ class AuditMiddleware:
         await self.app(scope, replay, capture)
 
         request = Request(scope)
-        action, params = match_action(scope["method"], scope["path"])
         # 401s are anonymous noise; a dry run changes nothing.
-        if (
-            action is None
-            or status_code == 401
-            or request.query_params.get("dry_run") == "true"
-        ):
+        if status_code == 401 or request.query_params.get("dry_run") == "true":
             return
 
         try:

@@ -1,15 +1,16 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Bot, Check } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   applyImport,
+  getAgentConfirmation,
   getImportRun,
   getImports,
   getTopology,
@@ -19,6 +20,7 @@ import {
 import { emptyEdits, planEditsReducer, type PlanEditAction } from "@/lib/importPlan";
 import { cn } from "@/lib/utils";
 import type {
+  AgentConfirmation,
   ImportPlan,
   ImportPlanEdits,
   ImportRunDetail,
@@ -76,12 +78,13 @@ function isPlan(plan: ImportRunDetail["plan"]): plan is ImportPlan {
 }
 
 export function ImportWizard() {
-  const runId = useSearchParams().get("run");
+  const params = useSearchParams();
+  const runId = params.get("run");
   // A new run is a new wizard: nothing of the previous one carries over.
-  return <WizardForRun key={runId ?? "new"} runId={runId} />;
+  return <WizardForRun key={runId ?? "new"} runId={runId} draftId={params.get("draft")} />;
 }
 
-function WizardForRun({ runId }: { runId: string | null }) {
+function WizardForRun({ runId, draftId }: { runId: string | null; draftId: string | null }) {
   const t = useTranslations("imports");
   const router = useRouter();
   const pathname = usePathname();
@@ -92,6 +95,9 @@ function WizardForRun({ runId }: { runId: string | null }) {
   const [live, setLive] = useState<Topology | null>(null);
   const [loading, setLoading] = useState(Boolean(runId));
   const [applying, setApplying] = useState(false);
+  const [draft, setDraft] = useState<AgentConfirmation | null>(null);
+  // Edits kept across a step-up win over the assistant's draft.
+  const keptEdits = useRef(Boolean(runId && loadEdits(runId)));
   const plan = run && isPlan(run.plan) ? run.plan : null;
 
   const [edits, rawDispatch] = useReducer(
@@ -152,6 +158,26 @@ function WizardForRun({ runId }: { runId: string | null }) {
     if (runId && step === "review") saveEdits(runId, edits);
   }, [runId, step, edits]);
 
+  useEffect(() => {
+    if (!draftId || step !== "review") return;
+    getAgentConfirmation(draftId)
+      .then((found) => {
+        // A draft proposed for another project or analysis is never shown here.
+        if (
+          found.status !== "pending" ||
+          found.tool !== "import_repo" ||
+          found.project !== projectName ||
+          found.draft_run_id !== runId
+        )
+          return;
+        setDraft(found);
+        if (!keptEdits.current && found.draft) {
+          rawDispatch({ type: "reset", edits: { ...emptyEdits(), ...found.draft } });
+        }
+      })
+      .catch(() => setDraft(null));
+  }, [draftId, step, projectName, runId]);
+
   const start = async (repo: string, branch: string | null) => {
     try {
       const next = await startImport(projectName, repo, branch);
@@ -165,7 +191,7 @@ function WizardForRun({ runId }: { runId: string | null }) {
     if (!run) return;
     setApplying(true);
     try {
-      const build = await applyImport(projectName, run.source_id, edits);
+      const build = await applyImport(projectName, run.source_id, run.id, edits, draft?.id);
       toast.success(t("applied"));
       go(build.id);
     } catch (err) {
@@ -235,6 +261,13 @@ function WizardForRun({ runId }: { runId: string | null }) {
       ) : step === "analysis" && run ? (
         <AnalysisStep run={run} repo={source?.repo_full_name ?? null} onRetry={reanalyze} onRestart={() => go(null)} />
       ) : step === "review" && run && plan ? (
+        <>
+        {draft && (
+          <p role="note" className="flex items-start gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
+            <Bot className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            {t("draftNote", { user: draft.username })}
+          </p>
+        )}
         <PlanReview
           projectName={projectName}
           plan={plan}
@@ -253,6 +286,7 @@ function WizardForRun({ runId }: { runId: string | null }) {
             router.push(`/projects/${encodeURIComponent(projectName)}`);
           }}
         />
+        </>
       ) : run ? (
         <ImportProgress projectName={projectName} run={run} onRebuild={() => void rebuild()} onReanalyze={reanalyze} />
       ) : null}
