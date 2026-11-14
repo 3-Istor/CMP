@@ -115,6 +115,30 @@ def _fetch(
     return data
 
 
+def measured_usage(namespace: str, cluster: str = "onprem") -> dict:
+    """
+    What one namespace requests against what it used over WINDOW: CPU cores
+    (p95) and memory GiB (p99), the same measures the recommendations use.
+
+    Raises:
+        httpx.HTTPError: VictoriaMetrics could not be read.
+    """
+    if not _NAMESPACE.match(namespace):
+        raise ValueError(f"invalid namespace {namespace!r}")
+    data = _fetch((namespace,), cluster)
+    return {
+        "cpu_request_cores": data["cpu_request"].get(namespace),
+        "cpu_p95_cores": data["cpu_p95"].get(namespace),
+        "ram_request_gib": _gib(data["ram_request"].get(namespace)),
+        "ram_p99_gib": _gib(data["ram_p99"].get(namespace)),
+        "history_days": data["history_days"].get(namespace, 0.0),
+    }
+
+
+def _gib(value: float | None) -> float | None:
+    return None if value is None else value / 2**30
+
+
 def _confidence(base: int, history_days: float) -> int:
     covered = min(1.0, history_days / FULL_HISTORY_DAYS)
     return int(max(10, base * (0.4 + 0.6 * covered)))
