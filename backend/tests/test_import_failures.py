@@ -196,7 +196,7 @@ def test_the_journal_keeps_the_workflow_run_id_not_its_url(
     (event,) = [k for a, k in journal if a == "import.fail"]
     assert (
         event["details"]["workflow_run"],
-        "github.com" in str(event),
+        "/actions/runs/" in str(event),
     ) == ("555", False)
 
 
@@ -757,7 +757,7 @@ def test_the_watch_journal_names_the_workflow_run_without_its_url(
     asyncio.run(watch.check_workflows())
 
     (event,) = github.journal
-    assert (event["details"]["workflow_run"], "github.com" in str(event)) == (
+    assert (event["details"]["workflow_run"], "/actions/runs/" in str(event)) == (
         900,
         False,
     )
