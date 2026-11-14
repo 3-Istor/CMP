@@ -3565,6 +3565,14 @@
         "internal": {
           "title": "Internal platform error",
           "explain": "The error comes from the platform, not from your repository. Try again; if it happens again, tell the platform team."
+        },
+        "scan_failed": {
+          "title": "The image scan could not run",
+          "explain": "The vulnerability scanner stopped before giving a result (database unavailable, rate limit). This is not your repository: try again; if it happens again, tell the platform team."
+        },
+        "build_job_failed": {
+          "title": "The build job stopped before the build",
+          "explain": "The job stopped before starting the build (runner, tools, artifacts). This is not your repository: try again; if it happens again, tell the platform team."
         }
       }
     }

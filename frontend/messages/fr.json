@@ -3565,6 +3565,14 @@
         "internal": {
           "title": "Erreur interne de la plateforme",
           "explain": "L'erreur vient de la plateforme, pas de votre dépôt. Relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "scan_failed": {
+          "title": "Le scan des images n'a pas pu se faire",
+          "explain": "Le scanner de vulnérabilités s'est arrêté avant d'avoir un résultat (base indisponible, limite de requêtes). Ce n'est pas votre dépôt : relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "build_job_failed": {
+          "title": "Le job de build s'est arrêté avant le build",
+          "explain": "Le job s'est arrêté avant de lancer le build (runner, outils, artefacts). Ce n'est pas votre dépôt : relancez ; si cela se reproduit, prévenez l'équipe plateforme."
         }
       }
     }

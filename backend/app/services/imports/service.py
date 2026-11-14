@@ -400,11 +400,13 @@ async def _dispatch(db: Session, run: ImportRun) -> None:
             {"run_id": run.id, "attempt_id": run.attempt_id},
         )
     except GitHubAppError as exc:
+        logger.warning("Import workflow dispatch of run %s: %s", run.id, exc)
+        public = failures.public_text(redact(str(exc)))
         run.status = RunStatus.FAILED.value
-        run.report = {"stage": "dispatch", "error": redact(str(exc))}
+        run.report = {"stage": "dispatch", "error": public}
         db.commit()
         raise ImportRefused(
-            f"Could not start the import workflow: {exc}", 502
+            f"Could not start the import workflow: {public}", 502
         ) from exc
 
 
@@ -972,5 +974,5 @@ def receive_failure(  # pylint: disable=too-many-arguments
         stage=stage,
         reason=kept.get("reason"),
         apps=kept.get("apps"),
-        workflow_run_url=url,
+        workflow_run=workflow_run_id or run.workflow_run_id,
     )

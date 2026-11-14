@@ -23,12 +23,14 @@ export function ImportProgress({
   projectName,
   run,
   source,
+  canManage,
   onRebuild,
   onReanalyze,
 }: {
   projectName: string;
   run: ImportRunDetail;
   source: ImportSourceView | null;
+  canManage: boolean;
   onRebuild: () => void;
   onReanalyze: () => void;
 }) {
@@ -68,7 +70,7 @@ export function ImportProgress({
         {t(`status.${run.status}`, { sha: run.sha.slice(0, 12) })}
       </p>
       {source?.rebuild_pending && (
-        <RebuildPendingNotice source={source} canManage onRebuild={onRebuild} />
+        <RebuildPendingNotice source={source} canManage={canManage} onRebuild={onRebuild} />
       )}
       {run.failure ? (
         <ImportFailurePanel

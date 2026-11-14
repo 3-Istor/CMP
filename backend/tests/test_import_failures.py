@@ -17,6 +17,7 @@ from tests.test_import_api import (  # noqa: F401
     world,
 )
 
+DISPATCH = service._dispatch
 ACTIONS_URL = (
     "https://github.com/3-Istor/extern-project-analyzer/actions/runs/123456"
 )
@@ -163,7 +164,7 @@ def test_a_report_without_details_is_still_accepted(client, world):
         _detail(client, run)["failure"]["cause"],
     ) == (
         204,
-        "build_failed",
+        "build_job_failed",
     )
 
 
@@ -185,15 +186,18 @@ def test_the_workflow_url_never_reaches_users(client, world):
     assert "extern-project-analyzer" not in shown
 
 
-def test_the_workflow_url_is_kept_in_the_journal(client, world, journal):
+def test_the_journal_keeps_the_workflow_run_id_not_its_url(
+    client, world, journal
+):
     run = _build(world)
 
     _scan_block(client, run)
 
     (event,) = [k for a, k in journal if a == "import.fail"]
-    assert event["details"]["workflow_run_url"] == (
-        "https://github.com/3-Istor/extern-project-analyzer/actions/runs/555"
-    )
+    assert (
+        event["details"]["workflow_run"],
+        "github.com" in str(event),
+    ) == ("555", False)
 
 
 def test_a_url_stored_before_the_change_is_hidden_too(client, world):
@@ -308,6 +312,13 @@ def _failed(world, kind="build", **report):
         ("build", {"stage": "publish"}, ["retry", "contact_platform"]),
         ("build", {"stage": "deploy"}, ["retry", "contact_platform"]),
         ("build", {"stage": "fetch"}, ["retry", "reanalyze"]),
+        ("build", {"stage": "scan"}, ["retry", "contact_platform"]),
+        (
+            "build",
+            {"stage": "scan", "failure": {"reason": "scan_failed"}},
+            ["retry", "contact_platform"],
+        ),
+        ("build", {"stage": "build"}, ["retry", "contact_platform"]),
         ("analyze", {"stage": "analyze"}, ["retry", "contact_platform"]),
         ("analyze", {"stage": "fetch"}, ["retry"]),
         ("analyze", {"stage": "dispatch"}, ["retry", "contact_platform"]),
@@ -322,7 +333,7 @@ def test_each_cause_offers_its_actions(client, world, kind, report, actions):
 def test_a_build_of_an_analysis_of_another_branch_offers_a_reanalysis(
     client, world
 ):
-    run = _failed(world, stage="build")
+    run = _failed(world, stage="build", failure={"reason": "build_failed"})
     with world.db() as db:
         db.get(ImportRun, run.id).source.branch = "develop"
         db.commit()
@@ -349,20 +360,24 @@ class GitHub:
         self.runs: dict[str, dict] = {}
         self.calls: list[str] = []
         self.error: Exception | None = None
+        self.on_read = None
 
     def install(self, monkeypatch):
         async def token():
             self.calls.append("token")
             return "ghs_installation"
 
-        async def listing(token, repo, workflow, since):
-            self.calls.append("list")
+        async def listing(token, repo, workflow, since, page=1):
+            self.calls.append(f"list {page}")
             if self.error:
                 raise self.error
-            return self.listing
+            start = (page - 1) * watch.LIST_PAGE_SIZE
+            return self.listing[start : start + watch.LIST_PAGE_SIZE]
 
         async def read(token, repo, workflow_run_id):
             self.calls.append(f"get {workflow_run_id}")
+            if self.on_read:
+                self.on_read()
             return self.runs.get(workflow_run_id)
 
         monkeypatch.setattr(watch, "get_org_installation_token", token)
@@ -374,9 +389,13 @@ class GitHub:
 def github(world, monkeypatch):
     fake = GitHub()
     fake.install(monkeypatch)
+    fake.journal = []
     monkeypatch.setattr(watch, "SessionLocal", world.Session)
+    monkeypatch.setattr(watch, "_token", {"value": None, "at": 0.0})
     monkeypatch.setattr(
-        watch.audit, "record_system_event", lambda *a, **k: None
+        watch.audit,
+        "record_system_event",
+        lambda action, **kwargs: fake.journal.append(kwargs),
     )
     return fake
 
@@ -547,3 +566,232 @@ def test_public_text_strips_only_the_workflow_repository_links():
     )
 
     assert text == "failed and https://github.com/org/app/issues/1"
+
+
+# ── Review of CNP-268 ───────────────────────────────────────────────────────
+
+
+def test_a_build_failure_leads_over_a_scan_block_of_another_group(
+    client, world
+):
+    run = _build(world)
+
+    _call(
+        client,
+        run,
+        "fail",
+        stage="build",
+        message="post-service failed; user-service blocked",
+        details={
+            "reason": "build_failed",
+            "apps": ["post-service", "user-service"],
+            "vulnerabilities": [NETTY],
+        },
+    )
+
+    failure = _detail(client, run)["failure"]
+    assert (failure["cause"], len(failure["vulnerabilities"])) == (
+        "build_failed",
+        1,
+    )
+
+
+def test_a_cancelled_run_offers_a_retry(client, world):
+    run = _failed(world, stage="build")
+    with world.db() as db:
+        db.get(ImportRun, run.id).status = "cancelled"
+        db.commit()
+
+    failure = _detail(client, run)["failure"]
+    assert (failure["cause"], failure["actions"]) == (
+        "workflow_stopped",
+        ["retry"],
+    )
+
+
+@pytest.mark.parametrize(
+    "details",
+    [
+        {"reason": ["scan_blocked"]},
+        {"apps": {"user-service": 1}},
+        {"vulnerabilities": 3},
+        {"vulnerabilities": [{**NETTY, "app": ["user-service"]}]},
+        {"vulnerabilities": [{**NETTY, "fixed": {"v": 1}}]},
+        {"log_excerpt": 12},
+    ],
+)
+def test_ill_typed_details_are_dropped_not_a_server_error(
+    client, world, details
+):
+    run = _build(world)
+
+    response = _call(
+        client, run, "fail", stage="scan", message="x", details=details
+    )
+
+    with world.db() as db:
+        kept = db.get(ImportRun, run.id).report.get("failure")
+    assert (response.status_code, kept) == (204, None)
+
+
+@pytest.mark.parametrize(
+    "raw,shown",
+    [
+        (
+            "Failed to start 'import.yml' on '3-Istor/extern-project-analyzer'",
+            "Failed to start 'import.yml' on 'the import workflow'",
+        ),
+        (
+            "clone git@github.com:3-Istor/extern-project-analyzer.git failed",
+            "clone git@github.com:the import workflow failed",
+        ),
+        (
+            "open /home/runner/_work/extern-project-analyzer/x/out/a.json",
+            "open a.json",
+        ),
+        (
+            "open /tmp/cnp-import-runners/r1/work/b.json: denied",
+            "open b.json: denied",
+        ),
+        ("see github.com/org/app", "see github.com/org/app"),
+    ],
+)
+def test_public_text_hides_the_workflow_repository_and_runner_paths(
+    raw, shown
+):
+    assert failures.public_text(raw) == shown
+
+
+def test_a_dispatch_refusal_names_no_workflow_repository(world, monkeypatch):
+    run = _run(world, _source(world))
+
+    async def token():
+        return "t"
+
+    async def refused(*_args, **_kwargs):
+        raise service.GitHubAppError(
+            "Failed to start 'import.yml' on "
+            "'3-Istor/extern-project-analyzer': HTTP 422"
+        )
+
+    monkeypatch.setattr(service, "get_org_installation_token", token)
+    monkeypatch.setattr(service, "dispatch_workflow", refused)
+
+    with world.db() as db, pytest.raises(service.ImportRefused) as caught:
+        asyncio.run(DISPATCH(db, db.get(ImportRun, run.id)))
+
+    assert "extern-project-analyzer" not in str(caught.value)
+
+
+def test_a_report_racing_the_watch_keeps_the_detailed_report(
+    client, world, github
+):
+    run = _build(
+        world,
+        status="claimed",
+        workflow_run_id="777",
+        workflow_run_attempt="1",
+    )
+    world.claims = {"run_id": "777", "run_attempt": "1"}
+    _age(world, run, 30)
+    github.runs["777"] = _workflow(run, conclusion="failure")
+    github.on_read = lambda: _scan_block(client, run)
+
+    asyncio.run(watch.check_workflows())
+
+    failure = _detail(client, run)["failure"]
+    dead = [e for e in github.journal if "cause" in e["details"]]
+    assert (failure["cause"], dead) == ("scan_blocked", [])
+
+
+def test_a_claimed_run_whose_workflow_run_is_gone_is_left_to_the_timeout(
+    world, github
+):
+    run = _build(world, status="claimed", workflow_run_id="404")
+    _age(world, run, 30)
+
+    asyncio.run(watch.check_workflows())
+
+    assert _status(world, run) == "claimed"
+
+
+def _others(count: int) -> list[dict]:
+    return [
+        {"id": n, "display_title": f"CNP import {n:036d}", "status": "queued"}
+        for n in range(count)
+    ]
+
+
+def test_the_listing_is_read_past_a_full_page(world, github):
+    run = _build(world, status="queued")
+    _age(world, run, 6)
+    github.listing = _others(watch.LIST_PAGE_SIZE) + [_workflow(run)]
+
+    asyncio.run(watch.check_workflows())
+
+    assert (_status(world, run), github.calls) == (
+        "failed",
+        ["token", "list 1", "list 2"],
+    )
+
+
+def test_a_run_missing_from_a_truncated_listing_is_not_called_unstarted(
+    world, github
+):
+    run = _build(world, status="queued")
+    _age(world, run, 11)
+    github.listing = _others(watch.LIST_PAGE_SIZE * watch.MAX_PAGES)
+
+    asyncio.run(watch.check_workflows())
+
+    assert _status(world, run) == "queued"
+
+
+def test_the_watch_journal_names_the_workflow_run_without_its_url(
+    world, github
+):
+    run = _build(world, status="claimed", workflow_run_id="777")
+    _age(world, run, 30)
+    github.runs["777"] = _workflow(run, conclusion="cancelled")
+
+    asyncio.run(watch.check_workflows())
+
+    (event,) = github.journal
+    assert (event["details"]["workflow_run"], "github.com" in str(event)) == (
+        900,
+        False,
+    )
+
+
+def test_the_installation_token_is_reused_between_ticks(world, github):
+    run = _build(world, status="claimed", workflow_run_id="777")
+    _age(world, run, 30)
+    github.runs["777"] = _workflow(run, status="in_progress")
+
+    asyncio.run(watch.check_workflows())
+    asyncio.run(watch.check_workflows())
+
+    assert github.calls.count("token") == 1
+
+
+def test_claimed_runs_are_read_concurrently_a_few_at_a_time(
+    world, github, monkeypatch
+):
+    seen = {"now": 0, "max": 0}
+
+    async def read(token, repo, workflow_run_id):
+        seen["now"] += 1
+        seen["max"] = max(seen["max"], seen["now"])
+        await asyncio.sleep(0.01)
+        seen["now"] -= 1
+        return {"status": "in_progress"}
+
+    monkeypatch.setattr(watch, "get_workflow_run", read)
+    runs = [
+        watch.Watched(f"run-{n}", "claimed", str(n), service._now())
+        for n in range(10)
+    ]
+
+    asyncio.run(watch._workflow_runs(runs))
+
+    assert seen["max"] == watch.CONCURRENT_READS

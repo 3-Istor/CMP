@@ -1500,7 +1500,9 @@ export interface ImportRunReport {
 
 export type ImportFailureCause =
   | "scan_blocked"
+  | "scan_failed"
   | "build_failed"
+  | "build_job_failed"
   | "dockerfile_refused"
   | "plan_mismatch"
   | "fetch_failed"

@@ -714,15 +714,19 @@ async def dispatch_workflow(
         )
 
 
+LIST_PAGE_SIZE = 100
+
+
 async def list_workflow_runs(
     installation_token: str,
     repo_full_name: str,
     workflow: str,
     created_since: datetime,
+    page: int = 1,
 ) -> list[dict]:
     """
     The dispatched runs of *workflow* created since *created_since*, newest
-    first, one page of 100.
+    first, page *page* of 100.
 
     Raises:
         GitHubAppError: On HTTP errors.
@@ -740,7 +744,8 @@ async def list_workflow_runs(
                 params={
                     "event": "workflow_dispatch",
                     "created": f">={since}",
-                    "per_page": 100,
+                    "per_page": LIST_PAGE_SIZE,
+                    "page": page,
                 },
                 timeout=15.0,
             )

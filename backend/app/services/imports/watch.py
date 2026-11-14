@@ -7,13 +7,17 @@ report-failure job could post leaves the run queued or claimed until the
 token the CMP dispatches with, how the workflow run of each active run
 ended, and fails the run a few minutes after its workflow completed.
 
-Rate: nothing while no run is active; then one listing of the workflow's
-recent runs for the runs not claimed yet (the CMP knows them by their
-run-name, "CNP import <run id>"), and one read per claimed run.
+Rate: nothing while no run is active; then the listing of the workflow's
+runs since the oldest unclaimed run (the CMP knows them by their run-name,
+"CNP import <run id>"), page by page up to MAX_PAGES, and one read per
+claimed run, a few at a time. The installation token is reused until close
+to its one-hour expiry.
 """
 
+import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -24,6 +28,7 @@ from app.core.database import SessionLocal
 from app.models.imports import ImportRun, RunStatus
 from app.services import audit
 from app.services.github_service import (
+    LIST_PAGE_SIZE,
     GitHubAppError,
     get_org_installation_token,
     get_workflow_run,
@@ -40,6 +45,12 @@ REPORT_GRACE = timedelta(minutes=2)
 NOT_STARTED_AFTER = timedelta(minutes=10)
 LISTING_MARGIN = timedelta(minutes=5)
 WATCHED = (RunStatus.QUEUED.value, RunStatus.CLAIMED.value)
+MAX_PAGES = 5
+CONCURRENT_READS = 4
+# Installation tokens live one hour.
+TOKEN_REUSE_SECONDS = 50 * 60
+
+_token: dict = {"value": None, "at": 0.0}
 
 
 @dataclass(frozen=True)
@@ -80,12 +91,20 @@ def _by_run_name(listing: list[dict]) -> dict[str, dict]:
 
 
 def verdict(
-    run: Watched, workflow_run: dict | None, now: datetime
+    run: Watched,
+    workflow_run: dict | None,
+    now: datetime,
+    listing_complete: bool = True,
 ) -> tuple[str, str] | None:
-    """(cause, message) when *run* is dead, None while it may still report."""
+    """
+    (cause, message) when *run* is dead, None while it may still report. A
+    run missing from an incomplete listing, or a claimed run GitHub no
+    longer has, is left to the timeout.
+    """
     if workflow_run is None:
         if (
-            run.workflow_run_id is None
+            listing_complete
+            and run.workflow_run_id is None
             and run.status == RunStatus.QUEUED.value
             and now - run.created_at > NOT_STARTED_AFTER
         ):
@@ -106,25 +125,56 @@ def verdict(
     )
 
 
-async def _workflow_runs(runs: list[Watched]) -> dict[str, dict | None]:
-    token = await get_org_installation_token()
-    repo = settings.IMPORT_WORKFLOW_REPO
+async def _installation_token() -> str:
+    if (
+        _token["value"] is None
+        or time.monotonic() - _token["at"] >= TOKEN_REUSE_SECONDS
+    ):
+        _token["value"] = await get_org_installation_token()
+        _token["at"] = time.monotonic()
+    return _token["value"]
+
+
+async def _listing(token: str, since: datetime) -> tuple[list[dict], bool]:
+    """The runs created since *since*, and whether the listing is whole."""
+    runs: list[dict] = []
+    for page in range(1, MAX_PAGES + 1):
+        batch = await list_workflow_runs(
+            token,
+            settings.IMPORT_WORKFLOW_REPO,
+            settings.IMPORT_WORKFLOW_FILE,
+            since,
+            page=page,
+        )
+        runs += batch
+        if len(batch) < LIST_PAGE_SIZE:
+            return runs, True
+    return runs, False
+
+
+async def _workflow_runs(
+    runs: list[Watched],
+) -> tuple[dict[str, dict | None], bool]:
+    token = await _installation_token()
     found: dict[str, dict | None] = {}
+    complete = True
     unclaimed = [r for r in runs if r.workflow_run_id is None]
     if unclaimed:
         since = min(r.created_at for r in unclaimed) - LISTING_MARGIN
-        listing = await list_workflow_runs(
-            token, repo, settings.IMPORT_WORKFLOW_FILE, since
-        )
+        listing, complete = await _listing(token, since)
         named = _by_run_name(listing)
         for run in unclaimed:
             found[run.id] = named.get(run.id)
-    for run in runs:
-        if run.workflow_run_id is not None:
+    gate = asyncio.Semaphore(CONCURRENT_READS)
+
+    async def read(run: Watched) -> None:
+        async with gate:
             found[run.id] = await get_workflow_run(
-                token, repo, run.workflow_run_id
+                token, settings.IMPORT_WORKFLOW_REPO, run.workflow_run_id
             )
-    return found
+
+    await asyncio.gather(*(read(r) for r in runs if r.workflow_run_id))
+    return found, complete
 
 
 def _fail(db, run: ImportRun, status: str, cause: str, message: str) -> bool:
@@ -164,13 +214,14 @@ async def check_workflows() -> set[str]:
     if not runs:
         return set()
     try:
-        workflow_runs = await _workflow_runs(runs)
+        workflow_runs, complete = await _workflow_runs(runs)
     except GitHubAppError as exc:
+        _token["value"] = None
         logger.warning("Import workflow watch skipped: %s", exc)
         return set()
     dead = {}
     for run in runs:
-        found = verdict(run, workflow_runs.get(run.id), now)
+        found = verdict(run, workflow_runs.get(run.id), now, complete)
         if found is not None:
             dead[run.id] = (run, *found)
     if not dead:
@@ -197,7 +248,8 @@ async def check_workflows() -> set[str]:
                     "kind": run.kind,
                     "cause": cause,
                     "conclusion": (workflow_run or {}).get("conclusion"),
-                    "workflow_run_url": url,
+                    "workflow_run": (workflow_run or {}).get("id")
+                    or run.workflow_run_id,
                 },
                 succeeded=False,
                 project=run.source.project_name,

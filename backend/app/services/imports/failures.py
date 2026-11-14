@@ -27,6 +27,7 @@ TOKEN_LIKE = re.compile(
 REASONS = frozenset(
     {
         "scan_blocked",
+        "scan_failed",
         "build_failed",
         "dockerfile_refused",
         "plan_mismatch",
@@ -42,7 +43,9 @@ CONTACT_PLATFORM = "contact_platform"
 
 ACTIONS = {
     "scan_blocked": [FIX_IN_REPO, RETRY],
+    "scan_failed": [RETRY, CONTACT_PLATFORM],
     "build_failed": [FIX_IN_REPO, RETRY],
+    "build_job_failed": [RETRY, CONTACT_PLATFORM],
     "dockerfile_refused": [FIX_IN_REPO, RETRY],
     "plan_mismatch": [REANALYZE],
     "fetch_failed": [RETRY, REANALYZE],
@@ -54,9 +57,12 @@ ACTIONS = {
     "deploy_failed": [RETRY, CONTACT_PLATFORM],
     "internal": [RETRY, CONTACT_PLATFORM],
 }
+# A stage without a reason: the failure happened outside the worker's own
+# checks (scanner crash, runner or tool install of the build job), or comes
+# from a workflow older than CNP-268.
 STAGE_CAUSES = {
-    "scan": "scan_blocked",
-    "build": "build_failed",
+    "scan": "scan_failed",
+    "build": "build_job_failed",
     "fetch": "fetch_failed",
     "analyze": "analysis_failed",
     "timeout": "timeout",
@@ -76,9 +82,28 @@ def _workflow_url() -> re.Pattern:
     )
 
 
+# Workspaces of GitHub-hosted and of the platform's self-hosted runners.
+RUNNER_PATH = re.compile(
+    r"(?:/home/runner/_?work|/tmp/cnp-[\w.-]*-runners)(?:/[^\s/:'\"]+)*"
+    r"/([^\s/:'\"]+)"
+)
+
+
+def _workflow_repo() -> re.Pattern:
+    repo = re.escape(settings.IMPORT_WORKFLOW_REPO)
+    return re.compile(rf"(?<![\w./-]){repo}(?:\.git)?(?![\w-])", re.I)
+
+
 def public_text(text: str) -> str:
-    """*text* without token-like strings nor a link to the workflow's runs."""
-    return _workflow_url().sub("", TOKEN_LIKE.sub("[redacted]", text)).strip()
+    """
+    *text* without token-like strings, nor anything that names the
+    workflow's repository or the runner's workspace: its runs, its name,
+    the paths of the job.
+    """
+    text = TOKEN_LIKE.sub("[redacted]", text)
+    text = _workflow_url().sub("", text)
+    text = _workflow_repo().sub("the import workflow", text)
+    return RUNNER_PATH.sub(r"\1", text).strip()
 
 
 def workflow_run_url(workflow_run_id: str | int | None) -> str | None:
@@ -105,8 +130,9 @@ def clean_details(details: dict | None, known_apps: set[str]) -> dict:
     if not isinstance(details, dict):
         return {}
     kept: dict = {}
-    if details.get("reason") in REASONS:
-        kept["reason"] = details["reason"]
+    reason = details.get("reason")
+    if isinstance(reason, str) and reason in REASONS:
+        kept["reason"] = reason
     apps = details.get("apps")
     if isinstance(apps, list):
         named = [
@@ -117,8 +143,12 @@ def clean_details(details: dict | None, known_apps: set[str]) -> dict:
         if named:
             kept["apps"] = named[:APPS_MAX]
     vulnerabilities = []
-    for item in details.get("vulnerabilities") or []:
-        if not isinstance(item, dict) or item.get("app") not in known_apps:
+    items = details.get("vulnerabilities")
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        app = item.get("app")
+        if not isinstance(app, str) or app not in known_apps:
             continue
         fields = {
             key: _text(item.get(key))
@@ -145,11 +175,13 @@ def cause(run: ImportRun) -> str:
         return failure["cause"]
     if run.status == RunStatus.CANCELLED.value:
         return "workflow_stopped"
+    # The lead group's reason first: a build failure in one group is shown
+    # before a scan block in another, whose vulnerabilities stay listed.
     reason = failure.get("reason")
-    if failure.get("vulnerabilities"):
-        return "scan_blocked"
     if reason in REASONS:
         return REASON_CAUSES.get(reason, reason)
+    if failure.get("vulnerabilities"):
+        return "scan_blocked"
     stage = report.get("stage")
     if stage is None and report.get("error") == "expired":
         return "timeout"
