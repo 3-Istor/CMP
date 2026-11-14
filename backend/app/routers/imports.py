@@ -317,6 +317,9 @@ class PublishCall(WorkerCall):
 class FailCall(WorkerCall):
     stage: str = Field(max_length=32)
     message: str = Field(default="", max_length=20000)
+    # Checked field by field by failures.clean_details: a malformed detail
+    # is dropped, it never costs the failure report.
+    details: dict[str, Any] | None = None
 
 
 async def worker_claims(
@@ -425,7 +428,14 @@ async def worker_fail(
     )
     run = _run_for(db, run_id, body.attempt_id, claims)
     try:
-        service.receive_failure(db, run, body.stage, body.message)
+        service.receive_failure(
+            db,
+            run,
+            body.stage,
+            body.message,
+            body.details,
+            str(claims["run_id"]),
+        )
     except ImportRefused as exc:
         raise _refused(exc) from exc
     return Response(status_code=204)

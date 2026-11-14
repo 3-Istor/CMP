@@ -312,6 +312,10 @@ class Settings(BaseSettings):
     IMPORT_WEBHOOK_MAX_BODY_BYTES: int = 1024 * 1024
     # Branch heads compared with the last build of auto-rebuilt imports.
     IMPORT_RECONCILE_INTERVAL_SECONDS: int = 600
+    # How often active runs are checked against their GitHub workflow run:
+    # one that ended without reporting fails a few minutes later instead of
+    # at the timeout above. Costs no API call while no run is active.
+    IMPORT_WORKFLOW_WATCH_SECONDS: int = 60
 
     # GitHub user OAuth (account linking). The client of the CNP-Portal app.
     GITHUB_OAUTH_CLIENT_ID: str = ""

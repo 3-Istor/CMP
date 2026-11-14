@@ -43,7 +43,7 @@ from app.models.imports import (
 from app.services import audit, keycloak_service, notifications
 from app.services.authz import assert_project_role
 from app.services.github_service import GITHUB_API_BASE, GitHubAppError
-from app.services.imports import access, service
+from app.services.imports import access, service, watch
 from app.services.imports.service import ImportRefused
 
 logger = logging.getLogger(__name__)
@@ -590,10 +590,26 @@ async def reconcile_once() -> None:
 
 
 async def reconcile_loop() -> None:
-    """First pass at startup: the CMP wakes up after a night asleep."""
+    """
+    First pass at startup: the CMP wakes up after a night asleep. The
+    workflow watch runs every tick, the reconcile pass every
+    IMPORT_RECONCILE_INTERVAL_SECONDS.
+    """
+    last_reconcile: float | None = None
     while True:
+        now = time.monotonic()
+        if (
+            last_reconcile is None
+            or now - last_reconcile
+            >= settings.IMPORT_RECONCILE_INTERVAL_SECONDS
+        ):
+            last_reconcile = now
+            try:
+                await reconcile_once()
+            except Exception:  # pylint: disable=broad-exception-caught
+                logger.exception("Import reconcile failed")
         try:
-            await reconcile_once()
+            await watch.check_workflows()
         except Exception:  # pylint: disable=broad-exception-caught
-            logger.exception("Import reconcile failed")
-        await asyncio.sleep(settings.IMPORT_RECONCILE_INTERVAL_SECONDS)
+            logger.exception("Import workflow watch failed")
+        await asyncio.sleep(settings.IMPORT_WORKFLOW_WATCH_SECONDS)
