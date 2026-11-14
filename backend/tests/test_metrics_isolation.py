@@ -1,7 +1,7 @@
 import base64
 import json
 from unittest import mock
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import pytest
 
@@ -25,6 +25,16 @@ def test_each_project_is_filtered_to_its_exact_namespaces():
 
     assert prefix.endswith(
         'extra_filters[]={namespace=~"shop-system|shop-web"}'
+        '&extra_filters={namespace=~"shop-system|shop-web"}'
+    )
+
+
+def test_both_filter_arg_spellings_are_pinned_so_a_client_cannot_add_one():
+    query = parse_qs(urlsplit(users()["project-shop"]["url_prefix"]).query)
+
+    assert (query["extra_filters[]"], query["extra_filters"]) == (
+        ['{namespace=~"shop-system|shop-web"}'],
+        ['{namespace=~"shop-system|shop-web"}'],
     )
 
 
