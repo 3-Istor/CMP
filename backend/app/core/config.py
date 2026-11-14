@@ -204,6 +204,26 @@ class Settings(BaseSettings):
     # Longest silence a project member can set from the portal.
     OBS_SILENCE_MAX_HOURS: int = 7 * 24
 
+    # CNP-185 wave V4 and D7: the stores project users read through vmauth.
+    # Each one is optional: with all three empty, vmauth's config is the
+    # metrics-only one sent to the legacy vmselect, byte for byte. Expected:
+    # http://vmsingle-cnp.observability.svc:8428,
+    # http://vlogs-cnp.observability.svc:9428,
+    # http://vtraces-cnp.observability.svc:10428.
+    OBS_VMSINGLE_URL: str = ""
+    OBS_VLOGS_URL: str = ""
+    OBS_VTRACES_URL: str = ""
+    # Q9: one VictoriaTraces tenant per project, routed by the OpenTelemetry
+    # gateway from a table the CMP writes. Off until the gateway exists.
+    OBS_TRACES_ROUTING_ENABLED: bool = False
+    OBS_COLLECTOR_NAMESPACE: str = "observability"
+    OBS_COLLECTOR_DEPLOYMENT: str = "otelcol-gateway"
+    OBS_COLLECTOR_ROUTING_CONFIGMAP: str = "otelcol-gateway-routing"
+    OBS_VTRACES_INSERT_URL: str = (
+        "http://vtraces-cnp.observability.svc:10428"
+        "/insert/opentelemetry/v1/traces"
+    )
+
     # FinOps: "simulated" keeps the demo engine, "real" reads cost_line_items.
     FINOPS_PROVIDER: str = "simulated"
     FINOPS_INGEST_ENABLED: bool = False
