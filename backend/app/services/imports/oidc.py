@@ -7,11 +7,14 @@ started by workflow_dispatch, on a runner environment the CMP allows. The
 repository is also pinned by its numeric ids, which a deleted and recreated
 repository of the same name does not keep.
 
-Signing keys are cached; a token with an unknown key id refetches the JWKS
-at most once per JWKS_REFETCH_SECONDS, so forged key ids cannot make the CMP
-hammer GitHub.
+Signing keys are cached for JWKS_TTL_SECONDS. A token with an unknown key
+id, or an expired cache, refetches the JWKS at most once per
+JWKS_REFETCH_SECONDS, so forged key ids cannot make the CMP hammer GitHub. A
+refetch that fails keeps the cached keys: an egress blip must not refuse the
+workflow's legitimate calls.
 """
 
+import logging
 import threading
 import time
 from functools import lru_cache
@@ -24,9 +27,13 @@ from app.core.config import settings
 ISSUER = "https://token.actions.githubusercontent.com"
 JWKS_URL = f"{ISSUER}/.well-known/jwks"
 JWKS_REFETCH_SECONDS = 60.0
+JWKS_TTL_SECONDS = 3600.0
+
+logger = logging.getLogger(__name__)
 
 _keys: dict[str, Any] = {}
 _fetched_at: float | None = None
+_loaded_at: float | None = None
 _keys_lock = threading.Lock()
 
 
@@ -42,16 +49,28 @@ def _jwks_client() -> jwt.PyJWKClient:
 
 
 def _refetch_keys() -> None:
-    global _fetched_at  # pylint: disable=global-statement
+    global _fetched_at, _loaded_at  # pylint: disable=global-statement
     _fetched_at = time.monotonic()
     try:
         jwk_set = _jwks_client().get_jwk_set(refresh=True)
     except jwt.PyJWTError as exc:
-        raise WorkerTokenError("JWKS unavailable") from exc
+        if not _keys:
+            raise WorkerTokenError("JWKS unavailable") from exc
+        logger.warning("GitHub JWKS refresh failed, cached keys kept: %s", exc)
+        return
     _keys.clear()
     _keys.update(
         {k.key_id: k.key for k in jwk_set.keys if k.key_id is not None}
     )
+    _loaded_at = _fetched_at
+
+
+def _needs_refetch(kid: str) -> bool:
+    now = time.monotonic()
+    if _fetched_at is not None and now - _fetched_at < JWKS_REFETCH_SECONDS:
+        return False
+    expired = _loaded_at is None or now - _loaded_at >= JWKS_TTL_SECONDS
+    return kid not in _keys or expired
 
 
 def _signing_key(token: str):
@@ -62,10 +81,7 @@ def _signing_key(token: str):
     if not isinstance(kid, str) or not kid:
         raise WorkerTokenError("kid")
     with _keys_lock:
-        if kid not in _keys and (
-            _fetched_at is None
-            or time.monotonic() - _fetched_at >= JWKS_REFETCH_SECONDS
-        ):
+        if _needs_refetch(kid):
             _refetch_keys()
         key = _keys.get(kid)
     if key is None:
