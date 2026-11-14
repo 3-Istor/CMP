@@ -451,7 +451,7 @@ async def auto_rebuild(  # pylint: disable=too-many-return-statements
         source = db.get(ImportSource, source_id)
         if source is None or not source.auto_rebuild:
             return "skipped"
-        service.expire_stale(db, source.id)
+        service.expire_source(db, source)
         if service._active_run(source) is not None:  # pylint: disable=W0212
             # The reconciler builds the head once this run is over.
             return "busy"
@@ -573,8 +573,8 @@ async def reconcile_once() -> None:
     if _reconcile_lock.locked():
         return
     async with _reconcile_lock:
+        service.expire_stale()
         with SessionLocal() as db:
-            service.expire_stale(db)
             ids = [
                 s.id
                 for s in db.query(ImportSource)

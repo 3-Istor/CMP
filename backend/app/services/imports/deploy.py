@@ -30,6 +30,7 @@ from app.services.imports.generate import AppSpec, PlanError
 from app.services.imports.registry_commit import commit_record_change
 from app.services.imports.service import (
     ImportRefused,
+    _deploying,
     _now,
     _refuse_if_busy,
     _spawn,
@@ -207,6 +208,7 @@ async def deploy(run_id: str) -> None:
         run = db.get(ImportRun, run_id)
         if run is None or run.status != RunStatus.RUNNING.value:
             return
+        _deploying.add(run_id)
         try:
             await _deploy(db, run)
         except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -223,6 +225,8 @@ async def deploy(run_id: str) -> None:
                 _refuse_services(run, exc)
             db.commit()
             _system_event(run, "import.deploy", False, error=redact(str(exc)))
+        finally:
+            _deploying.discard(run_id)
 
 
 def _refuse_services(run: ImportRun, exc: PlanError) -> None:

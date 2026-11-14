@@ -89,6 +89,7 @@ def world(monkeypatch):
         return list(world.repos)
 
     monkeypatch.setattr(access, "importable_repositories", importable)
+    monkeypatch.setattr(service, "SessionLocal", world.Session)
     monkeypatch.setattr(service, "_head", head)
     monkeypatch.setattr(service, "_dispatch", dispatch)
     monkeypatch.setattr(service, "_repo_token", repo_token)
@@ -905,9 +906,9 @@ def _branch(world, source) -> str:
         return db.get(ImportSource, source.id).branch
 
 
-def _stuck_since(minutes_past_timeout: int) -> datetime:
+def _stuck_since(status: str, minutes_past_timeout: int) -> datetime:
     return service._now() - timedelta(
-        minutes=settings.IMPORT_RUN_TIMEOUT_MINUTES + minutes_past_timeout
+        minutes=service._timeouts()[status] + minutes_past_timeout
     )
 
 
@@ -1030,7 +1031,7 @@ def test_a_run_without_news_past_the_timeout_no_longer_blocks_an_analysis(
         source,
         kind="build",
         status=status,
-        updated_at=_stuck_since(1),
+        updated_at=_stuck_since(status, 1),
     )
 
     response = reanalyze()
@@ -1041,13 +1042,94 @@ def test_a_run_without_news_past_the_timeout_no_longer_blocks_an_analysis(
         assert (failed.status, failed.report["stage"]) == ("failed", "timeout")
 
 
-def test_a_run_within_the_timeout_still_blocks_an_analysis(world, reanalyze):
+@pytest.mark.parametrize("status", ["queued", "claimed", "running"])
+def test_a_run_within_the_timeout_still_blocks_an_analysis(
+    world, reanalyze, status
+):
     source = _source(world)
-    _run(world, source, status="claimed", updated_at=_stuck_since(-1))
+    _run(world, source, status=status, updated_at=_stuck_since(status, -1))
 
     response = reanalyze()
 
     assert response.status_code == 409
+
+
+def test_a_claimed_build_outlives_the_queue_timeout(world, reanalyze):
+    source = _source(world)
+    _run(
+        world,
+        source,
+        kind="build",
+        status="claimed",
+        updated_at=_stuck_since("queued", 1),
+    )
+
+    response = reanalyze()
+
+    assert response.status_code == 409
+
+
+def test_a_run_whose_deploy_runs_in_this_process_is_never_expired(
+    world, reanalyze, monkeypatch
+):
+    source = _source(world)
+    deploying = _run(
+        world,
+        source,
+        kind="build",
+        status="running",
+        updated_at=_stuck_since("running", 1),
+    )
+    monkeypatch.setattr(service, "_deploying", {deploying.id})
+
+    response = reanalyze()
+
+    assert response.status_code == 409
+
+
+def _rebuild_user(world, source) -> str | None:
+    with world.db() as db:
+        return db.get(ImportSource, source.id).rebuild_user
+
+
+def test_a_refused_rebuild_leaves_the_rebuild_user_unchanged(client, world):
+    source = _applied(world)
+    with world.db() as db:
+        db.get(ImportSource, source.id).rebuild_user = "bob"
+        db.commit()
+    _run(world, source, kind="build", status="claimed")
+
+    response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
+
+    assert (response.status_code, _rebuild_user(world, source)) == (409, "bob")
+
+
+def test_a_refused_apply_leaves_the_rebuild_user_unchanged(client, world):
+    source = _source(world, rebuild_user="bob")
+    reviewed = _run(world, source, status="succeeded", plan=PLAN)
+    _run(world, source, status="succeeded", plan=PLAN)
+
+    response = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={reviewed.id}",
+        json={},
+    )
+
+    assert (response.status_code, _rebuild_user(world, source)) == (409, "bob")
+
+
+def test_an_applied_import_rebuilds_as_the_admin_who_applied_it(client, world):
+    source = _source(world, rebuild_user="bob")
+    analysis = _run(world, source, status="succeeded", plan=PLAN)
+
+    response = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={analysis.id}",
+        json={},
+    )
+
+    assert (response.status_code, _rebuild_user(world, source)) == (
+        202,
+        "alice",
+    )
 
 
 def test_a_stuck_run_no_longer_blocks_a_rebuild(client, world):
@@ -1057,7 +1139,7 @@ def test_a_stuck_run_no_longer_blocks_a_rebuild(client, world):
         source,
         kind="build",
         status="running",
-        updated_at=_stuck_since(1),
+        updated_at=_stuck_since("running", 1),
     )
 
     response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")

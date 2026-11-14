@@ -83,6 +83,7 @@ def world(monkeypatch):
     Session = sessionmaker(bind=engine, expire_on_commit=False)
     cluster = Cluster()
     monkeypatch.setattr(deploy, "SessionLocal", Session)
+    monkeypatch.setattr(service, "SessionLocal", Session)
     monkeypatch.setattr(deploy.vault_client, "read_kv", cluster.read_kv)
     monkeypatch.setattr(deploy.vault_client, "write_kv", cluster.write_kv)
     monkeypatch.setattr(deploy, "commit_record_change", cluster.commit)

@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.imports import (
     TERMINAL_STATUSES,
@@ -62,6 +63,8 @@ TOKEN_LIKE = re.compile(
 )
 
 _tasks: set[asyncio.Task] = set()
+# Runs whose deploy runs in this process: never failed for being slow.
+_deploying: set[str] = set()
 
 
 class ImportRefused(Exception):
@@ -194,62 +197,91 @@ def get_run(db: Session, project: str, run_id: str) -> ImportRun:
     return run
 
 
-def expire_stale(db: Session, source_id: str | None = None) -> None:
+def _timeouts() -> dict[str, int]:
+    """Minutes without progress after which a run of each status fails."""
+    return {
+        RunStatus.QUEUED.value: settings.IMPORT_RUN_TIMEOUT_MINUTES,
+        # No heartbeat between claim and publish: a build waiting for
+        # runners can legitimately take hours.
+        RunStatus.CLAIMED.value: settings.IMPORT_BUILD_TIMEOUT_MINUTES,
+        RunStatus.RUNNING.value: settings.IMPORT_RUN_TIMEOUT_MINUTES,
+    }
+
+
+def expire_stale(
+    source_id: str | None = None, project: str | None = None
+) -> set[str]:
     """
     Fail the runs that hold an import's single active slot for nothing: a
-    run the workflow left without news for IMPORT_RUN_TIMEOUT_MINUTES (the
-    workflow died, a deploy the CMP lost), or a queued or claimed run past
-    its expiry. Only *source_id*'s runs when given.
+    run without progress for its status's timeout (the workflow died, a
+    deploy the CMP lost), or a queued or claimed run past its expiry. Only
+    *source_id*'s or *project*'s runs when given. Its own session: the
+    caller's pending changes are never committed with it. Returns the ids
+    of the runs failed.
     """
     now = _now()
-    stuck = now - timedelta(minutes=settings.IMPORT_RUN_TIMEOUT_MINUTES)
     waiting = [RunStatus.QUEUED.value, RunStatus.CLAIMED.value]
-    query = db.query(ImportRun).filter(
-        or_(
-            and_(ImportRun.status.in_(waiting), ImportRun.expires_at < now),
-            and_(
-                ImportRun.status.in_([*waiting, RunStatus.RUNNING.value]),
-                ImportRun.updated_at < stuck,
-            ),
+    stuck = [
+        and_(
+            ImportRun.status == status,
+            ImportRun.updated_at < now - timedelta(minutes=minutes),
         )
-    )
-    if source_id is not None:
-        query = query.filter(ImportRun.source_id == source_id)
-    expired = []
-    for run in query.all():
-        timed_out = run.expires_at >= now
-        reason = (
-            f"Timed out: no progress for "
-            f"{settings.IMPORT_RUN_TIMEOUT_MINUTES} minutes while {run.status}"
-            if timed_out
-            else "expired"
-        )
-        result = db.execute(
-            update(ImportRun)
-            .where(ImportRun.id == run.id, ImportRun.status == run.status)
-            .values(
-                status=RunStatus.FAILED.value,
-                updated_at=now,
-                report={
-                    **(run.report or {}),
-                    "stage": "timeout" if timed_out else "expired",
-                    "error": reason,
-                },
+        for status, minutes in _timeouts().items()
+    ]
+    expired: list[tuple[ImportRun, str]] = []
+    with SessionLocal() as db:
+        query = db.query(ImportRun).filter(
+            or_(
+                and_(
+                    ImportRun.status.in_(waiting), ImportRun.expires_at < now
+                ),
+                *stuck,
             )
-            .execution_options(synchronize_session=False)
         )
-        if result.rowcount == 1:
-            expired.append((run, run.status))
-    db.commit()
-    for run, status in expired:
-        db.refresh(run)
-        audit.record_system_event(
-            "import.expire",
-            target=run.source.repo_full_name,
-            details={"run": run.id, "kind": run.kind, "was": status},
-            succeeded=False,
-            project=run.source.project_name,
-        )
+        if source_id is not None:
+            query = query.filter(ImportRun.source_id == source_id)
+        if project is not None:
+            query = query.join(ImportSource).filter(
+                ImportSource.project_name == project
+            )
+        for run in query.all():
+            if run.id in _deploying:
+                continue
+            timed_out = run.expires_at >= now
+            reason = (
+                f"Timed out: no progress for {_timeouts()[run.status]} "
+                f"minutes while {run.status}"
+                if timed_out
+                else "expired"
+            )
+            result = db.execute(
+                update(ImportRun)
+                .where(ImportRun.id == run.id, ImportRun.status == run.status)
+                .values(
+                    status=RunStatus.FAILED.value,
+                    updated_at=now,
+                    report={
+                        **(run.report or {}),
+                        "stage": "timeout" if timed_out else "expired",
+                        "error": reason,
+                    },
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount == 1:
+                expired.append((run, run.status))
+        if not expired:
+            return set()
+        db.commit()
+        for run, status in expired:
+            audit.record_system_event(
+                "import.expire",
+                target=run.source.repo_full_name,
+                details={"run": run.id, "kind": run.kind, "was": status},
+                succeeded=False,
+                project=run.source.project_name,
+            )
+    return {run.id for run, _ in expired}
 
 
 def _active_run(source: ImportSource) -> ImportRun | None:
@@ -263,8 +295,16 @@ def _active_run(source: ImportSource) -> ImportRun | None:
     )
 
 
+def expire_source(db: Session, source: ImportSource) -> None:
+    """expire_stale for one import, seen at once through *db*."""
+    expired = expire_stale(source.id)
+    for run in source.runs:
+        if run.id in expired:
+            db.refresh(run)
+
+
 def _refuse_if_busy(db: Session, source: ImportSource) -> None:
-    expire_stale(db, source.id)
+    expire_source(db, source)
     active = _active_run(source)
     if active is not None:
         raise ImportRefused(
@@ -403,15 +443,14 @@ async def start_analysis(  # pylint: disable=too-many-arguments
         )
     # The new branch is committed with the run that analyses it, by
     # _new_run, or not at all.
-    with db.no_autoflush:
-        source.branch = branch
-        source.repo_full_name = repo.full_name
-        source.installation_id = repo.installation_id
-        try:
-            sha = await _head(source)
-        except ImportRefused:
-            db.rollback()
-            raise
+    source.branch = branch
+    source.repo_full_name = repo.full_name
+    source.installation_id = repo.installation_id
+    try:
+        sha = await _head(source)
+    except ImportRefused:
+        db.rollback()
+        raise
     run = _new_run(db, source, RunKind.ANALYZE, sha, user)
     try:
         await _dispatch(db, run)
@@ -502,6 +541,7 @@ async def approve(  # pylint: disable=too-many-arguments
     source: ImportSource,
     edits: dict,
     run_id: str,
+    user_sub: str | None = None,
 ) -> ImportRun:
     """
     Validate the edited plan and start the build. *run_id* is the analysis
@@ -560,6 +600,9 @@ async def approve(  # pylint: disable=too-many-arguments
     if problems:
         raise ImportRefused("; ".join(sorted(set(problems))), 422)
 
+    # The admin who applies is who later rebuilds run as; stored with the
+    # run, never by a refused request.
+    set_rebuild_user(source, user, user_sub)
     # The run first: a request that loses the race to start it must not
     # leave its specs behind for the winner's build.
     run = _new_run(
@@ -630,11 +673,13 @@ async def rebuild(
     source: ImportSource,
     apps: set[str] | None = None,
     sha: str | None = None,
+    confirmed_by_sub: str | None = None,
 ) -> ImportRun:
     """
     Build the branch head, *sha* when the CMP resolved it already, never a
     commit a caller named. *apps* limits the build to those services; a
-    service never built is always part of it.
+    service never built is always part of it. With *confirmed_by_sub*, the
+    admin who confirmed it is who later rebuilds run as.
     """
     _refuse_if_busy(db, source)
     build = _last_run(source, RunKind.BUILD)
@@ -650,6 +695,8 @@ async def rebuild(
         }
         plan["apps"] = sorted(apps | unbuilt)
     source.rebuild_pending = None
+    if confirmed_by_sub is not None:
+        set_rebuild_user(source, user, confirmed_by_sub)
     run = _new_run(db, source, RunKind.BUILD, sha, user, plan=plan)
     await _dispatch(db, run)
     return run

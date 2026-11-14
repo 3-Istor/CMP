@@ -498,7 +498,7 @@ def test_a_reconcile_pass_fails_runs_stuck_past_the_timeout(world, identity):
         source,
         status="claimed",
         updated_at=service._now()
-        - timedelta(minutes=settings.IMPORT_RUN_TIMEOUT_MINUTES + 1),
+        - timedelta(minutes=settings.IMPORT_BUILD_TIMEOUT_MINUTES + 1),
     )
 
     asyncio.run(rebuilds.reconcile_once())

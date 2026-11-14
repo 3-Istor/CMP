@@ -33,6 +33,7 @@ function messageOf(err: unknown): string {
   try {
     const detail = JSON.parse(raw)?.detail;
     if (typeof detail === "string") return detail;
+    if (typeof detail?.message === "string") return detail.message;
   } catch {
     // not JSON: the raw message is the best we have
   }
