@@ -3584,11 +3584,11 @@
         },
         "crash_loop": {
           "title": "L'app plante au démarrage",
-          "explain": "Le conteneur démarre puis s'arrête, encore et encore. L'extrait de journal ci-dessous montre ses derniers mots : un réglage manquant, une dépendance injoignable ou une erreur de démarrage dans le code."
+          "explain": "Le conteneur démarre puis s'arrête, encore et encore. L'extrait de journal ci-dessous montre ses derniers mots : un réglage manquant, une dépendance injoignable ou une erreur de démarrage."
         },
         "probe_failed": {
           "title": "L'app n'a jamais répondu à son contrôle de santé",
-          "explain": "Le conteneur tourne, mais le contrôle de santé du plan échoue. Corrigez le chemin ou le port dans le dépôt, ou relancez l'analyse pour changer le contrôle de santé dans le plan."
+          "explain": "Le conteneur tourne, mais son contrôle de santé échoue. Pour une app du dépôt, corrigez le chemin ou le port sur lequel elle répond, ou relancez l'analyse pour changer le contrôle de santé dans le plan."
         },
         "unschedulable": {
           "title": "Pas assez de ressources pour démarrer l'app",

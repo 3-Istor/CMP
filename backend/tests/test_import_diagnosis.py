@@ -23,12 +23,19 @@ def _pod(name="web-1", phase="Running", containers=(), conditions=()):
     }
 
 
-def _event(reason, message, when="2026-11-14T10:00:00Z", kind="Warning"):
+def _event(
+    reason,
+    message,
+    when="2026-11-14T10:00:00Z",
+    kind="Warning",
+    pod="web-1",
+):
     return {
         "type": kind,
         "reason": reason,
         "message": message,
         "lastTimestamp": when,
+        "involvedObject": {"kind": "Pod", "name": pod},
     }
 
 
@@ -264,16 +271,16 @@ def test_a_crash_loop_diagnosis_carries_the_crashed_container_log(
     )
     reads = []
 
-    def get(path, params=None):
+    def get(path, params=None, cloud=None):
         if path.endswith("/applications/epitweet-neo4j-app"):
             return HEALTHY_APP
         if path.endswith("/pods"):
             return {"items": [pod]}
         return {"items": []}
 
-    def get_text(path, params=None):
+    def get_text(path, params=None, cloud=None):
         reads.append((path, params))
-        return "Invalid value for NEO4J_AUTH\n"
+        return "Invalid value for NEO4J_AUTH=neo4j/hunter2hunter2\n"
 
     monkeypatch.setattr(diagnosis.kube_client, "kube_get", get)
     monkeypatch.setattr(diagnosis.kube_client, "kube_get_text", get_text)
@@ -281,7 +288,7 @@ def test_a_crash_loop_diagnosis_carries_the_crashed_container_log(
     found = asyncio.run(diagnosis.diagnose("epitweet", "neo4j"))
 
     assert found["cause"] == "crash_loop"
-    assert found["log_excerpt"] == "Invalid value for NEO4J_AUTH"
+    assert found["log_excerpt"] == "Invalid value for NEO4J_AUTH=[redacted]"
     assert reads[0][0] == (
         "/api/v1/namespaces/epitweet-neo4j/pods/neo4j-0/log"
     )
@@ -289,7 +296,7 @@ def test_a_crash_loop_diagnosis_carries_the_crashed_container_log(
 
 
 def test_a_cluster_that_cannot_be_read_still_gives_a_timeout(monkeypatch):
-    def down(path, params=None):
+    def down(path, params=None, cloud=None):
         raise diagnosis.kube_client.KubeUnavailableError("down")
 
     monkeypatch.setattr(diagnosis.kube_client, "kube_get", down)
@@ -297,3 +304,123 @@ def test_a_cluster_that_cannot_be_read_still_gives_a_timeout(monkeypatch):
     found = asyncio.run(diagnosis.diagnose("epitweet", "neo4j"))
 
     assert found["cause"] == "deploy_timeout"
+
+
+def _crash_looping(restarts=4):
+    return _pod(
+        containers=[
+            {
+                "name": "app",
+                "ready": False,
+                "restartCount": restarts,
+                "state": {"waiting": {"reason": "CrashLoopBackOff"}},
+                "lastState": {
+                    "terminated": {"exitCode": 137, "reason": "Error"}
+                },
+            }
+        ]
+    )
+
+
+def test_a_container_its_liveness_probe_kills_is_a_probe_failure():
+    events = [
+        _event("Unhealthy", "Liveness probe failed: Get /health: 404"),
+    ]
+
+    found = diagnosis.classify(HEALTHY_APP, [_crash_looping()], events)
+
+    assert found["cause"] == "probe_failed"
+    assert found["message"] == "Liveness probe failed: Get /health: 404"
+    assert found["pod"] == "web-1"
+
+
+def test_a_container_that_crashed_once_then_runs_unready_is_a_probe_failure():
+    pod = _pod(
+        containers=[
+            {
+                "name": "app",
+                "ready": False,
+                "restartCount": 1,
+                "state": {"running": {}},
+                "lastState": {"terminated": {"exitCode": 1}},
+            }
+        ]
+    )
+    events = [_event("Unhealthy", "Readiness probe failed: 404")]
+
+    found = diagnosis.classify(HEALTHY_APP, [pod], events)
+
+    assert found["cause"] == "probe_failed"
+
+
+def test_events_of_an_earlier_version_are_ignored():
+    pod = _pod(containers=[{"name": "app", "ready": False, "state": {}}])
+    events = [
+        _event("Unhealthy", "Readiness probe failed", "2026-11-14T09:00:00Z")
+    ]
+
+    found = diagnosis.classify(
+        HEALTHY_APP, [pod], events, since="2026-11-14T09:30:00Z"
+    )
+
+    assert found["cause"] == "deploy_timeout"
+
+
+def test_probe_events_of_a_pod_already_gone_are_ignored():
+    pod = _pod(containers=[{"name": "app", "ready": False, "state": {}}])
+    events = [_event("Unhealthy", "Readiness probe failed", pod="web-old")]
+
+    found = diagnosis.classify(HEALTHY_APP, [pod], events)
+
+    assert found["cause"] == "deploy_timeout"
+
+
+def test_a_healthy_app_on_its_old_version_says_the_rollout_is_missing():
+    application = {
+        "status": {
+            "sync": {"status": "OutOfSync"},
+            "health": {"status": "Healthy"},
+        }
+    }
+
+    found = diagnosis.classify(application, [], [])
+
+    assert found["message"] == (
+        "Argo CD has not rolled out the new version yet (sync: OutOfSync)"
+    )
+
+
+def test_credentials_in_a_url_are_hidden():
+    application = {
+        "status": {
+            "conditions": [
+                {
+                    "type": "SyncError",
+                    "message": "dial mongodb://admin:s3cr3t@mongodb:27017 "
+                    "failed",
+                }
+            ]
+        }
+    }
+
+    found = diagnosis.classify(application, [], [])
+
+    assert "s3cr3t" not in found["message"]
+
+
+def test_the_pods_are_read_on_the_project_cluster(monkeypatch):
+    clouds = {}
+
+    def get(path, params=None, cloud=None):
+        clouds[path.rsplit("/", 1)[1]] = cloud
+        return HEALTHY_APP if "applications" in path else {"items": []}
+
+    monkeypatch.setattr(diagnosis.kube_client, "kube_get", get)
+
+    asyncio.run(
+        diagnosis.diagnose("epitweet", "neo4j", diagnosis.TargetCloud.AWS)
+    )
+
+    assert clouds["epitweet-neo4j-app"] is None
+    assert clouds["pods"] == diagnosis.TargetCloud.AWS
+    assert clouds["events"] == diagnosis.TargetCloud.AWS

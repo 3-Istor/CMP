@@ -50,6 +50,7 @@ class Cluster:
         self.recovering: dict[str, int] = {}
         self.polls: list[str] = []
         self.diagnoses: dict[str, dict] = {}
+        self.refused: set[str] = set()
 
     async def read_kv(self, mount, path):
         return dict(self.vault.get((mount, path), {}))
@@ -83,9 +84,11 @@ class Cluster:
         if self.recovering.get(name, 0) > 0:
             self.recovering[name] -= 1
             return "pending"
+        if name in self.refused:
+            return "refused"
         return "pending" if name in self.unhealthy else "synced"
 
-    async def diagnose(self, project, app):
+    async def diagnose(self, project, app, cloud=None, since=""):
         return dict(
             self.diagnoses.get(
                 app, {"cause": "deploy_timeout", "message": "Still Degraded"}
@@ -335,8 +338,11 @@ def test_the_public_app_is_committed_last(world):
     assert "frontend" in cluster.committed(-1)
 
 
-def test_a_wave_is_committed_once_the_previous_one_is_healthy(world):
+def test_a_wave_is_committed_once_the_previous_one_is_healthy(
+    world, monkeypatch
+):
     Session, cluster = world
+    monkeypatch.setattr(settings, "IMPORT_ARGO_TIMEOUT_SECONDS", 60)
     cluster.recovering["epitweet-neo4j-app"] = 3
 
     _deploy(_published_run(Session))
@@ -482,6 +488,85 @@ def test_a_public_app_without_links_still_waits_for_the_services():
     waves = deploy.deploy_waves([web, api])
 
     assert [[s.name for s in wave] for wave in waves] == [["api"], ["web"]]
+
+
+def test_an_app_healthy_by_the_end_of_the_deploy_does_not_fail_the_run(
+    world,
+):
+    Session, cluster = world
+    cluster.recovering["epitweet-neo4j-app"] = 1
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+        neo4j = db.query(ImportService).filter_by(app_name="neo4j").one()
+    assert run.status == "succeeded"
+    assert neo4j.status == "running"
+    assert run.report["states"]["neo4j"] == "synced"
+
+
+def test_a_chart_argo_refuses_to_render_does_not_wait_for_the_deadline(
+    world, monkeypatch
+):
+    Session, cluster = world
+    monkeypatch.setattr(settings, "IMPORT_ARGO_TIMEOUT_SECONDS", 3600)
+    monkeypatch.setattr(deploy, "POLL_SECONDS", 3600)
+    cluster.refused.add("epitweet-neo4j-app")
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+    assert run.report["failure"]["apps"][0] == "neo4j"
+
+
+def test_each_registry_commit_names_its_wave(world, monkeypatch):
+    Session, cluster = world
+    messages = []
+    commit = cluster.commit
+
+    async def named(project, change, message):
+        messages.append(message)
+        return await commit(project, change, message)
+
+    monkeypatch.setattr(deploy, "commit_record_change", named)
+
+    _deploy(_published_run(Session))
+
+    assert messages[-1].endswith("(4/4: frontend)")
+
+
+def test_an_error_after_the_first_wave_keeps_what_the_waves_found(
+    world, monkeypatch
+):
+    Session, cluster = world
+    cluster.unhealthy.add("epitweet-neo4j-app")
+    cluster.diagnoses["neo4j"] = {
+        "cause": "crash_loop",
+        "message": "Container neo4j restarted 6 times",
+    }
+    commit = cluster.commit
+
+    async def refuse_second(project, change, message):
+        if cluster.commits:
+            raise generate.PlanError(["app 'user-service': name taken"])
+        return await commit(project, change, message)
+
+    monkeypatch.setattr(deploy, "commit_record_change", refuse_second)
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+        rows = {s.app_name: s for s in db.query(ImportService).all()}
+    assert run.report["failure"]["app_failures"][0]["app"] == "neo4j"
+    assert rows["neo4j"].message == "Container neo4j restarted 6 times"
+    assert rows["mongodb"].status == "running"
+    assert "registry refused" in rows["user-service"].message
 
 
 def test_a_registry_failure_fails_the_run(world, monkeypatch):

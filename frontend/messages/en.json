@@ -3584,11 +3584,11 @@
         },
         "crash_loop": {
           "title": "The app keeps crashing at start",
-          "explain": "The container starts then stops, again and again. The log excerpt below shows its last words: a missing setting, a dependency it cannot reach, or a startup error in the code."
+          "explain": "The container starts then stops, again and again. The log excerpt below shows its last words: a missing setting, a dependency it cannot reach, or a startup error."
         },
         "probe_failed": {
           "title": "The app never answered its health check",
-          "explain": "The container runs, but the health check of the plan fails. Fix the path or port in the repository, or analyze again to change the health check in the plan."
+          "explain": "The container runs, but its health check fails. For an app of the repository, fix the path or port it answers on, or analyze again to change the health check in the plan."
         },
         "unschedulable": {
           "title": "Not enough resources to start the app",

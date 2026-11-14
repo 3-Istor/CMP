@@ -80,7 +80,9 @@ export function ImportFailurePanel({
               {failure.app_failures.map((line) => (
                 <tr key={line.app} className="border-b last:border-0">
                   <th scope="row" className={`${TD} text-left font-medium`}>{line.app}</th>
-                  <td className={TD}>{t(`cause.${line.cause}.title`)}</td>
+                  <td className={TD}>
+                    {t.has(`cause.${line.cause}.title`) ? t(`cause.${line.cause}.title`) : line.cause}
+                  </td>
                   <td className={`${TD} whitespace-pre-wrap break-words font-mono`}>{line.message}</td>
                 </tr>
               ))}
