@@ -3,6 +3,7 @@
 import { GitBranch, RotateCw, ShieldAlert, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
 import { deleteImport, getImports, rebuildImport, updateImportSettings } from "@/lib/api";
+import { importRefusal } from "@/lib/importRefusal";
 import type { ImportSourceView } from "@/types";
 
 const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
@@ -30,6 +32,7 @@ export function ImportsList({
   canManage: boolean;
 }) {
   const t = useTranslations("imports.list");
+  const router = useRouter();
   const [sources, setSources] = useState<ImportSourceView[]>([]);
   const [deleting, setDeleting] = useState<ImportSourceView | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -60,7 +63,12 @@ export function ImportsList({
       toast.success(t("rebuildStarted", { repo: source.repo_full_name }));
       refresh();
     } catch (err) {
-      toast.error(t("rebuildFailed", { message: err instanceof Error ? err.message : String(err) }));
+      const { message, latestRun } = importRefusal(err);
+      toast.error(t("rebuildFailed", { message }), {
+        action: latestRun
+          ? { label: t("openLatestRun"), onClick: () => router.push(latestRun.ui_path) }
+          : undefined,
+      });
     }
   };
 

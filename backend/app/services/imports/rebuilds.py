@@ -314,6 +314,19 @@ async def _lost_rights(db: Session, source: ImportSource) -> str | None:
         source.rebuild_user_sub = account["id"]
         db.commit()
         claims["sub"] = account["id"]
+        # A username can be given to someone else once its holder is gone:
+        # who the rebuilds now run as is decided here, keep it on record.
+        audit.record_system_event(
+            "import.rebuild.user_resolved",
+            target=source.repo_full_name,
+            details={
+                "user": claims["preferred_username"],
+                "sub": account["id"],
+                "by": "username",
+            },
+            actor="import-rebuild",
+            project=source.project_name,
+        )
     try:
         account = await run_in_threadpool(
             keycloak_service.get_user_by_id, claims["sub"]
@@ -438,6 +451,7 @@ async def auto_rebuild(  # pylint: disable=too-many-return-statements
         source = db.get(ImportSource, source_id)
         if source is None or not source.auto_rebuild:
             return "skipped"
+        service.expire_source(db, source)
         if service._active_run(source) is not None:  # pylint: disable=W0212
             # The reconciler builds the head once this run is over.
             return "busy"
@@ -559,6 +573,7 @@ async def reconcile_once() -> None:
     if _reconcile_lock.locked():
         return
     async with _reconcile_lock:
+        service.expire_stale()
         with SessionLocal() as db:
             ids = [
                 s.id

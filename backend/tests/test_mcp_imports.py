@@ -7,7 +7,7 @@ import pytest
 
 from app import mcp_server
 from app.models.agent import AgentConfirmation
-from app.services.agents import policy, store
+from app.services.agents import internal_api, policy, store
 from tests.test_mcp_owasp_controls import (  # noqa: F401
     LEAKED_PASSWORD,
     LEAKED_TOKEN,
@@ -405,3 +405,20 @@ def test_import_tool_descriptions_say_repository_content_is_data():
     ]
 
     assert not unlabelled
+
+
+def test_a_refusal_naming_the_latest_run_tells_the_assistant_to_follow_it():
+    refused = internal_api.ApiError(
+        409,
+        {
+            "message": "A run of this import is already in progress",
+            "latest_run": {
+                "run_id": "run-2",
+                "ui_path": "/projects/demo/import?run=run-2",
+            },
+        },
+    )
+
+    answer = mcp_server._error(refused)
+
+    assert "get_import with run_id run-2" in answer["next"]

@@ -18,6 +18,7 @@ import {
   startImport,
 } from "@/lib/api";
 import { emptyEdits, planEditsReducer, type PlanEditAction } from "@/lib/importPlan";
+import { importRefusal } from "@/lib/importRefusal";
 import { cn } from "@/lib/utils";
 import type {
   AgentConfirmation,
@@ -36,17 +37,6 @@ const POLL_MS = 3000;
 const STEPS = ["repo", "analysis", "review", "progress"] as const;
 type Step = (typeof STEPS)[number];
 const EDITS_KEY = "cnp-import-edits:";
-
-function messageOf(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  try {
-    const detail = JSON.parse(raw)?.detail;
-    if (typeof detail === "string") return detail;
-  } catch {
-    // not JSON
-  }
-  return raw;
-}
 
 // Kept across the passkey step-up: Keycloak sends the user back to this
 // page, where the reviewed edits must still be there.
@@ -128,7 +118,7 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
         setSource(sources.find((s) => s.id === detail.source_id) ?? null);
       }
     } catch (err) {
-      toast.error(t("loadFailed", { message: messageOf(err) }));
+      toast.error(t("loadFailed", { message: importRefusal(err).message }));
     } finally {
       setLoading(false);
     }
@@ -178,12 +168,23 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
       .catch(() => setDraft(null));
   }, [draftId, step, projectName, runId]);
 
+  // A refusal caused by another run offers to open it: the run in
+  // progress, or the analysis that replaced the one under review.
+  const refused = (key: "startFailed" | "applyFailed", err: unknown) => {
+    const { message, latestRun } = importRefusal(err);
+    toast.error(t(key, { message }), {
+      action: latestRun
+        ? { label: t("openLatestRun"), onClick: () => go(latestRun.run_id) }
+        : undefined,
+    });
+  };
+
   const start = async (repo: string, branch: string | null) => {
     try {
       const next = await startImport(projectName, repo, branch);
       go(next.id);
     } catch (err) {
-      toast.error(t("startFailed", { message: messageOf(err) }));
+      refused("startFailed", err);
     }
   };
 
@@ -195,7 +196,7 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
       toast.success(t("applied"));
       go(build.id);
     } catch (err) {
-      toast.error(t("applyFailed", { message: messageOf(err) }));
+      refused("applyFailed", err);
     } finally {
       setApplying(false);
     }
@@ -206,7 +207,7 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
     try {
       go((await rebuildImport(projectName, run.source_id)).id);
     } catch (err) {
-      toast.error(t("startFailed", { message: messageOf(err) }));
+      refused("startFailed", err);
     }
   };
 

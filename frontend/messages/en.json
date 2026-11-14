@@ -3309,6 +3309,7 @@
     "startFailed": "The run could not start: {message}",
     "applied": "Import approved: the build has started",
     "applyFailed": "The import was refused: {message}",
+    "openLatestRun": "Open the latest run",
     "stepsLabel": "Import steps",
     "step": {
       "repo": "Repository",
@@ -3452,6 +3453,7 @@
       "never": "Never run",
       "rebuildStarted": "Rebuilding {repo}",
       "rebuildFailed": "The rebuild could not start: {message}",
+      "openLatestRun": "Open the latest run",
       "rebuildOf": "Rebuild {repo}",
       "rebuild": "Rebuild",
       "deleteOf": "Delete the import of {repo}",

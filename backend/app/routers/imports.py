@@ -40,7 +40,12 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 
 def _refused(exc: ImportRefused) -> HTTPException:
-    return HTTPException(status_code=exc.status_code, detail=str(exc))
+    if exc.latest_run is None:
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"message": str(exc), "latest_run": exc.latest_run},
+    )
 
 
 def _enabled() -> None:
@@ -146,7 +151,7 @@ async def create_import(
 @router.get("/{project_name}/imports")
 async def list_imports(ctx: RequireMember, db: DbSession):
     _enabled()
-    service.expire_stale(db)
+    service.expire_stale(project=ctx.project_name)
     sources = (
         db.query(service.ImportSource)
         .filter_by(project_name=ctx.project_name)
@@ -192,7 +197,6 @@ async def apply_import(  # pylint: disable=too-many-arguments
     except ImportRefused as exc:
         raise _refused(exc) from exc
     await _recheck_repository(db, ctx.token, source)
-    service.set_rebuild_user(source, ctx.username, ctx.user_id)
     try:
         run = await service.approve(
             db,
@@ -201,6 +205,7 @@ async def apply_import(  # pylint: disable=too-many-arguments
             source,
             edits.model_dump(mode="json", by_alias=True),
             run_id,
+            ctx.user_id,
         )
     except ImportRefused as exc:
         raise _refused(exc) from exc
@@ -229,10 +234,10 @@ async def rebuild_import(
     except ImportRefused as exc:
         raise _refused(exc) from exc
     await _recheck_repository(db, ctx.token, source)
-    # The admin who confirms a rebuild is who later ones run as.
-    service.set_rebuild_user(source, ctx.username, ctx.user_id)
     try:
-        run = await service.rebuild(db, ctx.username, source)
+        run = await service.rebuild(
+            db, ctx.username, source, confirmed_by_sub=ctx.user_id
+        )
     except ImportRefused as exc:
         raise _refused(exc) from exc
     audit.note(request, target=source.repo_full_name)
