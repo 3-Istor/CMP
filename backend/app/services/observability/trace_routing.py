@@ -3,9 +3,11 @@ The routing table of the OpenTelemetry gateway (D10): each project's spans
 go to its own VictoriaTraces tenant.
 
 The gateway sets the resource attribute cnp.project from the pod the span
-came from, after deleting whatever the client sent, and hands every span to
-the routing connector rendered here. Its config is the platform's base file
-merged with this one (the collector's --config can be given twice). Spans
+came from, after deleting whatever the client sent, and hands every project
+span to the routing connector rendered here (platform spans go to tenant 0
+before it). Its config is the platform's base file merged with this one
+(the collector's --config can be given twice); this file replaces the
+connector's table. Spans
 with no known project are dropped by a filter, whose telemetry counts them
 (otelcol_processor_filter_spans_filtered).
 
@@ -18,7 +20,11 @@ import json
 import logging
 
 from app.core.config import settings
-from app.services.kube_client import kube_create, kube_get, kube_merge_patch
+from app.services.kube_client import (
+    KubeUnavailableError,
+    kube_get,
+    kube_merge_patch,
+)
 from app.services.observability.trace_tenants import PROJECT_ID
 
 logger = logging.getLogger(__name__)
@@ -35,7 +41,7 @@ def _pipeline(project: str) -> str:
 
 
 def _exporter(project: str) -> str:
-    return f"otlphttp/cnp_{project}"
+    return f"otlp_http/cnp_{project}"
 
 
 def _route(condition: str, pipeline: str) -> dict:
@@ -120,32 +126,20 @@ def sync(accounts: dict[str, int]) -> bool:
     happened.
 
     Raises:
-        KubeUnavailableError: The cluster could not be read or written.
+        KubeUnavailableError: The cluster could not be read or written, or
+            the ConfigMap Argo CD creates is missing.
     """
     wanted = render(accounts)
     digest = hashlib.sha256(wanted.encode()).hexdigest()
-    name = settings.OBS_COLLECTOR_ROUTING_CONFIGMAP
-    current = kube_get(f"{_configmap_path()}/{name}")
-    changed = False
+    path = f"{_configmap_path()}/{settings.OBS_COLLECTOR_ROUTING_CONFIGMAP}"
+    # Argo CD creates the ConfigMap and leaves its data to the CMP, which
+    # may only get and patch it.
+    current = kube_get(path)
     if current is None:
-        kube_create(
-            _configmap_path(),
-            {
-                "apiVersion": "v1",
-                "kind": "ConfigMap",
-                "metadata": {
-                    "name": name,
-                    "namespace": settings.OBS_COLLECTOR_NAMESPACE,
-                    "labels": {"cnp.3istor.com/owner": "cmp"},
-                },
-                "data": {KEY: wanted},
-            },
-        )
-        changed = True
-    elif (current.get("data") or {}).get(KEY) != wanted:
-        kube_merge_patch(
-            f"{_configmap_path()}/{name}", {"data": {KEY: wanted}}
-        )
+        raise KubeUnavailableError(f"GET {path}: HTTP 404")
+    changed = False
+    if (current.get("data") or {}).get(KEY) != wanted:
+        kube_merge_patch(path, {"data": {KEY: wanted}})
         changed = True
     deployment = kube_get(_deployment_path())
     if deployment is None:

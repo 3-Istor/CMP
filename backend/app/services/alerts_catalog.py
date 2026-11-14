@@ -8,6 +8,8 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from app.core.config import settings
+
 
 @dataclass(frozen=True)
 class Param:
@@ -47,6 +49,27 @@ def namespace_matcher(namespaces: list[str]) -> str:
     if not names or not all(_NAMESPACE.match(n) for n in names):
         raise ValueError(f"Invalid namespaces: {names}")
     return 'namespace=~"' + "|".join(names) + '"'
+
+
+# Per namespace log line counters: Alloy's (Loki) or the VictoriaLogs
+# recording rules (one sample a minute, so summed, not increased).
+_LOG_COUNTERS = {
+    "loki": {
+        "lines": "loki_process_custom_log_lines_total",
+        "error_lines": "loki_process_custom_log_error_lines_total",
+    },
+    "vl": {
+        "lines": "cnp_log_lines:count1m",
+        "error_lines": "cnp_log_error_lines:count1m",
+    },
+}
+
+
+def _log_count(kind: str, ns: str, window: str) -> str:
+    backend = "vl" if settings.LOGS_BACKEND == "vl" else "loki"
+    metric = _LOG_COUNTERS[backend][kind]
+    rollup = "sum_over_time" if backend == "vl" else "increase"
+    return f"sum by (namespace) ({rollup}({metric}{{{ns}}}[{window}]))"
 
 
 CATALOG: tuple[AlertTemplate, ...] = (
@@ -140,8 +163,7 @@ CATALOG: tuple[AlertTemplate, ...] = (
             Param("lines", "Lignes d'erreur en 5 min", "", 20, 1, 100000),
         ),
         expr=lambda ns, p: (
-            f"sum by (namespace) (increase(loki_process_custom_log_error_lines_total{{{ns}}}[5m]))"
-            f" > {p['lines']}"
+            f"{_log_count('error_lines', ns, '5m')} > {p['lines']}"
         ),
     ),
     AlertTemplate(
@@ -152,8 +174,7 @@ CATALOG: tuple[AlertTemplate, ...] = (
         wait="10m",
         params=(Param("lines", "Lignes en 10 min", "", 30000, 100, 10000000),),
         expr=lambda ns, p: (
-            f"sum by (namespace) (increase(loki_process_custom_log_lines_total{{{ns}}}[10m]))"
-            f" > {p['lines']}"
+            f"{_log_count('lines', ns, '10m')} > {p['lines']}"
         ),
     ),
 )

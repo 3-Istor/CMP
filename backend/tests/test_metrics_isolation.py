@@ -158,6 +158,13 @@ def test_logs_pin_every_filter_spelling_and_the_single_tenant(stores):
     )
 
 
+def test_the_logs_filter_is_an_exact_namespace_filter_never_project(stores):
+    logs = _entries("shop")["url_map"][1]
+    query = parse_qs(urlsplit(logs["url_prefix"]).query)
+
+    assert not any("project" in v for values in query.values() for v in values)
+
+
 def test_metrics_go_to_vmsingle_with_both_filter_spellings(stores):
     metrics = _entries("shop")["url_map"][0]
     query = parse_qs(urlsplit(metrics["url_prefix"]).query)

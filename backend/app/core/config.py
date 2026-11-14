@@ -180,6 +180,10 @@ class Settings(BaseSettings):
     # Days of audit history read from Loki the first time the collector runs.
     ACTIVITY_BACKFILL_DAYS: int = 7
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
+    # Where log-derived metrics come from (CNP-185 V2): "loki" reads Alloy's
+    # loki_process_custom_* counters, "vl" the VictoriaLogs recording rules
+    # cnp_log_*:count1m. Switch once vlogs-project-counters records.
+    LOGS_BACKEND: str = "loki"
 
     # CNP-185 wave V3: per-app SLO rules and per-project alert routing,
     # written as operator objects. Off until the VictoriaMetrics operator,
@@ -207,7 +211,7 @@ class Settings(BaseSettings):
     # CNP-185 wave V4 and D7: the stores project users read through vmauth.
     # Each one is optional: with all three empty, vmauth's config is the
     # metrics-only one sent to the legacy vmselect, byte for byte. Expected:
-    # http://vmsingle-cnp.observability.svc:8428,
+    # http://vmsingle-cnp.observability.svc:8429,
     # http://vlogs-cnp.observability.svc:9428,
     # http://vtraces-cnp.observability.svc:10428.
     OBS_VMSINGLE_URL: str = ""

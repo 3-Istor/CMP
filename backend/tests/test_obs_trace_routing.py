@@ -84,7 +84,7 @@ def _config(accounts):
 
 
 def test_each_project_is_exported_with_its_own_tenant_headers():
-    exporter = _config({"shop": 7})["exporters"]["otlphttp/cnp_shop"]
+    exporter = _config({"shop": 7})["exporters"]["otlp_http/cnp_shop"]
 
     assert exporter["headers"] == {"AccountID": "7", "ProjectID": "0"}
 
@@ -114,7 +114,6 @@ def _kube(configmap, deployment):
                 configmap if "/configmaps/" in path else deployment
             )
         ),
-        "kube_create": mock.Mock(),
         "kube_merge_patch": mock.Mock(),
     }
 
@@ -132,6 +131,16 @@ def test_a_new_table_rolls_the_gateway_by_patching_its_template():
 
     patched = [c.args[1] for c in calls["kube_merge_patch"].call_args_list]
     assert "template" in patched[1]["spec"]
+
+
+def test_a_missing_configmap_is_reported_never_created():
+    calls = _kube(None, _deployment())
+
+    with mock.patch.multiple(trace_routing, **calls):
+        with pytest.raises(trace_routing.KubeUnavailableError):
+            trace_routing.sync({"shop": 7})
+
+    assert calls["kube_merge_patch"].call_count == 0
 
 
 def test_an_unchanged_table_writes_nothing():
