@@ -3367,8 +3367,6 @@
       "smoke": "Smoke test"
     },
     "progress": {
-      "rebuild": "Rebuild",
-      "reanalyze": "Review the plan again",
       "logs": "Logs of {app}",
       "status": {
         "queued": "Waiting for the build workflow, commit {sha}.",
@@ -3382,7 +3380,9 @@
       "caption": "Progress of each app",
       "app": "App",
       "next": "What to do",
-      "seeTopology": "See the topology"
+      "seeTopology": "See the topology",
+      "blocking": "{count, plural, one {# blocking vulnerability} other {# blocking vulnerabilities}}",
+      "concerned": "Failed"
     },
     "review": {
       "capacity": "Memory",
@@ -3491,10 +3491,82 @@
       "pendingReason": {
         "not_admin": "{user}, who rebuilds it, is no longer admin of the project.",
         "inactive": "the account of {user}, who rebuilds it, is disabled.",
-        "repo_access": "the CMP cannot check that {user}, who rebuilds it, can still read the repository.",
+        "repo_access": "the CMP cannot check with the GitHub access of {user}, who rebuilds it, that they can still read the repository (GitHub account not linked, or access removed).",
         "unknown_user": "the CMP cannot find the account of {user}, who rebuilds it."
-      }
+      },
+      "pendingHelp": "A rebuild runs with the GitHub access of whoever starts it. By confirming, you start it with your access and your passkey; later rebuilds run as you.",
+      "linkGithub": "Link my GitHub account"
     },
-    "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey."
+    "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey.",
+    "failure": {
+      "apps": "Apps concerned: {apps}",
+      "upgradesCaption": "Dependencies to update",
+      "package": "Package",
+      "installed": "Current version",
+      "fixed": "Fixed version",
+      "appsColumn": "Apps",
+      "ids": "Vulnerabilities",
+      "fixUpgrades": "Move these packages to the fixed version in the repository (or use a newer base image), then push.",
+      "fixRepo": "Fix the repository using the log excerpt below, then push.",
+      "pushRebuilds": "The push starts the rebuild on its own.",
+      "thenRebuild": "Then start the rebuild.",
+      "contactPlatform": "If it happens again, contact the platform team with id {runId}.",
+      "message": "Message of the failed stage",
+      "log": "Log excerpt",
+      "rebuild": "Run the build again",
+      "rebuildAfterFix": "Rebuild",
+      "reanalyze": "Analyze again",
+      "analyzeAgain": "Analyze again",
+      "cause": {
+        "scan_blocked": {
+          "title": "Images blocked by critical vulnerabilities",
+          "explain": "The scan found critical vulnerabilities that have a fixed version. Nothing is deployed while they remain."
+        },
+        "build_failed": {
+          "title": "The image build failed",
+          "explain": "A build command stopped with an error. The cause is usually in the repository: Dockerfile, dependencies, build script."
+        },
+        "dockerfile_refused": {
+          "title": "Dockerfile refused by the platform",
+          "explain": "The Dockerfile uses a RUN flag the platform refuses (secret, ssh, host network or insecure mode)."
+        },
+        "plan_mismatch": {
+          "title": "The plan no longer matches the repository",
+          "explain": "A folder or Dockerfile of the plan no longer exists in the repository. Analyze again, then review the new plan."
+        },
+        "fetch_failed": {
+          "title": "The code could not be downloaded",
+          "explain": "GitHub did not return the commit archive. The commit may have left the branch: try again, or analyze again."
+        },
+        "analysis_failed": {
+          "title": "The analysis stopped",
+          "explain": "The analyzer could not read the whole repository. Try again; if it happens again, the platform team needs to look at it."
+        },
+        "timeout": {
+          "title": "The run stopped giving news",
+          "explain": "No news from the workflow for too long. This is usually transient: try again."
+        },
+        "workflow_stopped": {
+          "title": "The workflow stopped without reporting",
+          "explain": "The workflow was cancelled or lost its runner before reporting. This is usually transient: try again."
+        },
+        "workflow_not_started": {
+          "title": "The workflow did not start",
+          "explain": "GitHub did not start the requested workflow. Try again; if it happens again, tell the platform team."
+        },
+        "dispatch_failed": {
+          "title": "The workflow could not be started",
+          "explain": "The CMP could not ask GitHub for the workflow. Try again in a few minutes."
+        },
+        "deploy_failed": {
+          "title": "The deployment failed",
+          "explain": "The images are built, but their deployment stopped. Try again; if it happens again, tell the platform team."
+        },
+        "internal": {
+          "title": "Internal platform error",
+          "explain": "The error comes from the platform, not from your repository. Try again; if it happens again, tell the platform team."
+        }
+      }
+    }
   }
 }

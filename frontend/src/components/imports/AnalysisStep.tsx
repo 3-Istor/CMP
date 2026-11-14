@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import type { StageState } from "@/lib/importPlan";
 import type { ImportRun } from "@/types";
+import { ImportFailurePanel } from "./ImportFailurePanel";
 import { StageIcon } from "./StageIcon";
 
 const STEPS = ["queued", "fetch", "analyze", "plan"] as const;
@@ -61,7 +62,21 @@ export function AnalysisStep({
           </li>
         ))}
       </ol>
-      {failed && (
+      {failed && run.failure && (
+        <ImportFailurePanel
+          runId={run.id}
+          kind="analyze"
+          failure={run.failure}
+          onRebuild={onRetry}
+          onAnalyze={onRetry}
+          extra={
+            <Button size="sm" variant="outline" onClick={onRestart}>
+              {t("otherRepo")}
+            </Button>
+          }
+        />
+      )}
+      {failed && !run.failure && (
         <div role="alert" className="space-y-2 rounded-lg border border-destructive bg-destructive/5 p-4 text-sm">
           <p className="font-medium text-destructive">{t("failed")}</p>
           {run.report?.error && <pre className="whitespace-pre-wrap text-xs">{run.report.error}</pre>}

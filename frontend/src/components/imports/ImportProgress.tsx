@@ -1,12 +1,15 @@
 "use client";
 
-import { FileText, Network, RotateCw, ScanSearch } from "lucide-react";
+import { FileText, Network } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { blockingCount } from "@/lib/importFailure";
 import { serviceStages, STAGES, type Stage, type StageState } from "@/lib/importPlan";
-import type { ImportRunDetail, ImportServiceView } from "@/types";
+import type { ImportRunDetail, ImportServiceView, ImportSourceView } from "@/types";
+import { ImportFailurePanel } from "./ImportFailurePanel";
+import { RebuildPendingNotice } from "./RebuildPendingNotice";
 import { StageIcon } from "./StageIcon";
 
 const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
@@ -19,11 +22,13 @@ function failedStage(stages: Record<Stage, StageState>): Stage | null {
 export function ImportProgress({
   projectName,
   run,
+  source,
   onRebuild,
   onReanalyze,
 }: {
   projectName: string;
   run: ImportRunDetail;
+  source: ImportSourceView | null;
   onRebuild: () => void;
   onReanalyze: () => void;
 }) {
@@ -39,18 +44,11 @@ export function ImportProgress({
     if (!failed || !finished) return null;
     const logs = service.deployment_id ? `${base}/apps/${service.deployment_id}/logs` : null;
     if (failed === "build" || failed === "scan" || failed === "publish") {
-      return (
-        <div className="flex flex-wrap gap-1">
-          <Button size="sm" variant="outline" onClick={onRebuild}>
-            <RotateCw aria-hidden />
-            {t("rebuild")}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onReanalyze}>
-            <ScanSearch aria-hidden />
-            {t("reanalyze")}
-          </Button>
-        </div>
-      );
+      const blocking = blockingCount(run.failure, service.app);
+      if (blocking > 0) return <p className="text-xs text-destructive">{t("blocking", { count: blocking })}</p>;
+      return run.failure?.apps.includes(service.app) ? (
+        <p className="text-xs text-destructive">{t("concerned")}</p>
+      ) : null;
     }
     return (
       <div className="flex flex-wrap gap-1">
@@ -69,13 +67,26 @@ export function ImportProgress({
       <p className="text-sm text-muted-foreground" aria-live="polite">
         {t(`status.${run.status}`, { sha: run.sha.slice(0, 12) })}
       </p>
-      {run.report?.error && (
-        <div role="alert" className="rounded-lg border border-destructive bg-destructive/5 p-3 text-sm">
-          <p className="font-medium text-destructive">
-            {t("failedAt", { stage: run.report.stage ?? "?" })}
-          </p>
-          <pre className="mt-1 whitespace-pre-wrap text-xs">{run.report.error}</pre>
-        </div>
+      {source?.rebuild_pending && (
+        <RebuildPendingNotice source={source} canManage onRebuild={onRebuild} />
+      )}
+      {run.failure ? (
+        <ImportFailurePanel
+          runId={run.id}
+          kind={run.kind}
+          failure={run.failure}
+          onRebuild={onRebuild}
+          onAnalyze={onReanalyze}
+        />
+      ) : (
+        run.report?.error && (
+          <div role="alert" className="rounded-lg border border-destructive bg-destructive/5 p-3 text-sm">
+            <p className="font-medium text-destructive">
+              {t("failedAt", { stage: run.report.stage ?? "?" })}
+            </p>
+            <pre className="mt-1 whitespace-pre-wrap text-xs">{run.report.error}</pre>
+          </div>
+        )
       )}
       <div className="overflow-x-auto rounded-xl border">
         <table className="w-full text-sm">

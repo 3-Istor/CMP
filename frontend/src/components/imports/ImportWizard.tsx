@@ -289,7 +289,13 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
         />
         </>
       ) : run ? (
-        <ImportProgress projectName={projectName} run={run} onRebuild={() => void rebuild()} onReanalyze={reanalyze} />
+        <ImportProgress
+          projectName={projectName}
+          run={run}
+          source={source}
+          onRebuild={() => void rebuild()}
+          onReanalyze={reanalyze}
+        />
       ) : null}
     </div>
   );
