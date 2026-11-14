@@ -3309,6 +3309,7 @@
     "startFailed": "Le lancement a échoué : {message}",
     "applied": "Import approuvé : le build démarre",
     "applyFailed": "L'import a été refusé : {message}",
+    "openLatestRun": "Ouvrir le dernier lancement",
     "stepsLabel": "Étapes de l'import",
     "step": {
       "repo": "Repo",
@@ -3452,6 +3453,7 @@
       "never": "Jamais lancé",
       "rebuildStarted": "Reconstruction de {repo}",
       "rebuildFailed": "La reconstruction n'a pas pu démarrer : {message}",
+      "openLatestRun": "Ouvrir le dernier lancement",
       "rebuildOf": "Reconstruire {repo}",
       "rebuild": "Reconstruire",
       "deleteOf": "Supprimer l'import de {repo}",

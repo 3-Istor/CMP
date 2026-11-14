@@ -40,7 +40,12 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 
 def _refused(exc: ImportRefused) -> HTTPException:
-    return HTTPException(status_code=exc.status_code, detail=str(exc))
+    if exc.latest_run is None:
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"message": str(exc), "latest_run": exc.latest_run},
+    )
 
 
 def _enabled() -> None:

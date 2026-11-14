@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import uuid
+from datetime import timedelta
 
 import pytest
 import requests
@@ -451,6 +452,59 @@ def test_a_rebuild_user_without_sub_is_found_in_keycloak_by_username(
 
     assert (outcome, identity["seen"][0]["sub"]) == ("started", "uid-alice")
     assert _reload(world, source).rebuild_user_sub == "uid-alice"
+
+
+def test_a_rebuild_user_found_by_username_is_journaled(
+    world, identity, monkeypatch
+):
+    journal = []
+    monkeypatch.setattr(
+        rebuilds.audit,
+        "record_system_event",
+        lambda action, **kwargs: journal.append((action, kwargs)),
+    )
+    source = _built(world)
+
+    _auto(source)
+
+    resolved = [
+        k for action, k in journal if action == "import.rebuild.user_resolved"
+    ]
+    assert [r["details"] for r in resolved] == [
+        {"user": "alice", "sub": "uid-alice", "by": "username"}
+    ]
+
+
+def test_a_rebuild_user_with_a_sub_is_not_journaled_as_resolved(
+    world, identity, monkeypatch
+):
+    journal = []
+    monkeypatch.setattr(
+        rebuilds.audit,
+        "record_system_event",
+        lambda action, **kwargs: journal.append(action),
+    )
+    source = _built(world, rebuild_user_sub="uid-alice")
+
+    _auto(source)
+
+    assert "import.rebuild.user_resolved" not in journal
+
+
+def test_a_reconcile_pass_fails_runs_stuck_past_the_timeout(world, identity):
+    source = _built(world, auto_rebuild=False)
+    stuck = _run(
+        world,
+        source,
+        status="claimed",
+        updated_at=service._now()
+        - timedelta(minutes=settings.IMPORT_RUN_TIMEOUT_MINUTES + 1),
+    )
+
+    asyncio.run(rebuilds.reconcile_once())
+
+    with world.db() as db:
+        assert db.get(ImportRun, stuck.id).status == "failed"
 
 
 @pytest.mark.parametrize("users", [{}, None], ids=["unknown", "outage"])

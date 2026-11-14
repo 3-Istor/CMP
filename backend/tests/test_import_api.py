@@ -879,3 +879,187 @@ def test_unauthenticated_worker_call_is_refused_before_its_body_is_read(
 
     assert response.status_code == 401
     assert read == []
+
+
+# ── Re-analysis, refusals that point at the latest run, stuck runs ──────────
+
+
+@pytest.fixture
+def reanalyze(client, world, monkeypatch):
+    async def resolve(db, claims, name):
+        return REPO
+
+    monkeypatch.setattr(access, "resolve_repository", resolve)
+
+    def post(branch="dev"):
+        return client.post(
+            "/api/projects/shop/imports",
+            json={"repo_full_name": REPO.full_name, "branch": branch},
+        )
+
+    return post
+
+
+def _branch(world, source) -> str:
+    with world.db() as db:
+        return db.get(ImportSource, source.id).branch
+
+
+def _stuck_since(minutes_past_timeout: int) -> datetime:
+    return service._now() - timedelta(
+        minutes=settings.IMPORT_RUN_TIMEOUT_MINUTES + minutes_past_timeout
+    )
+
+
+def test_a_re_analysis_refused_while_a_run_is_in_progress_keeps_the_branch(
+    world, reanalyze
+):
+    source = _source(world)
+    _run(world, source, kind="build", status="claimed")
+
+    response = reanalyze()
+
+    assert (response.status_code, _branch(world, source)) == (409, "main")
+
+
+def test_a_re_analysis_that_loses_the_race_for_the_run_keeps_the_branch(
+    world, reanalyze, monkeypatch
+):
+    source = _source(world)
+
+    async def head_while_another_run_starts(source):
+        _run(world, source, kind="build", status="queued")
+        return SHA
+
+    monkeypatch.setattr(service, "_head", head_while_another_run_starts)
+
+    response = reanalyze()
+
+    assert (response.status_code, _branch(world, source)) == (409, "main")
+
+
+def test_a_re_analysis_of_an_unreadable_branch_keeps_the_branch(
+    world, reanalyze, monkeypatch
+):
+    source = _source(world)
+
+    async def unreadable(source):
+        raise service.ImportRefused("Could not read branch dev", 502)
+
+    monkeypatch.setattr(service, "_head", unreadable)
+
+    response = reanalyze()
+
+    assert (response.status_code, _branch(world, source)) == (502, "main")
+
+
+def test_a_re_analysis_whose_workflow_cannot_start_keeps_the_branch(
+    world, reanalyze, monkeypatch
+):
+    source = _source(world)
+
+    async def dispatch_fails(db, run):
+        run.status = "failed"
+        db.commit()
+        raise service.ImportRefused("Could not start the workflow", 502)
+
+    monkeypatch.setattr(service, "_dispatch", dispatch_fails)
+
+    response = reanalyze()
+
+    assert (response.status_code, _branch(world, source)) == (502, "main")
+
+
+def test_a_re_analysis_stores_the_new_branch_with_its_run(world, reanalyze):
+    source = _source(world)
+
+    response = reanalyze()
+
+    assert (response.status_code, _branch(world, source)) == (202, "dev")
+
+
+def test_a_refused_re_analysis_points_at_the_run_in_progress(world, reanalyze):
+    source = _source(world)
+    active = _run(world, source, kind="build", status="claimed")
+
+    detail = reanalyze().json()["detail"]
+
+    assert detail["latest_run"] == {
+        "run_id": active.id,
+        "kind": "build",
+        "status": "claimed",
+        "api_path": f"/api/projects/shop/imports/runs/{active.id}",
+        "ui_path": f"/projects/shop/import?run={active.id}",
+    }
+
+
+def test_apply_of_a_stale_analysis_points_at_the_latest_one(client, world):
+    source = _source(world)
+    reviewed = _run(world, source, status="succeeded", plan=PLAN)
+    latest = _run(world, source, status="succeeded", plan=PLAN)
+
+    response = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={reviewed.id}",
+        json={},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["latest_run"]["run_id"] == latest.id
+
+
+def test_apply_while_a_re_analysis_runs_points_at_it(client, world):
+    source = _source(world)
+    reviewed = _run(world, source, status="succeeded", plan=PLAN)
+    running = _run(world, source, status="claimed")
+
+    response = client.post(
+        f"/api/projects/shop/imports/{source.id}/apply?run_id={reviewed.id}",
+        json={},
+    )
+
+    assert response.json()["detail"]["latest_run"]["run_id"] == running.id
+
+
+@pytest.mark.parametrize("status", ["queued", "claimed", "running"])
+def test_a_run_without_news_past_the_timeout_no_longer_blocks_an_analysis(
+    world, reanalyze, status
+):
+    source = _source(world)
+    stuck = _run(
+        world,
+        source,
+        kind="build",
+        status=status,
+        updated_at=_stuck_since(1),
+    )
+
+    response = reanalyze()
+
+    assert response.status_code == 202
+    with world.db() as db:
+        failed = db.get(ImportRun, stuck.id)
+        assert (failed.status, failed.report["stage"]) == ("failed", "timeout")
+
+
+def test_a_run_within_the_timeout_still_blocks_an_analysis(world, reanalyze):
+    source = _source(world)
+    _run(world, source, status="claimed", updated_at=_stuck_since(-1))
+
+    response = reanalyze()
+
+    assert response.status_code == 409
+
+
+def test_a_stuck_run_no_longer_blocks_a_rebuild(client, world):
+    source = _applied(world)
+    _run(
+        world,
+        source,
+        kind="build",
+        status="running",
+        updated_at=_stuck_since(1),
+    )
+
+    response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
+
+    assert response.status_code == 202

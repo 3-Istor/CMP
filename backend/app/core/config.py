@@ -273,6 +273,10 @@ class Settings(BaseSettings):
     # Audience the workflow asks GitHub for; must match import.yml.
     IMPORT_OIDC_AUDIENCE: str = "cmp-import"
     IMPORT_RUN_TTL_HOURS: int = 24
+    # A queued, claimed or running run without news for this long is
+    # failed: a workflow that died or a deploy the CMP lost would otherwise
+    # hold the import's one active run, and refuse every new one, forever.
+    IMPORT_RUN_TIMEOUT_MINUTES: int = 120
     IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/imports"
     # Platform repositories nobody imports, owner/name, comma separated.
     IMPORT_DENY_REPOS: str = (

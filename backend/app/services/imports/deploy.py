@@ -30,7 +30,8 @@ from app.services.imports.generate import AppSpec, PlanError
 from app.services.imports.registry_commit import commit_record_change
 from app.services.imports.service import (
     ImportRefused,
-    _active_run,
+    _now,
+    _refuse_if_busy,
     _spawn,
     _system_event,
     image_name,
@@ -359,14 +360,20 @@ async def _deploy(db: Session, run: ImportRun) -> None:
 
 
 def resume_interrupted() -> None:
-    """Restart the deploy of runs left running when the CMP stopped."""
+    """
+    Restart the deploy of runs left running when the CMP stopped, each with
+    a fresh IMPORT_RUN_TIMEOUT_MINUTES: the CMP may have slept longer.
+    """
     with SessionLocal() as db:
-        ids = [
-            r.id
-            for r in db.query(ImportRun)
+        runs = (
+            db.query(ImportRun)
             .filter(ImportRun.status == RunStatus.RUNNING.value)
             .all()
-        ]
+        )
+        ids = [r.id for r in runs]
+        for run in runs:
+            run.updated_at = _now()
+        db.commit()
     for run_id in ids:
         _spawn(deploy(run_id))
 
@@ -381,8 +388,7 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
     the user confirmed with step-up). An app of the record under the same name that
     this import did not put there stays, with its namespace.
     """
-    if _active_run(source) is not None:
-        raise ImportRefused("A run of this import is in progress")
+    _refuse_if_busy(db, source)
     project = source.project_name
     services = {s.app_name for s in source.services if s.kind == "service"}
     deployed = {s.app_name for s in source.services if s.deployment_id}

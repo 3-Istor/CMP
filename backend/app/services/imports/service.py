@@ -15,8 +15,9 @@ import hmac
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
-from sqlalchemy import update
+from sqlalchemy import and_, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -64,10 +65,19 @@ _tasks: set[asyncio.Task] = set()
 
 
 class ImportRefused(Exception):
-    """An import request refused, with the HTTP status to answer."""
+    """
+    An import request refused, with the HTTP status to answer and, when
+    another run is the reason, where to follow that run.
+    """
 
-    def __init__(self, message: str, status_code: int = 409) -> None:
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 409,
+        latest_run: dict | None = None,
+    ) -> None:
         self.status_code = status_code
+        self.latest_run = latest_run
         super().__init__(message)
 
 
@@ -129,6 +139,18 @@ def run_view(run: ImportRun) -> dict:
     }
 
 
+def run_pointer(run: ImportRun) -> dict:
+    """The run_id get_import takes, and the API and CMP pages of the run."""
+    project = quote(run.source.project_name, safe="")
+    return {
+        "run_id": run.id,
+        "kind": run.kind,
+        "status": run.status,
+        "api_path": f"/api/projects/{project}/imports/runs/{run.id}",
+        "ui_path": f"/projects/{project}/import?run={run.id}",
+    }
+
+
 def service_view(service: ImportService) -> dict:
     return {
         "app": service.app_name,
@@ -172,18 +194,62 @@ def get_run(db: Session, project: str, run_id: str) -> ImportRun:
     return run
 
 
-def expire_stale(db: Session) -> None:
-    db.execute(
-        update(ImportRun)
-        .where(
-            ImportRun.status.in_(
-                [RunStatus.QUEUED.value, RunStatus.CLAIMED.value]
+def expire_stale(db: Session, source_id: str | None = None) -> None:
+    """
+    Fail the runs that hold an import's single active slot for nothing: a
+    run the workflow left without news for IMPORT_RUN_TIMEOUT_MINUTES (the
+    workflow died, a deploy the CMP lost), or a queued or claimed run past
+    its expiry. Only *source_id*'s runs when given.
+    """
+    now = _now()
+    stuck = now - timedelta(minutes=settings.IMPORT_RUN_TIMEOUT_MINUTES)
+    waiting = [RunStatus.QUEUED.value, RunStatus.CLAIMED.value]
+    query = db.query(ImportRun).filter(
+        or_(
+            and_(ImportRun.status.in_(waiting), ImportRun.expires_at < now),
+            and_(
+                ImportRun.status.in_([*waiting, RunStatus.RUNNING.value]),
+                ImportRun.updated_at < stuck,
             ),
-            ImportRun.expires_at < _now(),
         )
-        .values(status=RunStatus.FAILED.value, report={"error": "expired"})
     )
+    if source_id is not None:
+        query = query.filter(ImportRun.source_id == source_id)
+    expired = []
+    for run in query.all():
+        timed_out = run.expires_at >= now
+        reason = (
+            f"Timed out: no progress for "
+            f"{settings.IMPORT_RUN_TIMEOUT_MINUTES} minutes while {run.status}"
+            if timed_out
+            else "expired"
+        )
+        result = db.execute(
+            update(ImportRun)
+            .where(ImportRun.id == run.id, ImportRun.status == run.status)
+            .values(
+                status=RunStatus.FAILED.value,
+                updated_at=now,
+                report={
+                    **(run.report or {}),
+                    "stage": "timeout" if timed_out else "expired",
+                    "error": reason,
+                },
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 1:
+            expired.append((run, run.status))
     db.commit()
+    for run, status in expired:
+        db.refresh(run)
+        audit.record_system_event(
+            "import.expire",
+            target=run.source.repo_full_name,
+            details={"run": run.id, "kind": run.kind, "was": status},
+            succeeded=False,
+            project=run.source.project_name,
+        )
 
 
 def _active_run(source: ImportSource) -> ImportRun | None:
@@ -195,6 +261,16 @@ def _active_run(source: ImportSource) -> ImportRun | None:
         ),
         None,
     )
+
+
+def _refuse_if_busy(db: Session, source: ImportSource) -> None:
+    expire_stale(db, source.id)
+    active = _active_run(source)
+    if active is not None:
+        raise ImportRefused(
+            "A run of this import is already in progress",
+            latest_run=run_pointer(active),
+        )
 
 
 def _last_run(source: ImportSource, kind: RunKind) -> ImportRun | None:
@@ -255,8 +331,17 @@ def _new_run(
         # uq_import_runs_active_source: another request started a run
         # since this one checked.
         db.rollback()
+        active = (
+            db.query(ImportRun)
+            .filter(
+                ImportRun.source_id == source.id,
+                ImportRun.status.notin_([s.value for s in TERMINAL_STATUSES]),
+            )
+            .first()
+        )
         raise ImportRefused(
-            "A run of this import is already in progress"
+            "A run of this import is already in progress",
+            latest_run=run_pointer(active) if active else None,
         ) from exc
     db.refresh(run)
     return run
@@ -297,6 +382,7 @@ async def start_analysis(  # pylint: disable=too-many-arguments
         .filter_by(project_name=project, repo_id=repo.repo_id)
         .first()
     )
+    previous = None
     if source is None:
         source = ImportSource(
             project_name=project,
@@ -309,15 +395,35 @@ async def start_analysis(  # pylint: disable=too-many-arguments
         db.add(source)
         set_rebuild_user(source, user, user_sub)
     else:
-        if _active_run(source) is not None:
-            raise ImportRefused("A run of this import is already in progress")
+        _refuse_if_busy(db, source)
+        previous = (
+            source.branch,
+            source.repo_full_name,
+            source.installation_id,
+        )
+    # The new branch is committed with the run that analyses it, by
+    # _new_run, or not at all.
+    with db.no_autoflush:
         source.branch = branch
         source.repo_full_name = repo.full_name
         source.installation_id = repo.installation_id
-    db.commit()
-    sha = await _head(source)
+        try:
+            sha = await _head(source)
+        except ImportRefused:
+            db.rollback()
+            raise
     run = _new_run(db, source, RunKind.ANALYZE, sha, user)
-    await _dispatch(db, run)
+    try:
+        await _dispatch(db, run)
+    except ImportRefused:
+        if previous is not None:
+            (
+                source.branch,
+                source.repo_full_name,
+                source.installation_id,
+            ) = previous
+            db.commit()
+        raise
     return run
 
 
@@ -402,14 +508,17 @@ async def approve(  # pylint: disable=too-many-arguments
     the person reviewed: a newer one, an assistant's re-analysis say, is
     never applied in its place.
     """
-    if _active_run(source) is not None:
-        raise ImportRefused("A run of this import is already in progress")
+    _refuse_if_busy(db, source)
     analysis = _last_run(source, RunKind.ANALYZE)
     if analysis is None or analysis.status != RunStatus.SUCCEEDED.value:
-        raise ImportRefused("This import has no finished analysis to apply")
+        raise ImportRefused(
+            "This import has no finished analysis to apply",
+            latest_run=run_pointer(analysis) if analysis else None,
+        )
     if analysis.id != run_id:
         raise ImportRefused(
-            "The analysis changed since you reviewed it: review again"
+            "The analysis changed since you reviewed it: review again",
+            latest_run=run_pointer(analysis),
         )
     try:
         specs = generate.resolve(analysis.plan, edits)
@@ -527,8 +636,7 @@ async def rebuild(
     commit a caller named. *apps* limits the build to those services; a
     service never built is always part of it.
     """
-    if _active_run(source) is not None:
-        raise ImportRefused("A run of this import is already in progress")
+    _refuse_if_busy(db, source)
     build = _last_run(source, RunKind.BUILD)
     if build is None or not source.services:
         raise ImportRefused("Apply the analysis before rebuilding")

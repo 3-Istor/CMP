@@ -187,7 +187,19 @@ class Caller:
 
 def _error(exc: Exception) -> dict:
     if isinstance(exc, internal_api.ApiError):
-        return {"ok": False, "status": exc.status_code, "error": exc.detail}
+        answer = {"ok": False, "status": exc.status_code, "error": exc.detail}
+        latest = (
+            exc.detail.get("latest_run")
+            if isinstance(exc.detail, dict)
+            else None
+        )
+        if latest:
+            answer["next"] = (
+                f"Call get_import with run_id {latest['run_id']}, the "
+                "import's latest run, and tell the user; they can follow it "
+                f"in the CMP at {latest['ui_path']}."
+            )
+        return answer
     return {"ok": False, "error": str(exc)}
 
 
