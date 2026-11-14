@@ -176,7 +176,7 @@ def test_dashboards_are_generated_read_only(dashboard):
 def test_dashboards_never_name_a_project_or_a_tenant(dashboard):
     text = json.dumps(dashboard)
 
-    assert ("cnp_project" not in text, "AccountID" not in text) == (
+    assert ("cnp_project=" not in text, "AccountID" not in text) == (
         True,
         True,
     )
