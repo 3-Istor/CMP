@@ -1178,6 +1178,133 @@ async def get_app_logs(
 
 
 # ---------------------------------------------------------------------------
+# Observability, read only (CNP-185 D21): the same API as the app's pages,
+# so the user's rights and the server-side scope apply.
+# ---------------------------------------------------------------------------
+
+ObsRange = Literal["1h", "6h", "24h", "7d"]
+
+
+def _obs(app_id: int, path: str = "") -> str:
+    return f"/api/deployments/{app_id}/observability{path}"
+
+
+def _last(points: list[dict]) -> float | None:
+    return round(points[-1]["value"], 4) if points else None
+
+
+@mcp.tool(annotations=READ_ONLY)
+@tool_errors
+async def get_app_metrics(app_id: int, window: ObsRange = "1h") -> dict:
+    """Golden signals of the app in prod: requests per second, share of 5xx
+    answers, p50 and p95 latency in ms, now and per route over the range."""
+    caller = Caller()
+    body = await caller.api(
+        "GET", _obs(app_id, "/signals"), params={"range": window}
+    )
+    if body["no_traffic"]:
+        return {
+            "no_traffic": True,
+            "note": "No request reached the app since the gateway started "
+            "counting: this is not an error.",
+        }
+    return {
+        "no_traffic": False,
+        "range": body["range"],
+        "now": {
+            "requests_per_second": _last(body["rate"]),
+            "error_percent": _last(body["error_percent"]),
+            "p50_ms": _last(body["p50_ms"]),
+            "p95_ms": _last(body["p95_ms"]),
+        },
+        "routes": body["routes"],
+    }
+
+
+@mcp.tool(annotations=READ_ONLY)
+@tool_errors
+async def query_app_logs(  # pylint: disable=too-many-arguments
+    app_id: int,
+    mode: Literal["top_errors", "search"] = "top_errors",
+    window: Literal["15m", "1h", "6h", "24h", "7d"] = "1h",
+    level: Literal["error", "warn", "info", "debug"] | None = None,
+    search: Annotated[str | None, Field(max_length=200)] = None,
+    trace_id: Annotated[
+        str | None, Field(pattern="^[0-9a-fA-F]{16,32}$")
+    ] = None,
+    limit: Annotated[int, Field(ge=1, le=200)] = 50,
+) -> dict:
+    """The app's prod logs: the most frequent errors grouped by pattern
+    (numbers folded), or lines matching a phrase, a level or a trace."""
+    caller = Caller()
+    if mode == "top_errors":
+        rows = await caller.api(
+            "GET",
+            _obs(app_id, "/logs/top-errors"),
+            params={"range": window, "limit": min(limit, 20)},
+        )
+        return {"note": UNTRUSTED, "top_errors": rows}
+    params = {"range": window, "limit": limit}
+    params |= {
+        k: v
+        for k, v in {"level": level, "q": search, "trace_id": trace_id}.items()
+        if v
+    }
+    rows = await caller.api("GET", _obs(app_id, "/logs"), params=params)
+    return {"note": UNTRUSTED, "lines": rows}
+
+
+@mcp.tool(annotations=READ_ONLY)
+@tool_errors
+async def list_app_traces(
+    app_id: int,
+    window: Literal["15m", "1h", "6h", "24h"] = "1h",
+    errors_only: bool = False,
+    min_duration_ms: Annotated[int | None, Field(ge=1, le=600_000)] = None,
+    limit: Annotated[int, Field(ge=1, le=20)] = 10,
+) -> dict:
+    """Recent traces of the app, newest first, with their duration, span
+    count and errors. Give a trace_id to read its spans."""
+    caller = Caller()
+    params = {"range": window, "limit": limit, "errors_only": errors_only}
+    if min_duration_ms:
+        params["min_duration_ms"] = min_duration_ms
+    rows = await caller.api("GET", _obs(app_id, "/traces"), params=params)
+    return {"note": UNTRUSTED, "traces": rows}
+
+
+@mcp.tool(annotations=READ_ONLY)
+@tool_errors
+async def get_alerts(app_id: int) -> dict:
+    """Alerts of the app firing now, and the silences that cover it. Muting
+    is done by the user in the CMP, not by assistants."""
+    caller = Caller()
+    body = await caller.api("GET", _obs(app_id, "/alerts"))
+    return {
+        "alerts": body["alerts"],
+        "silences": body["silences"],
+    }
+
+
+@mcp.tool(annotations=READ_ONLY)
+@tool_errors
+async def get_slo(app_id: int) -> dict:
+    """The app's objectives (availability, latency under 500 ms), what is
+    left of the period's error budget and how fast it burns."""
+    caller = Caller()
+    body = await caller.api(
+        "GET", _obs(app_id, "/slo"), params={"range": "24h"}
+    )
+    return {
+        "period_days": body["settings"]["period_days"],
+        "objectives": [
+            {k: v for k, v in o.items() if k != "trend"}
+            for o in body["objectives"]
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Repository import and app links (CNP-243)
 # ---------------------------------------------------------------------------
 
