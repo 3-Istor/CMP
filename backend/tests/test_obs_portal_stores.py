@@ -28,6 +28,7 @@ from app.models.project import Project
 from app.routers import app_observability as router
 from app.services import authz, keycloak_service
 from app.services.keycloak_service import get_current_user
+from app.services.observability import grafana_project as gp
 from app.services.observability import silences, stores
 from tests import obs_seed
 from tests.obs_stack import free_port, need, store, wait_for_trace
@@ -399,3 +400,41 @@ def test_a_silence_from_the_portal_covers_the_apps_alert(api, stack):
         "suppressed",
         1,
     )
+
+
+# ── Grafana dashboards ───────────────────────────────────────────────────────
+
+
+def _panel_queries():
+    for dashboard in (gp.app_dashboard(), gp.project_dashboard()):
+        for panel in dashboard["panels"]:
+            yield dashboard["uid"], panel["title"], panel["targets"][0]["expr"]
+
+
+@pytest.mark.parametrize("uid,title,expr", list(_panel_queries()))
+def test_every_dashboard_query_runs_on_victoriametrics(
+    stack, uid, title, expr
+):
+    query = expr.replace("$app", "web").replace("$namespace", "shop-web")
+
+    response = httpx.get(
+        f"{stack['metrics']}/api/v1/query", params={"query": query}
+    )
+
+    assert (uid, title, response.status_code) == (uid, title, 200)
+
+
+def test_the_budget_panel_reads_the_recorded_series(stack):
+    budget = next(p for p in gp.app_dashboard()["panels"] if p["id"] == 4)[
+        "targets"
+    ][0]["expr"]
+
+    found = httpx.get(
+        f"{stack['metrics']}/api/v1/query",
+        params={"query": budget.replace("$app", "web")},
+    ).json()["data"]["result"]
+
+    assert {r["metric"]["cnp_slo"] for r in found} == {
+        "availability",
+        "latency",
+    }
