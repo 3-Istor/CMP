@@ -186,15 +186,15 @@ def test_deploy_writes_the_project_pull_secret_once(world):
 def test_neo4j_password_is_generated_once_and_copied_to_its_consumer(world):
     Session, cluster = world
     _deploy(_published_run(Session))
-    auth = cluster.vault[("project-epitweet", "system/imports/neo4j")]
+    auth = cluster.vault[("project-epitweet", "neo4j/imports")]
 
     _deploy(_published_run(Session))
 
-    assert cluster.vault[("project-epitweet", "system/imports/neo4j")] == auth
+    assert cluster.vault[("project-epitweet", "neo4j/imports")] == auth
     password = auth["NEO4J_AUTH"].split("/", 1)[1]
     assert len(password) >= 24
     consumer = cluster.vault[
-        ("project-epitweet", "system/imports/social-graph-service")
+        ("project-epitweet", "social-graph-service/imports")
     ]
     assert consumer == {
         "QUARKUS_NEO4J_AUTHENTICATION_USERNAME": "neo4j",
