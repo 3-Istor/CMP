@@ -9,6 +9,7 @@ import {
   NotAllowed,
   useProjectContext,
 } from "@/components/projects/ProjectContext";
+import { useObsCapabilities } from "@/components/observability/shared";
 import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,7 @@ import {
   Sun,
   Trash2,
   Wallet,
+  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -104,6 +106,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const canViewObservability = can("app.viewObservability");
 
   const isKubernetes = current.provider_type === "kubernetes";
+  const obsCaps = useObsCapabilities(
+    appId,
+    isKubernetes && canViewObservability,
+  ).data;
   const isRunning = current.status === "running";
   const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
 
@@ -219,6 +225,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       segment: "logs",
       icon: ScrollText,
       visible: isKubernetes && canViewLogs,
+    },
+    {
+      key: "traces",
+      segment: "traces",
+      icon: Waypoints,
+      visible: isKubernetes && canViewObservability && Boolean(obsCaps?.traces),
     },
     {
       key: "delivery",

@@ -2,6 +2,8 @@
 
 import { AppIconPanel } from "@/components/app-icon/AppIconPanel";
 import { EnvironmentsTab } from "@/components/environments/EnvironmentsTab";
+import { SloTargetsCard } from "@/components/observability/SloTargetsCard";
+import { useObsCapabilities } from "@/components/observability/shared";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
 import { useAppContext } from "@/components/projects/AppContext";
 import { AppSection } from "@/components/projects/AppFrame";
@@ -116,7 +118,7 @@ function SearchHighlight({ children }: { children: React.ReactNode }) {
   );
 }
 
-const SECTIONS = ["general", "secrets", "delivery", "security", "advanced"] as const;
+const SECTIONS = ["general", "secrets", "delivery", "slo", "security", "advanced"] as const;
 
 function SettingsSection({
   id,
@@ -166,10 +168,16 @@ export default function AppSettingsPage() {
 
   const allowed =
     deployment.provider_type === "kubernetes" && can("app.viewConfig");
+  const caps = useObsCapabilities(
+    appId,
+    allowed && can("app.viewObservability"),
+  );
+  const sloShown = Boolean(caps.data?.alerts);
   const visibleSections = SECTIONS.filter(
     (id) =>
       (id !== "secrets" || isRunning) &&
       (id !== "delivery" || can("release.view")) &&
+      (id !== "slo" || sloShown) &&
       (id !== "security" || can("app.viewObservability")),
   );
   const sectionsKey = visibleSections.join();
@@ -255,6 +263,15 @@ export default function AppSettingsPage() {
             </SettingsSection>
           )}
 
+          {sloShown && (
+            <SettingsSection
+              id="slo"
+              title={ts("sections.slo.title")}
+              description={ts("sections.slo.description")}
+            >
+              <SloTargetsCard project={projectName} app={deployment.name} />
+            </SettingsSection>
+          )}
           {can("app.viewObservability") && (
             <SettingsSection
               id="security"

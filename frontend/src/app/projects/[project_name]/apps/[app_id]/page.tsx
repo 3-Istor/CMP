@@ -9,6 +9,8 @@ import {
   CostCard,
   MetricCards,
 } from "@/components/app-overview/MetricCards";
+import { useObsCapabilities } from "@/components/observability/shared";
+import { OverviewObservability } from "@/components/observability/OverviewObservability";
 import { useAppContext } from "@/components/projects/AppContext";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +27,14 @@ export default function AppOverviewPage() {
   const canViewConfig = can("app.viewConfig");
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
 
+  // The golden signals above replace the legacy request and error cards.
+  const obsMetrics = Boolean(
+    useObsCapabilities(
+      appId,
+      isKubernetes && canViewLogs && can("app.viewObservability"),
+    ).data?.metrics,
+  );
+
   const links = useCardData(
     `links-${appId}-${current.github_repo_url ?? ""}`,
     () => getDeploymentLinks(appId),
@@ -37,13 +47,23 @@ export default function AppOverviewPage() {
 
   return (
     <>
+      <OverviewObservability
+        appId={appId}
+        project={projectName}
+        app={current.name}
+        base={base}
+        allowed={canViewLogs && can("app.viewObservability")}
+      />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCards
-          appId={appId}
-          links={links.data ?? []}
-          isKubernetes={isKubernetes}
-          allowed={canViewLogs}
-        />
+        {!obsMetrics && (
+          <MetricCards
+            appId={appId}
+            links={links.data ?? []}
+            isKubernetes={isKubernetes}
+            allowed={canViewLogs}
+          />
+        )}
         <CostCard
           appId={appId}
           projectName={projectName}
