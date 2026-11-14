@@ -47,6 +47,10 @@ class Cluster:
         self.record = json.loads(json.dumps(RECORD))
         self.record_reads: list[str] = []
         self.unhealthy: set[str] = set()
+        self.recovering: dict[str, int] = {}
+        self.polls: list[str] = []
+        self.diagnoses: dict[str, dict] = {}
+        self.refused: set[str] = set()
 
     async def read_kv(self, mount, path):
         return dict(self.vault.get((mount, path), {}))
@@ -76,7 +80,25 @@ class Cluster:
         self.cnames.append(hostname)
 
     def argo_state(self, name, image):
-        return "failed" if name in self.unhealthy else "synced"
+        self.polls.append(name)
+        if self.recovering.get(name, 0) > 0:
+            self.recovering[name] -= 1
+            return "pending"
+        if name in self.refused:
+            return "refused"
+        return "pending" if name in self.unhealthy else "synced"
+
+    async def diagnose(self, project, app, cloud=None, since=""):
+        return dict(
+            self.diagnoses.get(
+                app, {"cause": "deploy_timeout", "message": "Still Degraded"}
+            )
+        )
+
+    def committed(self, index: int) -> set[str]:
+        return {
+            a["name"] for a in self.commits[index]["record"]["spec"]["apps"]
+        }
 
 
 @pytest.fixture
@@ -103,6 +125,9 @@ def world(monkeypatch):
     monkeypatch.setattr(deploy, "list_records", cluster.records)
     monkeypatch.setattr(deploy.dns, "ensure_cname", cluster.cname)
     monkeypatch.setattr(deploy, "_argo_state", cluster.argo_state)
+    monkeypatch.setattr(deploy.diagnosis, "diagnose", cluster.diagnose)
+    monkeypatch.setattr(deploy, "POLL_SECONDS", 0)
+    monkeypatch.setattr(settings, "IMPORT_ARGO_TIMEOUT_SECONDS", 0)
 
     async def smoke(url):
         return True
@@ -165,16 +190,15 @@ def _deploy(run_id):
     asyncio.run(deploy.deploy(run_id))
 
 
-def test_deploy_writes_one_commit_with_the_record_and_eleven_values(world):
+def test_deploy_ends_with_a_commit_of_the_record_and_eleven_values(world):
     Session, cluster = world
     run_id = _published_run(Session)
 
     _deploy(run_id)
 
-    assert len(cluster.commits) == 1
-    files = cluster.commits[0]["files"]
+    files = cluster.commits[-1]["files"]
     assert len(files) == 11
-    assert len(cluster.commits[0]["record"]["spec"]["apps"]) == 11
+    assert len(cluster.commits[-1]["record"]["spec"]["apps"]) == 11
     with Session() as db:
         run = db.get(ImportRun, run_id)
         assert run.status == "succeeded"
@@ -278,6 +302,273 @@ def test_a_failed_service_does_not_block_the_others(world):
     assert run.status == "failed"
 
 
+BACKING = {"mongodb", "redis", "neo4j", "elasticsearch"}
+
+
+def test_backing_apps_are_committed_before_the_services_that_link_to_them(
+    world,
+):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    assert cluster.committed(0) == BACKING
+
+
+def test_an_app_is_committed_after_every_app_it_links_to(world):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    first_seen = {}
+    for index in range(len(cluster.commits)):
+        for app in cluster.committed(index):
+            first_seen.setdefault(app, index)
+    for spec in generate.resolve(PLAN):
+        for link in spec.depends_on:
+            assert first_seen[link["app"]] < first_seen[spec.name]
+
+
+def test_the_public_app_is_committed_last(world):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    assert "frontend" not in cluster.committed(-2)
+    assert "frontend" in cluster.committed(-1)
+
+
+def test_a_wave_is_committed_once_the_previous_one_is_healthy(
+    world, monkeypatch
+):
+    Session, cluster = world
+    monkeypatch.setattr(settings, "IMPORT_ARGO_TIMEOUT_SECONDS", 60)
+    cluster.recovering["epitweet-neo4j-app"] = 3
+
+    _deploy(_published_run(Session))
+
+    last_neo4j_poll = max(
+        i for i, n in enumerate(cluster.polls) if n == "epitweet-neo4j-app"
+    )
+    first_service_poll = cluster.polls.index("epitweet-user-service-app")
+    assert last_neo4j_poll < first_service_poll
+
+
+def test_an_app_unhealthy_while_its_dependencies_start_does_not_fail_the_run(
+    world, monkeypatch
+):
+    Session, cluster = world
+    monkeypatch.setattr(settings, "IMPORT_ARGO_TIMEOUT_SECONDS", 60)
+    cluster.recovering["epitweet-frontend-app"] = 5
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+        frontend = db.query(ImportService).filter_by(app_name="frontend").one()
+    assert run.status == "succeeded"
+    assert frontend.status == "running"
+
+
+def test_a_deploy_failure_names_its_cause_and_message(world):
+    Session, cluster = world
+    cluster.unhealthy.add("epitweet-search-service-app")
+    cluster.diagnoses["search-service"] = {
+        "cause": "crash_loop",
+        "message": "Container app restarted 6 times, last exit code 1",
+        "log_excerpt": "Connection refused: elasticsearch:9200",
+    }
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+        row = (
+            db.query(ImportService).filter_by(app_name="search-service").one()
+        )
+    failure = run.report["failure"]
+    assert run.report["stage"] == "deploy"
+    assert failure["cause"] == "crash_loop"
+    assert failure["apps"] == ["search-service"]
+    assert failure["log_excerpt"] == "Connection refused: elasticsearch:9200"
+    assert "search-service: Container app restarted 6 times" in (
+        run.report["error"]
+    )
+    assert row.message == "Container app restarted 6 times, last exit code 1"
+    assert run.report["states"]["search-service"] == "crash_loop"
+
+
+def test_the_lead_cause_is_the_dependency_that_failed_first(world):
+    Session, cluster = world
+    cluster.unhealthy |= {
+        "epitweet-neo4j-app",
+        "epitweet-social-graph-service-app",
+    }
+    cluster.diagnoses["neo4j"] = {
+        "cause": "crash_loop",
+        "message": "Container neo4j restarted 6 times",
+    }
+    cluster.diagnoses["social-graph-service"] = {
+        "cause": "probe_failed",
+        "message": "Readiness probe failed",
+    }
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+    failure = run.report["failure"]
+    assert failure["cause"] == "crash_loop"
+    assert failure["apps"] == ["neo4j", "social-graph-service"]
+    graph = next(
+        f
+        for f in failure["app_failures"]
+        if f["app"] == "social-graph-service"
+    )
+    assert graph["cause"] == "dependency_failed"
+    assert "neo4j" in graph["message"]
+
+
+def test_an_unreachable_public_app_is_its_own_cause(world, monkeypatch):
+    Session, cluster = world
+
+    async def smoke(url):
+        return False
+
+    monkeypatch.setattr(deploy, "_smoke", smoke)
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+    assert run.report["failure"]["cause"] == "unreachable"
+    assert run.report["states"]["frontend"] == "unreachable"
+
+
+def test_deploy_waves_put_backing_apps_first_and_public_apps_last():
+    specs = generate.resolve(PLAN)
+
+    waves = [
+        sorted(s.name for s in wave) for wave in deploy.deploy_waves(specs)
+    ]
+
+    assert waves == [
+        sorted(BACKING),
+        ["search-service", "social-graph-service", "user-service"],
+        ["like-service", "post-service", "timeline-service"],
+        ["frontend"],
+    ]
+
+
+def test_deploy_waves_place_every_app_of_a_link_cycle():
+    a = generate.AppSpec(
+        name="a",
+        kind="service",
+        depends_on=[{"app": "b", "port": 80, "alias": "b"}],
+    )
+    b = generate.AppSpec(
+        name="b",
+        kind="service",
+        depends_on=[{"app": "a", "port": 80, "alias": "a"}],
+    )
+
+    waves = deploy.deploy_waves([a, b])
+
+    assert sorted(s.name for wave in waves for s in wave) == ["a", "b"]
+
+
+def test_a_public_app_without_links_still_waits_for_the_services():
+    web = generate.AppSpec(name="web", kind="service", public=True)
+    api = generate.AppSpec(name="api", kind="service")
+
+    waves = deploy.deploy_waves([web, api])
+
+    assert [[s.name for s in wave] for wave in waves] == [["api"], ["web"]]
+
+
+def test_an_app_healthy_by_the_end_of_the_deploy_does_not_fail_the_run(
+    world,
+):
+    Session, cluster = world
+    cluster.recovering["epitweet-neo4j-app"] = 1
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+        neo4j = db.query(ImportService).filter_by(app_name="neo4j").one()
+    assert run.status == "succeeded"
+    assert neo4j.status == "running"
+    assert run.report["states"]["neo4j"] == "synced"
+
+
+def test_a_chart_argo_refuses_to_render_does_not_wait_for_the_deadline(
+    world, monkeypatch
+):
+    Session, cluster = world
+    monkeypatch.setattr(settings, "IMPORT_ARGO_TIMEOUT_SECONDS", 3600)
+    monkeypatch.setattr(deploy, "POLL_SECONDS", 3600)
+    cluster.refused.add("epitweet-neo4j-app")
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+    assert run.report["failure"]["apps"][0] == "neo4j"
+
+
+def test_each_registry_commit_names_its_wave(world, monkeypatch):
+    Session, cluster = world
+    messages = []
+    commit = cluster.commit
+
+    async def named(project, change, message):
+        messages.append(message)
+        return await commit(project, change, message)
+
+    monkeypatch.setattr(deploy, "commit_record_change", named)
+
+    _deploy(_published_run(Session))
+
+    assert messages[-1].endswith("(4/4: frontend)")
+
+
+def test_an_error_after_the_first_wave_keeps_what_the_waves_found(
+    world, monkeypatch
+):
+    Session, cluster = world
+    cluster.unhealthy.add("epitweet-neo4j-app")
+    cluster.diagnoses["neo4j"] = {
+        "cause": "crash_loop",
+        "message": "Container neo4j restarted 6 times",
+    }
+    commit = cluster.commit
+
+    async def refuse_second(project, change, message):
+        if cluster.commits:
+            raise generate.PlanError(["app 'user-service': name taken"])
+        return await commit(project, change, message)
+
+    monkeypatch.setattr(deploy, "commit_record_change", refuse_second)
+    run_id = _published_run(Session)
+
+    _deploy(run_id)
+
+    with Session() as db:
+        run = db.get(ImportRun, run_id)
+        rows = {s.app_name: s for s in db.query(ImportService).all()}
+    assert run.report["failure"]["app_failures"][0]["app"] == "neo4j"
+    assert rows["neo4j"].message == "Container neo4j restarted 6 times"
+    assert rows["mongodb"].status == "running"
+    assert "registry refused" in rows["user-service"].message
+
+
 def test_a_registry_failure_fails_the_run(world, monkeypatch):
     Session, cluster = world
 
@@ -300,7 +591,7 @@ def test_values_carry_the_published_digest(world):
 
     _deploy(_published_run(Session))
 
-    files = cluster.commits[0]["files"]
+    files = cluster.commits[-1]["files"]
     values = YAML(typ="safe").load(
         files["apps/epitweet/user-service/values.yaml"]
     )
@@ -312,7 +603,7 @@ def test_deploy_reads_the_registry_at_the_head_it_commits_on(world):
 
     _deploy(_published_run(Session))
 
-    assert cluster.record_reads == ["head"]
+    assert set(cluster.record_reads) == {"head"}
 
 
 def test_name_taken_by_another_project_since_approval_aborts_the_commit(

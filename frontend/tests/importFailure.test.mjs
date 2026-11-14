@@ -32,6 +32,7 @@ const failure = (fields) => ({
   stage: "scan",
   message: "",
   apps: ["user-service"],
+  app_failures: [],
   vulnerabilities: [netty, { ...netty, id: "CVE-2023-7272" }],
   upgrades: [],
   log_excerpt: null,

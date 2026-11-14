@@ -1512,6 +1512,14 @@ export type ImportFailureCause =
   | "workflow_not_started"
   | "dispatch_failed"
   | "deploy_failed"
+  | "manifests_refused"
+  | "image_pull"
+  | "crash_loop"
+  | "probe_failed"
+  | "unschedulable"
+  | "deploy_timeout"
+  | "unreachable"
+  | "dependency_failed"
   | "internal";
 
 export type ImportFailureAction = "retry" | "fix_in_repo" | "reanalyze" | "contact_platform";
@@ -1523,6 +1531,13 @@ export interface ImportBlockingVulnerability {
   installed: string;
   fixed: string;
   severity: string;
+}
+
+/** One app that did not start, in deploy order (CNP-270). */
+export interface ImportAppFailure {
+  app: string;
+  cause: ImportFailureCause;
+  message: string;
 }
 
 export interface ImportUpgrade {
@@ -1539,6 +1554,7 @@ export interface ImportFailure {
   stage: string | null;
   message: string;
   apps: string[];
+  app_failures: ImportAppFailure[];
   vulnerabilities: ImportBlockingVulnerability[];
   upgrades: ImportUpgrade[];
   log_excerpt: string | null;

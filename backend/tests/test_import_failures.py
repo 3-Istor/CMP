@@ -322,6 +322,41 @@ def _failed(world, kind="build", **report):
         ("analyze", {"stage": "analyze"}, ["retry", "contact_platform"]),
         ("analyze", {"stage": "fetch"}, ["retry"]),
         ("analyze", {"stage": "dispatch"}, ["retry", "contact_platform"]),
+        (
+            "build",
+            {"stage": "deploy", "failure": {"cause": "manifests_refused"}},
+            ["contact_platform", "retry"],
+        ),
+        (
+            "build",
+            {"stage": "deploy", "failure": {"cause": "image_pull"}},
+            ["retry", "contact_platform"],
+        ),
+        (
+            "build",
+            {"stage": "deploy", "failure": {"cause": "crash_loop"}},
+            ["fix_in_repo", "retry"],
+        ),
+        (
+            "build",
+            {"stage": "deploy", "failure": {"cause": "probe_failed"}},
+            ["fix_in_repo", "reanalyze", "retry"],
+        ),
+        (
+            "build",
+            {"stage": "deploy", "failure": {"cause": "unschedulable"}},
+            ["contact_platform", "retry"],
+        ),
+        (
+            "build",
+            {"stage": "deploy", "failure": {"cause": "deploy_timeout"}},
+            ["retry", "contact_platform"],
+        ),
+        (
+            "build",
+            {"stage": "deploy", "failure": {"cause": "unreachable"}},
+            ["retry", "contact_platform"],
+        ),
     ],
 )
 def test_each_cause_offers_its_actions(client, world, kind, report, actions):
@@ -342,6 +377,65 @@ def test_a_build_of_an_analysis_of_another_branch_offers_a_reanalysis(
         "fix_in_repo",
         "retry",
         "reanalyze",
+    ]
+
+
+def test_a_deploy_failure_lists_each_app_with_its_cause(client, world):
+    app_failures = [
+        {
+            "app": "user-service",
+            "cause": "crash_loop",
+            "message": "Container app restarted 6 times, last exit code 1",
+        },
+        {
+            "app": "post-service",
+            "cause": "dependency_failed",
+            "message": "user-service did not start first; Still Degraded",
+        },
+    ]
+    run = _failed(
+        world,
+        stage="deploy",
+        error="user-service: Container app restarted 6 times",
+        failure={
+            "cause": "crash_loop",
+            "apps": ["user-service", "post-service"],
+            "app_failures": app_failures,
+            "log_excerpt": "boom",
+        },
+    )
+
+    failure = _detail(client, run)["failure"]
+
+    assert failure["cause"] == "crash_loop"
+    assert (
+        failure["message"] == "user-service: Container app restarted 6 times"
+    )
+    assert failure["app_failures"] == app_failures
+    assert failure["log_excerpt"] == "boom"
+
+
+def test_a_crash_loop_of_a_backing_app_is_for_the_platform(client, world):
+    run = _failed(
+        world,
+        stage="deploy",
+        failure={"cause": "crash_loop", "apps": ["neo4j"]},
+    )
+    with world.db() as db:
+        source = db.get(ImportRun, run.id).source
+        db.add(
+            ImportService(
+                source_id=source.id,
+                app_name="neo4j",
+                kind="backing",
+                spec={"plan_name": "neo4j"},
+            )
+        )
+        db.commit()
+
+    assert _detail(client, run)["failure"]["actions"] == [
+        "retry",
+        "contact_platform",
     ]
 
 
@@ -757,7 +851,10 @@ def test_the_watch_journal_names_the_workflow_run_without_its_url(
     asyncio.run(watch.check_workflows())
 
     (event,) = github.journal
-    assert (event["details"]["workflow_run"], "/actions/runs/" in str(event)) == (
+    assert (
+        event["details"]["workflow_run"],
+        "/actions/runs/" in str(event),
+    ) == (
         900,
         False,
     )
