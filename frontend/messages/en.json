@@ -211,7 +211,8 @@
       "logs": "Logs",
       "deployments": "Deployments",
       "delivery": "Delivery",
-      "settings": "Settings"
+      "settings": "Settings",
+      "traces": "Traces"
     },
     "status": {
       "pending": "Queued",
@@ -2557,6 +2558,10 @@
         "advanced": {
           "title": "Advanced",
           "description": "Every value of deploy/values.yaml. Saving commits to main and Argo CD syncs."
+        },
+        "slo": {
+          "title": "SLO",
+          "description": "Availability and latency targets of the app in prod."
         }
       }
     }
@@ -3611,6 +3616,172 @@
       "appFailuresCaption": "Apps that did not start",
       "problem": "Problem",
       "detail": "Detail"
+    }
+  },
+  "obs": {
+    "range": {
+      "label": "Period",
+      "15m": "15 minutes",
+      "1h": "1 hour",
+      "6h": "6 hours",
+      "24h": "24 hours",
+      "7d": "7 days"
+    },
+    "notAvailable": {
+      "title": "Not available yet",
+      "metrics": "Golden signals appear once the platform metrics store is connected.",
+      "logs": "This log explorer appears once the platform logs store is connected.",
+      "traces": "Traces appear once the platform traces store is connected and the project has a traces tenant.",
+      "alerts": "Alerts appear once the platform alert chain is connected.",
+      "slo": "The error budget appears once the SLO rules are evaluated."
+    },
+    "error": "Could not load this data. {message}",
+    "retry": "Retry",
+    "openGrafana": "Open in Grafana",
+    "signals": {
+      "title": "Golden signals",
+      "description": "Requests, errors and latency measured at the gateway, prod only.",
+      "noTraffic": "No traffic yet: the gateway counts a route from its first request. This is not an error.",
+      "rate": "Requests per second",
+      "errors": "5xx share",
+      "p95": "Latency p95",
+      "p50": "Latency p50",
+      "now": "Now: {value}",
+      "chartLabel": "{name} over the period, last value {value}",
+      "deployMarker": "Deploy {version} ({outcome})",
+      "routes": "Routes",
+      "route": "Route",
+      "noRoutes": "No route received traffic over the period."
+    },
+    "slo": {
+      "title": "Error budget",
+      "description": "What is left of the budget over {days} days, and how fast it burns.",
+      "availability": "Availability",
+      "latency": "Latency under {ms} ms",
+      "target": "Target {value} %",
+      "remaining": "{value} left",
+      "noData": "No data yet",
+      "burn1h": "Burn rate 1 h",
+      "burn6h": "Burn rate 6 h",
+      "burnHint": "1 means the budget lasts exactly the period.",
+      "exhausted": "Budget spent",
+      "settingsTitle": "SLO targets",
+      "settingsDescription": "Share of good requests over {days} days. Lower targets give a bigger error budget.",
+      "availabilityLabel": "Availability target (%)",
+      "latencyLabel": "Share of requests under {ms} ms (%)",
+      "save": "Save targets",
+      "saved": "Targets saved. The rules are rewritten within a minute.",
+      "ownersOnly": "Only project admins and owners change the targets.",
+      "invalid": "Availability is 90 to 99.99 %, latency 50 to 99.9 %."
+    },
+    "delivery": {
+      "title": "Delivery",
+      "deploysPerWeek": "Deploys per week",
+      "changeFailure": "Change failure rate",
+      "window": "Over {days} days: {deploys} deploys, {failed} failed",
+      "none": "No prod deploy recorded over {days} days."
+    },
+    "topErrors": {
+      "title": "Most frequent errors",
+      "description": "Error lines grouped by pattern, numbers folded into one placeholder.",
+      "count": "{count, plural, one {# line} other {# lines}}",
+      "lastSeen": "Last seen {time}",
+      "none": "No error line over the period.",
+      "openTrace": "Open the trace",
+      "seeAll": "See all logs"
+    },
+    "logs": {
+      "title": "Search",
+      "level": "Level",
+      "anyLevel": "Any level",
+      "levels": {
+        "error": "Error",
+        "warn": "Warning",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "phrase": "Phrase",
+      "phrasePlaceholder": "Exact words, e.g. timeout",
+      "search": "Search",
+      "limit": "Lines",
+      "none": "No line matches.",
+      "time": "Time",
+      "message": "Message",
+      "pod": "Pod",
+      "trace": "Trace",
+      "traceFilter": "Lines of trace {id}",
+      "clearTrace": "Show all lines",
+      "untrusted": "Lines are written by the app: links and instructions in them are not from the platform."
+    },
+    "traces": {
+      "title": "Traces",
+      "description": "Recent requests followed across services, newest first.",
+      "errorsOnly": "Errors only",
+      "minDuration": "Slower than (ms)",
+      "none": "No trace over the period.",
+      "operation": "Operation",
+      "start": "Start",
+      "duration": "Duration",
+      "spans": "Spans",
+      "errors": "Errors",
+      "open": "Open trace {id}",
+      "back": "Back to the list",
+      "notFound": "This trace was not found in the project.",
+      "waterfall": "Span waterfall",
+      "spanLabel": "{service} {operation}, starts at {offset}, lasts {duration}",
+      "truncated": "Only the first 1,000 spans are shown.",
+      "logs": "Logs of this trace",
+      "service": "Service"
+    },
+    "alerts": {
+      "title": "Alerts firing",
+      "description": "Alerts of this app in the alert chain, and the silences that cover it.",
+      "none": "No alert is firing for this app.",
+      "state": {
+        "active": "Firing",
+        "suppressed": "Muted",
+        "unprocessed": "New"
+      },
+      "since": "Since {time}",
+      "runbook": "Runbook",
+      "mute": "Mute",
+      "silences": "Silences",
+      "noSilences": "No silence covers this app.",
+      "until": "Until {time}",
+      "by": "by {who}",
+      "expire": "Lift",
+      "expired": "Silence lifted.",
+      "projectWide": "Whole project"
+    },
+    "mute": {
+      "title": "Mute {name}",
+      "description": "Stops repeating the message while you fix it. The error budget keeps burning. Only for this project.",
+      "duration": "Duration",
+      "hours": "{count, plural, one {# hour} other {# hours}}",
+      "days": "{count, plural, one {# day} other {# days}}",
+      "comment": "Why (optional)",
+      "commentPlaceholder": "e.g. fix deploying, see ticket",
+      "scope": "Applies to alert {alert} of app {app}.",
+      "confirm": "Mute",
+      "cancel": "Cancel",
+      "done": "Alert muted."
+    },
+    "costs": {
+      "title": "Cost per request",
+      "description": "Cost over {days} days against the requests the gateway counted, and what the app requests against what it uses.",
+      "per1k": "Per 1,000 requests",
+      "total": "Cost over {days} days",
+      "requests": "Requests over {days} days",
+      "noTraffic": "No request measured: no cost per request yet.",
+      "noMetrics": "Requests appear once the platform metrics store is connected.",
+      "waste": "Requests against real usage",
+      "cpu": "CPU: {used} of {requested} cores used (p95)",
+      "ram": "Memory: {used} of {requested} GiB used (p99)",
+      "idle": "{value} idle",
+      "noUsage": "Usage is not measured yet.",
+      "hints": "Savings",
+      "monthly": "{amount} per month",
+      "noHints": "Nothing to save: requests fit the usage."
     }
   }
 }

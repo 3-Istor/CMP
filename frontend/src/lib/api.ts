@@ -1589,3 +1589,116 @@ export const deleteImport = (project: string, sourceId: string) =>
     `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}`,
     { method: "DELETE" },
   );
+
+// Observability of an app (CNP-185 V5). A store not configured yet answers
+// 503 {"detail": {"code": "not_available"}}: see isObsNotAvailable.
+const obs = (deploymentId: number, path = "") =>
+  `/deployments/${deploymentId}/observability${path}`;
+
+function obsQuery(params: Record<string, string | number | boolean | null | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
+export function isObsNotAvailable(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 503) return false;
+  try {
+    return JSON.parse(err.body)?.detail?.code === "not_available";
+  } catch {
+    return false;
+  }
+}
+
+export const getObsCapabilities = (deploymentId: number) =>
+  request<import("@/types/observability").ObsCapabilities>(obs(deploymentId));
+
+export const getObsSignals = (deploymentId: number, range: string) =>
+  request<import("@/types/observability").GoldenSignals>(
+    obs(deploymentId, `/signals${obsQuery({ range })}`),
+  );
+
+export const getObsSlo = (deploymentId: number, range: string) =>
+  request<import("@/types/observability").SloStatus>(
+    obs(deploymentId, `/slo${obsQuery({ range })}`),
+  );
+
+export const getObsDeploys = (deploymentId: number, range: string) =>
+  request<import("@/types/observability").DeployMarker[]>(
+    obs(deploymentId, `/deploys${obsQuery({ range })}`),
+  );
+
+export const getObsDora = (deploymentId: number, days = 30) =>
+  request<import("@/types/observability").Dora>(
+    obs(deploymentId, `/dora${obsQuery({ days })}`),
+  );
+
+export const getObsTopErrors = (deploymentId: number, range: string, limit = 5) =>
+  request<import("@/types/observability").ErrorPattern[]>(
+    obs(deploymentId, `/logs/top-errors${obsQuery({ range, limit })}`),
+  );
+
+export const searchObsLogs = (
+  deploymentId: number,
+  params: { range: string; level?: string; q?: string; trace_id?: string; limit?: number },
+) =>
+  request<import("@/types/observability").ObsLogLine[]>(
+    obs(deploymentId, `/logs${obsQuery(params)}`),
+  );
+
+export const listObsTraces = (
+  deploymentId: number,
+  params: { range: string; errors_only?: boolean; min_duration_ms?: number; limit?: number },
+) =>
+  request<import("@/types/observability").TraceSummary[]>(
+    obs(deploymentId, `/traces${obsQuery(params)}`),
+  );
+
+export const getObsTrace = (deploymentId: number, traceId: string) =>
+  request<import("@/types/observability").TraceDetail>(
+    obs(deploymentId, `/traces/${encodeURIComponent(traceId)}`),
+  );
+
+export const getObsAlerts = (deploymentId: number) =>
+  request<import("@/types/observability").AppAlerts>(obs(deploymentId, "/alerts"));
+
+export const getObsCosts = (deploymentId: number) =>
+  request<import("@/types/observability").AppCosts>(obs(deploymentId, "/costs"));
+
+export const updateSloTargets = (body: {
+  project: string;
+  app: string;
+  availability: number;
+  latency: number;
+}) =>
+  request<import("@/types/observability").SloSettings>("/observability/slo", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+
+export const createSilence = (body: {
+  project: string;
+  matchers: Record<string, string>;
+  hours: number;
+  comment: string;
+}) =>
+  request<{ id: string }>("/observability/silences", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const expireSilence = (project: string, id: string) =>
+  request<void>(
+    `/observability/silences/${encodeURIComponent(id)}${obsQuery({ project })}`,
+    { method: "DELETE" },
+  );
+
+export const getSloTargets = (project: string, app: string) =>
+  request<import("@/types/observability").SloSettings>(
+    `/observability/slo${obsQuery({ project, app })}`,
+  );
