@@ -24,6 +24,7 @@ from app.models.imports import (
     ImportSource,
     RunStatus,
 )
+from app.models.project import Project
 from app.services import kube_client, topology_cache, vault_client
 from app.services.imports import dns, generate
 from app.services.imports.generate import AppSpec, PlanError
@@ -82,6 +83,26 @@ async def _ensure_pull_secret(project: str) -> None:
             )
         },
     )
+
+
+def _auth_mount(db: Session, project: str) -> str:
+    row = db.query(Project).filter_by(project_name=project).first()
+    cloud = (row.target_cloud if row else None) or "onprem"
+    return "kubernetes" if cloud == "onprem" else f"kubernetes-{cloud}"
+
+
+async def _ensure_app_roles(
+    db: Session, project: str, specs: list[AppSpec]
+) -> None:
+    """The Vault role each app with a secret syncs it with (read-only)."""
+    mount = _auth_mount(db, project)
+    for spec in specs:
+        if generate.needs_secret(spec):
+            await vault_client.write_app_role(
+                mount,
+                generate.app_role_name(project, spec.name),
+                f"project-{project}-read-policy",
+            )
 
 
 async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
@@ -280,6 +301,7 @@ async def _deploy(db: Session, run: ImportRun) -> None:
 
     await _ensure_pull_secret(project)
     await _ensure_credentials(project, specs)
+    await _ensure_app_roles(db, project, specs)
 
     async def change(record: dict, head: str) -> dict[str, str | None]:
         await _check_names_at_head(
@@ -432,6 +454,14 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
                 )
             except dns.DnsError as exc:
                 logger.warning("DNS cleanup of %s failed: %s", app, exc)
+    mount = _auth_mount(db, project)
+    for app in sorted(removed):
+        try:
+            await vault_client.delete_app_role(
+                mount, generate.app_role_name(project, app)
+            )
+        except vault_client.VaultError as exc:
+            logger.warning("Vault role cleanup of %s failed: %s", app, exc)
     for service in source.services:
         if service.deployment_id:
             row = db.get(Deployment, service.deployment_id)

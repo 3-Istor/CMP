@@ -121,3 +121,47 @@ async def list_paths(mount: str, prefix: str = "") -> list[str]:
                 else:
                     paths.append(f"{folder}{key}")
     return sorted(paths)
+
+
+def _role_url(mount: str, name: str) -> str:
+    if not vault_auth.is_configured():
+        raise VaultError("Vault is not configured on the CMP.")
+    return f"{settings.VAULT_URL}/v1/auth/{mount}/role/{name}"
+
+
+async def write_app_role(mount: str, name: str, policy: str) -> None:
+    """
+    A kubernetes auth role the Vault Secrets Operator logs in with for one
+    app, as app-templates' k3s-gitops-app creates for a template app. The
+    cmp-backend policy only lets these bindings and project-* policies through.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.post(
+                _role_url(mount, name),
+                headers=await _headers(),
+                json={
+                    "bound_service_account_names": ["vault-secrets-operator"],
+                    "bound_service_account_namespaces": [
+                        "vault-secrets-operator"
+                    ],
+                    "token_policies": [policy],
+                    "token_ttl": 86400,
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 204):
+        raise VaultError(f"Vault role write failed ({response.status_code})")
+
+
+async def delete_app_role(mount: str, name: str) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.delete(
+                _role_url(mount, name), headers=await _headers()
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 204, 404):
+        raise VaultError(f"Vault role delete failed ({response.status_code})")

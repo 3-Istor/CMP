@@ -667,13 +667,16 @@ def service_values(
 
 
 def _secrets(project: str, app: str) -> dict:
-    # The project's system role reads project-<p>/system/*: imported apps get
-    # no per-app Terraform and so no per-app role (D9).
+    # No vaultRole: cnp-generic-app derives the app's own role,
+    # <project>-<app>-role, which deploy creates (app_role_name).
     return {
         "enabled": True,
         "vaultPath": f"project-{project}/{secret_path(app)}",
-        "vaultRole": f"project-{project}-system-role",
     }
+
+
+def app_role_name(project: str, app: str) -> str:
+    return f"{project}-{app}-role"
 
 
 def backing_values(project: str, spec: AppSpec) -> dict:
