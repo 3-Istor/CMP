@@ -25,6 +25,7 @@ from app.services.github_service import (
     GitHubAppError,
     get_org_installation_token,
 )
+from app.services.observability import reconcile as obs_reconcile
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
 
@@ -265,6 +266,7 @@ def run_deployment(deployment_id: int) -> None:
                 f"Running - {output_msg}",
             )
             _notify(deployment, "deployment_succeeded")
+            obs_reconcile.request_sync()
 
             logger.info("=" * 80)
             logger.info(f"Deployment {deployment_id} completed successfully")
@@ -473,6 +475,7 @@ def run_deletion(deployment_id: int) -> None:
                 "Resources destroyed",
             )
             _notify(deployment, "app_deleted")
+            obs_reconcile.request_sync()
 
             logger.info("=" * 80)
             logger.info(f"Deletion {deployment_id} completed successfully")

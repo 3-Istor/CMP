@@ -181,6 +181,29 @@ class Settings(BaseSettings):
     ACTIVITY_BACKFILL_DAYS: int = 7
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
 
+    # CNP-185 wave V3: per-app SLO rules and per-project alert routing,
+    # written as operator objects. Off until the VictoriaMetrics operator,
+    # VMAlert and VMAlertmanager of V1/V3 are deployed: with it off the CMP
+    # writes and deletes nothing.
+    OBS_V3_ENABLED: bool = False
+    # The namespace the operator reads project objects from; the CMP is its
+    # only writer.
+    OBS_RULES_NAMESPACE: str = "cnp-observability"
+    # Where the Envoy proxies run: their metrics carry this namespace, the
+    # app's own namespace is in envoy_cluster_name.
+    OBS_GATEWAY_NAMESPACE: str = "envoy-gateway-system"
+    # Burn-rate alerts stay silent below this many requests per hour.
+    OBS_SLO_MIN_REQUESTS_PER_HOUR: int = 60
+    # offhours-guard runs in <project>-system: the scrape renames its own
+    # namespace label to this one, which names the app's namespace.
+    OBS_OFFHOURS_NAMESPACE_LABEL: str = "exported_namespace"
+    OBS_RUNBOOK_BASE_URL: str = (
+        "https://github.com/3-Istor/cnp-docs/blob/main/docs/"
+        "10-observabilite/runbooks"
+    )
+    # Longest silence a project member can set from the portal.
+    OBS_SILENCE_MAX_HOURS: int = 7 * 24
+
     # FinOps: "simulated" keeps the demo engine, "real" reads cost_line_items.
     FINOPS_PROVIDER: str = "simulated"
     FINOPS_INGEST_ENABLED: bool = False

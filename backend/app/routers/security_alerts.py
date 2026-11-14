@@ -21,6 +21,7 @@ from app.routers.security import (
     _require_member,
     _username,
 )
+from app.services.observability import reconcile as obs_reconcile
 from app.services.security import alerts
 from app.services.security.model import Audience
 from app.services.vault_client import VaultError
@@ -107,6 +108,7 @@ async def set_alert_target(
         await alerts.write_target(payload.project, payload.app, url)
     except VaultError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    obs_reconcile.request_sync()
     return await get_alert_targets(token, payload.project, payload.app, db)
 
 

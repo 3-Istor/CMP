@@ -228,3 +228,21 @@ def kube_merge_patch(
     if response.status_code == 404:
         raise KubeUnavailableError(f"PATCH {path}: HTTP 404")
     return response.json()
+
+
+def kube_replace(
+    path: str,
+    body: dict[str, Any],
+    cloud: TargetCloud = TargetCloud.ONPREM,
+) -> dict[str, Any]:
+    """
+    PUT a whole object; *body* carries the resourceVersion that was read.
+
+    Raises:
+        KubeUnavailableError: Not in a cluster, refused (409 when the object
+            changed since it was read), or the object is gone.
+    """
+    response = _request("PUT", path, json=body, cloud=cloud)
+    if response.status_code == 404:
+        raise KubeUnavailableError(f"PUT {path}: HTTP 404")
+    return response.json()

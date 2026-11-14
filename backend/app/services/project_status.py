@@ -3,6 +3,7 @@ import logging
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, ProjectStatus
+from app.services.observability import reconcile as obs_reconcile
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,8 @@ def set_project_status(
                 message[:_MAX_MESSAGE_LENGTH] if message else None
             )
             db.commit()
+        if status in (ProjectStatus.ACTIVE, ProjectStatus.DECOMMISSIONING):
+            obs_reconcile.request_sync()
     except Exception:  # noqa: BLE001 - status is informative, not critical
         logger.exception(
             "Could not record status '%s' for project '%s'",
@@ -44,6 +47,7 @@ def delete_project_row(project_name: str) -> None:
     with SessionLocal() as db:
         db.query(Project).filter(Project.project_name == project_name).delete()
         db.commit()
+    obs_reconcile.request_sync()
 
 
 # Bootstraps, teardowns and app runs are background tasks of this process: a
