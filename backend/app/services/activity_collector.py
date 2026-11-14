@@ -22,6 +22,7 @@ from app.services.kube_client import (
     KubeUnavailableError,
     in_cluster,
 )
+from app.services.observability import reconcile as obs_reconcile
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,7 @@ async def collect_once() -> None:
             await run_in_threadpool(metrics_isolation.sync, ns_projects)
         except KubeUnavailableError as exc:
             logger.warning("vmauth config not written: %s", exc)
+    await obs_reconcile.sync_quietly()
     for source in QUERIES:
         try:
             added = await collect_source(source, ns_projects)
@@ -168,6 +170,7 @@ async def collect_once() -> None:
 
 async def activity_collector_loop() -> None:
     logger.info("Activity collector started")
+    obs_reconcile.bind(asyncio.get_running_loop())
     if not in_cluster():
         logger.warning("Activity collector: %s", OUTSIDE_CLUSTER_NOTICE)
     while True:
