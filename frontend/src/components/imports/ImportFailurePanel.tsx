@@ -65,6 +65,29 @@ export function ImportFailurePanel({
           </table>
         </div>
       )}
+      {failure.app_failures.length > 0 && (
+        <div className="overflow-x-auto rounded-md border bg-background">
+          <table className="w-full text-xs">
+            <caption className="sr-only">{t("appFailuresCaption")}</caption>
+            <thead className="border-b bg-muted/40">
+              <tr>
+                <th scope="col" className={TH}>{t("appsColumn")}</th>
+                <th scope="col" className={TH}>{t("problem")}</th>
+                <th scope="col" className={TH}>{t("detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {failure.app_failures.map((line) => (
+                <tr key={line.app} className="border-b last:border-0">
+                  <th scope="row" className={`${TD} text-left font-medium`}>{line.app}</th>
+                  <td className={TD}>{t(`cause.${line.cause}.title`)}</td>
+                  <td className={`${TD} whitespace-pre-wrap break-words font-mono`}>{line.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {plan.hints.includes("fix_in_repo") && (
         <p className="flex items-start gap-2">
           <Wrench className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -80,7 +103,7 @@ export function ImportFailurePanel({
           <span>{t("contactPlatform", { runId })}</span>
         </p>
       )}
-      {failure.message && (
+      {failure.message && failure.app_failures.length === 0 && (
         <details>
           <summary className="cursor-pointer text-xs text-muted-foreground">{t("message")}</summary>
           <pre className="mt-1 whitespace-pre-wrap text-xs">{failure.message}</pre>

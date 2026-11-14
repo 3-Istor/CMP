@@ -55,8 +55,19 @@ ACTIONS = {
     "workflow_not_started": [RETRY, CONTACT_PLATFORM],
     "dispatch_failed": [RETRY, CONTACT_PLATFORM],
     "deploy_failed": [RETRY, CONTACT_PLATFORM],
+    "manifests_refused": [CONTACT_PLATFORM, RETRY],
+    "image_pull": [RETRY, CONTACT_PLATFORM],
+    "crash_loop": [FIX_IN_REPO, RETRY],
+    "probe_failed": [FIX_IN_REPO, REANALYZE, RETRY],
+    "unschedulable": [CONTACT_PLATFORM, RETRY],
+    "deploy_timeout": [RETRY, CONTACT_PLATFORM],
+    "unreachable": [RETRY, CONTACT_PLATFORM],
+    "dependency_failed": [RETRY, CONTACT_PLATFORM],
     "internal": [RETRY, CONTACT_PLATFORM],
 }
+# The repository holds no code of a backing app: its own failure is the
+# platform's to fix.
+APP_CODE_CAUSES = frozenset({"crash_loop", "probe_failed"})
 # A stage without a reason: the failure happened outside the worker's own
 # checks (scanner crash, runner or tool install of the build job), or comes
 # from a workflow older than CNP-268.
@@ -230,6 +241,10 @@ def _analysis_is_stale(run: ImportRun) -> bool:
     )
 
 
+def _backing_apps(run: ImportRun) -> set[str]:
+    return {s.app_name for s in run.source.services if s.kind == "backing"}
+
+
 def failure_view(run: ImportRun) -> dict | None:
     """What failed, for whom, and the actions offered; None unless failed."""
     if run.status not in (RunStatus.FAILED.value, RunStatus.CANCELLED.value):
@@ -250,12 +265,16 @@ def failure_view(run: ImportRun) -> dict | None:
             actions.insert(0, RETRY)
     if run.kind == RunKind.ANALYZE.value and FIX_IN_REPO in actions:
         actions.remove(FIX_IN_REPO)
+    apps = details.get("apps") or []
+    if found in APP_CODE_CAUSES and apps and apps[0] in _backing_apps(run):
+        actions = [RETRY, CONTACT_PLATFORM]
     vulnerabilities = details.get("vulnerabilities") or []
     return {
         "cause": found,
         "stage": report.get("stage"),
         "message": public_text(report.get("error") or ""),
-        "apps": details.get("apps") or [],
+        "apps": apps,
+        "app_failures": details.get("app_failures") or [],
         "vulnerabilities": vulnerabilities,
         "upgrades": upgrades(vulnerabilities),
         "log_excerpt": details.get("log_excerpt"),

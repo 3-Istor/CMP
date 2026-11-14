@@ -3573,8 +3573,43 @@
         "build_job_failed": {
           "title": "The build job stopped before the build",
           "explain": "The job stopped before starting the build (runner, tools, artifacts). This is not your repository: try again; if it happens again, tell the platform team."
+        },
+        "manifests_refused": {
+          "title": "The platform refused to deploy the app",
+          "explain": "Argo CD could not render or apply the app's manifests. The detail below names the setting it refused. This comes from the platform: tell the platform team."
+        },
+        "image_pull": {
+          "title": "The image could not be pulled",
+          "explain": "The cluster could not download the app's image. This is usually a registry access problem on the platform side: try again; if it happens again, tell the platform team."
+        },
+        "crash_loop": {
+          "title": "The app keeps crashing at start",
+          "explain": "The container starts then stops, again and again. The log excerpt below shows its last words: a missing setting, a dependency it cannot reach, or a startup error in the code."
+        },
+        "probe_failed": {
+          "title": "The app never answered its health check",
+          "explain": "The container runs, but the health check of the plan fails. Fix the path or port in the repository, or analyze again to change the health check in the plan."
+        },
+        "unschedulable": {
+          "title": "Not enough resources to start the app",
+          "explain": "No node could take the app, or the project's quota is used up. Tell the platform team."
+        },
+        "deploy_timeout": {
+          "title": "The app did not become ready in time",
+          "explain": "The app was still not healthy after the allowed delay. The detail below gives its last known state."
+        },
+        "unreachable": {
+          "title": "The public address does not answer",
+          "explain": "The app is healthy in the cluster but its public address does not answer yet. DNS can take a few minutes: try again."
+        },
+        "dependency_failed": {
+          "title": "An app it depends on did not start",
+          "explain": "This app waits on another app of the import that failed first. Fix that one: this app follows."
         }
-      }
+      },
+      "appFailuresCaption": "Apps that did not start",
+      "problem": "Problem",
+      "detail": "Detail"
     }
   }
 }

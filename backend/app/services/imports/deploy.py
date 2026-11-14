@@ -7,6 +7,7 @@ deployed again from the start on the next boot.
 
 import asyncio
 import base64
+import copy
 import json
 import logging
 import secrets
@@ -26,7 +27,7 @@ from app.models.imports import (
 )
 from app.models.project import Project
 from app.services import kube_client, topology_cache, vault_client
-from app.services.imports import dns, generate
+from app.services.imports import diagnosis, dns, generate
 from app.services.imports.generate import AppSpec, PlanError
 from app.services.imports.registry_commit import commit_record_change
 from app.services.imports.service import (
@@ -44,6 +45,7 @@ from app.services.registry_names import check_app, project_name_of
 
 logger = logging.getLogger(__name__)
 
+POLL_SECONDS = 10
 TEMPLATE_KIND = {"service": "import-service", "backing": "import-backing"}
 BACKING_TITLE = {
     "mongodb": "MongoDB",
@@ -167,7 +169,10 @@ def _upsert_deployment(
 
 
 def _argo_state(app_name: str, image: str) -> str:
-    """synced, failed or pending for one Application."""
+    """
+    synced or pending for one Application. A Degraded app stays pending: it
+    may crash only until the apps it calls are up, the deadline decides.
+    """
     body = kube_client.kube_get(
         f"/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/{app_name}"
     )
@@ -177,8 +182,6 @@ def _argo_state(app_name: str, image: str) -> str:
     health = (status.get("health") or {}).get("status")
     sync = (status.get("sync") or {}).get("status")
     images = (status.get("summary") or {}).get("images") or []
-    if health == "Degraded" and image in images:
-        return "failed"
     if sync == "Synced" and health == "Healthy" and image in images:
         return "synced"
     return "pending"
@@ -186,28 +189,59 @@ def _argo_state(app_name: str, image: str) -> str:
 
 async def _wait_for_argo(
     project: str, apps: dict[str, str], timeout: float
-) -> dict[str, str]:
-    """Final state of each app (name -> expected image ref)."""
+) -> set[str]:
+    """The apps (name -> expected image ref) synced before the deadline."""
     deadline = asyncio.get_running_loop().time() + timeout
-    states = {app: "pending" for app in apps}
+    synced: set[str] = set()
     while True:
         for app, image in apps.items():
-            if states[app] != "pending":
+            if app in synced:
                 continue
             try:
-                states[app] = await run_in_threadpool(
+                state = await run_in_threadpool(
                     _argo_state, f"{project}-{app}-app", image
                 )
             except kube_client.KubeUnavailableError as exc:
                 logger.warning("Argo CD read for %s failed: %s", app, exc)
-        if all(s != "pending" for s in states.values()):
-            return states
-        if asyncio.get_running_loop().time() > deadline:
-            return {
-                a: ("timeout" if s == "pending" else s)
-                for a, s in states.items()
-            }
-        await asyncio.sleep(10)
+                continue
+            if state == "synced":
+                synced.add(app)
+        if len(synced) == len(apps):
+            return synced
+        if asyncio.get_running_loop().time() >= deadline:
+            return synced
+        await asyncio.sleep(POLL_SECONDS)
+
+
+def deploy_waves(specs: list[AppSpec]) -> list[list[AppSpec]]:
+    """
+    The order the apps are committed in: backing apps, then services, then
+    public apps, and each app after the apps it links to. A link cycle is
+    cut where the walk meets it.
+    """
+    by_name = {s.name: s for s in specs}
+    ranks: dict[str, int] = {}
+
+    def rank(spec: AppSpec, path: frozenset[str]) -> int:
+        if spec.name not in ranks:
+            floor = 0 if spec.kind == "backing" else 2 if spec.public else 1
+            inner = path | {spec.name}
+            ranks[spec.name] = max(
+                [floor]
+                + [
+                    rank(by_name[link["app"]], inner) + 1
+                    for link in spec.depends_on
+                    if link["app"] in by_name and link["app"] not in inner
+                ]
+            )
+        return ranks[spec.name]
+
+    for spec in sorted(specs, key=lambda s: s.name):
+        rank(spec, frozenset())
+    waves: dict[int, list[AppSpec]] = {}
+    for spec in specs:
+        waves.setdefault(ranks[spec.name], []).append(spec)
+    return [waves[r] for r in sorted(waves)]
 
 
 async def _smoke(url: str) -> bool:
@@ -303,86 +337,166 @@ async def _deploy(db: Session, run: ImportRun) -> None:
     await _ensure_credentials(project, specs)
     await _ensure_app_roles(db, project, specs)
 
+    deployable = [s for s in specs if s.kind == "backing" or s.name in digests]
+    committed: list[AppSpec] = []
+
     async def change(record: dict, head: str) -> dict[str, str | None]:
-        await _check_names_at_head(
-            project,
-            record,
-            head,
-            [s for s in specs if s.kind == "backing" or s.name in digests],
-        )
+        # Every wave is checked against the whole import: a conflict found
+        # once some apps are committed would leave the import half deployed.
+        await _check_names_at_head(project, record, head, deployable)
+        apply(copy.deepcopy(record), deployable)
+        return apply(record, committed)
+
+    def apply(record: dict, apps: list[AppSpec]) -> dict[str, str]:
         return generate.apply_to_record(
             record,
             project,
-            specs,
+            apps,
             digests,
             source.repo_full_name,
             run.sha,
             settings.IMPORT_IMAGE_PREFIX,
         )
 
-    commit = await commit_record_change(
-        project,
-        change,
-        f"feat(registry): import {source.repo_full_name}@{run.sha[:12]} "
-        f"into {project}",
-    )
-
-    expected: dict[str, str] = {}
-    for app, row in rows.items():
-        spec = AppSpec.from_dict(row.spec)
-        if row.kind == "service":
-            if app not in digests:
-                continue
-            row.last_digest = digests[app]
-            row.last_sha = run.sha
-            if app in images:
-                row.built_sha = run.sha
-            expected[app] = f"{image_name(project, app)}@{digests[app]}"
-        else:
-            preset = generate.load_preset(spec.backing_kind)["image"]
-            expected[app] = f"{preset['repository']}@{preset['digest']}"
-        row.status = "deploying"
-        _upsert_deployment(db, project, row)
-    run.report = {**(run.report or {}), "commit": commit}
-    topology_cache.invalidate(project)
-    # Committed before DNS: a failure from here on must still let remove()
-    # recognise these apps as the import's and clean them up.
-    db.commit()
-
-    for spec in specs:
-        if spec.public:
-            await dns.ensure_cname(
-                project, spec.name, generate.hostname(project, spec.name)
-            )
-
-    states = await _wait_for_argo(
-        project, expected, settings.IMPORT_ARGO_TIMEOUT_SECONDS
-    )
-    failed = []
-    for app, state in states.items():
-        row = rows[app]
-        deployment = db.get(Deployment, row.deployment_id)
-        ok = state == "synced"
-        if ok and row.spec.get("public"):
-            ok = await _smoke(f"https://{generate.hostname(project, app)}/")
-            state = "synced" if ok else "unreachable"
-        row.status = "running" if ok else "failed"
-        row.message = "" if ok else f"Argo CD: {state}"
-        deployment.status = (
-            DeploymentStatus.RUNNING if ok else DeploymentStatus.DEGRADED
+    commit = ""
+    states: dict[str, str] = {}
+    failures: list[dict] = []
+    for wave in deploy_waves(deployable):
+        committed.extend(wave)
+        commit = await commit_record_change(
+            project,
+            change,
+            f"feat(registry): import {source.repo_full_name}@{run.sha[:12]} "
+            f"into {project}",
         )
-        deployment.step_message = "Running" if ok else f"Argo CD: {state}"
-        if not ok:
-            failed.append(app)
+        expected = {
+            spec.name: _start_app(
+                db, project, run, rows[spec.name], spec, digests, images
+            )
+            for spec in wave
+        }
+        run.report = {**(run.report or {}), "commit": commit}
+        topology_cache.invalidate(project)
+        # Committed before DNS: a failure from here on must still let remove()
+        # recognise these apps as the import's and clean them up.
+        db.commit()
+
+        for spec in wave:
+            if spec.public:
+                await dns.ensure_cname(
+                    project, spec.name, generate.hostname(project, spec.name)
+                )
+        synced = await _wait_for_argo(
+            project, expected, settings.IMPORT_ARGO_TIMEOUT_SECONDS
+        )
+        failed_before = {f["app"] for f in failures}
+        for spec in wave:
+            failure = await _app_failure(project, spec, synced, failed_before)
+            _finish_app(db, rows[spec.name], failure)
+            states[spec.name] = failure["cause"] if failure else "synced"
+            if failure:
+                failures.append({"app": spec.name, **failure})
+        run.report = {**(run.report or {}), "states": dict(states)}
+        db.commit()
+
     run.status = (
-        RunStatus.FAILED.value if failed else RunStatus.SUCCEEDED.value
+        RunStatus.FAILED.value if failures else RunStatus.SUCCEEDED.value
     )
-    run.report = {**(run.report or {}), "states": states}
+    if failures:
+        run.report = {**(run.report or {}), **_failure_report(failures)}
     db.commit()
     topology_cache.invalidate(project)
     _system_event(
-        run, "import.deploy", not failed, commit=commit, failed=failed
+        run,
+        "import.deploy",
+        not failures,
+        commit=commit,
+        failed=[f["app"] for f in failures],
     )
+
+
+def _start_app(  # pylint: disable=too-many-arguments
+    db: Session,
+    project: str,
+    run: ImportRun,
+    row: ImportService,
+    spec: AppSpec,
+    digests: dict[str, str],
+    images: dict,
+) -> str:
+    """Mark the app deploying and return the image ref Argo CD must run."""
+    if row.kind == "service":
+        row.last_digest = digests[spec.name]
+        row.last_sha = run.sha
+        if spec.name in images:
+            row.built_sha = run.sha
+        expected = f"{image_name(project, spec.name)}@{digests[spec.name]}"
+    else:
+        preset = generate.load_preset(spec.backing_kind)["image"]
+        expected = f"{preset['repository']}@{preset['digest']}"
+    row.status = "deploying"
+    row.message = ""
+    _upsert_deployment(db, project, row)
+    return expected
+
+
+async def _app_failure(
+    project: str, spec: AppSpec, synced: set[str], failed_before: set[str]
+) -> dict | None:
+    """Why the app is not up, or None when it is."""
+    if spec.name in synced:
+        if not spec.public:
+            return None
+        host = generate.hostname(project, spec.name)
+        if await _smoke(f"https://{host}/"):
+            return None
+        return {
+            "cause": "unreachable",
+            "message": f"https://{host}/ did not answer while Argo CD "
+            "reports the app healthy",
+        }
+    found = await diagnosis.diagnose(project, spec.name)
+    broken = sorted({link["app"] for link in spec.depends_on} & failed_before)
+    if broken:
+        found = {
+            **found,
+            "cause": "dependency_failed",
+            "message": f"{', '.join(broken)} did not start first; "
+            f"{found['message']}",
+        }
+    return found
+
+
+def _finish_app(db: Session, row: ImportService, failure: dict | None) -> None:
+    deployment = db.get(Deployment, row.deployment_id)
+    row.status = "failed" if failure else "running"
+    row.message = failure["message"] if failure else ""
+    deployment.status = (
+        DeploymentStatus.DEGRADED if failure else DeploymentStatus.RUNNING
+    )
+    deployment.step_message = (
+        failure["message"][:255] if failure else "Running"
+    )
+
+
+def _failure_report(failures: list[dict]) -> dict:
+    """The run's failure: the first app to fail leads, it failed upstream."""
+    logs = [f["log_excerpt"] for f in failures if f.get("log_excerpt")]
+    failure = {
+        "cause": failures[0]["cause"],
+        "apps": [f["app"] for f in failures],
+        "app_failures": [
+            {"app": f["app"], "cause": f["cause"], "message": f["message"]}
+            for f in failures
+        ],
+    }
+    if logs:
+        failure["log_excerpt"] = logs[0]
+    return {
+        "stage": "deploy",
+        "error": "\n".join(f"{f['app']}: {f['message']}" for f in failures),
+        "failure": failure,
+    }
 
 
 def resume_interrupted() -> None:

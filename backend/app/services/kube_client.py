@@ -166,6 +166,18 @@ def kube_get(
     return response.json()
 
 
+def kube_get_text(
+    path: str,
+    params: dict[str, str] | None = None,
+    cloud: TargetCloud = TargetCloud.ONPREM,
+) -> str | None:
+    """GET a path that answers plain text, such as a pod log; None on 404."""
+    response = _request("GET", path, params=params, cloud=cloud)
+    if response.status_code == 404:
+        return None
+    return response.text
+
+
 def kube_list(
     path: str,
     params: dict[str, str] | None = None,

@@ -3573,8 +3573,43 @@
         "build_job_failed": {
           "title": "Le job de build s'est arrêté avant le build",
           "explain": "Le job s'est arrêté avant de lancer le build (runner, outils, artefacts). Ce n'est pas votre dépôt : relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "manifests_refused": {
+          "title": "La plateforme a refusé de déployer l'app",
+          "explain": "Argo CD n'a pas pu générer ou appliquer les manifestes de l'app. Le détail ci-dessous nomme le réglage refusé. Cela vient de la plateforme : prévenez l'équipe plateforme."
+        },
+        "image_pull": {
+          "title": "L'image n'a pas pu être téléchargée",
+          "explain": "Le cluster n'a pas pu télécharger l'image de l'app. C'est en général un problème d'accès au registre côté plateforme : relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "crash_loop": {
+          "title": "L'app plante au démarrage",
+          "explain": "Le conteneur démarre puis s'arrête, encore et encore. L'extrait de journal ci-dessous montre ses derniers mots : un réglage manquant, une dépendance injoignable ou une erreur de démarrage dans le code."
+        },
+        "probe_failed": {
+          "title": "L'app n'a jamais répondu à son contrôle de santé",
+          "explain": "Le conteneur tourne, mais le contrôle de santé du plan échoue. Corrigez le chemin ou le port dans le dépôt, ou relancez l'analyse pour changer le contrôle de santé dans le plan."
+        },
+        "unschedulable": {
+          "title": "Pas assez de ressources pour démarrer l'app",
+          "explain": "Aucun nœud ne peut accueillir l'app, ou le quota du projet est épuisé. Prévenez l'équipe plateforme."
+        },
+        "deploy_timeout": {
+          "title": "L'app n'est pas devenue prête à temps",
+          "explain": "L'app n'était toujours pas en bonne santé après le délai prévu. Le détail ci-dessous donne son dernier état connu."
+        },
+        "unreachable": {
+          "title": "L'adresse publique ne répond pas",
+          "explain": "L'app est en bonne santé dans le cluster mais son adresse publique ne répond pas encore. Le DNS peut prendre quelques minutes : relancez."
+        },
+        "dependency_failed": {
+          "title": "Une app dont elle dépend n'a pas démarré",
+          "explain": "Cette app attend une autre app de l'import qui a échoué avant elle. Corrigez celle-là : celle-ci suivra."
         }
-      }
+      },
+      "appFailuresCaption": "Apps qui n'ont pas démarré",
+      "problem": "Problème",
+      "detail": "Détail"
     }
   }
 }
