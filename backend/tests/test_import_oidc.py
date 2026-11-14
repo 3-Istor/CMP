@@ -125,9 +125,12 @@ class _FakeJwks:
     def __init__(self, keys):
         self.keys = keys
         self.fetches = 0
+        self.down = False
 
     def get_jwk_set(self, refresh=False):
         self.fetches += 1
+        if self.down:
+            raise jwt.PyJWKClientConnectionError("egress blip")
         return self
 
 
@@ -144,6 +147,7 @@ def jwks(monkeypatch):
     monkeypatch.setattr(oidc, "_jwks_client", lambda: fake)
     monkeypatch.setattr(oidc, "_keys", {})
     monkeypatch.setattr(oidc, "_fetched_at", None)
+    monkeypatch.setattr(oidc, "_loaded_at", None)
     clock = {"now": 1000.0}
     monkeypatch.setattr(oidc.time, "monotonic", lambda: clock["now"])
     return fake, clock
@@ -183,4 +187,46 @@ def test_unknown_kid_refetches_once_the_minute_is_over(jwks):
     key = oidc._signing_key(_kid_token("k2"))
 
     assert key is not None
+    assert fake.fetches == 2
+
+
+def test_a_failed_refresh_with_a_warm_cache_still_verifies(jwks):
+    fake, clock = jwks
+    oidc._signing_key(_kid_token("k1"))
+    fake.down = True
+    clock["now"] += oidc.JWKS_TTL_SECONDS
+
+    key = oidc._signing_key(_kid_token("k1"))
+
+    assert (key is not None, fake.fetches) == (True, 2)
+
+
+def test_a_failed_fetch_with_no_cache_is_refused(jwks):
+    fake, _ = jwks
+    fake.down = True
+
+    with pytest.raises(WorkerTokenError, match="JWKS unavailable"):
+        oidc._signing_key(_kid_token("k1"))
+
+
+def test_an_expired_cache_is_refreshed_once(jwks):
+    fake, clock = jwks
+    oidc._signing_key(_kid_token("k1"))
+    clock["now"] += oidc.JWKS_TTL_SECONDS
+
+    oidc._signing_key(_kid_token("k1"))
+    oidc._signing_key(_kid_token("k1"))
+
+    assert fake.fetches == 2
+
+
+def test_an_unknown_kid_triggers_one_refresh(jwks):
+    fake, clock = jwks
+    oidc._signing_key(_kid_token("k1"))
+    fake.keys.append(_Jwk("k2", KEY.public_key()))
+    clock["now"] += oidc.JWKS_REFETCH_SECONDS
+
+    oidc._signing_key(_kid_token("k2"))
+    oidc._signing_key(_kid_token("k2"))
+
     assert fake.fetches == 2

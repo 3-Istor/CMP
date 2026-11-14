@@ -3367,8 +3367,6 @@
       "smoke": "Test fonctionnel"
     },
     "progress": {
-      "rebuild": "Reconstruire",
-      "reanalyze": "Revoir le plan",
       "logs": "Journaux de {app}",
       "status": {
         "queued": "En attente du workflow de build, commit {sha}.",
@@ -3382,7 +3380,9 @@
       "caption": "Avancement de chaque app",
       "app": "App",
       "next": "Que faire",
-      "seeTopology": "Voir la topologie"
+      "seeTopology": "Voir la topologie",
+      "blocking": "{count, plural, one {# vulnérabilité bloquante} other {# vulnérabilités bloquantes}}",
+      "concerned": "En échec"
     },
     "review": {
       "capacity": "Mémoire",
@@ -3491,10 +3491,90 @@
       "pendingReason": {
         "not_admin": "{user}, qui le reconstruit, n'est plus admin du projet.",
         "inactive": "le compte de {user}, qui le reconstruit, est désactivé.",
-        "repo_access": "le CMP ne peut pas vérifier que {user}, qui le reconstruit, peut encore lire le dépôt.",
+        "repo_access": "le CMP ne peut pas vérifier avec l'accès GitHub de {user}, qui le reconstruit, qu'il lit encore le dépôt (compte GitHub non lié ou accès retiré).",
         "unknown_user": "le CMP ne trouve pas le compte de {user}, qui le reconstruit."
-      }
+      },
+      "pendingHelp": "Une reconstruction s'exécute avec l'accès GitHub de la personne qui la lance. En confirmant, vous la lancez avec votre accès et votre passkey ; les suivantes se feront en votre nom.",
+      "linkGithub": "Lier mon compte GitHub"
     },
-    "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey."
+    "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey.",
+    "failure": {
+      "apps": "Apps concernées : {apps}",
+      "upgradesCaption": "Dépendances à mettre à jour",
+      "package": "Paquet",
+      "installed": "Version actuelle",
+      "fixed": "Version corrigée",
+      "appsColumn": "Apps",
+      "ids": "Vulnérabilités",
+      "fixUpgrades": "Passez ces paquets à la version corrigée dans le dépôt (ou prenez une image de base plus récente), puis poussez.",
+      "fixRepo": "Corrigez le dépôt d'après l'extrait du journal ci-dessous, puis poussez.",
+      "pushRebuilds": "Le push relance la reconstruction tout seul.",
+      "thenRebuild": "Relancez ensuite la reconstruction.",
+      "contactPlatform": "Si cela se reproduit, contactez l'équipe plateforme avec l'identifiant {runId}.",
+      "message": "Message de l'étape en échec",
+      "log": "Extrait du journal",
+      "rebuild": "Relancer le build",
+      "rebuildAfterFix": "Reconstruire",
+      "reanalyze": "Relancer l'analyse",
+      "analyzeAgain": "Relancer l'analyse",
+      "cause": {
+        "scan_blocked": {
+          "title": "Images bloquées par des vulnérabilités critiques",
+          "explain": "Le scan a trouvé des vulnérabilités critiques qui ont une version corrigée. Rien n'est déployé tant qu'elles restent."
+        },
+        "build_failed": {
+          "title": "Le build des images a échoué",
+          "explain": "Une commande du build s'est arrêtée en erreur. La cause est le plus souvent dans le dépôt : Dockerfile, dépendances, script de build."
+        },
+        "dockerfile_refused": {
+          "title": "Dockerfile refusé par la plateforme",
+          "explain": "Le Dockerfile utilise un drapeau RUN que la plateforme refuse (secret, ssh, réseau de l'hôte ou mode insecure)."
+        },
+        "plan_mismatch": {
+          "title": "Le plan ne correspond plus au dépôt",
+          "explain": "Un dossier ou un Dockerfile du plan n'existe plus dans le dépôt. Relancez l'analyse, puis relisez le nouveau plan."
+        },
+        "fetch_failed": {
+          "title": "Le code n'a pas pu être téléchargé",
+          "explain": "GitHub n'a pas rendu l'archive du commit. Le commit a peut-être disparu de la branche : relancez, ou relancez l'analyse."
+        },
+        "analysis_failed": {
+          "title": "L'analyse s'est arrêtée",
+          "explain": "L'analyseur n'a pas pu lire le dépôt jusqu'au bout. Relancez ; si cela se reproduit, c'est à l'équipe plateforme de regarder."
+        },
+        "timeout": {
+          "title": "Le lancement n'a plus donné de nouvelles",
+          "explain": "Aucune nouvelle du workflow pendant trop longtemps. C'est en général passager : relancez."
+        },
+        "workflow_stopped": {
+          "title": "Le workflow s'est arrêté sans rendre compte",
+          "explain": "Le workflow a été annulé ou a perdu son runner avant de rendre compte. C'est en général passager : relancez."
+        },
+        "workflow_not_started": {
+          "title": "Le workflow n'a pas démarré",
+          "explain": "GitHub n'a pas lancé le workflow demandé. Relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "dispatch_failed": {
+          "title": "Le workflow n'a pas pu être lancé",
+          "explain": "Le CMP n'a pas pu demander le workflow à GitHub. Relancez dans quelques minutes."
+        },
+        "deploy_failed": {
+          "title": "Le déploiement a échoué",
+          "explain": "Les images sont construites, mais leur déploiement s'est arrêté. Relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "internal": {
+          "title": "Erreur interne de la plateforme",
+          "explain": "L'erreur vient de la plateforme, pas de votre dépôt. Relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "scan_failed": {
+          "title": "Le scan des images n'a pas pu se faire",
+          "explain": "Le scanner de vulnérabilités s'est arrêté avant d'avoir un résultat (base indisponible, limite de requêtes). Ce n'est pas votre dépôt : relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        },
+        "build_job_failed": {
+          "title": "Le job de build s'est arrêté avant le build",
+          "explain": "Le job s'est arrêté avant de lancer le build (runner, outils, artefacts). Ce n'est pas votre dépôt : relancez ; si cela se reproduit, prévenez l'équipe plateforme."
+        }
+      }
+    }
   }
 }

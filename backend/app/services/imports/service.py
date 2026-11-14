@@ -40,8 +40,9 @@ from app.services.github_service import (
     get_org_installation_token,
     get_repository_id_scoped_token,
 )
-from app.services.imports import generate
+from app.services.imports import failures, generate
 from app.services.imports.access import RepoRef
+from app.services.imports.failures import TOKEN_LIKE
 from app.services.imports.generate import AppSpec, PlanError
 from app.services.imports.plan_model import ImportPlan
 from app.services.project_registry import RegistryError, list_records
@@ -56,11 +57,6 @@ MAX_MESSAGE = 2000
 ARCHIVE_MAX_BYTES = 256 * 1024 * 1024
 STAGES = frozenset({"claim", "fetch", "analyze", "build", "scan", "publish"})
 SECRET_ENV = re.compile(r"PASSWORD|SECRET|TOKEN|_KEY$|CREDENTIAL", re.I)
-TOKEN_LIKE = re.compile(
-    r"(gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
-    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+"
-    r"|[Bb]earer\s+\S+)"
-)
 
 _tasks: set[asyncio.Task] = set()
 # Runs whose deploy runs in this process: never failed for being slow.
@@ -127,6 +123,11 @@ def run_view(run: ImportRun) -> dict:
         plan = {"edits": plan.get("edits")}
     else:
         plan = redacted_plan(plan)
+    report = run.report
+    if report:
+        report = {k: v for k, v in report.items() if k != "failure"}
+        if isinstance(report.get("error"), str):
+            report["error"] = failures.public_text(report["error"])
     return {
         "id": run.id,
         "source_id": run.source_id,
@@ -134,7 +135,8 @@ def run_view(run: ImportRun) -> dict:
         "sha": run.sha,
         "status": run.status,
         "plan": plan,
-        "report": run.report,
+        "report": report,
+        "failure": failures.failure_view(run),
         "requested_by": run.requested_by,
         "approved_by": run.approved_by,
         "created_at": run.created_at,
@@ -398,11 +400,13 @@ async def _dispatch(db: Session, run: ImportRun) -> None:
             {"run_id": run.id, "attempt_id": run.attempt_id},
         )
     except GitHubAppError as exc:
+        logger.warning("Import workflow dispatch of run %s: %s", run.id, exc)
+        public = failures.public_text(redact(str(exc)))
         run.status = RunStatus.FAILED.value
-        run.report = {"stage": "dispatch", "error": redact(str(exc))}
+        run.report = {"stage": "dispatch", "error": public}
         db.commit()
         raise ImportRefused(
-            f"Could not start the import workflow: {exc}", 502
+            f"Could not start the import workflow: {public}", 502
         ) from exc
 
 
@@ -933,19 +937,42 @@ def receive_publish(db: Session, run: ImportRun, services: list[dict]) -> None:
     _spawn(deploy(run.id))
 
 
-def receive_failure(
-    db: Session, run: ImportRun, stage: str, message: str
+def receive_failure(  # pylint: disable=too-many-arguments
+    db: Session,
+    run: ImportRun,
+    stage: str,
+    message: str,
+    details: dict | None = None,
+    workflow_run_id: str | None = None,
 ) -> None:
+    """
+    The first report wins: a later one finds the run finished (409). The
+    workflow URL goes to the logs and the journal, never to users.
+    """
     stage = stage if stage in STAGES else "unknown"
-    _transition(
-        db,
-        run,
-        run.status,
-        RunStatus.FAILED,
-        report={
-            **(run.report or {}),
-            "stage": stage,
-            "error": redact(message),
-        },
+    kept = failures.clean_details(details, failures.known_apps(run))
+    report = {
+        **(run.report or {}),
+        "stage": stage,
+        "error": failures.public_text(redact(message)),
+    }
+    if kept:
+        report["failure"] = kept
+    url = failures.workflow_run_url(workflow_run_id or run.workflow_run_id)
+    _transition(db, run, run.status, RunStatus.FAILED, report=report)
+    logger.info(
+        "Import run %s failed at %s (%s): %s",
+        run.id,
+        stage,
+        url,
+        redact(message),
     )
-    _system_event(run, "import.fail", False, stage=stage)
+    _system_event(
+        run,
+        "import.fail",
+        False,
+        stage=stage,
+        reason=kept.get("reason"),
+        apps=kept.get("apps"),
+        workflow_run=workflow_run_id or run.workflow_run_id,
+    )

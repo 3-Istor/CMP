@@ -1498,6 +1498,54 @@ export interface ImportRunReport {
   states?: Record<string, string>;
 }
 
+export type ImportFailureCause =
+  | "scan_blocked"
+  | "scan_failed"
+  | "build_failed"
+  | "build_job_failed"
+  | "dockerfile_refused"
+  | "plan_mismatch"
+  | "fetch_failed"
+  | "analysis_failed"
+  | "timeout"
+  | "workflow_stopped"
+  | "workflow_not_started"
+  | "dispatch_failed"
+  | "deploy_failed"
+  | "internal";
+
+export type ImportFailureAction = "retry" | "fix_in_repo" | "reanalyze" | "contact_platform";
+
+export interface ImportBlockingVulnerability {
+  app: string;
+  id: string;
+  package: string;
+  installed: string;
+  fixed: string;
+  severity: string;
+}
+
+export interface ImportUpgrade {
+  package: string;
+  installed: string;
+  fixed: string;
+  apps: string[];
+  ids: string[];
+}
+
+/** Why a run failed and what the CMP offers to do about it (CNP-268). */
+export interface ImportFailure {
+  cause: ImportFailureCause;
+  stage: string | null;
+  message: string;
+  apps: string[];
+  vulnerabilities: ImportBlockingVulnerability[];
+  upgrades: ImportUpgrade[];
+  log_excerpt: string | null;
+  actions: ImportFailureAction[];
+  rebuilds_on_push: boolean;
+}
+
 export interface ImportRun {
   id: string;
   source_id: string;
@@ -1506,6 +1554,7 @@ export interface ImportRun {
   status: ImportRunStatus;
   plan: ImportPlan | { edits: ImportPlanEdits } | null;
   report: ImportRunReport | null;
+  failure: ImportFailure | null;
   requested_by: string;
   approved_by: string | null;
   created_at: string;

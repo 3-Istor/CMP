@@ -9,6 +9,8 @@ from app import mcp_server
 from app.models.agent import AgentConfirmation
 from app.services.agents import internal_api, policy, store
 from tests.test_mcp_owasp_controls import (  # noqa: F401
+    IMPORT_RUN,
+    IMPORT_SOURCE,
     LEAKED_PASSWORD,
     LEAKED_TOKEN,
     _call,
@@ -422,3 +424,94 @@ def test_a_refusal_naming_the_latest_run_tells_the_assistant_to_follow_it():
     answer = mcp_server._error(refused)
 
     assert "get_import with run_id run-2" in answer["next"]
+
+
+SCAN_BLOCK = {
+    "cause": "scan_blocked",
+    "stage": "scan",
+    "message": "blocked by fixable critical vulnerabilities",
+    "apps": ["api"],
+    "vulnerabilities": [
+        {
+            "app": "api",
+            "id": "CVE-2023-7272",
+            "package": "org.eclipse.parsson:parsson",
+            "installed": "1.1.1",
+            "fixed": "1.1.3",
+            "severity": "CRITICAL",
+        }
+    ],
+    "upgrades": [
+        {
+            "package": "org.eclipse.parsson:parsson",
+            "installed": "1.1.1",
+            "fixed": "1.1.3",
+            "apps": ["api"],
+            "ids": ["CVE-2023-7272"],
+        }
+    ],
+    "log_excerpt": None,
+    "actions": ["fix_in_repo", "retry"],
+    "rebuilds_on_push": True,
+}
+
+
+def _failed_build(monkeypatch):
+    monkeypatch.setitem(IMPORT_RUN, "kind", "build")
+    monkeypatch.setitem(IMPORT_RUN, "status", "failed")
+    monkeypatch.setitem(IMPORT_RUN, "failure", SCAN_BLOCK)
+
+
+def test_get_import_explains_a_failure_with_its_target_versions(
+    cmp, monkeypatch
+):
+    _failed_build(monkeypatch)
+    tokens = _connect(cmp)
+
+    result = _call(
+        cmp,
+        tokens["access_token"],
+        "get_import",
+        {"project": "demo", "run_id": "run-1"},
+    )
+
+    assert result["run"]["failure"]["upgrades"][0]["fixed"] == "1.1.3"
+
+
+def test_get_import_spells_out_each_action_of_a_failure(cmp, monkeypatch):
+    _failed_build(monkeypatch)
+    tokens = _connect(cmp)
+
+    result = _call(
+        cmp,
+        tokens["access_token"],
+        "get_import",
+        {"project": "demo", "run_id": "run-1"},
+    )
+
+    actions = result["run"]["failure"]["actions"]
+    assert [a["action"] for a in actions] == ["fix_in_repo", "retry"]
+    assert "the push starts a rebuild" in actions[0]["how"]
+    assert "/projects/demo/import?run=run-1" in actions[1]["how"]
+
+
+def test_get_import_explains_a_rebuild_waiting_for_github_access(
+    cmp, monkeypatch
+):
+    pending = {
+        "reason": "repo_access",
+        "user": "bob",
+        "trigger": "push",
+        "since": "2026-11-14T10:00:00",
+        "apps": None,
+    }
+    monkeypatch.setitem(IMPORT_SOURCE, "rebuild_pending", pending)
+    tokens = _connect(cmp)
+
+    result = _call(
+        cmp, tokens["access_token"], "get_import", {"project": "demo"}
+    )
+
+    explanation = result["imports"][0]["rebuild_pending"]["explanation"]
+    assert "bob's GitHub access" in explanation
+    assert "confirms the rebuild in the CMP" in explanation

@@ -78,7 +78,7 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
   const t = useTranslations("imports");
   const router = useRouter();
   const pathname = usePathname();
-  const { projectName } = useProjectContext();
+  const { projectName, can } = useProjectContext();
 
   const [run, setRun] = useState<ImportRunDetail | null>(null);
   const [source, setSource] = useState<ImportSourceView | null>(null);
@@ -289,7 +289,14 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
         />
         </>
       ) : run ? (
-        <ImportProgress projectName={projectName} run={run} onRebuild={() => void rebuild()} onReanalyze={reanalyze} />
+        <ImportProgress
+          projectName={projectName}
+          run={run}
+          source={source}
+          canManage={can("import.manage")}
+          onRebuild={() => void rebuild()}
+          onReanalyze={reanalyze}
+        />
       ) : null}
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranch, RotateCw, ShieldAlert, Trash2 } from "lucide-react";
+import { GitBranch, RotateCw, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { deleteImport, getImports, rebuildImport, updateImportSettings } from "@/lib/api";
 import { importRefusal } from "@/lib/importRefusal";
 import type { ImportSourceView } from "@/types";
+import { RebuildPendingNotice } from "./RebuildPendingNotice";
 
 const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
 const TD = "px-3 py-2 align-middle";
@@ -92,27 +93,12 @@ export function ImportsList({
         {t("title")}
       </h2>
       {pending.map((source) => (
-        <div
+        <RebuildPendingNotice
           key={source.id}
-          role="status"
-          className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
-        >
-          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden />
-          <span className="flex-1">
-            {t("pending", {
-              repo: source.repo_full_name,
-              reason: t(`pendingReason.${source.rebuild_pending?.reason ?? "not_admin"}`, {
-                user: source.rebuild_pending?.user ?? "",
-              }),
-            })}
-          </span>
-          {canManage && (
-            <Button size="sm" variant="outline" onClick={() => void rebuild(source)}>
-              <RotateCw aria-hidden />
-              {t("confirmRebuild")}
-            </Button>
-          )}
-        </div>
+          source={source}
+          canManage={canManage}
+          onRebuild={() => void rebuild(source)}
+        />
       ))}
       <div className="overflow-x-auto rounded-xl border">
         <table className="w-full text-sm">

@@ -714,6 +714,84 @@ async def dispatch_workflow(
         )
 
 
+LIST_PAGE_SIZE = 100
+
+
+async def list_workflow_runs(
+    installation_token: str,
+    repo_full_name: str,
+    workflow: str,
+    created_since: datetime,
+    page: int = 1,
+) -> list[dict]:
+    """
+    The dispatched runs of *workflow* created since *created_since*, newest
+    first, page *page* of 100.
+
+    Raises:
+        GitHubAppError: On HTTP errors.
+    """
+    if created_since.tzinfo is None:
+        created_since = created_since.replace(tzinfo=timezone.utc)
+    since = created_since.astimezone(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/workflows/{workflow}/runs",
+                headers=_api_headers(installation_token),
+                params={
+                    "event": "workflow_dispatch",
+                    "created": f">={since}",
+                    "per_page": LIST_PAGE_SIZE,
+                    "page": page,
+                },
+                timeout=15.0,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to list the runs of '{workflow}': {exc}"
+        ) from exc
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to list the runs of '{workflow}': "
+            f"{_github_error_message(response)}"
+        )
+    runs = response.json().get("workflow_runs")
+    return runs if isinstance(runs, list) else []
+
+
+async def get_workflow_run(
+    installation_token: str, repo_full_name: str, workflow_run_id: str
+) -> dict | None:
+    """
+    One workflow run, None when GitHub no longer has it.
+
+    Raises:
+        GitHubAppError: On other HTTP errors.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}/actions/runs/{workflow_run_id}",
+                headers=_api_headers(installation_token),
+                timeout=15.0,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to read workflow run {workflow_run_id}: {exc}"
+        ) from exc
+    if response.status_code == 404:
+        return None
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to read workflow run {workflow_run_id}: "
+            f"{_github_error_message(response)}"
+        )
+    return response.json()
+
+
 class StaleBranchError(GitHubAppError):
     """The branch moved since it was read: re-read and recompute the change."""
 
