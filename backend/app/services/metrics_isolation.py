@@ -51,6 +51,14 @@ def password(project: str) -> str:
     ).hexdigest()
 
 
+def url_prefix(namespaces: list[str]) -> str:
+    # vmauth drops a client query arg only when url_prefix sets the same name,
+    # and vmselect ORs every extra_filters it receives, with or without "[]".
+    # Setting one name only lets a client widen the filter with the other.
+    selector = quote("{" + namespace_matcher(namespaces) + "}", safe="")
+    return f"{VMSELECT}?extra_filters[]={selector}&extra_filters={selector}"
+
+
 def render(ns_projects: dict[str, str]) -> str:
     by_project: dict[str, list[str]] = {}
     for namespace, project in ns_projects.items():
@@ -59,10 +67,7 @@ def render(ns_projects: dict[str, str]) -> str:
         {
             "username": username(project),
             "password": password(project),
-            "url_prefix": (
-                f"{VMSELECT}?extra_filters[]="
-                + quote("{" + namespace_matcher(namespaces) + "}", safe="")
-            ),
+            "url_prefix": url_prefix(namespaces),
         }
         for project, namespaces in sorted(by_project.items())
     ]
