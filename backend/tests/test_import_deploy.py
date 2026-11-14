@@ -39,6 +39,7 @@ class Cluster:
     def __init__(self):
         self.vault: dict[tuple[str, str], dict] = {}
         self.vault_writes: list[tuple[str, str]] = []
+        self.roles: dict[tuple[str, str], str] = {}
         self.commits: list[dict] = []
         self.cnames: list[str] = []
         self.argo: dict[str, str] = {}
@@ -53,6 +54,12 @@ class Cluster:
     async def write_kv(self, mount, path, data):
         self.vault[(mount, path)] = dict(data)
         self.vault_writes.append((mount, path))
+
+    async def write_app_role(self, mount, name, policy):
+        self.roles[(mount, name)] = policy
+
+    async def delete_app_role(self, mount, name):
+        self.roles.pop((mount, name), None)
 
     async def commit(self, project, change, message):
         record = json.loads(json.dumps(self.record))
@@ -86,6 +93,12 @@ def world(monkeypatch):
     monkeypatch.setattr(service, "SessionLocal", Session)
     monkeypatch.setattr(deploy.vault_client, "read_kv", cluster.read_kv)
     monkeypatch.setattr(deploy.vault_client, "write_kv", cluster.write_kv)
+    monkeypatch.setattr(
+        deploy.vault_client, "write_app_role", cluster.write_app_role
+    )
+    monkeypatch.setattr(
+        deploy.vault_client, "delete_app_role", cluster.delete_app_role
+    )
     monkeypatch.setattr(deploy, "commit_record_change", cluster.commit)
     monkeypatch.setattr(deploy, "list_records", cluster.records)
     monkeypatch.setattr(deploy.dns, "ensure_cname", cluster.cname)
@@ -200,6 +213,24 @@ def test_neo4j_password_is_generated_once_and_copied_to_its_consumer(world):
         "QUARKUS_NEO4J_AUTHENTICATION_USERNAME": "neo4j",
         "QUARKUS_NEO4J_AUTHENTICATION_PASSWORD": password,
         "QUARKUS_MONGODB_CONNECTION_STRING": "mongodb://mongodb:27017",
+    }
+
+
+def test_each_app_with_a_secret_gets_its_own_read_only_vault_role(world):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    with Session() as db:
+        with_secret = {
+            s.app_name
+            for s in db.query(ImportService).all()
+            if generate.needs_secret(generate.AppSpec.from_dict(s.spec))
+        }
+    assert with_secret >= {"neo4j", "social-graph-service"}
+    assert cluster.roles == {
+        ("kubernetes", f"epitweet-{app}-role"): "project-epitweet-read-policy"
+        for app in with_secret
     }
 
 
@@ -362,6 +393,16 @@ def test_removal_takes_out_what_the_import_deployed(removal):
     assert _names(cluster.record) == set()
     assert set(calls["namespaces"][0]) == deployed
     assert calls["dns"] == ["frontend-epitweet.3istor.com"]
+
+
+def test_removal_deletes_the_vault_roles_of_the_apps_it_took_out(removal):
+    Session, cluster, calls = removal
+    _deploy(_published_run(Session))
+    assert cluster.roles
+
+    _remove(Session)
+
+    assert cluster.roles == {}
 
 
 def test_removal_keeps_a_template_app_named_like_a_pending_service(removal):

@@ -366,10 +366,7 @@ def test_neo4j_and_its_consumer_read_the_generated_secret_from_vault():
     neo4j = _values(files, "neo4j")
     graph = _values(files, "social-graph-service")
 
-    expected = {
-        "enabled": True,
-        "vaultRole": "project-epitweet-system-role",
-    }
+    expected = {"enabled": True}
     assert neo4j["secrets"] == {
         **expected,
         "vaultPath": "project-epitweet/neo4j/imports",
