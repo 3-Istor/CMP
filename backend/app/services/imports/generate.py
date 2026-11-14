@@ -560,8 +560,12 @@ def hostname(project: str, app: str) -> str:
 
 
 def secret_path(app: str) -> str:
-    """KV path, in mount project-<p>, of an app's generated environment."""
-    return f"system/imports/{app}"
+    """
+    KV path, in mount project-<p>, of an app's generated environment. Under
+    the app's own path: cnp-generic-app refuses a vaultPath outside
+    project-<p>/<app> (infra-templates#26).
+    """
+    return f"{app}/imports"
 
 
 def needs_secret(spec: AppSpec) -> bool:
