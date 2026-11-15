@@ -87,37 +87,71 @@ WRITE_TOOLS = {
 CONFIRMED_IN_CMP = {"import_repo", "link_apps", "unlink_apps"}
 # Not read-only by annotation, but it only returns a link to the CMP.
 WRITES_NOTHING = {"request_secret"}
-REVIEWED_TOOLS = {
-    "whoami",
-    "get_guide",
-    "get_project_policy",
-    "create_project",
-    "list_apps",
-    "get_app",
-    "create_app",
-    "wait_for_app",
-    "delete_app",
-    "list_app_files",
-    "read_app_file",
-    "push_files",
-    "request_secret",
-    "cut_release",
-    "get_release",
-    "list_releases",
-    "release_action",
-    "get_app_logs",
-    "analyze_repo",
-    "get_import",
-    "get_topology",
-    "import_repo",
-    "link_apps",
-    "unlink_apps",
-    "get_app_metrics",
-    "query_app_logs",
-    "list_app_traces",
-    "get_alerts",
-    "get_slo",
+# Run and operate apps and projects (CNP-233): each call goes through one
+# CMP route the audit middleware journals, proven route by route in
+# test_mcp_operations.test_every_route_an_operations_tool_writes_to_is_journaled.
+OPERATIONS_WRITE_TOOLS = {
+    "app_power",
+    "update_app_config",
+    "staging",
+    "promotion",
+    "set_promotion_policy",
+    "ci_run",
+    "release_traffic",
+    "update_release_settings",
+    "project_member",
+    "delete_project",
+    "set_budget",
+    "cost_recommendation",
+    "security_scan",
+    "request_security_exception",
+    "database_backup",
+    "database_restore",
 }
+OPERATIONS_READ_TOOLS = {
+    "get_app_config",
+    "get_environments",
+    "list_members",
+    "get_costs",
+    "get_security",
+    "list_backups",
+    "get_alert_rules",
+}
+REVIEWED_TOOLS = (
+    {
+        "whoami",
+        "get_guide",
+        "get_project_policy",
+        "create_project",
+        "list_apps",
+        "get_app",
+        "create_app",
+        "wait_for_app",
+        "delete_app",
+        "list_app_files",
+        "read_app_file",
+        "push_files",
+        "request_secret",
+        "cut_release",
+        "get_release",
+        "list_releases",
+        "release_action",
+        "get_app_logs",
+        "analyze_repo",
+        "get_import",
+        "get_topology",
+        "import_repo",
+        "link_apps",
+        "unlink_apps",
+        "get_app_metrics",
+        "query_app_logs",
+        "list_app_traces",
+        "get_alerts",
+        "get_slo",
+    }
+    | OPERATIONS_WRITE_TOOLS
+    | OPERATIONS_READ_TOOLS
+)
 OBSERVABILITY_TOOLS = {
     "get_app_metrics",
     "query_app_logs",
@@ -131,6 +165,9 @@ NEVER_AUTONOMOUS = (
     "import.apply",
     "app.link",
     "app.unlink",
+    "project.delete",
+    "project.members",
+    "db.restore",
 )
 # What the import API answers (service.run_view), with what a scrubber could
 # miss: a credential in an env value whose name says nothing, a token in an
@@ -597,7 +634,12 @@ def test_every_write_tool_call_is_journaled_with_the_assistant_name(cmp, tool):
 def test_every_tool_that_can_change_something_is_in_the_journal_test():
     write_tools = _write_tools()
 
-    assert write_tools == set(WRITE_TOOLS) | WRITES_NOTHING | CONFIRMED_IN_CMP
+    assert write_tools == (
+        set(WRITE_TOOLS)
+        | WRITES_NOTHING
+        | CONFIRMED_IN_CMP
+        | OPERATIONS_WRITE_TOOLS
+    )
 
 
 def test_a_call_the_stake_policy_refuses_is_journaled(cmp):
