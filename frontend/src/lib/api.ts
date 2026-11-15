@@ -1703,3 +1703,30 @@ export const getSloTargets = (project: string, app: string) =>
   request<import("@/types/observability").SloSettings>(
     `/observability/slo${obsQuery({ project, app })}`,
   );
+
+export interface ProjectExport {
+  id: string;
+  project: string;
+  status: string;
+  requested_by: string;
+  created_at: string;
+  finished_at: string | null;
+  expires_at: string | null;
+  size: number | null;
+  sha256: string | null;
+  problems: Record<string, string>[];
+}
+
+export const listProjectExports = (project: string) =>
+  request<ProjectExport[]>(`/projects/${encodeURIComponent(project)}/exports`);
+
+export const requestProjectExport = (project: string) =>
+  request<ProjectExport>(`/projects/${encodeURIComponent(project)}/export`, {
+    method: "POST",
+  });
+
+export const projectExportLink = (project: string, exportId: string) =>
+  request<{ url: string; expires_in: number; sha256: string }>(
+    `/projects/${encodeURIComponent(project)}/exports/${encodeURIComponent(exportId)}/link`,
+    { method: "POST" },
+  );
