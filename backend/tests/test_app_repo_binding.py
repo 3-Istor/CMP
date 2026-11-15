@@ -29,6 +29,14 @@ def test_running_app_resolves_to_its_own_repository():
     assert repo == "3-Istor/shop"
 
 
+def test_an_app_named_landing_resolves_to_its_own_repository():
+    repo = app_repo.bound_repo(
+        "https://github.com/3-Istor/landing", "landing", "running"
+    )
+
+    assert repo == "3-Istor/landing"
+
+
 @pytest.mark.parametrize(
     "url,name,status",
     [

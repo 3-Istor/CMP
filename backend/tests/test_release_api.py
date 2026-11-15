@@ -868,6 +868,38 @@ class TestCutRelease:
         assert response.status_code == 409
         github.create_tag.assert_not_awaited()
 
+    def test_an_unbound_repository_is_a_conflict_not_a_bad_gateway(
+        self, session_factory, keycloak, github
+    ):
+        with session_factory() as db:
+            db.get(Deployment, 7).github_repo_url = (
+                "https://github.com/someone-else/web"
+            )
+            db.commit()
+        client = _client(session_factory, FakeSource(None))
+
+        response = client.get("/api/deployments/7/release/choices")
+
+        assert (response.status_code, response.json()["detail"]) == (
+            409,
+            "The app's repository is not the one created for it.",
+        )
+
+    def test_an_app_named_landing_gets_its_choices(
+        self, session_factory, keycloak, github
+    ):
+        with session_factory() as db:
+            app = db.get(Deployment, 7)
+            app.name = "landing"
+            app.github_repo_url = "https://github.com/3-Istor/landing"
+            db.commit()
+        client = _client(session_factory, FakeSource(None))
+
+        response = client.get("/api/deployments/7/release/choices")
+
+        assert response.status_code == 200
+        github.list_tags.assert_awaited_once_with("gh", "3-Istor/landing")
+
     def test_a_guest_cannot_read_the_choices_nor_tag(
         self, session_factory, keycloak, github, staged
     ):
