@@ -1,0 +1,90 @@
+{
+  "me": "alice",
+  "catalog": {
+    "elevations": [
+      {
+        "key": "vault-data",
+        "group": "elevated-vault-data",
+        "system": "vault"
+      },
+      {
+        "key": "k3s-admin",
+        "group": "elevated-k3s-admin",
+        "system": "k3s"
+      }
+    ],
+    "default_minutes": 60,
+    "min_minutes": 15,
+    "max_minutes": 240
+  },
+  "pending": [
+    {
+      "decided_by": null,
+      "decided_at": null,
+      "decision_note": null,
+      "activated_at": null,
+      "expires_at": null,
+      "ended_at": null,
+      "ended_by": null,
+      "id": 3,
+      "elevation": "k3s-admin",
+      "requester": "bob",
+      "reason": "Restart the stuck ingress controller, incident INC-42",
+      "duration_minutes": 30,
+      "status": "pending",
+      "created_at": "2026-11-11T09:55:00Z"
+    },
+    {
+      "decided_by": null,
+      "decided_at": null,
+      "decision_note": null,
+      "activated_at": null,
+      "expires_at": null,
+      "ended_at": null,
+      "ended_by": null,
+      "id": 4,
+      "elevation": "k3s-admin",
+      "requester": "alice",
+      "reason": "Rotate the Argo CD repo credentials",
+      "duration_minutes": 60,
+      "status": "pending",
+      "created_at": "2026-11-11T09:58:00Z"
+    }
+  ],
+  "active": [
+    {
+      "decided_by": "bob",
+      "decided_at": "2026-11-11T09:05:00Z",
+      "decision_note": null,
+      "activated_at": "2026-11-11T09:05:00Z",
+      "expires_at": "2099-01-01T00:00:00Z",
+      "ended_at": null,
+      "ended_by": null,
+      "id": 2,
+      "elevation": "vault-data",
+      "requester": "alice",
+      "reason": "Read the payments DB password for the restore drill",
+      "duration_minutes": 60,
+      "status": "active",
+      "created_at": "2026-11-11T09:00:00Z"
+    }
+  ],
+  "history": [
+    {
+      "decided_by": "alice",
+      "decided_at": "2026-11-10T14:02:00Z",
+      "decision_note": null,
+      "activated_at": "2026-11-10T14:02:00Z",
+      "expires_at": "2026-11-10T14:17:00Z",
+      "ended_at": "2026-11-10T14:17:10Z",
+      "ended_by": "cmp",
+      "id": 1,
+      "elevation": "vault-data",
+      "requester": "bob",
+      "reason": "Check a secret version after a failed rollout",
+      "duration_minutes": 15,
+      "status": "expired",
+      "created_at": "2026-11-10T14:00:00Z"
+    }
+  ]
+}

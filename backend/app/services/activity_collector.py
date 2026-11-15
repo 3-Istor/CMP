@@ -22,6 +22,9 @@ from app.services.kube_client import (
     KubeUnavailableError,
     in_cluster,
 )
+from app.services.observability import grafana_project
+from app.services.observability import reconcile as obs_reconcile
+from app.services.observability import trace_routing, trace_tenants
 
 logger = logging.getLogger(__name__)
 
@@ -141,11 +144,25 @@ async def collect_once() -> None:
     ns_projects = (
         await run_in_threadpool(src.namespace_projects) if has_cluster else {}
     )
+    accounts = None
+    if has_cluster and (
+        settings.OBS_VTRACES_URL or settings.OBS_TRACES_ROUTING_ENABLED
+    ):
+        accounts = await run_in_threadpool(trace_tenants.accounts)
     if settings.METRICS_PROJECT_KEY and ns_projects:
         try:
-            await run_in_threadpool(metrics_isolation.sync, ns_projects)
+            await run_in_threadpool(
+                metrics_isolation.sync, ns_projects, accounts
+            )
         except KubeUnavailableError as exc:
             logger.warning("vmauth config not written: %s", exc)
+    if accounts is not None and settings.OBS_TRACES_ROUTING_ENABLED:
+        try:
+            await run_in_threadpool(trace_routing.sync, accounts)
+        except KubeUnavailableError as exc:
+            logger.warning("Trace routing not written: %s", exc)
+    await obs_reconcile.sync_quietly()
+    await grafana_project.sync_quietly()
     for source in QUERIES:
         try:
             added = await collect_source(source, ns_projects)
@@ -168,6 +185,7 @@ async def collect_once() -> None:
 
 async def activity_collector_loop() -> None:
     logger.info("Activity collector started")
+    obs_reconcile.bind(asyncio.get_running_loop())
     if not in_cluster():
         logger.warning("Activity collector: %s", OUTSIDE_CLUSTER_NOTICE)
     while True:

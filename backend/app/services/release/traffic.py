@@ -161,15 +161,34 @@ def _asks_for_sso(response: httpx.Response) -> bool:
     )
 
 
+def _on_realm(url: httpx.URL, realm: str) -> bool:
+    """True for a URL of the platform Keycloak under the project realm."""
+    base = httpx.URL(f"{settings.KEYCLOAK_URL.rstrip('/')}/realms/{realm}/")
+    return (url.scheme, url.host, url.port) == (
+        base.scheme,
+        base.host,
+        base.port,
+    ) and (
+        url.path.startswith(base.path)
+        and not {".", ".."} & set(url.path.split("/"))
+    )
+
+
 async def _follow(
-    client: httpx.AsyncClient, response: httpx.Response
+    client: httpx.AsyncClient,
+    response: httpx.Response,
+    realm: str,
+    app_host: str | None = None,
 ) -> httpx.Response:
+    """Follow redirects that stay on the project realm, or on the app host."""
     for _ in range(10):
         if response.status_code not in (301, 302, 303, 307, 308):
             break
-        response = await client.get(
-            response.url.join(response.headers["location"])
-        )
+        target = response.url.join(response.headers["location"])
+        on_app = app_host is not None and target.host == app_host
+        if not on_app and not _on_realm(target, realm):
+            raise TrafficError("The SSO redirect left the project realm.")
+        response = await client.get(target)
     return response
 
 
@@ -183,14 +202,26 @@ async def login(app_url: str, realm: str) -> str:
         first = await client.get(app_url)
         if not _asks_for_sso(first):
             return ""
-        password = await _prepare_user(client, realm)
-        page = await _follow(client, first)
+        # The app answers this first request: its redirects and pages are
+        # untrusted until they are on the platform Keycloak, and the password
+        # is only reset once the login form posts back there.
+        if not _on_realm(first.url.join(first.headers["location"]), realm):
+            raise TrafficError(
+                "The app does not redirect to its project realm."
+            )
+        page = await _follow(client, first, realm)
         match = _LOGIN_ACTION.search(page.text)
-        if match is None:
+        if match is None or not _on_realm(page.url, realm):
             raise TrafficError(
                 "The app did not show its SSO login page: is it exposed with SSO?"
             )
-        action = json.loads(f'"{match.group(1)}"')
+        action = page.url.join(json.loads(f'"{match.group(1)}"'))
+        if (
+            not _on_realm(action, realm)
+            or "/login-actions/" not in action.path
+        ):
+            raise TrafficError("The app's SSO login form is not the realm's.")
+        password = await _prepare_user(client, realm)
         landed = await _follow(
             client,
             await client.post(
@@ -201,6 +232,8 @@ async def login(app_url: str, realm: str) -> str:
                     "credentialId": "",
                 },
             ),
+            realm,
+            host,
         )
         if landed.url.host != host:
             raise TrafficError("The traffic user could not log into the app.")

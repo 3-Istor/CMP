@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,27 +7,32 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.staticfiles import StaticFiles
 
 from app import mcp_server
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import (
+    access,
+    access_reviews,
     account,
     activity,
     agents,
     alerting,
     app_icons,
+    app_observability,
     app_overview,
     catalog,
     deployments,
     environments,
     finops,
     finops_finance,
+    imports,
     infra,
     links,
     notifications,
+    observability,
     power,
+    project_export,
     projects,
     releases,
     scorecard,
@@ -36,8 +40,12 @@ from app.routers import (
     security,
     security_alerts,
     security_databases,
+    template_assets,
+    topology,
 )
 from app.services import health_poller, keycloak_admin, vault_auth
+from app.services.access.grants import access_sweep_loop
+from app.services.access_review.jobs import access_review_loop
 from app.services.activity_collector import activity_collector_loop
 from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
@@ -50,6 +58,7 @@ from app.services.grafana_service import (
     sync_all_project_orgs,
 )
 from app.services.kube_client import ClusterNotConnectedError
+from app.services.project_export import runner as project_export_runner
 from app.services.project_status import fail_interrupted_runs
 from app.services.release.recorder import release_recorder_loop
 from app.services.security.collector import security_collector_loop
@@ -254,16 +263,15 @@ async def lifespan(app: FastAPI):
 
     # Before anything can start a new Terraform run.
     fail_interrupted_runs()
+    project_export_runner.fail_interrupted()
 
-    # Mount static files after repository is cloned
-    if os.path.exists("data/templates/templates"):
-        logger.info("Mounting static files...")
-        app.mount(
-            "/static/templates",
-            StaticFiles(directory="data/templates/templates"),
-            name="templates",
-        )
-        logger.info("Static files mounted")
+    import_reconcile_task = None
+    if settings.IMPORT_ENABLED:
+        from app.services.imports.deploy import resume_interrupted
+        from app.services.imports.rebuilds import reconcile_loop
+
+        resume_interrupted()
+        import_reconcile_task = asyncio.create_task(reconcile_loop())
 
     # Start background health poller
     logger.info("Starting health poller...")
@@ -294,6 +302,11 @@ async def lifespan(app: FastAPI):
     activity_collector_task = asyncio.create_task(activity_collector_loop())
     release_recorder_task = asyncio.create_task(release_recorder_loop())
     environment_task = asyncio.create_task(environment_loop())
+    access_sweep_task = asyncio.create_task(access_sweep_loop())
+    access_review_task = asyncio.create_task(access_review_loop())
+    export_retention_task = asyncio.create_task(
+        project_export_runner.export_retention_loop()
+    )
     # Runs once, after startup: Grafana being down only logs.
     grafana_sync_task = asyncio.create_task(sync_all_project_orgs())
     grafana_platform_task = asyncio.create_task(platform_org_sync_loop())
@@ -321,8 +334,13 @@ async def lifespan(app: FastAPI):
     activity_collector_task.cancel()
     release_recorder_task.cancel()
     environment_task.cancel()
+    access_sweep_task.cancel()
+    access_review_task.cancel()
+    export_retention_task.cancel()
     grafana_sync_task.cancel()
     grafana_platform_task.cancel()
+    if import_reconcile_task:
+        import_reconcile_task.cancel()
     for task in (
         health_poller_task,
         finops_poller_task,
@@ -331,6 +349,9 @@ async def lifespan(app: FastAPI):
         activity_collector_task,
         release_recorder_task,
         environment_task,
+        access_sweep_task,
+        access_review_task,
+        export_retention_task,
         grafana_sync_task,
         grafana_platform_task,
     ):
@@ -378,6 +399,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(template_assets.router)
+app.include_router(access.router, prefix="/api")
+app.include_router(access_reviews.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(agents.projects_router, prefix="/api")
@@ -385,12 +409,18 @@ app.include_router(activity.router, prefix="/api")
 app.include_router(alerting.router, prefix="/api")
 app.include_router(app_icons.router, prefix="/api")
 app.include_router(app_overview.router, prefix="/api")
+app.include_router(app_observability.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(deployments.router, prefix="/api")
+app.include_router(imports.router, prefix="/api")
+app.include_router(imports.worker, prefix="/api")
+app.include_router(imports.webhooks, prefix="/api")
 app.include_router(infra.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(observability.router, prefix="/api")
+app.include_router(project_export.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
 app.include_router(power.router, prefix="/api")
@@ -404,6 +434,7 @@ app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")
 app.include_router(secrets_presence.router, prefix="/api")
 app.include_router(scorecard.router, prefix="/api")
+app.include_router(topology.router, prefix="/api")
 
 
 internal_api.bind(app)

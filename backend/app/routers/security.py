@@ -22,6 +22,7 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
+from app.services import app_repo
 from app.services.authz import (
     is_auditor,
     is_cnp_admin,
@@ -36,7 +37,7 @@ from app.services.github_service import (
     dispatch_workflow,
     get_default_branch,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
     put_file_content,
 )
 from app.services.keycloak_service import get_current_user, get_project_role
@@ -56,10 +57,10 @@ from app.services.security import store
 from app.services.security.collector import (
     K8S_TEMPLATE,
     SECURITY_WORKFLOW,
-    repo_full_name,
     utcnow,
 )
 from app.services.security.model import Category, Source, Tier
+from app.services.step_up import assert_step_up
 
 logger = logging.getLogger(__name__)
 
@@ -492,16 +493,14 @@ class ScanRequest(BaseModel):
 
 
 async def _github_token(deployment: Deployment) -> tuple[str, str]:
-    installation_id = json.loads(deployment.app_config or "{}").get(
-        "github_installation_id"
-    )
-    repo = repo_full_name(deployment.github_repo_url)
-    if not installation_id or not repo:
-        raise HTTPException(
-            status_code=409, detail="This app has no GitHub repository linked."
-        )
     try:
-        return await get_installation_token(installation_id), repo
+        repo = app_repo.bound_repo(
+            deployment.github_repo_url, deployment.name, deployment.status
+        )
+    except app_repo.RepoNotBound as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        return await get_org_installation_token(), repo
     except GitHubAppError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -714,17 +713,21 @@ async def approve_exception(
             detail="Un autre admin du projet que l'auteur doit valider.",
         )
     reviewer = is_cnp_admin(token) or is_auditor(token)
+    # A core finding is a fixable critical. An unknown tier is treated as
+    # critical.
+    critical = _exception_tier(db, row) in (Tier.CORE, None)
     if not reviewer:
         await _require_admin(token, row.project)
-        # A core finding is a fixable critical: only the auditor or a platform
-        # admin may accept it. An unknown tier is treated as critical.
-        if _exception_tier(db, row) in (Tier.CORE, None):
+        # Only the auditor or a platform admin may accept a critical.
+        if critical:
             raise HTTPException(
                 status_code=403,
                 detail="Une exception critique est validée par l'audit sécurité.",
             )
     if row.revoked_at is not None:
         raise HTTPException(status_code=409, detail="Exception réactivée.")
+    if critical:
+        assert_step_up(token)
     row.approved_by, row.approved_at = approver, utcnow()
     row.approved_by_reviewer = reviewer
     db.commit()

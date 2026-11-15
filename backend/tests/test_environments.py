@@ -387,11 +387,18 @@ class TestStagingRealm:
         )
         executor.apply.assert_not_called()
 
-    def test_a_project_with_its_own_keycloak_keeps_its_realm(self, db):
+    def test_a_stored_realm_never_overrides_the_staging_realm(self, db):
+        # Arrange
         deployment = db.get(Deployment, 7)
-        deployment.app_config = json.dumps({"keycloak_realm_id": "acme"})
+        deployment.app_config = json.dumps(
+            {"keycloak_realm_id": "other-project-staging"}
+        )
 
-        assert activation._variables(deployment)["keycloak_realm_id"] == "acme"
+        # Act
+        variables = activation._variables(deployment)
+
+        # Assert
+        assert variables["keycloak_realm_id"] == "shop-staging"
 
 
 class TestPromotionSteps:
@@ -914,3 +921,62 @@ def _async(value):
         return value
 
     return _value()
+
+
+class TestSmokePath:
+    @pytest.mark.parametrize(
+        "path",
+        ["@127.0.0.1:18081/latest/meta-data/", "relative", "/a b", 7],
+    )
+    def test_falls_back_to_the_root_for_a_repo_path_that_is_not_an_absolute_path(
+        self, path
+    ):
+        # Arrange
+        values = {"release": {"smoke": {"path": path}}}
+
+        # Act
+        found = gitops.smoke_path(values)
+
+        # Assert
+        assert found == "/"
+
+    def test_keeps_a_valid_repo_path(self):
+        assert gitops.smoke_path({"monitoring": {"path": "/healthz"}}) == (
+            "/healthz"
+        )
+
+    @pytest.mark.parametrize(
+        "path, expected",
+        [
+            ("/healthz", "http://web.ns.svc.cluster.local:8080/healthz"),
+            (
+                "/ready?deep=1",
+                "http://web.ns.svc.cluster.local:8080/ready?deep=1",
+            ),
+            (
+                "//evil.test/x",
+                "http://web.ns.svc.cluster.local:8080//evil.test/x",
+            ),
+            ("@127.0.0.1:18081/", "http://web.ns.svc.cluster.local:8080/"),
+        ],
+    )
+    def test_the_smoke_url_keeps_the_service_authority_whatever_the_path(
+        self, path, expected
+    ):
+        # Arrange
+        services = [
+            {
+                "metadata": {"name": "web"},
+                "spec": {"ports": [{"port": 8080}]},
+            }
+        ]
+
+        # Act
+        with mock.patch.object(suites, "kube_list", return_value=services):
+            urls = suites._service_urls("ns", {"web": "r"}, {"web": path})
+
+        # Assert
+        assert (urls["web"].host, str(urls["web"])) == (
+            "web.ns.svc.cluster.local",
+            expected,
+        )

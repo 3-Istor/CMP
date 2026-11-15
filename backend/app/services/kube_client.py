@@ -166,6 +166,18 @@ def kube_get(
     return response.json()
 
 
+def kube_get_text(
+    path: str,
+    params: dict[str, str] | None = None,
+    cloud: TargetCloud = TargetCloud.ONPREM,
+) -> str | None:
+    """GET a path that answers plain text, such as a pod log; None on 404."""
+    response = _request("GET", path, params=params, cloud=cloud)
+    if response.status_code == 404:
+        return None
+    return response.text
+
+
 def kube_list(
     path: str,
     params: dict[str, str] | None = None,
@@ -202,6 +214,11 @@ def kube_delete_collection(
     _request("DELETE", path, params=params, cloud=cloud)
 
 
+def kube_delete(path: str, cloud: TargetCloud = TargetCloud.ONPREM) -> None:
+    """DELETE one object; already gone is not an error."""
+    _request("DELETE", path, cloud=cloud)
+
+
 def kube_merge_patch(
     path: str,
     body: dict[str, Any],
@@ -222,4 +239,22 @@ def kube_merge_patch(
     )
     if response.status_code == 404:
         raise KubeUnavailableError(f"PATCH {path}: HTTP 404")
+    return response.json()
+
+
+def kube_replace(
+    path: str,
+    body: dict[str, Any],
+    cloud: TargetCloud = TargetCloud.ONPREM,
+) -> dict[str, Any]:
+    """
+    PUT a whole object; *body* carries the resourceVersion that was read.
+
+    Raises:
+        KubeUnavailableError: Not in a cluster, refused (409 when the object
+            changed since it was read), or the object is gone.
+    """
+    response = _request("PUT", path, json=body, cloud=cloud)
+    if response.status_code == 404:
+        raise KubeUnavailableError(f"PUT {path}: HTTP 404")
     return response.json()

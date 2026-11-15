@@ -33,6 +33,11 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/projects/"): "project.create",
     ("DELETE", "/api/projects/{project_name}"): "project.delete",
     ("POST", "/api/projects/{project_name}/members"): "project.member.add",
+    ("POST", "/api/projects/{project_name}/export"): "project.export",
+    (
+        "POST",
+        "/api/projects/{project_name}/exports/{export_id}/link",
+    ): "project.export.link",
     (
         "DELETE",
         "/api/projects/{project_name}/members/{username}",
@@ -125,12 +130,39 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/deployments/{deployment_id}/restart"): "app.restart",
     ("PUT", "/api/alerting/{alert_id}"): "alerting.update",
     ("POST", "/api/catalog/sync"): "catalog.sync",
+    ("POST", "/api/projects/{project_name}/imports"): "import.create",
+    ("POST", "/api/projects/{project_name}/topology/links"): "app.link",
+    ("DELETE", "/api/projects/{project_name}/topology/links"): "app.unlink",
+    (
+        "POST",
+        "/api/projects/{project_name}/imports/{source_id}/apply",
+    ): "import.apply",
+    (
+        "POST",
+        "/api/projects/{project_name}/imports/{source_id}/rebuild",
+    ): "import.rebuild",
+    (
+        "DELETE",
+        "/api/projects/{project_name}/imports/{source_id}",
+    ): "import.delete",
+    (
+        "PUT",
+        "/api/projects/{project_name}/imports/{source_id}/settings",
+    ): "import.settings.update",
     ("POST", "/api/account/picture"): "account.picture.update",
     (
         "POST",
         "/api/agents/requests/{request_id}/approve",
     ): "agent.connect",
     ("DELETE", "/api/agents/grants/{grant_id}"): "agent.disconnect",
+    (
+        "DELETE",
+        "/api/agents/admin/grants/{grant_id}",
+    ): "agent.admin.revoke",
+    (
+        "DELETE",
+        "/api/agents/admin/users/{username}/grants",
+    ): "agent.admin.revoke_user",
     (
         "POST",
         "/api/agents/confirmations/{confirmation_id}/{decision}",
@@ -143,6 +175,31 @@ ACTIONS: dict[tuple[str, str], str] = {
         "POST",
         "/api/account/github-installation",
     ): "account.github.link",
+    ("POST", "/api/access/requests"): "access.request",
+    (
+        "POST",
+        "/api/access/requests/{request_id}/approve",
+    ): "access.approve",
+    ("POST", "/api/access/requests/{request_id}/deny"): "access.deny",
+    ("POST", "/api/access/requests/{request_id}/cancel"): "access.cancel",
+    ("POST", "/api/access/requests/{request_id}/end"): "access.end",
+    ("POST", "/api/access-reviews/campaigns"): "access_review.start",
+    (
+        "POST",
+        "/api/access-reviews/campaigns/{campaign_id}/close",
+    ): "access_review.close",
+    (
+        "POST",
+        "/api/access-reviews/items/{item_id}/decision",
+    ): "access_review.decide",
+    (
+        "POST",
+        "/api/access-reviews/items/{item_id}/task-done",
+    ): "access_review.task_done",
+    (
+        "POST",
+        "/api/access-reviews/accounts/{user_id}/enable",
+    ): "access_review.account.enable",
 }
 
 # Matched on the raw path rather than on the route FastAPI selected: since
@@ -188,7 +245,21 @@ NOTABLE = {
     "release.abort",
     "release.settings.update",
     "agent.connect",
+    "agent.admin.revoke",
+    "agent.admin.revoke_user",
     "project.agents.update",
+    "access.request",
+    "access.approve",
+    "access.end",
+    "access.expire",
+    "access.unmanaged",
+    "access_review.start",
+    "access_review.decide",
+    "access_review.escalate",
+    "access_review.terraform_task",
+    "access_review.account.flag",
+    "access_review.account.disable",
+    "access_review.account.enable",
 }
 
 # Body fields copied into the journal. Anything else, config values in
@@ -327,6 +398,34 @@ def record_agent_event(
     )
 
 
+def record_system_event(
+    action: str,
+    target: str,
+    details: dict,
+    actor: str = "cmp",
+    succeeded: bool = True,
+    project: str | None = None,
+    app: str | None = None,
+) -> None:
+    """
+    Journal a change the CMP made on its own, such as a grant removed at
+    expiry, which no REST call carries.
+    """
+    _store(
+        AuditEvent(
+            actor=actor,
+            action=action,
+            project=project,
+            app=app,
+            target=target,
+            outcome="success" if succeeded else "failure",
+            status_code=200 if succeeded else 500,
+            source_ip="cmp",
+            details=json.dumps(details, default=str),
+        )
+    )
+
+
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
@@ -368,6 +467,12 @@ class AuditMiddleware:
         ):
             await self.app(scope, receive, send)
             return
+        action, params = match_action(scope["method"], scope["path"])
+        if action is None:
+            # Nothing to journal: the body is not buffered here, so routes
+            # that cap it (webhooks, worker calls) stream it themselves.
+            await self.app(scope, receive, send)
+            return
 
         chunks = []
         while True:
@@ -398,13 +503,8 @@ class AuditMiddleware:
         await self.app(scope, replay, capture)
 
         request = Request(scope)
-        action, params = match_action(scope["method"], scope["path"])
         # 401s are anonymous noise; a dry run changes nothing.
-        if (
-            action is None
-            or status_code == 401
-            or request.query_params.get("dry_run") == "true"
-        ):
+        if status_code == 401 or request.query_params.get("dry_run") == "true":
             return
 
         try:
@@ -442,7 +542,7 @@ async def _record(
     if action == "app.create":
         app = app or fields.get("name")
 
-    target = next(
+    target = noted.pop("target", None) or next(
         (
             str(params[k])
             for k in (

@@ -1,16 +1,12 @@
 "use client";
 import { TemplateIcon } from "./TemplateIcon";
 
-import { AlertCircle } from "lucide-react";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getGitHubStatus } from "@/lib/api";
 import type { CatalogTemplate, Project } from "@/types";
 
 interface Props {
@@ -39,22 +35,9 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const [fieldValues, setFieldValues] = useState<
     Record<string, string | number>
   >({});
-  const [hasGitHub, setHasGitHub] = useState(false);
-  const [checkingGitHub, setCheckingGitHub] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const isOpen = !!template;
   const isKubernetes = template?.category === "paas";
-
-  // Check GitHub status when opening a Kubernetes template
-  useEffect(() => {
-    if (template && isKubernetes) {
-      setCheckingGitHub(true);
-      getGitHubStatus()
-        .then((data) => setHasGitHub(!!data.github_installation_id))
-        .catch(() => setHasGitHub(false))
-        .finally(() => setCheckingGitHub(false));
-    }
-  }, [template, isKubernetes]);
 
   // Reset form when template changes
   useEffect(() => {
@@ -108,11 +91,10 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid()) return;
-    if (isKubernetes && !hasGitHub) return; // Prevent submit if GitHub not linked
     onConfirm(appName.trim(), fieldValues);
   };
 
-  const canDeploy = isFormValid() && (!isKubernetes || hasGitHub);
+  const canDeploy = isFormValid();
 
   return (
     <>
@@ -273,23 +255,6 @@ export function DeployModal({ template, onClose, onConfirm, loading }: Props) {
                       </div>
                     ))}
                   </div>
-                )}
-
-                {/* GitHub Account Warning for Kubernetes */}
-                {isKubernetes && !checkingGitHub && !hasGitHub && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>{t("modal.githubTitle")}</AlertTitle>
-                    <AlertDescription>
-                      {t("modal.githubText")}{" "}
-                      <Link
-                        href="/account"
-                        className="underline font-medium hover:no-underline"
-                      >
-                        {t("modal.githubLink")}
-                      </Link>
-                    </AlertDescription>
-                  </Alert>
                 )}
 
                 {/* Info box */}

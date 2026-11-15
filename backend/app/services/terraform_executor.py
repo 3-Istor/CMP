@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
-from app.services import keycloak_admin, vault_auth
+from app.services import aws_tfstate, keycloak_admin, vault_auth
 from app.services.state_lock import (
     raise_if_state_locked,
     run_releasing_dead_pod_lock,
@@ -37,7 +37,11 @@ class TerraformExecutor:
         self.working_dir = working_dir
         self.deployment_name = deployment_name
         self.s3_key_path = s3_key_path  # Custom S3 key path (e.g., "cnp/projects/my-project/my-app")
-        self.state_dir = Path("./data/terraform_states") / deployment_name
+        # TF_DATA_DIR holds the backend binding written by init: it must be as
+        # unique as the state key, and app names are only unique per project.
+        self.state_dir = Path("./data/terraform_states") / (
+            s3_key_path or deployment_name
+        )
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.use_s3_backend = settings.TF_BACKEND_S3_ENABLED
         self.log_file = log_file
@@ -81,6 +85,10 @@ class TerraformExecutor:
             "-backend-config=encrypt=true",
             "-backend-config=use_lockfile=true",
         ]
+
+        # Federated runs get their credentials from the AWS profile.
+        if aws_tfstate.enabled():
+            return backend_config
 
         # Add S3 backend credentials if provided
         if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
@@ -149,11 +157,12 @@ class TerraformExecutor:
         if settings.OS_PROJECT_DOMAIN_NAME:
             env["OS_PROJECT_DOMAIN_NAME"] = settings.OS_PROJECT_DOMAIN_NAME
 
-        # Pass AWS credentials to Terraform (for AWS provider)
-        if settings.AWS_ACCESS_KEY_ID:
-            env["AWS_ACCESS_KEY_ID"] = settings.AWS_ACCESS_KEY_ID
-        if settings.AWS_SECRET_ACCESS_KEY:
-            env["AWS_SECRET_ACCESS_KEY"] = settings.AWS_SECRET_ACCESS_KEY
+        # Federated runs give the AWS provider the cnp-tfstate profile.
+        if not aws_tfstate.enabled():
+            if settings.AWS_ACCESS_KEY_ID:
+                env["AWS_ACCESS_KEY_ID"] = settings.AWS_ACCESS_KEY_ID
+            if settings.AWS_SECRET_ACCESS_KEY:
+                env["AWS_SECRET_ACCESS_KEY"] = settings.AWS_SECRET_ACCESS_KEY
         if settings.AWS_DEFAULT_REGION:
             env["AWS_DEFAULT_REGION"] = settings.AWS_DEFAULT_REGION
 
@@ -194,6 +203,7 @@ class TerraformExecutor:
             )
 
         env.update(vault_auth.terraform_env())
+        aws_tfstate.apply_terraform_env(env)
 
         # Pass GitHub Registry credentials to Terraform (for image pull secrets)
         if settings.GITHUB_REGISTRY_TOKEN:
@@ -381,14 +391,9 @@ terraform {{
   }}
 }}
 
+# Credentials come from the OS_* variables of the terraform process: this
+# file lives in the template clone and must never hold them.
 provider "openstack" {{
-  user_name           = "{settings.OS_USERNAME}"
-  password            = "{settings.OS_PASSWORD}"
-  tenant_name         = "{settings.OS_PROJECT_NAME}"
-  user_domain_name    = "{settings.OS_USER_DOMAIN_NAME}"
-  project_domain_name = "{settings.OS_PROJECT_DOMAIN_NAME}"
-  auth_url            = "{settings.OS_AUTH_URL}"
-
   # Override endpoints to use real IPs instead of localhost
   endpoint_overrides = {{
     "identity"      = "{base_url}:5000/v3/"

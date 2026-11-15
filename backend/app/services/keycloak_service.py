@@ -45,6 +45,7 @@ from app.core.roles import (
     ProjectRole,
     rank,
 )
+from app.services.agents import internal_api
 from app.services.agents import store as agent_store
 
 logger = logging.getLogger(__name__)
@@ -219,6 +220,40 @@ def _find_user_by_username(username: str, admin_token: str) -> dict | None:
     response.raise_for_status()
     users = response.json()
     return users[0] if users else None
+
+
+def get_user_by_id(user_id: str) -> dict | None:
+    """
+    The Keycloak user behind a ``sub``, None when it no longer exists.
+
+    Raises:
+        requests.RequestException: Keycloak could not say, which callers
+            must not read as "gone".
+    """
+    admin_token = _get_admin_token()
+    response = requests.get(
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+        f"/users/{user_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        timeout=10,
+    )
+    if response.status_code == 404:
+        return None
+    response.raise_for_status()
+    return response.json()
+
+
+def get_user_by_username(username: str) -> dict | None:
+    """
+    The Keycloak user with exactly this username, None when there is none.
+
+    Raises:
+        requests.RequestException: Keycloak could not say.
+    """
+    found = _find_user_by_username(username, _get_admin_token())
+    if found is None or found.get("username") != username:
+        return None
+    return found
 
 
 def _find_group_by_name(group_name: str, admin_token: str) -> dict | None:
@@ -667,6 +702,15 @@ def decode_platform_token(token: str) -> dict:
     if token.startswith(agent_store.ACCESS_PREFIX):
         # An assistant's token, issued by the CMP's own OAuth server. It
         # carries the user's identity, so every RBAC check below applies.
+        # Only MCP tools may present it: straight to /api it would skip the
+        # stake policy and the read-only scope, which the tools enforce.
+        if not internal_api.in_tool_call():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Assistant tokens are only accepted through the MCP "
+                "server.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         claims = agent_store.token_claims(token)
         if claims is None:
             raise HTTPException(

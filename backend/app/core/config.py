@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     TF_BACKEND_AWS_REGION: str = "eu-west-3"
     TF_BACKEND_S3_BUCKET: str = ""
     TF_BACKEND_S3_KEY_PREFIX: str = "deployments/"
+    # Role assumed with a token of the Keycloak client cnp-tfstate instead of
+    # the static key above (Cloud repo, terraform/public/aws/cmp-iam). Empty
+    # keeps the static key: that is the rollback switch.
+    TF_BACKEND_AWS_ROLE_ARN: str = ""
+    TF_BACKEND_OIDC_TOKEN_URL: str = (
+        "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token"
+    )
+    TF_BACKEND_OIDC_CLIENT_ID: str = "cnp-tfstate"
+    TF_BACKEND_OIDC_CLIENT_SECRET: str = ""
 
     # Project registry, the Git source of truth for project placement (D-01)
     CNP_REGISTRY_REPO: str = "3-Istor/cnp-projects"
@@ -66,6 +75,24 @@ class Settings(BaseSettings):
     ICONS_S3_SECRET_ACCESS_KEY: str = ""
     ICONS_S3_REGION: str = "garage"
 
+    # Project exports (EU Data Act Art. 25): private Garage bucket. Unset keys
+    # disable the export. The archive is kept EXPORT_RETENTION_DAYS, the Data
+    # Act retrieval period; a download link lives at most
+    # EXPORT_LINK_MAX_SECONDS, because SigV4 presigned URLs cannot exceed 7
+    # days: the owner asks for a fresh link within the retention period.
+    EXPORT_S3_ENDPOINT: str = ""
+    EXPORT_S3_BUCKET: str = "cnp-project-exports"
+    EXPORT_S3_ACCESS_KEY_ID: str = ""
+    EXPORT_S3_SECRET_ACCESS_KEY: str = ""
+    EXPORT_S3_REGION: str = "garage"
+    # The store as dump Jobs reach it from inside the cluster (its Service),
+    # so database dumps never leave the cluster. Empty: EXPORT_S3_ENDPOINT.
+    EXPORT_S3_INTERNAL_ENDPOINT: str = ""
+    EXPORT_RETENTION_DAYS: int = 30
+    EXPORT_LINK_MAX_SECONDS: int = 7 * 24 * 3600
+    # Log history exported, bounded by the Loki retention anyway.
+    EXPORT_LOG_DAYS: int = 30
+
     # Keycloak (for user profile management and project group resolution)
     KEYCLOAK_URL: str = "https://auth.3istor.com"
     KEYCLOAK_REALM: str = "3istor"
@@ -75,13 +102,44 @@ class Settings(BaseSettings):
     # Comma separated, so a client switch can accept both for a while.
     # Empty means KEYCLOAK_CLIENT_ID alone.
     KEYCLOAK_ALLOWED_CLIENTS: str = ""
-    # Master realm identity for realm provisioning and Terraform. The
-    # confidential client wins when both are set; the admin user is the
-    # legacy fallback.
+    # Step-up before destructive actions (app.services.step_up). Off until the
+    # Keycloak flow that issues the acr is live: with it on and no such flow,
+    # every destructive action would loop on the login page.
+    STEP_UP_ENABLED: bool = False
+    # acr of Keycloak LoA 2 (a passkey), per the clients' acr.loa.map.
+    STEP_UP_ACR: str = "gold"
+    # Must be at least the LoA 2 max age of the Keycloak flow (300 s).
+    STEP_UP_MAX_AGE: int = 300
+    # Master realm client (cmp-provisioner) for realm provisioning and
+    # Terraform.
     KEYCLOAK_PROVISIONER_CLIENT_ID: str = ""
     KEYCLOAK_PROVISIONER_CLIENT_SECRET: str = ""
-    KEYCLOAK_ADMIN_USERNAME: str = ""
-    KEYCLOAK_ADMIN_PASSWORD: str = ""
+
+    # Just-in-time access (CNP-124). Durations in minutes; the max is capped
+    # at 240 whatever is configured. A request nobody decides on lapses.
+    ACCESS_DEFAULT_MINUTES: int = 60
+    ACCESS_MAX_MINUTES: int = 60
+    ACCESS_REQUEST_TTL_MINUTES: int = 120
+    # Members found in an elevated group without an active grant are removed
+    # and reported. Off only while migrating by hand.
+    ACCESS_REMOVE_UNMANAGED_MEMBERS: bool = True
+
+    # Periodic access review (CNP-124). Infra opens a campaign by hand; with
+    # ACCESS_REVIEW_AUTO_START the CMP also opens one every
+    # ACCESS_REVIEW_INTERVAL_DAYS. Undecided items are escalated at the
+    # deadline, never removed.
+    ACCESS_REVIEW_AUTO_START: bool = False
+    ACCESS_REVIEW_INTERVAL_DAYS: int = 90
+    ACCESS_REVIEW_DEADLINE_DAYS: int = 14
+    # Accounts without a login for INACTIVE_AFTER_DAYS are reported, then
+    # disabled (enabled=false, reversible) INACTIVE_GRACE_DAYS later, only
+    # when INACTIVE_DISABLE_ENABLED. Usernames starting with one of the
+    # comma-separated prefixes, or listed exactly, are never touched.
+    INACTIVE_AFTER_DAYS: int = 60
+    INACTIVE_GRACE_DAYS: int = 14
+    INACTIVE_DISABLE_ENABLED: bool = False
+    INACTIVE_EXCLUDED_PREFIXES: str = "demo-,break-glass,service-account-"
+    INACTIVE_EXCLUDED_USERS: str = ""
 
     # Vault (for secret management in Terraform modules)
     VAULT_URL: str = ""
@@ -122,6 +180,61 @@ class Settings(BaseSettings):
     # Days of audit history read from Loki the first time the collector runs.
     ACTIVITY_BACKFILL_DAYS: int = 7
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
+    # Where log-derived metrics come from (CNP-185 V2): "loki" reads Alloy's
+    # loki_process_custom_* counters, "vl" the VictoriaLogs recording rules
+    # cnp_log_*:count1m. Switch once vlogs-project-counters records.
+    LOGS_BACKEND: str = "loki"
+
+    # CNP-185 wave V3: per-app SLO rules and per-project alert routing,
+    # written as operator objects. Off until the VictoriaMetrics operator,
+    # VMAlert and VMAlertmanager of V1/V3 are deployed: with it off the CMP
+    # writes and deletes nothing.
+    OBS_V3_ENABLED: bool = False
+    # The namespace the operator reads project objects from; the CMP is its
+    # only writer.
+    OBS_RULES_NAMESPACE: str = "cnp-observability"
+    # Where the Envoy proxies run: their metrics carry this namespace, the
+    # app's own namespace is in envoy_cluster_name.
+    OBS_GATEWAY_NAMESPACE: str = "envoy-gateway-system"
+    # Burn-rate alerts stay silent below this many requests per hour.
+    OBS_SLO_MIN_REQUESTS_PER_HOUR: int = 60
+    # offhours-guard runs in <project>-system: the scrape renames its own
+    # namespace label to this one, which names the app's namespace.
+    OBS_OFFHOURS_NAMESPACE_LABEL: str = "exported_namespace"
+    OBS_RUNBOOK_BASE_URL: str = (
+        "https://github.com/3-Istor/cnp-docs/blob/main/docs/"
+        "10-observabilite/runbooks"
+    )
+    # Longest silence a project member can set from the portal.
+    OBS_SILENCE_MAX_HOURS: int = 7 * 24
+
+    # CNP-185 wave V4 and D7: the stores project users read through vmauth.
+    # Each one is optional: with all three empty, vmauth's config is the
+    # metrics-only one sent to the legacy vmselect, byte for byte. Expected:
+    # http://vmsingle-cnp.observability.svc:8429,
+    # http://vlogs-cnp.observability.svc:9428,
+    # http://vtraces-cnp.observability.svc:10428.
+    OBS_VMSINGLE_URL: str = ""
+    OBS_VLOGS_URL: str = ""
+    OBS_VTRACES_URL: str = ""
+    # Q9: one VictoriaTraces tenant per project, routed by the OpenTelemetry
+    # gateway from a table the CMP writes. Off until the gateway exists.
+    OBS_TRACES_ROUTING_ENABLED: bool = False
+    OBS_COLLECTOR_NAMESPACE: str = "observability"
+    OBS_COLLECTOR_DEPLOYMENT: str = "otelcol-gateway"
+    OBS_COLLECTOR_ROUTING_CONFIGMAP: str = "otelcol-gateway-routing"
+    OBS_VTRACES_INSERT_URL: str = (
+        "http://vtraces-cnp.observability.svc:10428"
+        "/insert/opentelemetry/v1/traces"
+    )
+    # CNP-185 wave V5: the app's Overview, Logs, Traces, Alerts and Costs
+    # read the stores above directly, each tab once its store is set. The
+    # project Grafana orgs get a traces datasource and the CMP's dashboards
+    # once this is on; the project's vmauth user reads through this URL.
+    OBS_GRAFANA_PROVISIONING_ENABLED: bool = False
+    OBS_VMAUTH_PROJECTS_URL: str = (
+        "http://vmauth-projects.observability.svc.cluster.local:8427"
+    )
 
     # FinOps: "simulated" keeps the demo engine, "real" reads cost_line_items.
     FINOPS_PROVIDER: str = "simulated"
@@ -188,6 +301,8 @@ class Settings(BaseSettings):
     # Installation ID of the GitHub App on the 3-Istor org, used to mint
     # installation tokens for org-level Terraform operations (e.g. project bootstrap)
     GITHUB_INSTALLATION_ID: str = ""
+    # Owner of every app repository; never taken from a deployment request.
+    GITHUB_ORG: str = "3-Istor"
 
     # GitHub Registry (GHCR) Token for pulling private container images
     # Personal Access Token (PAT) with read:packages scope
@@ -195,6 +310,78 @@ class Settings(BaseSettings):
     GITHUB_REGISTRY_TOKEN: str = ""
 
     GRAFANA_ADMIN_PASSWORD: str = ""
+
+    # Repository import (CNP-238, CNP-241). Off until the central workflow,
+    # the OIDC trust below and the GitHub linking keys are in place.
+    IMPORT_ENABLED: bool = False
+    # Repository running .github/workflows/import.yml, pinned by name and by
+    # the numeric ids GitHub puts in the OIDC token (a renamed or recreated
+    # repository gets new ids).
+    IMPORT_WORKFLOW_REPO: str = "3-Istor/extern-project-analyzer"
+    IMPORT_WORKFLOW_REPO_ID: str = ""
+    IMPORT_WORKFLOW_OWNER_ID: str = ""
+    IMPORT_WORKFLOW_FILE: str = "import.yml"
+    IMPORT_WORKFLOW_REF: str = "refs/heads/main"
+    # Comma-separated commits of import.yml allowed to call the worker API:
+    # a change to the workflow is live only once its commit is listed here.
+    IMPORT_WORKFLOW_SHAS: str = ""
+    # Audience the workflow asks GitHub for; must match import.yml.
+    IMPORT_OIDC_AUDIENCE: str = "cmp-import"
+    IMPORT_RUN_TTL_HOURS: int = 24
+    # A queued or running run without news for this long is failed: a
+    # workflow that never started or a deploy the CMP lost would otherwise
+    # hold the import's one active run, and refuse every new one, forever.
+    IMPORT_RUN_TIMEOUT_MINUTES: int = 120
+    # Same for a claimed run, which reports nothing until it publishes or
+    # posts its plan: GitHub's 6 h job ceiling.
+    IMPORT_BUILD_TIMEOUT_MINUTES: int = 360
+    IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/imports"
+    # Platform repositories nobody imports, owner/name, comma separated.
+    IMPORT_DENY_REPOS: str = (
+        "3-Istor/K3s,3-Istor/CMP,3-Istor/Cloud,3-Istor/cnp-projects,"
+        "3-Istor/cnp-project-base,3-Istor/infra-templates,"
+        "3-Istor/app-templates,3-Istor/extern-project-analyzer,"
+        "3-Istor/keycloak-theme,3-Istor/cnp-docs,3-Istor/offhours-guard"
+    )
+    # runner_environment claims the worker API accepts. "self-hosted" only
+    # for a runner group of isolated, ephemeral runners (one job per VM,
+    # nothing shared with other workflows): a persistent self-hosted runner
+    # lets one import read the next one's source and tokens.
+    IMPORT_ALLOWED_RUNNER_ENVIRONMENTS: list[str] = ["github-hosted"]
+    # Services plus backing apps of one import.
+    IMPORT_MAX_APPS: int = 20
+    # Body of a worker call other than the plan (claim, publish, fail).
+    IMPORT_WORKER_MAX_BODY_BYTES: int = 256 * 1024
+    # Sum of the memory requests of one project's imported apps.
+    IMPORT_MAX_PROJECT_REQUESTS_MIB: int = 6144
+    # Per-namespace quota of cnp-project-base (requests.memory, requests.cpu).
+    IMPORT_NAMESPACE_REQUESTS_MIB: int = 2048
+    IMPORT_NAMESPACE_REQUESTS_MILLICPU: int = 1000
+    # Argo CD API for the post-deploy wait; empty reads the Applications
+    # through the Kubernetes API instead.
+    IMPORT_ARGO_TIMEOUT_SECONDS: int = 900
+    # Secret of the CNP-Portal GitHub App webhook (push events). Empty
+    # refuses every delivery: rebuilds then only come from the reconciler.
+    GITHUB_WEBHOOK_SECRET: str = ""
+    # GitHub sends up to 25 MB; a push of a few commits is a few kB.
+    IMPORT_WEBHOOK_MAX_BODY_BYTES: int = 1024 * 1024
+    # Branch heads compared with the last build of auto-rebuilt imports.
+    IMPORT_RECONCILE_INTERVAL_SECONDS: int = 600
+    # How often active runs are checked against their GitHub workflow run:
+    # one that ended without reporting fails a few minutes later instead of
+    # at the timeout above. Costs no API call while no run is active.
+    IMPORT_WORKFLOW_WATCH_SECONDS: int = 60
+
+    # GitHub user OAuth (account linking). The client of the CNP-Portal app.
+    GITHUB_OAUTH_CLIENT_ID: str = ""
+    GITHUB_OAUTH_CLIENT_SECRET: str = ""
+    GITHUB_OAUTH_REDIRECT_URI: str = (
+        "https://cmp.3istor.com/api/auth/github/callback"
+    )
+    GITHUB_APP_SLUG: str = "cnp-portal"
+    # Fernet keys encrypting stored GitHub user tokens, comma separated,
+    # newest first: older keys only decrypt, so a rotation is adding a key.
+    GITHUB_TOKEN_ENCRYPTION_KEYS: str = ""
 
     # AI assistants (MCP server on /mcp, OAuth served by the CMP itself)
     AGENT_ACCESS_TOKEN_TTL_SECONDS: int = 900

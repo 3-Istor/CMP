@@ -8,7 +8,8 @@ import {
     getProjectApps,
     getProjects,
 } from "./api";
-import { can, type Capability } from "./permissions";
+import { can, canAsPlatform, type Capability } from "./permissions";
+import { usePlatformRoles } from "./usePlatformRoles";
 
 const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
 
@@ -285,10 +286,12 @@ export function useProjectRole(projectName: string | null) {
  */
 export function useCan(projectName: string | null) {
   const { role, loading, error, refresh } = useProjectRole(projectName);
+  const platformRoles = usePlatformRoles();
 
   const check = useCallback(
-    (capability: Capability) => can(role, capability),
-    [role],
+    (capability: Capability) =>
+      can(role, capability) || canAsPlatform(platformRoles, capability),
+    [role, platformRoles],
   );
 
   return { role, loading, error, refresh, can: check };

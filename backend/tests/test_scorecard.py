@@ -5,8 +5,10 @@ from unittest import mock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
-from app.core.database import get_db
+from app.core.database import Base, get_db
 from app.models.finops import ProjectBudget, RecommendationState
 from app.models.project import Project
 from app.models.security import SecurityScan
@@ -289,9 +291,10 @@ def healthy_card_patches():
 def client_factory(session_factory):
     started = []
 
-    def build(role, readme=LONG_README, with_project=True):
-        deployment_id = add_deployment(session_factory, "static")
-        with session_factory() as db:
+    def build(role, readme=LONG_README, with_project=True, factory=None):
+        factory = factory or session_factory
+        deployment_id = add_deployment(factory, "static")
+        with factory() as db:
             _scan(db)
             if with_project:
                 db.add(Project(project_name="demo", owner_username="alice"))
@@ -300,7 +303,7 @@ def client_factory(session_factory):
         app.include_router(scorecard_router.router, prefix="/api")
 
         def override_db():
-            with session_factory() as db:
+            with factory() as db:
                 yield db
 
         app.dependency_overrides[get_db] = override_db
@@ -313,7 +316,7 @@ def client_factory(session_factory):
             mock.patch.object(scorecard_router, "get_file_content", get_file),
             mock.patch.object(
                 deployments_router,
-                "get_installation_token",
+                "get_org_installation_token",
                 mock.AsyncMock(return_value="tok"),
             ),
             mock.patch.object(
@@ -379,6 +382,44 @@ def test_scorecard_returns_404_for_an_unknown_app(client_factory):
     client, _, _ = client_factory("member")
 
     assert client.get(scorecard_url(9999)).status_code == 404
+
+
+@pytest.fixture
+def one_connection_pool(tmp_path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'cmp.db'}",
+        connect_args={"check_same_thread": False},
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
+    )
+    Base.metadata.create_all(engine)
+    yield engine
+    engine.dispose()
+
+
+def test_scorecard_holds_no_connection_while_it_waits_on_outside_sources(
+    client_factory, one_connection_pool
+):
+    factory = sessionmaker(bind=one_connection_pool)
+    client, deployment_id, get_file = client_factory("member", factory=factory)
+    checked_out = {}
+
+    def read_costs(deployment):
+        checked_out["cost"] = one_connection_pool.pool.checkedout()
+        with factory() as db:
+            db.execute(text("SELECT 1"))
+        return 0.0, []
+
+    async def read_readme(**_):
+        checked_out["documentation"] = one_connection_pool.pool.checkedout()
+        return LONG_README, "sha"
+
+    get_file.side_effect = read_readme
+    with mock.patch.object(sc, "_read_costs", read_costs):
+        client.get(scorecard_url(deployment_id))
+
+    assert checked_out == {"cost": 0, "documentation": 0}
 
 
 def test_a_missing_readme_scores_the_documentation_zero(client_factory):

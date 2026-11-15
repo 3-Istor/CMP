@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from mcp.server.auth.provider import construct_redirect_uri
 from pydantic import BaseModel, Field
@@ -24,8 +24,10 @@ from app.models.agent import AgentConfirmation, AgentGrant
 from app.models.audit import AuditEvent
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services.agents import policy, store
-from app.services.authz import assert_project_role
+from app.services.audit import note
+from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.keycloak_service import get_current_user
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/agents", tags=["AI assistants"])
 projects_router = APIRouter(prefix="/projects", tags=["AI assistants"])
@@ -48,6 +50,18 @@ def require_human(token: CurrentUser) -> dict:
 
 
 Human = Annotated[dict, Depends(require_human)]
+
+
+def require_infra_human(token: Human) -> dict:
+    if not is_cnp_admin(token):
+        raise HTTPException(
+            status_code=403,
+            detail="Only infra manages other people's assistants.",
+        )
+    return token
+
+
+InfraHuman = Annotated[dict, Depends(require_infra_human)]
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +112,9 @@ def get_auth_request(request_id: str, _: Human) -> AuthRequestView:
 def approve_auth_request(
     request_id: str, body: ApproveRequest, token: Human
 ) -> RedirectView:
+    # A grant outlives the session that consents to it by weeks: a stolen
+    # session must not be able to turn itself into one.
+    assert_step_up(token)
     request = _pending_or_404(request_id)
     scopes = [s for s in store.SCOPES if s in body.scopes]
     if store.READ_SCOPE not in scopes:
@@ -156,6 +173,46 @@ def list_my_grants(token: CurrentUser) -> list[GrantRead]:
 def revoke_my_grant(grant_id: int, token: CurrentUser) -> None:
     if not store.revoke_grant(grant_id, token.get("preferred_username", "")):
         raise HTTPException(status_code=404, detail="No such assistant.")
+
+
+class AdminGrantRead(GrantRead):
+    username: str
+    subject: str
+
+
+class RevokedGrants(BaseModel):
+    revoked: list[int]
+
+
+@router.get("/admin/grants", response_model=list[AdminGrantRead])
+def list_all_grants(
+    _: InfraHuman, username: str | None = None
+) -> list[AdminGrantRead]:
+    return [
+        AdminGrantRead(**g.__dict__) for g in store.list_all_grants(username)
+    ]
+
+
+@router.delete("/admin/grants/{grant_id}", status_code=204)
+def revoke_any_grant(grant_id: int, request: Request, _: InfraHuman) -> None:
+    grant = store.revoke_any_grant(grant_id)
+    if grant is None:
+        raise HTTPException(status_code=404, detail="No such assistant.")
+    note(
+        request,
+        target=grant.username,
+        grant_id=grant.id,
+        client=grant.client_name,
+    )
+
+
+@router.delete("/admin/users/{username}/grants", response_model=RevokedGrants)
+def revoke_user_grants(
+    username: str, request: Request, _: InfraHuman
+) -> RevokedGrants:
+    revoked = [g.id for g in store.revoke_user(username)]
+    note(request, target=username, grant_ids=revoked)
+    return RevokedGrants(revoked=revoked)
 
 
 class AgentSummary(BaseModel):
@@ -250,6 +307,23 @@ class ConfirmationRead(BaseModel):
     created_at: datetime
     expires_at: datetime
     decided_by: str | None
+    # Where a person reviews a draft of a portal-only tool (policy
+    # PORTAL_TOOLS) instead of approving it here.
+    review_link: str | None = None
+    # The plan edits the assistant proposed, prefilled on that page only
+    # for the analysis they were proposed for.
+    draft: dict | None = None
+    draft_run_id: str | None = None
+
+
+def _confirmation_read(view: policy.ConfirmationView) -> ConfirmationRead:
+    portal = view.tool in policy.PORTAL_TOOLS
+    return ConfirmationRead(
+        **{k: v for k, v in view.__dict__.items() if k != "arguments"},
+        review_link=policy.draft_review_link(view) if portal else None,
+        draft=view.arguments.get("edits") if portal else None,
+        draft_run_id=view.arguments.get("run_id") if portal else None,
+    )
 
 
 def _confirmations_for(
@@ -288,9 +362,7 @@ def get_confirmation(
     if view is None:
         raise HTTPException(status_code=404, detail="No such request.")
     assert_project_role(db, token, view.project, ProjectRole.MEMBER)
-    return ConfirmationRead(
-        **{k: v for k, v in view.__dict__.items() if k != "arguments"}
-    )
+    return _confirmation_read(view)
 
 
 @router.post(
@@ -307,6 +379,13 @@ def decide_confirmation(
     if view is None:
         raise HTTPException(status_code=404, detail="No such request.")
     _may_decide(db, token, view)
+    if decision == "approve" and view.tool in policy.PORTAL_TOOLS:
+        raise HTTPException(
+            status_code=409,
+            detail="Review and apply this import from its page in the CMP.",
+        )
+    if decision == "approve":
+        assert_step_up(token)
     if view.status != "pending":
         raise HTTPException(
             status_code=409, detail=f"This request is already {view.status}."
@@ -316,9 +395,7 @@ def decide_confirmation(
         decision == "approve",
         token.get("preferred_username", ""),
     )
-    return ConfirmationRead(
-        **{k: v for k, v in decided.__dict__.items() if k != "arguments"}
-    )
+    return _confirmation_read(decided)
 
 
 @router.get("/confirmations", response_model=list[ConfirmationRead])
@@ -333,9 +410,7 @@ def list_confirmations(
         db, token.get("preferred_username", ""), project
     )
     return [
-        ConfirmationRead(
-            **{k: v for k, v in view.__dict__.items() if k != "arguments"}
-        )
+        _confirmation_read(view)
         for view in sorted(views, key=lambda v: v.created_at, reverse=True)
     ]
 

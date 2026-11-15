@@ -20,6 +20,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from keystoneauth1 import exceptions as ksa_exceptions
 
 from app.core.config import settings
+from app.services import aws_tfstate
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,12 @@ def _get_openstack_connection(
 
 def _get_boto3_client(service: str):
     """Create boto3 client with credentials from settings."""
+    if aws_tfstate.enabled():
+        return boto3.client(
+            service,
+            region_name=settings.AWS_DEFAULT_REGION,
+            **aws_tfstate.boto3_credentials(),
+        )
     return boto3.client(
         service,
         region_name=settings.AWS_DEFAULT_REGION,

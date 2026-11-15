@@ -96,6 +96,7 @@ from app.services.project_registry import (
     set_customer_access,
     set_deletion_protection,
 )
+from app.services.step_up import assert_step_up
 
 logger = logging.getLogger(__name__)
 
@@ -310,8 +311,7 @@ async def create_project(
     - ArgoCD AppProject
 
     Required settings (from .env):
-    - KEYCLOAK_URL, KEYCLOAK_PROVISIONER_CLIENT_ID and _SECRET (or the
-      legacy KEYCLOAK_ADMIN_USERNAME and KEYCLOAK_ADMIN_PASSWORD)
+    - KEYCLOAK_URL, KEYCLOAK_PROVISIONER_CLIENT_ID and _SECRET
     - VAULT_URL, VAULT_AUTH=kubernetes (or the legacy VAULT_TOKEN)
     - GITHUB_INSTALLATION_ID, GITHUB_APP_PRIVATE_KEY
     - DISCORD_WEBHOOK_URL
@@ -321,10 +321,7 @@ async def create_project(
     if not settings.KEYCLOAK_URL:
         missing.append("KEYCLOAK_URL")
     if not keycloak_admin.is_configured():
-        missing.append(
-            "KEYCLOAK_PROVISIONER_CLIENT_ID/SECRET or "
-            "KEYCLOAK_ADMIN_USERNAME/PASSWORD"
-        )
+        missing.append("KEYCLOAK_PROVISIONER_CLIENT_ID/SECRET")
     if not settings.VAULT_URL:
         missing.append("VAULT_URL")
     elif not vault_auth.is_configured():
@@ -1011,6 +1008,7 @@ async def delete_project(
         409: Deletion protection is on, or still being lifted on the cluster
     """
     project_name = ctx.project_name
+    assert_step_up(ctx.token)
 
     try:
         row = (

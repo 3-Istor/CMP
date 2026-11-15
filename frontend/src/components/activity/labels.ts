@@ -31,6 +31,8 @@ export const ACTION_GROUPS: { value: string; labelKey: string }[] = [
   { value: "vault.", labelKey: "groups.vault" },
   { value: "keycloak.login_error", labelKey: "groups.logins" },
   { value: "deployment.", labelKey: "groups.deployments" },
+  { value: "access.", labelKey: "groups.access" },
+  { value: "access_review.", labelKey: "groups.accessReview" },
 ];
 
 const EXPOSURE_KEYS: Record<string, string> = {
@@ -127,6 +129,26 @@ export function describe(e: ActivityEvent, t: Translate): string {
   if (appKey) return t(`events.${appKey}`, { app });
   const plainKey = PLAIN_ACTION_KEYS[e.action];
   if (plainKey) return t(`events.${plainKey}`);
+  if (e.action.startsWith("access.")) {
+    const [user, elevation] = e.target.split(":");
+    const key = e.action.replace("access.", "");
+    return t(`events.access.${key}`, {
+      user: str(d.requester) || user || "",
+      elevation: str(d.elevation) || elevation || "",
+    });
+  }
+  if (e.action.startsWith("access_review.")) {
+    const [user, subject] = e.target.split(":");
+    return t(
+      `events.accessReview.${e.action.slice("access_review.".length).replace(".", "_")}`,
+      {
+        user: user ?? "",
+        subject: str(d.subject) || subject || "",
+        decision: str(d.decision) || "other",
+        count: str(d.undecided ?? d.items),
+      },
+    );
+  }
   switch (e.action) {
     case "project.create":
       return t("events.projectCreate", { project: e.project ?? "" });

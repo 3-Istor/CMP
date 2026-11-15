@@ -1,12 +1,14 @@
 "use client";
 
-import { CheckCircle2, GitBranch, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, GitBranch, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { IMPORT_RETURN_KEY } from "@/components/imports/RepoStep";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,125 +16,102 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { getGitHubStatus, saveGitHubInstallationId } from "@/lib/api";
+import {
+  connectGitHubInstallation,
+  getGitHubConnectionStatus,
+  startGitHubLink,
+  unlinkGitHub,
+} from "@/lib/api";
+import type { GitHubConnectionStatus } from "@/types";
 
 export function GitHubLinkButton() {
   const t = useTranslations("account.github");
-  const [isLinked, setIsLinked] = useState(false);
-  const [installationId, setInstallationId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [manualId, setManualId] = useState("");
-
   const searchParams = useSearchParams();
+  const [status, setStatus] = useState<GitHubConnectionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [importReturn, setImportReturn] = useState<string | null>(null);
 
-  const handleCallback = async () => {
-    // Check if we have an installation_id in the URL (GitHub callback)
-    const callbackInstallationId = searchParams.get("installation_id");
-
-    if (callbackInstallationId) {
-      console.log(
-        "GitHub callback detected with installation_id:",
-        callbackInstallationId,
-      );
-
-      try {
-        setSaving(true);
-        await saveGitHubInstallationId(callbackInstallationId);
-
-        // Clean the URL
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname,
-        );
-
-        toast.success(t("callbackSaved"));
-
-        // Refresh status
-        await fetchGitHubStatus();
-      } catch (error) {
-        console.error("Failed to save installation ID from callback:", error);
-        toast.error(t("callbackFailed"));
-      } finally {
-        setSaving(false);
-      }
-    } else {
-      // No callback, just fetch current status
-      await fetchGitHubStatus();
-    }
-  };
-
-  const fetchGitHubStatus = async () => {
+  const refresh = useCallback(async () => {
     try {
-      setLoading(true);
-      const data = await getGitHubStatus();
-      setIsLinked(!!data.github_installation_id);
-      setInstallationId(data.github_installation_id);
-    } catch (error) {
-      console.error("Failed to fetch GitHub status:", error);
+      setStatus(await getGitHubConnectionStatus());
+    } catch {
       toast.error(t("statusFailed"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
-    handleCallback();
+    // Set by the OAuth bridge (api/auth/github/callback) on its way back.
+    const outcome = searchParams.get("github");
+    if (outcome) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      if (outcome === "linked") toast.success(t("callbackSaved"));
+      else toast.error(t("callbackFailed"));
+    }
+    try {
+      // Set by the import wizard before it sent the user to GitHub.
+      const back = sessionStorage.getItem(IMPORT_RETURN_KEY);
+      if (back && /^\/projects\/[^/?#]+\/import$/.test(back)) setImportReturn(back);
+    } catch {
+      // storage blocked: no way back offered
+    }
+    refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleLink = () => {
-    // Open GitHub App installation in a new tab
-    // The callback URL should be set in the GitHub App settings to return to this page
-    window.open(
-      "https://github.com/apps/cnp-portal/installations/new",
-      "_blank",
-      "noopener,noreferrer",
-    );
-
-    // Show a message to the user
-    toast.info(t("opened"));
-  };
-
-  const handleManualSave = async () => {
-    const trimmedId = manualId.trim();
-
-    if (!trimmedId) {
-      toast.error(t("idRequired"));
-      return;
-    }
-
+  const go = async (mode: "authorize" | "install") => {
     try {
-      setSaving(true);
-      await saveGitHubInstallationId(trimmedId);
-
-      toast.success(t("idSaved"));
-      setManualId("");
-
-      // Refresh status
-      await fetchGitHubStatus();
-    } catch (error) {
-      console.error("Failed to save installation ID:", error);
-      toast.error(t("idSaveFailed"));
-    } finally {
-      setSaving(false);
+      setBusy(true);
+      const { authorization_url } = await startGitHubLink(mode);
+      window.location.assign(authorization_url);
+    } catch {
+      toast.error(t("startFailed"));
+      setBusy(false);
     }
   };
 
-  if (loading) {
+  const select = async (installationId: string) => {
+    try {
+      setBusy(true);
+      await connectGitHubInstallation(installationId);
+      toast.success(t("installationSelected"));
+      await refresh();
+    } catch {
+      toast.error(t("installationFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unlink = async () => {
+    try {
+      setBusy(true);
+      await unlinkGitHub();
+      toast.success(t("unlinked"));
+      await refresh();
+    } catch {
+      toast.error(t("unlinkFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const header = (
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <GitBranch className="h-5 w-5" />
+        {t("title")}
+      </CardTitle>
+      <CardDescription>{t("description")}</CardDescription>
+    </CardHeader>
+  );
+
+  if (loading || !status) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GitBranch className="h-5 w-5" />
-            {t("title")}
-          </CardTitle>
-          <CardDescription>{t("description")}</CardDescription>
-        </CardHeader>
+        {header}
         <CardContent>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -143,94 +122,105 @@ export function GitHubLinkButton() {
     );
   }
 
+  if (!status.oauth_configured) {
+    return (
+      <Card>
+        {header}
+        <CardContent>
+          <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!status.identity_linked) {
+    return (
+      <Card>
+        {header}
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t("needLink")}</p>
+          <Button onClick={() => go("authorize")} disabled={busy}>
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {t("linkButton")}
+          </Button>
+          <p className="text-xs text-muted-foreground">{t("redirectNote")}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <GitBranch className="h-5 w-5" />
-          {t("title")}
-        </CardTitle>
-        <CardDescription>{t("description")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLinked ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-green-600 dark:text-green-500">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium">{t("linked")}</span>
-            </div>
-            <div className="rounded-lg bg-muted p-3">
-              <p className="text-xs text-muted-foreground mb-1">
-                {t("installationId")}
-              </p>
-              <p className="text-sm font-mono">{installationId}</p>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("linkedHelp")}</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">{t("needApp")}</p>
-            <Button onClick={handleLink} className="w-full" disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t("linking")}
-                </>
-              ) : (
-                <>
-                  <GitBranch className="mr-2 h-4 w-4" />
-                  {t("linkButton")}
-                </>
-              )}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              {t("redirectNote")}
+      {header}
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-2 text-green-600 dark:text-green-500">
+          <CheckCircle2 className="h-5 w-5" />
+          <span className="font-medium">
+            {t("linkedAs", { login: status.github_login ?? "" })}
+          </span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{t("installations")}</p>
+          {status.installations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("noInstallation")}
             </p>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator className="w-full" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  {t("or")}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="manual-installation-id" className="text-sm">
-                {t("alreadyInstalled")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("alreadyHelp")}
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  id="manual-installation-id"
-                  type="text"
-                  placeholder="12345678"
-                  value={manualId}
-                  onChange={(e) => setManualId(e.target.value)}
-                  disabled={saving}
-                  className="flex-1"
-                />
-                <Button
-                  onClick={handleManualSave}
-                  disabled={saving || !manualId.trim()}
-                  variant="outline"
+          ) : (
+            <ul className="space-y-2">
+              {status.installations.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between rounded-lg bg-muted p-3"
                 >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">{item.account}</span>
+                  {status.github_installation_id === item.id ? (
+                    <span className="text-xs text-muted-foreground">
+                      {t("selected")}
+                    </span>
                   ) : (
-                    t("saveId")
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => select(item.id)}
+                    >
+                      {t("select")}
+                    </Button>
                   )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">{t("idHelp")}</p>
-            </div>
-          </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{t("linkedHelp")}</p>
+        {importReturn && (
+          <Link
+            href={importReturn}
+            onClick={() => {
+              try {
+                sessionStorage.removeItem(IMPORT_RETURN_KEY);
+              } catch {
+                // nothing to clear
+              }
+            }}
+            className={buttonVariants({ size: "sm" })}
+          >
+            <ArrowLeft aria-hidden />
+            {t("backToImport")}
+          </Link>
         )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => go("install")}
+            disabled={busy}
+          >
+            {t("installButton")}
+          </Button>
+          <Button variant="ghost" onClick={unlink} disabled={busy}>
+            {t("unlinkButton")}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

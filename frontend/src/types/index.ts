@@ -311,13 +311,20 @@ export interface UserProfile {
   platform_roles?: string[];
 }
 
-export interface GitHubStatus {
+export interface GitHubConnectionStatus {
   github_installation_id: string | null;
+  identity_linked: boolean;
+  github_login: string | null;
+  oauth_configured: boolean;
+  installations: { id: string; account: string; account_type: string }[];
+  installation_url: string | null;
 }
 
 export interface GitHubInstallationResponse {
   message: string;
   installation_id: string;
+  github_login: string;
+  account: string;
 }
 
 export interface PictureUploadResponse {
@@ -1044,6 +1051,10 @@ export interface AgentConfirmation {
   created_at: string;
   expires_at: string;
   decided_by: string | null;
+  /** Portal-only tools (import_repo): the page where the draft is applied. */
+  review_link?: string | null;
+  draft?: Partial<ImportPlanEdits> | null;
+  draft_run_id?: string | null;
 }
 
 export type StakeLevel = "sandbox" | "demo" | "standard" | "critical";
@@ -1271,4 +1282,322 @@ export interface AppEvent {
   count: number;
   kind: string;
   object: string;
+}
+
+export interface AccessElevation {
+  key: string;
+  group: string;
+  system: string;
+}
+
+export type AccessStatus =
+  | "pending"
+  | "active"
+  | "denied"
+  | "cancelled"
+  | "lapsed"
+  | "expired"
+  | "revoked"
+  | "failed";
+
+export interface AccessRequest {
+  id: number;
+  elevation: string;
+  requester: string;
+  reason: string;
+  duration_minutes: number;
+  status: AccessStatus;
+  created_at: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  activated_at: string | null;
+  expires_at: string | null;
+  ended_at: string | null;
+  ended_by: string | null;
+}
+
+export interface AccessOverview {
+  me: string;
+  catalog: {
+    elevations: AccessElevation[];
+    default_minutes: number;
+    min_minutes: number;
+    max_minutes: number;
+  };
+  pending: AccessRequest[];
+  active: AccessRequest[];
+  history: AccessRequest[];
+}
+
+// ── Topology (CNP-242) ──────────────────────────────────────────────────────
+
+export type TopologyNodeKind = "static" | "fullstack" | "service" | "backing";
+
+export type TopologyEdgeState =
+  | "declared_observed"
+  | "declared_only"
+  | "observed_only"
+  | "denied";
+
+export interface TopologyPort {
+  name: string;
+  port: number;
+}
+
+export interface TopologyNode {
+  id: string;
+  app: string;
+  kind: TopologyNodeKind;
+  components: string[];
+  public: boolean;
+  hostname: string | null;
+  health: string | null;
+  sync: string | null;
+  asleep: boolean | null;
+  digest: string | null;
+  imported: boolean;
+  backing_kind: string | null;
+  ports: TopologyPort[];
+  linkable: boolean;
+  deployment_id: number | null;
+  in_registry: boolean;
+}
+
+export interface TopologyEdge {
+  id: string;
+  from: string;
+  to: string;
+  port: number | null;
+  alias: string | null;
+  declared: boolean;
+  observed: {
+    rps: number;
+    count: number;
+    last_seen: string | null;
+    verdict: "forwarded" | "dropped";
+  } | null;
+  state: TopologyEdgeState;
+}
+
+export interface Topology {
+  project: string;
+  nodes: TopologyNode[];
+  edges: TopologyEdge[];
+  observed_available: boolean;
+  generated_at: string;
+}
+
+// ── Repository import (CNP-241) ─────────────────────────────────────────────
+
+export interface ImportableRepo {
+  full_name: string;
+  default_branch: string;
+  private: boolean;
+}
+
+export type ImportRunStatus =
+  | "queued"
+  | "claimed"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type Confidence = "high" | "medium" | "low";
+
+export interface PlanPort {
+  name: string;
+  port: number;
+}
+
+export interface PlanProbe {
+  kind: "tcp" | "http";
+  path: string | null;
+  port: number;
+}
+
+export interface PlanService {
+  name: string;
+  path: string;
+  stack: { language: string; framework: string | null; version: string | null };
+  build: { strategy: "dockerfile" | "repaired_dockerfile" | "railpack"; context: string; notes: string[] };
+  ports: PlanPort[];
+  probes: PlanProbe | null;
+  env: { name: string; value: string | null; from_link: string | null; secret: boolean }[];
+  public: boolean;
+  resources: { requests_mem_mib: number; limits_mem_mib: number; cpu: string };
+  confidence: { overall: Confidence; reasons: string[] };
+}
+
+export interface PlanBacking {
+  name: string;
+  kind: string;
+  image: string;
+  supported: boolean;
+  port: number | null;
+  resources: { requests_mem_mib: number; limits_mem_mib: number; cpu: string };
+  credentials_found: string[];
+}
+
+export interface PlanLink {
+  from: string;
+  to: string;
+  port: number | null;
+  alias: string;
+  evidence: { file: string; line: number; kind: string }[];
+}
+
+export interface ImportPlan {
+  schema_version: string;
+  source: { branch: string | null; sha: string | null };
+  services: PlanService[];
+  backing: PlanBacking[];
+  links: PlanLink[];
+  unsupported: { name: string; kind: string; reason: string; file: string | null; line: number | null }[];
+  secrets_found: { file: string; line: number; kind: string; redacted: string }[];
+  warnings: string[];
+  capacity: { requests_mem_mib: number; limits_mem_mib: number };
+}
+
+export interface ImportPlanEdits {
+  exclude: string[];
+  rename: Record<string, string>;
+  public: Record<string, boolean>;
+  memory: Record<string, { requests_mem_mib: number; limits_mem_mib: number }>;
+  port: Record<string, number>;
+  probe: Record<string, PlanProbe>;
+  drop_links: { from: string; to: string }[];
+}
+
+export interface ImportCapacity {
+  project_max_mib: number;
+  namespace_max_mib: number;
+  other_imports_mib: number;
+  backing_requests_mib: Record<string, number>;
+}
+
+export interface ImportServiceView {
+  app: string;
+  kind: "service" | "backing";
+  path: string;
+  status: "pending" | "deploying" | "running" | "failed" | string;
+  message: string | null;
+  last_sha: string | null;
+  last_digest: string | null;
+  deployment_id: number | null;
+  public: boolean;
+  warnings: string[];
+}
+
+export interface ImportRunReport {
+  stage?: string;
+  error?: string;
+  commit?: string;
+  images?: Record<string, { digest: string; vulns: Record<string, number>; sbom: Record<string, unknown> }>;
+  states?: Record<string, string>;
+}
+
+export type ImportFailureCause =
+  | "scan_blocked"
+  | "scan_failed"
+  | "build_failed"
+  | "build_job_failed"
+  | "dockerfile_refused"
+  | "plan_mismatch"
+  | "fetch_failed"
+  | "analysis_failed"
+  | "timeout"
+  | "workflow_stopped"
+  | "workflow_not_started"
+  | "dispatch_failed"
+  | "deploy_failed"
+  | "manifests_refused"
+  | "image_pull"
+  | "crash_loop"
+  | "probe_failed"
+  | "unschedulable"
+  | "deploy_timeout"
+  | "unreachable"
+  | "dependency_failed"
+  | "internal";
+
+export type ImportFailureAction = "retry" | "fix_in_repo" | "reanalyze" | "contact_platform";
+
+export interface ImportBlockingVulnerability {
+  app: string;
+  id: string;
+  package: string;
+  installed: string;
+  fixed: string;
+  severity: string;
+}
+
+/** One app that did not start, in deploy order (CNP-270). */
+export interface ImportAppFailure {
+  app: string;
+  cause: ImportFailureCause;
+  message: string;
+}
+
+export interface ImportUpgrade {
+  package: string;
+  installed: string;
+  fixed: string;
+  apps: string[];
+  ids: string[];
+}
+
+/** Why a run failed and what the CMP offers to do about it (CNP-268). */
+export interface ImportFailure {
+  cause: ImportFailureCause;
+  stage: string | null;
+  message: string;
+  apps: string[];
+  app_failures: ImportAppFailure[];
+  vulnerabilities: ImportBlockingVulnerability[];
+  upgrades: ImportUpgrade[];
+  log_excerpt: string | null;
+  actions: ImportFailureAction[];
+  rebuilds_on_push: boolean;
+}
+
+export interface ImportRun {
+  id: string;
+  source_id: string;
+  kind: "analyze" | "build";
+  sha: string;
+  status: ImportRunStatus;
+  plan: ImportPlan | { edits: ImportPlanEdits } | null;
+  report: ImportRunReport | null;
+  failure: ImportFailure | null;
+  requested_by: string;
+  approved_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportRunDetail extends ImportRun {
+  capacity: ImportCapacity;
+  services: ImportServiceView[];
+}
+
+export interface ImportRebuildPending {
+  reason: "not_admin" | "inactive" | "repo_access" | "unknown_user";
+  user: string;
+  trigger: "push" | "reconcile";
+  since: string;
+  apps: string[] | null;
+}
+
+export interface ImportSourceView {
+  id: string;
+  repo_full_name: string;
+  branch: string;
+  created_by: string;
+  created_at: string;
+  auto_rebuild: boolean;
+  rebuild_pending: ImportRebuildPending | null;
+  runs: ImportRun[];
+  services: ImportServiceView[];
 }

@@ -5,6 +5,7 @@ import type {
   TerraformOutputs,
 } from "@/types";
 import { getSession, signIn } from "next-auth/react";
+import { parseStepUpHint, startStepUp } from "./stepUp";
 
 // Declare runtime config type
 declare global {
@@ -124,6 +125,11 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const err = await res.text();
+    const stepUp = parseStepUpHint(res.status, err);
+    if (stepUp && (await startStepUp(stepUp))) {
+      // The page is leaving for Keycloak: settling would flash an error.
+      return new Promise<T>(() => {});
+    }
     throw new ApiError(res.status, err);
   }
 
@@ -341,24 +347,36 @@ export const updateFavorites = (favorites: Favorites) =>
     body: JSON.stringify(favorites),
   });
 
-export const getGitHubStatus = async (): Promise<
-  import("@/types").GitHubStatus
-> => {
-  const profile = await request<import("@/types").UserProfile>("/account/me");
-  return { github_installation_id: profile.github_installation_id ?? null };
-};
+export const getGitHubConnectionStatus = () =>
+  request<import("@/types").GitHubConnectionStatus>("/account/github");
 
-export const saveGitHubInstallationId = async (
-  installation_id: string,
-): Promise<import("@/types").GitHubInstallationResponse> => {
-  return request<import("@/types").GitHubInstallationResponse>(
+export const connectGitHubInstallation = (installation_id: string) =>
+  request<import("@/types").GitHubInstallationResponse>(
     "/account/github-installation",
     {
       method: "POST",
       body: JSON.stringify({ installation_id }),
     },
   );
-};
+
+export const unlinkGitHub = () =>
+  request<void>("/account/github", { method: "DELETE" });
+
+// Goes through the Next.js bridge, which keeps the OAuth binding cookie.
+export async function startGitHubLink(
+  mode: "authorize" | "install" = "authorize",
+): Promise<{ authorization_url: string }> {
+  const response = await fetch("/api/auth/github/link", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, "GitHub linking is unavailable");
+  }
+  return response.json();
+}
 
 // Projects (Phase 4)
 export const getProjects = () =>
@@ -904,6 +922,85 @@ export async function downloadActivity(
   URL.revokeObjectURL(url);
 }
 
+// Periodic access review (infra and security auditors, owners for /mine)
+export const getAccessReviews = () =>
+  request<import("@/types/accessReview").AccessReviewOverview>(
+    "/access-reviews",
+  );
+
+export const getAccessReview = (id: number) =>
+  request<import("@/types/accessReview").AccessReviewDetail>(
+    `/access-reviews/campaigns/${id}`,
+  );
+
+export const startAccessReview = (deadlineDays?: number) =>
+  request<import("@/types/accessReview").AccessReviewCampaign>(
+    "/access-reviews/campaigns",
+    {
+      method: "POST",
+      body: JSON.stringify(
+        deadlineDays ? { deadline_days: deadlineDays } : {},
+      ),
+    },
+  );
+
+export const closeAccessReview = (id: number) =>
+  request<import("@/types/accessReview").AccessReviewCampaign>(
+    `/access-reviews/campaigns/${id}/close`,
+    { method: "POST" },
+  );
+
+export const getMyAccessReview = (project: string) =>
+  request<import("@/types/accessReview").MyAccessReview>(
+    `/access-reviews/mine?project=${encodeURIComponent(project)}`,
+  );
+
+export const decideAccessReview = (
+  itemId: number,
+  body: {
+    decision: import("@/types/accessReview").ReviewDecision;
+    role?: string;
+    note?: string;
+  },
+) =>
+  request<import("@/types/accessReview").AccessReviewItem>(
+    `/access-reviews/items/${itemId}/decision`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+
+export const markReviewTaskDone = (itemId: number) =>
+  request<import("@/types/accessReview").AccessReviewItem>(
+    `/access-reviews/items/${itemId}/task-done`,
+    { method: "POST" },
+  );
+
+export const enableInactiveAccount = (userId: string) =>
+  request<import("@/types/accessReview").InactiveAccount>(
+    `/access-reviews/accounts/${encodeURIComponent(userId)}/enable`,
+    { method: "POST" },
+  );
+
+export async function downloadAccessReview(
+  id: number,
+  format: "csv" | "json",
+) {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${BASE}/access-reviews/campaigns/${id}/export?format=${format}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `access-review-${id}.${format}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export const getProjectLogs = (
   project: string,
   f: import("@/types").LogFilters,
@@ -1338,7 +1435,9 @@ export type NotificationKind =
   | "app_deleted"
   | "alert"
   | "member_added"
-  | "approval_request";
+  | "approval_request"
+  | "access"
+  | "access_review";
 
 export interface AppNotification {
   id: number;
@@ -1373,3 +1472,233 @@ export const markNotificationRead = (id: number) =>
 
 export const markAllNotificationsRead = () =>
   request<{ updated: number }>("/notifications/read-all", { method: "POST" });
+
+// Just-in-time access (platform admins only)
+export const getAccessOverview = () =>
+  request<import("@/types").AccessOverview>("/access");
+
+export const requestAccess = (body: {
+  elevation: string;
+  reason: string;
+  duration_minutes: number;
+}) =>
+  request<import("@/types").AccessRequest>("/access/requests", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const decideAccess = (
+  id: number,
+  action: "approve" | "deny" | "cancel" | "end",
+  reason?: string,
+) =>
+  request<import("@/types").AccessRequest>(
+    `/access/requests/${id}/${action}`,
+    {
+      method: "POST",
+      body: action === "deny" ? JSON.stringify({ reason: reason ?? "" }) : undefined,
+    },
+  );
+
+// Topology (CNP-242)
+const projectPath = (project: string) =>
+  `/projects/${encodeURIComponent(project)}`;
+
+export const getTopology = (project: string) =>
+  request<import("@/types").Topology>(`${projectPath(project)}/topology`);
+
+export const linkApps = (
+  project: string,
+  link: { from: string; to: string; port: number; alias?: string | null },
+) =>
+  request<{ from: string; app: string; port: number; alias: string }>(
+    `${projectPath(project)}/topology/links`,
+    { method: "POST", body: JSON.stringify(link) },
+  );
+
+export const unlinkApps = (
+  project: string,
+  link: { from: string; to: string; alias?: string | null },
+) => {
+  const query = new URLSearchParams({ from: link.from, to: link.to });
+  if (link.alias) query.set("alias", link.alias);
+  return request<{ commit: string }>(
+    `${projectPath(project)}/topology/links?${query}`,
+    { method: "DELETE" },
+  );
+};
+
+// Repository import (CNP-241)
+export const getImportableRepos = (project: string) =>
+  request<{ repositories: import("@/types").ImportableRepo[] }>(
+    `${projectPath(project)}/import/repos`,
+  ).then((r) => r.repositories);
+
+export const startImport = (
+  project: string,
+  repo_full_name: string,
+  branch: string | null,
+) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports`,
+    { method: "POST", body: JSON.stringify({ repo_full_name, branch }) },
+  ).then((r) => r.run);
+
+export const getImports = (project: string) =>
+  request<{ imports: import("@/types").ImportSourceView[] }>(
+    `${projectPath(project)}/imports`,
+  ).then((r) => r.imports);
+
+export const getImportRun = (project: string, runId: string) =>
+  request<import("@/types").ImportRunDetail>(
+    `${projectPath(project)}/imports/runs/${encodeURIComponent(runId)}`,
+  );
+
+export const applyImport = (
+  project: string,
+  sourceId: string,
+  runId: string,
+  edits: import("@/types").ImportPlanEdits,
+  draft?: string | null,
+) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/apply` +
+      `?run_id=${encodeURIComponent(runId)}` +
+      (draft ? `&draft=${encodeURIComponent(draft)}` : ""),
+    { method: "POST", body: JSON.stringify(edits) },
+  ).then((r) => r.run);
+
+export const updateImportSettings = (
+  project: string,
+  sourceId: string,
+  settings: { auto_rebuild: boolean },
+) =>
+  request<import("@/types").ImportSourceView>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/settings`,
+    { method: "PUT", body: JSON.stringify(settings) },
+  );
+
+export const rebuildImport = (project: string, sourceId: string) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/rebuild`,
+    { method: "POST" },
+  ).then((r) => r.run);
+
+export const deleteImport = (project: string, sourceId: string) =>
+  request<{ message: string }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}`,
+    { method: "DELETE" },
+  );
+
+// Observability of an app (CNP-185 V5). A store not configured yet answers
+// 503 {"detail": {"code": "not_available"}}: see isObsNotAvailable.
+const obs = (deploymentId: number, path = "") =>
+  `/deployments/${deploymentId}/observability${path}`;
+
+function obsQuery(params: Record<string, string | number | boolean | null | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
+export function isObsNotAvailable(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 503) return false;
+  try {
+    return JSON.parse(err.body)?.detail?.code === "not_available";
+  } catch {
+    return false;
+  }
+}
+
+export const getObsCapabilities = (deploymentId: number) =>
+  request<import("@/types/observability").ObsCapabilities>(obs(deploymentId));
+
+export const getObsSignals = (deploymentId: number, range: string) =>
+  request<import("@/types/observability").GoldenSignals>(
+    obs(deploymentId, `/signals${obsQuery({ range })}`),
+  );
+
+export const getObsSlo = (deploymentId: number, range: string) =>
+  request<import("@/types/observability").SloStatus>(
+    obs(deploymentId, `/slo${obsQuery({ range })}`),
+  );
+
+export const getObsDeploys = (deploymentId: number, range: string) =>
+  request<import("@/types/observability").DeployMarker[]>(
+    obs(deploymentId, `/deploys${obsQuery({ range })}`),
+  );
+
+export const getObsDora = (deploymentId: number, days = 30) =>
+  request<import("@/types/observability").Dora>(
+    obs(deploymentId, `/dora${obsQuery({ days })}`),
+  );
+
+export const getObsTopErrors = (deploymentId: number, range: string, limit = 5) =>
+  request<import("@/types/observability").ErrorPattern[]>(
+    obs(deploymentId, `/logs/top-errors${obsQuery({ range, limit })}`),
+  );
+
+export const searchObsLogs = (
+  deploymentId: number,
+  params: { range: string; level?: string; q?: string; trace_id?: string; limit?: number },
+) =>
+  request<import("@/types/observability").ObsLogLine[]>(
+    obs(deploymentId, `/logs${obsQuery(params)}`),
+  );
+
+export const listObsTraces = (
+  deploymentId: number,
+  params: { range: string; errors_only?: boolean; min_duration_ms?: number; limit?: number },
+) =>
+  request<import("@/types/observability").TraceSummary[]>(
+    obs(deploymentId, `/traces${obsQuery(params)}`),
+  );
+
+export const getObsTrace = (deploymentId: number, traceId: string) =>
+  request<import("@/types/observability").TraceDetail>(
+    obs(deploymentId, `/traces/${encodeURIComponent(traceId)}`),
+  );
+
+export const getObsAlerts = (deploymentId: number) =>
+  request<import("@/types/observability").AppAlerts>(obs(deploymentId, "/alerts"));
+
+export const getObsCosts = (deploymentId: number) =>
+  request<import("@/types/observability").AppCosts>(obs(deploymentId, "/costs"));
+
+export const updateSloTargets = (body: {
+  project: string;
+  app: string;
+  availability: number;
+  latency: number;
+}) =>
+  request<import("@/types/observability").SloSettings>("/observability/slo", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+
+export const createSilence = (body: {
+  project: string;
+  matchers: Record<string, string>;
+  hours: number;
+  comment: string;
+}) =>
+  request<{ id: string }>("/observability/silences", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const expireSilence = (project: string, id: string) =>
+  request<void>(
+    `/observability/silences/${encodeURIComponent(id)}${obsQuery({ project })}`,
+    { method: "DELETE" },
+  );
+
+export const getSloTargets = (project: string, app: string) =>
+  request<import("@/types/observability").SloSettings>(
+    `/observability/slo${obsQuery({ project, app })}`,
+  );

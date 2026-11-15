@@ -7,12 +7,17 @@ from sqlalchemy import engine_from_config, pool
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Imported so every model is registered on Base.metadata (autogenerate).
+import app.models.access  # noqa: F401
+import app.models.access_review  # noqa: F401
 import app.models.agent  # noqa: F401
 import app.models.deployment  # noqa: F401
 import app.models.environment  # noqa: F401
 import app.models.finops  # noqa: F401
+import app.models.imports  # noqa: F401
 import app.models.notification  # noqa: F401
+import app.models.observability  # noqa: F401
 import app.models.project  # noqa: F401
+import app.models.project_export  # noqa: F401
 import app.models.release  # noqa: F401
 import app.models.user_github  # noqa: F401
 import app.models.user_preference  # noqa: F401

@@ -20,9 +20,11 @@ import app.models.agent  # noqa: F401
 import app.models.audit  # noqa: F401
 import app.models.deployment  # noqa: F401
 from app import mcp_server
+from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models.project import TargetCloud
 from app.routers import agents as agents_router
+from app.services import audit, keycloak_service
 from app.services.agents import (
     internal_api,
     policy,
@@ -38,6 +40,7 @@ from app.services.keycloak_service import (
 )
 
 HUMAN = {"sub": "user-1", "preferred_username": "alice", "name": "Alice"}
+INFRA = {"sub": "user-9", "preferred_username": "ivan", "groups": ["infra"]}
 REDIRECT = "http://localhost:4567/callback"
 
 
@@ -82,7 +85,7 @@ def platform():
         token = credentials.credentials
         if token.startswith(store.ACCESS_PREFIX):
             return decode_platform_token(token)
-        return HUMAN
+        return INFRA if token == "infra" else HUMAN
 
     def db():
         with factory() as session:
@@ -96,6 +99,11 @@ def platform():
     patches = [
         mock.patch.object(store, "SessionLocal", factory),
         mock.patch.object(policy, "SessionLocal", factory),
+        mock.patch.object(
+            keycloak_service,
+            "get_user_by_id",
+            lambda sub: {"id": sub, "enabled": True},
+        ),
         mock.patch.object(
             skills,
             "list_skills",
@@ -190,6 +198,20 @@ def _connect(client, scopes=None) -> dict:
 
 def _result(response) -> dict:
     return json.loads(response.json()["result"]["content"][0]["text"])
+
+
+def _as_a_tool(client, token: str, method: str, path: str, **kwargs) -> int:
+    """
+    Status of an API call made the way MCP tools make it, in-process: the
+    only way an assistant token reaches the REST API.
+    """
+    try:
+        client.portal.call(
+            lambda: internal_api.call(token, method, path, **kwargs)
+        )
+    except internal_api.ApiError as exc:
+        return exc.status_code
+    return 200
 
 
 def _call(client, token: str, tool: str, arguments: dict | None = None):
@@ -331,6 +353,210 @@ def test_revoked_assistant_is_refused_on_its_next_call(platform):
     assert response.status_code == 401
 
 
+def _refresh(client, tokens):
+    return client.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": tokens["refresh_token"],
+            "client_id": tokens["client_id"],
+        },
+    )
+
+
+def _live_grants(client) -> list[dict]:
+    return client.get(
+        "/api/agents/admin/grants", headers={"Authorization": "Bearer infra"}
+    ).json()
+
+
+def test_refresh_revokes_the_grant_of_a_disabled_account(
+    platform, monkeypatch
+):
+    # Arrange
+    tokens = _connect(platform)
+    monkeypatch.setattr(
+        keycloak_service,
+        "get_user_by_id",
+        lambda sub: {"id": sub, "enabled": False},
+    )
+
+    # Act
+    issued = store.rotate_refresh(
+        tokens["refresh_token"], tokens["client_id"], []
+    )
+
+    # Assert
+    assert issued is None
+    assert _live_grants(platform) == []
+
+
+def test_refresh_revokes_the_grant_of_a_deleted_account(platform, monkeypatch):
+    tokens = _connect(platform)
+    monkeypatch.setattr(keycloak_service, "get_user_by_id", lambda sub: None)
+
+    response = _refresh(platform, tokens)
+
+    assert response.json()["error"] == "invalid_grant"
+    assert store.token_claims(tokens["access_token"]) is None
+
+
+def test_refresh_is_refused_but_the_grant_kept_when_keycloak_is_down(
+    platform, monkeypatch
+):
+    # Arrange
+    tokens = _connect(platform)
+
+    def down(sub):
+        raise keycloak_service.requests.ConnectionError("down")
+
+    monkeypatch.setattr(keycloak_service, "get_user_by_id", down)
+
+    # Act
+    issued = store.rotate_refresh(
+        tokens["refresh_token"], tokens["client_id"], []
+    )
+
+    # Assert
+    assert issued is None
+    assert len(_live_grants(platform)) == 1
+
+
+def test_refresh_works_again_once_keycloak_is_back(platform, monkeypatch):
+    tokens = _connect(platform)
+    monkeypatch.setattr(
+        keycloak_service,
+        "get_user_by_id",
+        mock.Mock(side_effect=keycloak_service.requests.Timeout("slow")),
+    )
+    _refresh(platform, tokens)
+    monkeypatch.setattr(
+        keycloak_service,
+        "get_user_by_id",
+        lambda sub: {"id": sub, "enabled": True},
+    )
+
+    response = _refresh(platform, tokens)
+
+    assert response.status_code == 200
+
+
+def _keycloak_answers(monkeypatch, status_code):
+    response = keycloak_service.requests.Response()
+    response.status_code = status_code
+    monkeypatch.setattr(keycloak_service, "_get_admin_token", lambda: "t")
+    monkeypatch.setattr(
+        keycloak_service.requests, "get", lambda *a, **k: response
+    )
+
+
+def test_account_lookup_reads_a_404_as_gone(monkeypatch):
+    _keycloak_answers(monkeypatch, 404)
+
+    user = keycloak_service.get_user_by_id("user-1")
+
+    assert user is None
+
+
+@pytest.mark.parametrize("status_code", [500, 401])
+def test_account_lookup_raises_when_keycloak_cannot_say(
+    monkeypatch, status_code
+):
+    _keycloak_answers(monkeypatch, status_code)
+
+    with pytest.raises(keycloak_service.requests.HTTPError):
+        keycloak_service.get_user_by_id("user-1")
+
+
+def test_disabling_an_account_revokes_all_its_grants(platform):
+    tokens = _connect(platform)
+    _connect(platform)
+
+    revoked = store.revoke_subject(HUMAN["sub"])
+
+    assert len(revoked) == 2
+    assert store.token_claims(tokens["access_token"]) is None
+
+
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("get", "/api/agents/admin/grants"),
+        ("delete", "/api/agents/admin/grants/1"),
+        ("delete", "/api/agents/admin/users/alice/grants"),
+    ],
+)
+def test_admin_grant_endpoints_refuse_a_caller_outside_infra(
+    platform, method, path
+):
+    _connect(platform)
+
+    response = platform.request(
+        method, path, headers={"Authorization": "Bearer human"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_grant_endpoints_refuse_an_assistant_token(platform):
+    tokens = _connect(platform)
+
+    status = _as_a_tool(
+        platform, tokens["access_token"], "GET", "/api/agents/admin/grants"
+    )
+
+    assert status == 403
+
+
+def test_infra_lists_the_grants_of_every_user(platform):
+    _connect(platform)
+
+    grants = _live_grants(platform)
+
+    assert [(g["username"], g["subject"]) for g in grants] == [
+        ("alice", "user-1")
+    ]
+
+
+def test_infra_revokes_another_users_grant(platform):
+    tokens = _connect(platform)
+    grant_id = _live_grants(platform)[0]["id"]
+
+    response = platform.delete(
+        f"/api/agents/admin/grants/{grant_id}",
+        headers={"Authorization": "Bearer infra"},
+    )
+
+    assert response.status_code == 204
+    assert _call(platform, tokens["access_token"], "whoami").status_code == 401
+
+
+def test_infra_revokes_every_grant_of_a_user(platform):
+    _connect(platform)
+    _connect(platform)
+
+    response = platform.delete(
+        "/api/agents/admin/users/alice/grants",
+        headers={"Authorization": "Bearer infra"},
+    )
+
+    assert len(response.json()["revoked"]) == 2
+    assert _live_grants(platform) == []
+
+
+@pytest.mark.parametrize(
+    "path,action",
+    [
+        ("/api/agents/admin/grants/7", "agent.admin.revoke"),
+        ("/api/agents/admin/users/alice/grants", "agent.admin.revoke_user"),
+    ],
+)
+def test_admin_revocations_are_journaled(path, action):
+    found, _ = audit.match_action("DELETE", path)
+
+    assert found == action
+
+
 def test_an_assistant_cannot_approve_a_connection(platform):
     tokens = _connect(platform)
     client_id = _register(platform).json()["client_id"]
@@ -350,13 +576,15 @@ def test_an_assistant_cannot_approve_a_connection(platform):
         "request"
     ][0]
 
-    response = platform.post(
+    status = _as_a_tool(
+        platform,
+        tokens["access_token"],
+        "POST",
         f"/api/agents/requests/{request_id}/approve",
         json={"scopes": store.SCOPES},
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
 
-    assert response.status_code == 403
+    assert status == 403
 
 
 def test_read_only_assistant_cannot_create_an_app(platform):
@@ -442,12 +670,14 @@ def test_assistant_cannot_approve_its_own_sensitive_action(platform):
     )
     confirmation = asked["approval_link"].rsplit("/", 1)[1]
 
-    response = platform.post(
+    status = _as_a_tool(
+        platform,
+        tokens["access_token"],
+        "POST",
         f"/api/agents/confirmations/{confirmation}/approve",
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
 
-    assert response.status_code == 403
+    assert status == 403
 
 
 # ---------------------------------------------------------------------------
@@ -723,3 +953,120 @@ def test_whoami_lists_each_cloud_state_and_project_cloud(monkeypatch):
 
     assert result["clouds"] == {"onprem": "up", "aws": "up", "gcp": "down"}
     assert result["projects"][0]["cloud"] == "aws"
+
+
+# ---------------------------------------------------------------------------
+# Step-up
+# ---------------------------------------------------------------------------
+
+
+def _step_up_on():
+    return mock.patch.object(settings, "STEP_UP_ENABLED", True)
+
+
+def _pending_request(client) -> str:
+    client_id = _register(client).json()["client_id"]
+    _, challenge = _pkce()
+    authorize = client.get(
+        "/authorize",
+        params={
+            "client_id": client_id,
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    return parse_qs(urlparse(authorize.headers["location"]).query)["request"][
+        0
+    ]
+
+
+def test_connecting_an_assistant_needs_a_fresh_passkey_login(platform):
+    # Arrange
+    request_id = _pending_request(platform)
+
+    # Act
+    with _step_up_on():
+        response = platform.post(
+            f"/api/agents/requests/{request_id}/approve",
+            json={"scopes": store.SCOPES},
+            headers={"Authorization": "Bearer human"},
+        )
+
+    # Assert
+    assert (response.status_code, response.json()["detail"]["code"]) == (
+        401,
+        "step_up_required",
+    )
+
+
+def test_approving_an_assistant_request_in_the_cmp_needs_a_fresh_passkey_login(
+    platform,
+):
+    # Arrange
+    tokens = _connect(platform)
+    policy.set_project_stake("demo", "alice", level="critical")
+    asked = _result(
+        _call(
+            platform,
+            tokens["access_token"],
+            "release_action",
+            {"app_id": 1, "action": "promote"},
+        )
+    )
+    confirmation = asked["approval_link"].rsplit("/", 1)[1]
+
+    # Act
+    with _step_up_on():
+        response = platform.post(
+            f"/api/agents/confirmations/{confirmation}/approve",
+            headers={"Authorization": "Bearer human"},
+        )
+
+    # Assert
+    assert (
+        response.status_code,
+        policy.load_confirmation(confirmation).status,
+    ) == (
+        401,
+        "pending",
+    )
+
+
+@pytest.mark.parametrize(
+    "tool, arguments",
+    [
+        (
+            "release_action",
+            {
+                "app_id": 1,
+                "action": "promote",
+                "full": True,
+                "reason": "hotfix",
+                "user_confirmed": True,
+            },
+        ),
+        ("delete_app", {"app_id": 1, "user_confirmed": True}),
+    ],
+)
+def test_an_assistant_hands_passkey_actions_to_the_user_in_the_cmp(
+    platform, tool, arguments
+):
+    # Arrange
+    tokens = _connect(platform)
+    policy.set_project_stake("demo", "alice", level="sandbox")
+
+    # Act
+    with _step_up_on():
+        result = _result(
+            _call(platform, tokens["access_token"], tool, arguments)
+        )
+
+    # Assert
+    assert (result["status"], result["cmp_link"], platform.promoted) == (
+        "not_allowed_for_assistants",
+        f"{mcp_server.PUBLIC_URL}/projects/demo/apps/1",
+        [],
+    )

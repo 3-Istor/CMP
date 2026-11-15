@@ -9,7 +9,6 @@ Off: the reverse, with prod's image written back into the shared files first.
 """
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment
 from app.models.environment import AppEnvironment, Promotion, VerificationRun
-from app.services import customer_identity, project_registry
+from app.services import app_inputs, customer_identity, project_registry
 from app.services.environments import gitops, layout, registry, staging_realm
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
@@ -55,21 +54,18 @@ def _executor(deployment: Deployment):
 
 def realm_of(deployment: Deployment) -> str:
     """
-    The realm the staging OIDC client lives in: the project's staging realm,
-    or the one a project running its own Keycloak configured.
+    The realm the staging OIDC client lives in. Never read from app_config:
+    the staging module runs with the platform's Keycloak provisioner secret,
+    so a stored realm would let a project create clients in another's realm.
     """
-    config = json.loads(deployment.app_config or "{}")
-    return config.get("keycloak_realm_id") or staging_realm.realm_name(
-        deployment.project_id
-    )
+    return staging_realm.realm_name(deployment.project_id)
 
 
 def _variables(deployment: Deployment) -> dict[str, Any]:
-    config = json.loads(deployment.app_config or "{}")
     return {
         "app_name": deployment.name,
         "project_name": deployment.project_id,
-        "target_cloud": config.get("target_cloud", "onprem"),
+        "target_cloud": app_inputs.stored_target_cloud(deployment.app_config),
         "keycloak_realm_id": realm_of(deployment),
     }
 
@@ -165,32 +161,29 @@ async def _enable(deployment_id: int, offhours: dict[str, Any]) -> None:
         row = db.get(AppEnvironment, (deployment_id, STAGING))
         try:
             variables = _variables(deployment)
-            if variables["keycloak_realm_id"] == staging_realm.realm_name(
-                deployment.project_id
-            ):
-                _set(db, row, "provisioning", "Creating the staging realm")
-                try:
-                    await asyncio.to_thread(
-                        staging_realm.ensure, deployment.project_id
-                    )
-                except Exception as exc:  # name the step in the row
-                    logger.exception(
-                        "creating the staging realm for deployment %s failed",
-                        deployment_id,
-                    )
-                    _set(
-                        db,
-                        row,
-                        "failed",
-                        f"Creating the staging realm failed: {exc}",
-                    )
-                    return
+            _set(db, row, "provisioning", "Creating the staging realm")
+            try:
+                await asyncio.to_thread(
+                    staging_realm.ensure, deployment.project_id
+                )
+            except Exception as exc:  # name the step in the row
+                logger.exception(
+                    "creating the staging realm for deployment %s failed",
+                    deployment_id,
+                )
                 _set(
                     db,
                     row,
-                    "provisioning",
-                    "Creating the OIDC client, secrets and hostname",
+                    "failed",
+                    f"Creating the staging realm failed: {exc}",
                 )
+                return
+            _set(
+                db,
+                row,
+                "provisioning",
+                "Creating the OIDC client, secrets and hostname",
+            )
             executor = _executor(deployment)
             await asyncio.to_thread(executor.init)
             outputs = await asyncio.to_thread(executor.apply, variables)

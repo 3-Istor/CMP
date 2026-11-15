@@ -24,7 +24,9 @@
       "navigation": "Main navigation",
       "navigationHint": "Platform pages, links, theme and profile.",
       "openMenu": "Open the menu",
-      "skipToContent": "Skip to content"
+      "skipToContent": "Skip to content",
+      "access": "Elevated access",
+      "accessReviews": "Access reviews"
     },
     "home": {
       "fallbackName": "Developer",
@@ -96,7 +98,8 @@
       "appsLoadFailed": "Failed to load applications",
       "noApps": "No applications yet",
       "deployFirst": "Deploy your first app to this project.",
-      "noAppsReadOnly": "Nothing has been deployed here yet."
+      "noAppsReadOnly": "Nothing has been deployed here yet.",
+      "importRepo": "Import a repo"
     },
     "logs": {
       "title": "Logs"
@@ -208,7 +211,8 @@
       "logs": "Logs",
       "deployments": "Deployments",
       "delivery": "Delivery",
-      "settings": "Settings"
+      "settings": "Settings",
+      "traces": "Traces"
     },
     "status": {
       "pending": "Queued",
@@ -963,7 +967,9 @@
       "shells": "Shells in a pod",
       "vault": "Vault secrets",
       "logins": "Failed logins",
-      "deployments": "Deployments"
+      "deployments": "Deployments",
+      "access": "Elevated access",
+      "accessReview": "Access reviews"
     },
     "roles": {
       "admin": "admin",
@@ -1047,7 +1053,28 @@
       "agentDisconnect": "disconnected an AI assistant",
       "monthClose": "closed a FinOps month",
       "costCenters": "changed the cost centers",
-      "catalogSync": "synchronised the catalog"
+      "catalogSync": "synchronised the catalog",
+      "access": {
+        "request": "{user} asked for {elevation}",
+        "approve": "approved {elevation} for {user}",
+        "deny": "denied {elevation} for {user}",
+        "cancel": "cancelled the request for {elevation}",
+        "end": "ended {elevation} of {user} early",
+        "expire": "{elevation} of {user} expired",
+        "lapse": "request of {user} for {elevation} lapsed without a decision",
+        "unmanaged": "found {user} in {elevation} without a grant"
+      },
+      "accessReview": {
+        "start": "Opened access review #{subject}",
+        "close": "Closed access review #{subject}",
+        "escalate": "Access review #{subject} overdue: {count} undecided",
+        "decide": "Reviewed {user} on {subject}: {decision, select, keep {kept} remove {removed} change_role {role changed} other {decided}}",
+        "terraform_task": "Terraform change needed to remove {user} from {subject}",
+        "task_done": "Terraform change applied for {user} on {subject}",
+        "account_flag": "{user} reported inactive",
+        "account_disable": "{user} disabled for inactivity",
+        "account_enable": "{user} kept active"
+      }
     },
     "audit": {
       "kpi": {
@@ -1332,27 +1359,28 @@
     },
     "github": {
       "title": "GitHub integration",
-      "description": "Link your GitHub account to deploy Kubernetes applications",
       "loadingStatus": "Loading status…",
-      "linked": "GitHub account linked",
-      "installationId": "Installation ID",
-      "linkedHelp": "You can now deploy Kubernetes applications with GitOps. The platform creates and manages repositories for you.",
-      "needApp": "To deploy Kubernetes applications, install the CNP GitHub App. It lets the platform create and manage repositories on your behalf.",
-      "linking": "Linking…",
+      "description": "Link your GitHub account to import your own repositories",
+      "unavailable": "GitHub linking is not configured on this platform yet. Apps created from the catalogue do not need it.",
+      "needLink": "Link your GitHub account to import repositories you can push to. The platform only reads the repositories you choose.",
       "linkButton": "Link GitHub account",
       "redirectNote": "You will be redirected to GitHub to authorise the CNP Portal app.",
-      "or": "Or",
-      "alreadyInstalled": "Already installed the app?",
-      "alreadyHelp": "If the CNP GitHub App is already installed on your organisation, enter the installation ID here.",
-      "saveId": "Save ID",
-      "idHelp": "You can find the installation ID in your GitHub App settings.",
-      "callbackSaved": "GitHub account linked successfully!",
-      "callbackFailed": "Failed to link the GitHub account. Try again or enter the ID manually.",
-      "statusFailed": "Failed to load the GitHub integration status",
-      "opened": "The GitHub App installation opened in a new tab. Come back here once it is installed.",
-      "idRequired": "Enter an installation ID",
-      "idSaved": "Installation ID saved",
-      "idSaveFailed": "Failed to save the ID. Check it and try again."
+      "linkedAs": "Linked as {login}",
+      "installations": "CNP Portal installations you can reach",
+      "noInstallation": "No installation yet: install CNP Portal on your account or organisation.",
+      "selected": "Selected",
+      "select": "Use",
+      "installButton": "Install CNP Portal on more repositories",
+      "unlinkButton": "Unlink",
+      "linkedHelp": "Repositories of these installations on which you can push appear in a project's import page.",
+      "callbackSaved": "GitHub account linked",
+      "callbackFailed": "Failed to link the GitHub account.",
+      "startFailed": "GitHub linking is unavailable. Try again later.",
+      "installationSelected": "Installation verified and selected",
+      "installationFailed": "This installation cannot be verified with your GitHub account.",
+      "unlinked": "GitHub account unlinked",
+      "unlinkFailed": "Failed to unlink the GitHub account.",
+      "backToImport": "Back to the import"
     }
   },
   "common": {
@@ -1410,7 +1438,8 @@
     },
     "appFilter": "Application",
     "allApps": "All applications",
-    "settings": "Settings"
+    "settings": "Settings",
+    "topology": "Topology"
   },
   "catalog": {
     "iconAlt": "{name} icon",
@@ -1429,9 +1458,6 @@
       "selectOption": "Select an option…",
       "required": "Required",
       "optional": "Optional",
-      "githubTitle": "GitHub account required",
-      "githubText": "To deploy Kubernetes applications, you first need to link your GitHub account.",
-      "githubLink": "Go to account settings",
       "provisionedTitle": "What will be provisioned",
       "repo": "Private GitHub repository with the template code",
       "namespace": "Kubernetes namespace with RBAC",
@@ -1656,7 +1682,8 @@
       "action": "Action",
       "expires": "Expires",
       "decline": "Decline",
-      "approve": "Approve"
+      "approve": "Approve",
+      "review": "Review the plan"
     },
     "connectAi": {
       "title": "Connect your AI assistant to CNP",
@@ -2531,6 +2558,10 @@
         "advanced": {
           "title": "Advanced",
           "description": "Every value of deploy/values.yaml. Saving commits to main and Argo CD syncs."
+        },
+        "slo": {
+          "title": "SLO",
+          "description": "Availability and latency targets of the app in prod."
         }
       }
     }
@@ -2584,6 +2615,10 @@
       "sky": "Sky",
       "slate": "Slate"
     }
+  },
+  "stepUp": {
+    "confirmed": "Identity confirmed with your passkey. Confirm the action again.",
+    "failed": "This action needs a recent login with a passkey, and the login did not provide it. Add a passkey in your 3Istor ID account, then try again."
   },
   "signin": {
     "redirecting": "Redirecting to Keycloak…",
@@ -2644,7 +2679,20 @@
       "cost_anomaly": "Cost anomaly on {app}",
       "member_added": "You are now {role, select, admin {administrator} guest {guest} other {member}} of {project}",
       "approval_request": "{user} needs your approval: {summary}",
-      "unknown": "New notification"
+      "unknown": "New notification",
+      "access_requested": "{user} asks for {elevation}, your approval is needed",
+      "access_approved": "{by} approved your {elevation} access",
+      "access_denied": "{by} denied your {elevation} access",
+      "access_expired": "Your {elevation} access has expired",
+      "access_revoked": "{by} ended your {elevation} access",
+      "access_lapsed": "Your {elevation} request lapsed without a decision",
+      "access_review_pending": "Review who can access {project} before {due}",
+      "access_review_platform_pending": "Review the platform groups before {due}",
+      "access_review_escalated": "Access review overdue: {count} undecided",
+      "access_review_terraform_task": "Remove {user} from {group} in the K3s Terraform",
+      "access_review_inactive": "{user} has not logged in for {days} days",
+      "access_review_disabled": "{user} was disabled after {days} days without login",
+      "import_rebuild_pending": "A rebuild of {repo} waits for an admin"
     }
   },
   "secretsPresence": {
@@ -2941,6 +2989,799 @@
       "title": "Admin-locked setting changed in the repo",
       "detail": "deploy/security.yaml no longer follows the project policy.",
       "fix": "Put the locked value back, or ask the project admin to lift the lock."
+    }
+  },
+  "access": {
+    "title": "Elevated access",
+    "description": "Just-in-time access to sensitive systems: asked with a reason, approved by another platform admin, removed at expiry.",
+    "forbidden": "Elevated access is reserved for platform admins (infra group).",
+    "loading": "Loading",
+    "remaining": "{time} left",
+    "denyReason": "Reason for the refusal (optional)",
+    "elevations": {
+      "vault-data": {
+        "title": "Vault: project secrets",
+        "description": "Read and write every project-* secret in Vault (policy vault_data_admin)."
+      },
+      "k3s-admin": {
+        "title": "K3s: cluster-admin",
+        "description": "cluster-admin on the K3s cluster through kubectl OIDC."
+      }
+    },
+    "duration": {
+      "minutes": "{count} min",
+      "hours": "{count, plural, one {# hour} other {# hours}}"
+    },
+    "form": {
+      "title": "Request access",
+      "description": "Another platform admin must approve. Nobody can approve their own request.",
+      "elevation": "Access",
+      "duration": "Duration",
+      "durationHint": "At most {max}. The access is removed automatically at expiry.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Incident, ticket, what you need to do (10 characters minimum)",
+      "lagHint": "Log in again to Vault or kubectl once approved. After expiry, tokens already issued stay valid until they expire (5 minutes for kubectl, at most 1 hour for Vault).",
+      "submit": "Send the request"
+    },
+    "mine": {
+      "title": "My access",
+      "description": "Your pending requests and active grants.",
+      "empty": "Nothing pending or active."
+    },
+    "queue": {
+      "title": "Waiting for approval",
+      "description": "Requests from other platform admins.",
+      "empty": "No request waiting for you."
+    },
+    "active": {
+      "title": "Active grants",
+      "description": "Every elevated access in effect right now.",
+      "empty": "Nobody holds an elevated access."
+    },
+    "history": {
+      "title": "History",
+      "description": "The last 50 closed requests.",
+      "empty": "No history yet.",
+      "when": "Requested",
+      "who": "Requester",
+      "elevation": "Access",
+      "decidedBy": "Decided by",
+      "status": "Status",
+      "reason": "Reason",
+      "note": "Note: {note}"
+    },
+    "meta": {
+      "pending": "{user}, {duration}, {when}",
+      "active": "{user}, approved by {approver}"
+    },
+    "status": {
+      "pending": "Pending",
+      "active": "Active",
+      "denied": "Denied",
+      "cancelled": "Cancelled",
+      "lapsed": "Lapsed",
+      "expired": "Expired",
+      "revoked": "Ended early",
+      "failed": "Failed"
+    },
+    "actions": {
+      "approve": "Approve",
+      "deny": "Deny",
+      "confirmDeny": "Confirm refusal",
+      "cancel": "Cancel",
+      "end": "End now"
+    },
+    "toasts": {
+      "request": "Request sent to the other platform admins.",
+      "approve": "Access granted.",
+      "deny": "Request denied.",
+      "cancel": "Request cancelled.",
+      "end": "Access ended."
+    }
+  },
+  "accessReviews": {
+    "title": "Access reviews",
+    "description": "Periodic review of who can access each project and platform group, and accounts nobody uses any more.",
+    "forbidden": "Access reviews are for infra and security auditors.",
+    "loading": "Loading access reviews",
+    "readOnly": "Read-only: infra starts campaigns and reviews the platform groups. Exports are available to you.",
+    "campaigns": {
+      "title": "Campaigns",
+      "auto": "A campaign opens automatically every {days} days.",
+      "manual": "Campaigns are opened by infra.",
+      "deadline": "Reviewers have {days} days; undecided items are escalated, never removed.",
+      "empty": "No campaign yet.",
+      "none": "Select a campaign to see its items.",
+      "name": "Campaign #{id}",
+      "meta": "{decided} of {total} decided, due {due}"
+    },
+    "status": {
+      "open": "Open",
+      "closed": "Closed",
+      "overdue": "Overdue"
+    },
+    "detail": {
+      "meta": "Started by {by} on {started}, due {due}.",
+      "platformTitle": "Platform groups",
+      "platformDescription": "infra, security-auditor and finops. Reviewed by an infra member other than the person concerned. A removal becomes a Terraform task.",
+      "projectsTitle": "Projects",
+      "projectsDescription": "Decided by each project owner, or its admins when the owner is gone. Decisions apply at once.",
+      "empty": "Nothing to review here."
+    },
+    "tasks": {
+      "title": "Terraform tasks",
+      "description": "Platform groups are declared in the K3s Terraform: apply these changes there, then mark them done.",
+      "remove": "Remove {user} from {group}",
+      "done": "Done by {user}"
+    },
+    "inactive": {
+      "title": "Inactive accounts",
+      "description": "Accounts without a login for {days} days. Demo, break-glass and service accounts are never listed.",
+      "disableOn": "They are disabled {days} days after being reported, and can be enabled again here.",
+      "disableOff": "Automatic disabling is off: they are only reported.",
+      "empty": "No inactive account.",
+      "state": "State",
+      "notSince": "None since {date}",
+      "disabled": "Disabled on {date}",
+      "disableDue": "Disabled on {date} unless kept",
+      "reported": "Reported"
+    },
+    "table": {
+      "subject": "Project or group",
+      "member": "Member",
+      "role": "Role",
+      "lastLogin": "Last login",
+      "decision": "Decision",
+      "actions": "Actions"
+    },
+    "roles": {
+      "owner": "Owner",
+      "admin": "Administrator",
+      "member": "Member",
+      "guest": "Guest"
+    },
+    "lastLogin": {
+      "none": "Not seen"
+    },
+    "decision": {
+      "pending": "To review",
+      "keep": "Kept",
+      "remove": "Removed",
+      "changedTo": "Now {role, select, admin {administrator} guest {guest} other {member}}",
+      "self": "Reviewed by someone else",
+      "confirmRemove": "Remove {user} from the project?",
+      "confirmPlatformRemove": "Remove {user}? A Terraform task will be created.",
+      "newRole": "New role",
+      "by": "By {user}"
+    },
+    "actions": {
+      "start": "Start a campaign",
+      "close": "Close the campaign",
+      "exportCsv": "Export CSV",
+      "exportJson": "Export JSON",
+      "keep": "Keep",
+      "remove": "Remove",
+      "role": "Change role",
+      "confirmRemove": "Remove",
+      "confirmRole": "Apply",
+      "cancel": "Cancel",
+      "keepUser": "Keep {user}",
+      "roleUser": "Change the role of {user}",
+      "removeUser": "Remove {user}",
+      "taskDone": "Mark as done",
+      "enable": "Enable again",
+      "keepActive": "Keep active",
+      "keepAccount": "Keep the account of {user}"
+    },
+    "toasts": {
+      "keep": "{user} kept",
+      "remove": "{user} removed",
+      "change_role": "Role of {user} changed",
+      "started": "Campaign started, reviewers notified",
+      "closed": "Campaign closed",
+      "taskDone": "Task marked as done",
+      "kept": "{user} kept active"
+    },
+    "card": {
+      "title": "Review access",
+      "description": "{count, plural, =0 {Every member reviewed.} one {1 member to review} other {# members to review}}, due {due}. Keep, remove or change the role of each.",
+      "open": "Review",
+      "hide": "Hide"
+    }
+  },
+  "topology": {
+    "internet": "Internet",
+    "health": {
+      "healthy": "Healthy",
+      "progressing": "Progressing",
+      "suspended": "Suspended",
+      "unknown": "Health unknown",
+      "missing": "Missing",
+      "degraded": "Degraded"
+    },
+    "kind": {
+      "internet": "Public entry",
+      "static": "Static site",
+      "fullstack": "Full-stack app",
+      "service": "Service",
+      "backing": "Database"
+    },
+    "asleep": "Asleep",
+    "imported": "Imported",
+    "inboundPort": "Called on port {port}",
+    "staged": "Planned",
+    "confidence": {
+      "high": "Sure",
+      "medium": "Likely",
+      "low": "Unsure"
+    },
+    "unsupported": "Not supported",
+    "nameTaken": "Name taken",
+    "rps": "{value} req/s",
+    "declare": "Declare this link",
+    "nodeLabel": "{name}, {kind}, {health}",
+    "edgeLabel": "{from} to {to}: {state}",
+    "edgeState": {
+      "declared_observed": "Declared, traffic seen",
+      "declared_only": "Declared, no traffic",
+      "observed_only": "Traffic not declared",
+      "denied": "Denied by a policy",
+      "draft": "Proposed by the import",
+      "entry": "Public entry"
+    },
+    "closeDetails": "Close the link details",
+    "action": {
+      "declare": "Declare this link",
+      "unlink": "Unlink",
+      "remove": "Remove from the plan",
+      "restore": "Keep in the plan",
+      "declareOf": "Declare the link from {from} to {to}",
+      "unlinkOf": "Unlink {from} from {to}",
+      "removeOf": "Remove the link from {from} to {to}",
+      "restoreOf": "Keep the link from {from} to {to}"
+    },
+    "a11y": {
+      "node": "Press Enter to select this app, then Tab to move to the next element.",
+      "edge": "Press Enter to select this link and show its actions.",
+      "controls": "Map controls",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fitView": "Fit the whole map",
+      "interactive": "Lock the map",
+      "handle": "Link handle"
+    },
+    "legend": "Link legend",
+    "observedUnavailable": "Traffic is not measured for this project yet: only declared links are shown.",
+    "table": {
+      "apps": "Applications",
+      "name": "Name",
+      "kind": "Type",
+      "health": "Health",
+      "exposure": "Exposure",
+      "image": "Image",
+      "links": "Links",
+      "from": "From",
+      "to": "To",
+      "target": "Name used:port",
+      "state": "State",
+      "traffic": "Traffic",
+      "actions": "Actions",
+      "noLinks": "No link declared or seen."
+    },
+    "internal": "Internal",
+    "viewLabel": "Display",
+    "mapView": "Map view",
+    "listView": "List view",
+    "linkMode": "Link two apps",
+    "linkDialog": "New link",
+    "refresh": "Refresh the map",
+    "loadFailed": "The map could not be loaded",
+    "retry": "Retry",
+    "empty": "Nothing to map yet",
+    "emptyBody": "Deploy an app or import a repository: its services, databases and links will show here.",
+    "importRepo": "Import a repo",
+    "staleData": "The last refresh failed: the map may be out of date.",
+    "linkModeHelp": "Drag from the dot on the right of an app to the dot on the left of the app it calls. Only imported services and databases can be linked for now.",
+    "canvasLabel": "Map of project {project}",
+    "canvasHelp": "Refreshed every 30 seconds. The list view shows the same apps and links as tables.",
+    "linked": "{from} now reaches {to}",
+    "unlinked": "Link removed",
+    "unlink": {
+      "title": "Unlink {from} from {to}?",
+      "description": "The name {alias} stops resolving in the calling app as soon as Argo CD syncs. Code that still uses it will fail.",
+      "confirm": "Unlink"
+    },
+    "link": {
+      "title": "Link two apps",
+      "description": "The calling app reaches the target under the name you choose, without changing its code.",
+      "from": "Calling app",
+      "to": "Target app",
+      "port": "Port",
+      "noPort": "This app exposes no known port.",
+      "alias": "Name used by the code",
+      "aliasHelp": "The code reaches it at {alias}:{port}.",
+      "cancel": "Cancel",
+      "submit": "Link"
+    },
+    "alias": {
+      "format": "Lowercase letters, digits and dashes, starting with a letter, 63 characters at most.",
+      "reserved": "This name is reserved by the platform.",
+      "own": "This name is a Service of the calling app itself."
+    }
+  },
+  "imports": {
+    "title": "Import a repository",
+    "loadFailed": "The import could not be loaded: {message}",
+    "startFailed": "The run could not start: {message}",
+    "applied": "Import approved: the build has started",
+    "applyFailed": "The import was refused: {message}",
+    "openLatestRun": "Open the latest run",
+    "stepsLabel": "Import steps",
+    "step": {
+      "repo": "Repository",
+      "analysis": "Analysis",
+      "review": "Plan review",
+      "progress": "Deployment"
+    },
+    "sourceLine": "{repo}, branch {branch}",
+    "repo": {
+      "disabled": "Repository import is not enabled on this platform.",
+      "loadFailed": "Your repositories could not be read from GitHub.",
+      "connectFailed": "GitHub could not be reached. Try again.",
+      "loading": "Reading your repositories...",
+      "installTitle": "Install CNP-Portal on your repositories",
+      "connectTitle": "Connect GitHub",
+      "installBody": "Your GitHub account is linked, but CNP-Portal is installed on no repository you can import. Install it on the repositories you choose.",
+      "connectBody": "Link your GitHub account, then install CNP-Portal on the repositories you choose. You come back here afterwards.",
+      "oauthUnavailable": "GitHub linking is not configured on this platform.",
+      "installButton": "Install CNP-Portal",
+      "connectButton": "Connect GitHub",
+      "readOnlyNote": "The platform only ever reads your code, one repository at a time, at a fixed commit.",
+      "search": "Search a repository",
+      "choose": "Repository",
+      "private": "Private",
+      "noMatch": "No repository matches.",
+      "branch": "Branch",
+      "branchHelp": "The analysis reads the branch head and keeps that commit for every later step.",
+      "analyze": "Analyze",
+      "moreRepos": "Add repositories"
+    },
+    "stageState": {
+      "pending": "Waiting",
+      "active": "In progress",
+      "done": "Done",
+      "failed": "Failed",
+      "skipped": "Not needed"
+    },
+    "analysis": {
+      "intro": "Analysis of {repo} at commit {sha}. Nothing is created before you approve the plan.",
+      "stage": {
+        "queued": "Waiting for the analysis workflow",
+        "fetch": "Code downloaded, read only",
+        "analyze": "Detecting services, databases and links",
+        "plan": "Plan ready"
+      },
+      "failed": "The analysis failed",
+      "retry": "Analyze again",
+      "otherRepo": "Choose another repository"
+    },
+    "stage": {
+      "build": "Build",
+      "scan": "Scan",
+      "publish": "Publish",
+      "deploy": "Deploy",
+      "smoke": "Smoke test"
+    },
+    "progress": {
+      "logs": "Logs of {app}",
+      "status": {
+        "queued": "Waiting for the build workflow, commit {sha}.",
+        "claimed": "Building and scanning the images of commit {sha}.",
+        "running": "Images published, deploying commit {sha}.",
+        "succeeded": "Commit {sha} is deployed.",
+        "failed": "The import of commit {sha} stopped. A failing app does not stop the others.",
+        "cancelled": "The import of commit {sha} was cancelled."
+      },
+      "failedAt": "Stopped at stage {stage}",
+      "caption": "Progress of each app",
+      "app": "App",
+      "next": "What to do",
+      "seeTopology": "See the topology",
+      "blocking": "{count, plural, one {# blocking vulnerability} other {# blocking vulnerabilities}}",
+      "concerned": "Failed"
+    },
+    "review": {
+      "capacity": "Memory",
+      "capacityText": "{requested} MiB requested by this import, {other} MiB by other imports, out of {max} MiB for the project.",
+      "namespaceTooSmall": "{apps}: more than the {max} MiB one app may request.",
+      "canvasLabel": "Import plan on the map of project {project}",
+      "canvasHelp": "Dashed apps and links come from the plan. Select an app to edit it, or a link to remove it.",
+      "editorLabel": "Edit the plan",
+      "selectHint": "Select an app on the map or in the list below to edit it.",
+      "apps": "Apps of the plan",
+      "confidenceShort": {
+        "high": "sure",
+        "medium": "likely",
+        "low": "unsure"
+      },
+      "secrets": "Secrets found",
+      "noSecrets": "No secret written in the repository.",
+      "secretsBody": "These values stay out of the platform: each one is replaced by a secret generated in Vault, which only the app can read.",
+      "unsupported": "Not supported",
+      "allSupported": "Everything found in the repository can be deployed.",
+      "backingNotInCatalogue": "{kind} is not in the database catalogue: exclude it to import the rest.",
+      "warnings": "Warnings",
+      "noWarnings": "No warning.",
+      "blocked": "Fix these points before applying:",
+      "abandon": "Abandon, nothing was created",
+      "stepUpNote": "Applying asks for your passkey.",
+      "apply": "Apply",
+      "editor": {
+        "include": "Keep",
+        "exclude": "Exclude",
+        "renamedFrom": "Called {name} in the repository.",
+        "name": "App name",
+        "catalogue": "Deployed from the platform catalogue ({kind}), with generated credentials.",
+        "notCatalogue": "{kind} is not in the catalogue.",
+        "public": "Public on the internet",
+        "port": "Port",
+        "probe": "Health probe",
+        "probeKind": "Type",
+        "probePort": "Port",
+        "probePath": "Path",
+        "memory": "Memory (MiB)",
+        "requests": "Requested",
+        "limits": "Limit",
+        "links": "Links",
+        "removeLink": "Remove",
+        "restoreLink": "Keep",
+        "removeLinkOf": "Remove the link from {from} to {to}",
+        "restoreLinkOf": "Keep the link from {from} to {to}"
+      }
+    },
+    "problem": {
+      "unsupported": "{app} is not in the catalogue: exclude it.",
+      "name": "{app} is not a valid name: lowercase letters, digits and dashes, starting with a letter, 40 characters at most.",
+      "duplicate": "{app} is already used by another app.",
+      "memory": "{app}: the memory request must be at least 16 MiB and at most the limit.",
+      "probePath": "{app}: an HTTP probe needs a path such as /health.",
+      "probePort": "{app}: an HTTP probe must use the first port, the one the monitoring checks.",
+      "nothing": "Every app is excluded: there is nothing to import."
+    },
+    "list": {
+      "title": "Imported repositories",
+      "repo": "Repository",
+      "branch": "Branch",
+      "sha": "Last commit",
+      "status": "Status",
+      "apps": "Apps",
+      "actions": "Actions",
+      "never": "Never run",
+      "rebuildStarted": "Rebuilding {repo}",
+      "rebuildFailed": "The rebuild could not start: {message}",
+      "openLatestRun": "Open the latest run",
+      "rebuildOf": "Rebuild {repo}",
+      "rebuild": "Rebuild",
+      "deleteOf": "Delete the import of {repo}",
+      "delete": "Delete",
+      "deleteTitle": "Delete the import of {repo}?",
+      "deleteDescription": "Its apps leave the project. This cannot be undone.",
+      "deleteApps": "{count, plural, one {# app and its deployment} other {# apps and their deployments}}",
+      "deleteData": "The data of its databases, deleted once the apps are gone",
+      "deleteLinks": "The links other apps have to them",
+      "deleteConfirm": "Delete the import",
+      "deleteStarted": "Removal started",
+      "runStatus": {
+        "analyze": {
+          "queued": "Analysis queued",
+          "claimed": "Analyzing",
+          "running": "Analyzing",
+          "succeeded": "Plan to review",
+          "failed": "Analysis failed",
+          "cancelled": "Analysis cancelled"
+        },
+        "build": {
+          "queued": "Build queued",
+          "claimed": "Building",
+          "running": "Deploying",
+          "succeeded": "Deployed",
+          "failed": "Failed",
+          "cancelled": "Cancelled"
+        }
+      },
+      "autoRebuild": "Rebuild on push",
+      "autoRebuildOf": "Rebuild {repo} on every push",
+      "autoRebuildFailed": "The setting could not be saved: {message}",
+      "pending": "A push to {repo} waits for an admin: {reason}",
+      "confirmRebuild": "Confirm the rebuild",
+      "pendingReason": {
+        "not_admin": "{user}, who rebuilds it, is no longer admin of the project.",
+        "inactive": "the account of {user}, who rebuilds it, is disabled.",
+        "repo_access": "the CMP cannot check with the GitHub access of {user}, who rebuilds it, that they can still read the repository (GitHub account not linked, or access removed).",
+        "unknown_user": "the CMP cannot find the account of {user}, who rebuilds it."
+      },
+      "pendingHelp": "A rebuild runs with the GitHub access of whoever starts it. By confirming, you start it with your access and your passkey; later rebuilds run as you.",
+      "linkGithub": "Link my GitHub account"
+    },
+    "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey.",
+    "failure": {
+      "apps": "Apps concerned: {apps}",
+      "upgradesCaption": "Dependencies to update",
+      "package": "Package",
+      "installed": "Current version",
+      "fixed": "Fixed version",
+      "appsColumn": "Apps",
+      "ids": "Vulnerabilities",
+      "fixUpgrades": "Move these packages to the fixed version in the repository (or use a newer base image), then push.",
+      "fixRepo": "Fix the repository using the log excerpt below, then push.",
+      "pushRebuilds": "The push starts the rebuild on its own.",
+      "thenRebuild": "Then start the rebuild.",
+      "contactPlatform": "If it happens again, contact the platform team with id {runId}.",
+      "message": "Message of the failed stage",
+      "log": "Log excerpt",
+      "rebuild": "Run the build again",
+      "rebuildAfterFix": "Rebuild",
+      "reanalyze": "Analyze again",
+      "analyzeAgain": "Analyze again",
+      "cause": {
+        "scan_blocked": {
+          "title": "Images blocked by critical vulnerabilities",
+          "explain": "The scan found critical vulnerabilities that have a fixed version. Nothing is deployed while they remain."
+        },
+        "build_failed": {
+          "title": "The image build failed",
+          "explain": "A build command stopped with an error. The cause is usually in the repository: Dockerfile, dependencies, build script."
+        },
+        "dockerfile_refused": {
+          "title": "Dockerfile refused by the platform",
+          "explain": "The Dockerfile uses a RUN flag the platform refuses (secret, ssh, host network or insecure mode)."
+        },
+        "plan_mismatch": {
+          "title": "The plan no longer matches the repository",
+          "explain": "A folder or Dockerfile of the plan no longer exists in the repository. Analyze again, then review the new plan."
+        },
+        "fetch_failed": {
+          "title": "The code could not be downloaded",
+          "explain": "GitHub did not return the commit archive. The commit may have left the branch: try again, or analyze again."
+        },
+        "analysis_failed": {
+          "title": "The analysis stopped",
+          "explain": "The analyzer could not read the whole repository. Try again; if it happens again, the platform team needs to look at it."
+        },
+        "timeout": {
+          "title": "The run stopped giving news",
+          "explain": "No news from the workflow for too long. This is usually transient: try again."
+        },
+        "workflow_stopped": {
+          "title": "The workflow stopped without reporting",
+          "explain": "The workflow was cancelled or lost its runner before reporting. This is usually transient: try again."
+        },
+        "workflow_not_started": {
+          "title": "The workflow did not start",
+          "explain": "GitHub did not start the requested workflow. Try again; if it happens again, tell the platform team."
+        },
+        "dispatch_failed": {
+          "title": "The workflow could not be started",
+          "explain": "The CMP could not ask GitHub for the workflow. Try again in a few minutes."
+        },
+        "deploy_failed": {
+          "title": "The deployment failed",
+          "explain": "The images are built, but their deployment stopped. Try again; if it happens again, tell the platform team."
+        },
+        "internal": {
+          "title": "Internal platform error",
+          "explain": "The error comes from the platform, not from your repository. Try again; if it happens again, tell the platform team."
+        },
+        "scan_failed": {
+          "title": "The image scan could not run",
+          "explain": "The vulnerability scanner stopped before giving a result (database unavailable, rate limit). This is not your repository: try again; if it happens again, tell the platform team."
+        },
+        "build_job_failed": {
+          "title": "The build job stopped before the build",
+          "explain": "The job stopped before starting the build (runner, tools, artifacts). This is not your repository: try again; if it happens again, tell the platform team."
+        },
+        "manifests_refused": {
+          "title": "The platform refused to deploy the app",
+          "explain": "Argo CD could not render or apply the app's manifests. The detail below names the setting it refused. This comes from the platform: tell the platform team."
+        },
+        "image_pull": {
+          "title": "The image could not be pulled",
+          "explain": "The cluster could not download the app's image. This is usually a registry access problem on the platform side: try again; if it happens again, tell the platform team."
+        },
+        "crash_loop": {
+          "title": "The app keeps crashing at start",
+          "explain": "The container starts then stops, again and again. The log excerpt below shows its last words: a missing setting, a dependency it cannot reach, or a startup error."
+        },
+        "probe_failed": {
+          "title": "The app never answered its health check",
+          "explain": "The container runs, but its health check fails. For an app of the repository, fix the path or port it answers on, or analyze again to change the health check in the plan."
+        },
+        "unschedulable": {
+          "title": "Not enough resources to start the app",
+          "explain": "No node could take the app, or the project's quota is used up. Tell the platform team."
+        },
+        "deploy_timeout": {
+          "title": "The app did not become ready in time",
+          "explain": "The app was still not healthy after the allowed delay. The detail below gives its last known state."
+        },
+        "unreachable": {
+          "title": "The public address does not answer",
+          "explain": "The app is healthy in the cluster but its public address does not answer yet. DNS can take a few minutes: try again."
+        },
+        "dependency_failed": {
+          "title": "An app it depends on did not start",
+          "explain": "This app waits on another app of the import that failed first. Fix that one: this app follows."
+        }
+      },
+      "appFailuresCaption": "Apps that did not start",
+      "problem": "Problem",
+      "detail": "Detail"
+    }
+  },
+  "obs": {
+    "range": {
+      "label": "Period",
+      "15m": "15 minutes",
+      "1h": "1 hour",
+      "6h": "6 hours",
+      "24h": "24 hours",
+      "7d": "7 days"
+    },
+    "notAvailable": {
+      "title": "Not available yet",
+      "metrics": "Golden signals appear once the platform metrics store is connected.",
+      "logs": "This log explorer appears once the platform logs store is connected.",
+      "traces": "Traces appear once the platform traces store is connected and the project has a traces tenant.",
+      "alerts": "Alerts appear once the platform alert chain is connected.",
+      "slo": "The error budget appears once the SLO rules are evaluated."
+    },
+    "error": "Could not load this data. {message}",
+    "retry": "Retry",
+    "openGrafana": "Open in Grafana",
+    "signals": {
+      "title": "Golden signals",
+      "description": "Requests, errors and latency measured at the gateway, prod only.",
+      "noTraffic": "No traffic yet: the gateway counts a route from its first request. This is not an error.",
+      "rate": "Requests per second",
+      "errors": "5xx share",
+      "p95": "Latency p95",
+      "p50": "Latency p50",
+      "now": "Now: {value}",
+      "chartLabel": "{name} over the period, last value {value}",
+      "deployMarker": "Deploy {version} ({outcome})",
+      "routes": "Routes",
+      "route": "Route",
+      "noRoutes": "No route received traffic over the period."
+    },
+    "slo": {
+      "title": "Error budget",
+      "description": "What is left of the budget over {days} days, and how fast it burns.",
+      "availability": "Availability",
+      "latency": "Latency under {ms} ms",
+      "target": "Target {value} %",
+      "remaining": "{value} left",
+      "noData": "No data yet",
+      "burn1h": "Burn rate 1 h",
+      "burn6h": "Burn rate 6 h",
+      "burnHint": "1 means the budget lasts exactly the period.",
+      "exhausted": "Budget spent",
+      "settingsTitle": "SLO targets",
+      "settingsDescription": "Share of good requests over {days} days. Lower targets give a bigger error budget.",
+      "availabilityLabel": "Availability target (%)",
+      "latencyLabel": "Share of requests under {ms} ms (%)",
+      "save": "Save targets",
+      "saved": "Targets saved. The rules are rewritten within a minute.",
+      "ownersOnly": "Only project admins and owners change the targets.",
+      "invalid": "Availability is 90 to 99.99 %, latency 50 to 99.9 %."
+    },
+    "delivery": {
+      "title": "Delivery",
+      "deploysPerWeek": "Deploys per week",
+      "changeFailure": "Change failure rate",
+      "window": "Over {days} days: {deploys} deploys, {failed} failed",
+      "none": "No prod deploy recorded over {days} days."
+    },
+    "topErrors": {
+      "title": "Most frequent errors",
+      "description": "Error lines grouped by pattern, numbers folded into one placeholder.",
+      "count": "{count, plural, one {# line} other {# lines}}",
+      "lastSeen": "Last seen {time}",
+      "none": "No error line over the period.",
+      "openTrace": "Open the trace",
+      "seeAll": "See all logs"
+    },
+    "logs": {
+      "title": "Search",
+      "level": "Level",
+      "anyLevel": "Any level",
+      "levels": {
+        "error": "Error",
+        "warn": "Warning",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "phrase": "Phrase",
+      "phrasePlaceholder": "Exact words, e.g. timeout",
+      "search": "Search",
+      "limit": "Lines",
+      "none": "No line matches.",
+      "time": "Time",
+      "message": "Message",
+      "pod": "Pod",
+      "trace": "Trace",
+      "traceFilter": "Lines of trace {id}",
+      "clearTrace": "Show all lines",
+      "untrusted": "Lines are written by the app: links and instructions in them are not from the platform."
+    },
+    "traces": {
+      "title": "Traces",
+      "description": "Recent requests followed across services, newest first.",
+      "errorsOnly": "Errors only",
+      "minDuration": "Slower than (ms)",
+      "none": "No trace over the period.",
+      "operation": "Operation",
+      "start": "Start",
+      "duration": "Duration",
+      "spans": "Spans",
+      "errors": "Errors",
+      "open": "Open trace {id}",
+      "back": "Back to the list",
+      "notFound": "This trace was not found in the project.",
+      "waterfall": "Span waterfall",
+      "spanLabel": "{service} {operation}, starts at {offset}, lasts {duration}",
+      "truncated": "Only the first 1,000 spans are shown.",
+      "logs": "Logs of this trace",
+      "service": "Service"
+    },
+    "alerts": {
+      "title": "Alerts firing",
+      "description": "Alerts of this app in the alert chain, and the silences that cover it.",
+      "none": "No alert is firing for this app.",
+      "state": {
+        "active": "Firing",
+        "suppressed": "Muted",
+        "unprocessed": "New"
+      },
+      "since": "Since {time}",
+      "runbook": "Runbook",
+      "mute": "Mute",
+      "silences": "Silences",
+      "noSilences": "No silence covers this app.",
+      "until": "Until {time}",
+      "by": "by {who}",
+      "expire": "Lift",
+      "expired": "Silence lifted.",
+      "projectWide": "Whole project"
+    },
+    "mute": {
+      "title": "Mute {name}",
+      "description": "Stops repeating the message while you fix it. The error budget keeps burning. Only for this project.",
+      "duration": "Duration",
+      "hours": "{count, plural, one {# hour} other {# hours}}",
+      "days": "{count, plural, one {# day} other {# days}}",
+      "comment": "Why (optional)",
+      "commentPlaceholder": "e.g. fix deploying, see ticket",
+      "scope": "Applies to alert {alert} of app {app}.",
+      "confirm": "Mute",
+      "cancel": "Cancel",
+      "done": "Alert muted."
+    },
+    "costs": {
+      "title": "Cost per request",
+      "description": "Cost over {days} days against the requests the gateway counted, and what the app requests against what it uses.",
+      "per1k": "Per 1,000 requests",
+      "total": "Cost over {days} days",
+      "requests": "Requests over {days} days",
+      "noTraffic": "No request measured: no cost per request yet.",
+      "noMetrics": "Requests appear once the platform metrics store is connected.",
+      "waste": "Requests against real usage",
+      "cpu": "CPU: {used} of {requested} cores used (p95)",
+      "ram": "Memory: {used} of {requested} GiB used (p99)",
+      "idle": "{value} idle",
+      "noUsage": "Usage is not measured yet.",
+      "hints": "Savings",
+      "monthly": "{amount} per month",
+      "noHints": "Nothing to save: requests fit the usage."
     }
   }
 }

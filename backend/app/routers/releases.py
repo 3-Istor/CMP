@@ -74,6 +74,7 @@ from app.services.release.view import (
     promote_patch,
     skip_patch,
 )
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/deployments", tags=["Releases"])
 
@@ -333,6 +334,9 @@ def promote_release(
         if not view.in_progress or view.phase == "Aborted":
             raise _conflict("No release in progress.")
         _forbid_force(view)
+        # Skips the remaining canary steps in prod: a person with a passkey
+        # does it in the CMP, never an assistant.
+        assert_step_up(token)
         if payload.reason is None:
             raise HTTPException(
                 status_code=422,
@@ -488,7 +492,7 @@ async def _load_all(
     deployment: Deployment,
 ) -> tuple[str, str, list[tuple[str, Any, str]]]:
     gh_token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
     loaded = []
     for file_path in _release_files(deployment):
         values, sha = await _load_values_file(gh_token, repo, file_path)

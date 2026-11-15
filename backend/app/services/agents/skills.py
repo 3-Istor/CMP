@@ -20,7 +20,7 @@ from app.services.agents import repo as repo_ops
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def _front_matter(text: str) -> dict:
 
 
 async def _refresh() -> None:
-    token = await get_installation_token(settings.GITHUB_INSTALLATION_ID)
+    token = await get_org_installation_token()
     root = settings.AGENT_KIT_SKILLS_PATH.strip("/")
     paths = await repo_ops.list_files(
         token, settings.AGENT_KIT_REPO, settings.AGENT_KIT_BRANCH

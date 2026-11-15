@@ -41,7 +41,10 @@ export type Capability =
   | "finops.view"
   | "finops.act"
   | "finops.editBudget"
-  | "agents.configure";
+  | "agents.configure"
+  | "topology.view"
+  | "topology.link"
+  | "import.manage";
 
 /**
  * The weakest role that holds each capability.
@@ -71,7 +74,21 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "finops.act": "admin",
   "finops.editBudget": "owner",
   "agents.configure": "admin",
+  // Mirrors backend routers/topology.py and routers/imports.py.
+  "topology.view": "member",
+  "topology.link": "admin",
+  "import.manage": "admin",
 };
+
+/**
+ * What the security-auditor platform group reads on every project, whatever
+ * its project role. Mirrors backend routers/topology.py.
+ */
+const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(["topology.view"]);
+
+export function canAsPlatform(platformRoles: readonly string[], capability: Capability): boolean {
+  return platformRoles.includes("security-auditor") && AUDITOR_CAPABILITIES.has(capability);
+}
 
 /**
  * Return true if *role* holds *capability*.

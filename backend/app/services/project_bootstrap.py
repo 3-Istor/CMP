@@ -12,8 +12,7 @@ The Terraform module is expected to be located in the cloned templates repositor
 
 Terraform variables injected:
   project_name, target_cloud, keycloak_url, keycloak_client_id and
-  keycloak_client_secret (or the legacy keycloak_admin_username and
-  keycloak_admin_password), vault_url, vault_token,
+  keycloak_client_secret, vault_url, vault_token,
   github_token, discord_webhook_url
 """
 
@@ -27,9 +26,17 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.models.project import ProjectStatus
-from app.services import keycloak_admin, metrics_isolation, vault_auth
+from app.services import (
+    aws_tfstate,
+    keycloak_admin,
+    metrics_isolation,
+    vault_auth,
+)
 from app.services.environments import staging_realm
-from app.services.github_service import GitHubAppError, get_installation_token
+from app.services.github_service import (
+    GitHubAppError,
+    get_org_installation_token,
+)
 from app.services.project_status import delete_project_row, set_project_status
 from app.services.state_lock import (
     StateLockedError,
@@ -177,9 +184,7 @@ def run_project_bootstrap(
     # cnp-projects repository), minted once and reused for init + apply
     try:
         github_token = (
-            asyncio.run(
-                get_installation_token(settings.GITHUB_INSTALLATION_ID)
-            )
+            asyncio.run(get_org_installation_token())
             if settings.GITHUB_INSTALLATION_ID
             else ""
         )
@@ -329,9 +334,7 @@ def run_project_teardown(
     # provider can authenticate while destroying GitHub resources.
     try:
         github_token = (
-            asyncio.run(
-                get_installation_token(settings.GITHUB_INSTALLATION_ID)
-            )
+            asyncio.run(get_org_installation_token())
             if settings.GITHUB_INSTALLATION_ID
             else ""
         )
@@ -541,12 +544,14 @@ def _run_once(
     env["TF_DATA_DIR"] = str(work_dir / ".terraform")
 
     # ── S3 backend credentials ────────────────────────────────────────────
-    if settings.TF_BACKEND_AWS_ACCESS_KEY_ID:
+    if settings.TF_BACKEND_AWS_ACCESS_KEY_ID and not aws_tfstate.enabled():
         env["AWS_ACCESS_KEY_ID"] = settings.TF_BACKEND_AWS_ACCESS_KEY_ID
         env["AWS_SECRET_ACCESS_KEY"] = (
             settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY
         )
         env["AWS_DEFAULT_REGION"] = settings.TF_BACKEND_AWS_REGION
+
+    aws_tfstate.apply_terraform_env(env)
 
     env.update(vault_auth.terraform_env())
     env.update(keycloak_admin.terraform_env())

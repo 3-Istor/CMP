@@ -1,0 +1,209 @@
+{
+  "project": "demo",
+  "observed_available": true,
+  "generated_at": "2026-11-13T09:00:00+00:00",
+  "nodes": [
+    {
+      "id": "demo-app",
+      "app": "demo-app",
+      "kind": "static",
+      "components": [
+        "app"
+      ],
+      "public": true,
+      "hostname": "demo-app-demo.3istor.com",
+      "health": "healthy",
+      "sync": "synced",
+      "asleep": false,
+      "digest": null,
+      "imported": false,
+      "backing_kind": null,
+      "ports": [],
+      "linkable": false,
+      "deployment_id": 1,
+      "in_registry": true
+    },
+    {
+      "id": "frontend",
+      "app": "frontend",
+      "kind": "service",
+      "components": [
+        "app"
+      ],
+      "public": true,
+      "hostname": "frontend-demo.3istor.com",
+      "health": "healthy",
+      "sync": "synced",
+      "asleep": false,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "imported": true,
+      "backing_kind": null,
+      "ports": [
+        {
+          "name": "http",
+          "port": 80
+        }
+      ],
+      "linkable": true,
+      "deployment_id": null,
+      "in_registry": true
+    },
+    {
+      "id": "user-service",
+      "app": "user-service",
+      "kind": "service",
+      "components": [
+        "app"
+      ],
+      "public": false,
+      "hostname": null,
+      "health": "healthy",
+      "sync": "synced",
+      "asleep": false,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "imported": true,
+      "backing_kind": null,
+      "ports": [
+        {
+          "name": "http",
+          "port": 8081
+        }
+      ],
+      "linkable": true,
+      "deployment_id": null,
+      "in_registry": true
+    },
+    {
+      "id": "post-service",
+      "app": "post-service",
+      "kind": "service",
+      "components": [
+        "app"
+      ],
+      "public": false,
+      "hostname": null,
+      "health": "degraded",
+      "sync": "synced",
+      "asleep": false,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "imported": true,
+      "backing_kind": null,
+      "ports": [
+        {
+          "name": "http",
+          "port": 8082
+        }
+      ],
+      "linkable": true,
+      "deployment_id": null,
+      "in_registry": true
+    },
+    {
+      "id": "mongodb",
+      "app": "mongodb",
+      "kind": "backing",
+      "components": [
+        "app"
+      ],
+      "public": false,
+      "hostname": null,
+      "health": "healthy",
+      "sync": "synced",
+      "asleep": false,
+      "digest": null,
+      "imported": true,
+      "backing_kind": "mongodb",
+      "ports": [
+        {
+          "name": "mongodb",
+          "port": 27017
+        }
+      ],
+      "linkable": true,
+      "deployment_id": null,
+      "in_registry": true
+    },
+    {
+      "id": "redis",
+      "app": "redis",
+      "kind": "backing",
+      "components": [
+        "app"
+      ],
+      "public": false,
+      "hostname": null,
+      "health": "healthy",
+      "sync": "synced",
+      "asleep": true,
+      "digest": null,
+      "imported": true,
+      "backing_kind": "redis",
+      "ports": [
+        {
+          "name": "redis",
+          "port": 6379
+        }
+      ],
+      "linkable": true,
+      "deployment_id": null,
+      "in_registry": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "frontend->user-service:user-service",
+      "from": "frontend",
+      "to": "user-service",
+      "port": 8081,
+      "alias": "user-service",
+      "declared": true,
+      "observed": {
+        "rps": 1.5,
+        "count": 5400,
+        "last_seen": "2026-11-13T09:00:00+00:00",
+        "verdict": "forwarded"
+      },
+      "state": "declared_observed"
+    },
+    {
+      "id": "user-service->mongodb:mongodb",
+      "from": "user-service",
+      "to": "mongodb",
+      "port": 27017,
+      "alias": "mongodb",
+      "declared": true,
+      "observed": null,
+      "state": "declared_only"
+    },
+    {
+      "id": "post-service->redis",
+      "from": "post-service",
+      "to": "redis",
+      "port": null,
+      "alias": null,
+      "declared": false,
+      "observed": {
+        "rps": 0.2,
+        "count": 700,
+        "last_seen": "2026-11-13T09:00:00+00:00",
+        "verdict": "forwarded"
+      },
+      "state": "observed_only"
+    },
+    {
+      "id": "demo-app->mongodb",
+      "from": "demo-app",
+      "to": "mongodb",
+      "port": null,
+      "alias": null,
+      "declared": false,
+      "observed": {
+        "rps": 0,
+        "count": 12,
+        "last_seen": null,
+        "verdict": "dropped"
+      },
+      "state": "denied"
+    }
+  ]
+}

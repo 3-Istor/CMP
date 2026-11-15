@@ -8,7 +8,7 @@ are applied here before a record is written. Keep both in sync.
 
 import re
 
-DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+DNS_LABEL = re.compile(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?")
 MAX_LABEL_LENGTH = 63
 FULLSTACK_COMPONENTS = ("frontend", "backend")
 HOSTNAME_DOMAIN = "3istor.com"
@@ -43,7 +43,94 @@ PLATFORM_VAULT_ROLES = frozenset(
     }
 )
 
+# Namespaces the platform runs on the on-prem cluster (kubectl get ns, K3s
+# k8s/) and on the EKS/GKE clusters (Cloud). cnp-project-base gives a project
+# the Namespace, both AppProjects and an operator Role (secrets, pods/exec) in
+# every namespace its names derive, so none may be one of these. The list goes
+# stale as the platform grows: PLATFORM_NAMESPACE_PREFIXES catches the usual
+# families, the CMP also refuses a derived namespace that already exists
+# without the project's label, and the project ApplicationSets run with
+# FailOnSharedResource. Keep in sync with cnp-projects validate-registry.py.
+PLATFORM_NAMESPACES = frozenset(
+    {
+        "3istor-sessions",
+        "argo-rollouts",
+        "argocd",
+        "arcl-cmp",
+        "cert-manager",
+        "cilium-secrets",
+        "cloudflared",
+        "cnp-projects-db",
+        "cnp-vpn",
+        "cnpg-system",
+        "compliance",
+        "default",
+        "demo-app",
+        "dev-sandbox",
+        "envoy-gateway-system",
+        "finops",
+        "garage",
+        "garage-s3",
+        "gateway-infra",
+        "keycloak",
+        "kolla",
+        "kube-node-lease",
+        "kube-public",
+        "kube-system",
+        "kyverno",
+        "linmap-bot",
+        "local-path-storage",
+        "mepa-app",
+        "n8n",
+        "observability",
+        "offhours-guard",
+        "opencost",
+        "qcm",
+        "release-lab",
+        "roadmap",
+        "rook-ceph",
+        "status",
+        "trivy-system",
+        "vault",
+        "vault-secrets-operator",
+        "wireguard",
+    }
+)
+PLATFORM_NAMESPACE_PREFIXES = (
+    "argo-",
+    "argocd-",
+    "arcl-",
+    "cert-manager-",
+    "cilium-",
+    "cnpg-",
+    "envoy-",
+    "gateway-",
+    "keycloak-",
+    "kube-",
+    "kyverno-",
+    "observability-",
+    "rook-",
+    "trivy-",
+    "vault-",
+)
+# AppProjects the platform owns: a project's tenant AppProject takes its name.
+PLATFORM_PROJECT_NAMES = frozenset({"default"})
+
 DerivedName = tuple[str, str, str]
+
+
+def is_platform_namespace(namespace: str) -> bool:
+    return namespace in PLATFORM_NAMESPACES or namespace.startswith(
+        PLATFORM_NAMESPACE_PREFIXES
+    )
+
+
+def _platform_namespace_errors(names: list[DerivedName]) -> list[str]:
+    return [
+        f"{source} would be '{name}', a namespace of the platform"
+        for kind, name, source in names
+        if kind == "namespace" and is_platform_namespace(name)
+    ]
 
 
 def app_vault_roles(project: str, app_name: str) -> list[str]:
@@ -137,6 +224,11 @@ def project_name_of(record: dict) -> str | None:
     return name if isinstance(name, str) else None
 
 
+def app_hostname(project: str, app_name: str) -> str:
+    """The hostname the app modules give an app, whether or not it is set."""
+    return f"{app_name}-{project}.{HOSTNAME_DOMAIN}"
+
+
 def check_app_name(project: str, app_name: str) -> list[str]:
     errors: list[str] = []
     if app_name == "system":
@@ -144,6 +236,12 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             f"app 'system' is reserved: namespace '{project}-system' "
             "belongs to the project itself"
         )
+    for kind, name, source in project_names(project):
+        if kind == "hostname" and name == app_hostname(project, app_name):
+            errors.append(
+                f"app '{app_name}' is reserved: hostname '{name}' is "
+                f"{source} of project '{project}'"
+            )
     for role in app_vault_roles(project, app_name):
         if _is_reserved_vault_role(role):
             errors.append(
@@ -152,12 +250,18 @@ def check_app_name(project: str, app_name: str) -> list[str]:
             )
     namespace = f"{project}-{app_name}"
     staging = f"{namespace}{ENVIRONMENT_SUFFIX['staging']}"
+    for environment, candidate in (("prod", namespace), ("staging", staging)):
+        if is_platform_namespace(candidate):
+            errors.append(
+                f"app '{app_name}' gives {environment} namespace "
+                f"'{candidate}', a namespace of the platform"
+            )
     if len(staging) > MAX_LABEL_LENGTH:
         errors.append(
             f"app '{app_name}' gives staging namespace '{staging}' of "
             f"{len(staging)} characters, the limit is {MAX_LABEL_LENGTH}"
         )
-    elif not DNS_LABEL.match(namespace):
+    elif not DNS_LABEL.fullmatch(namespace):
         errors.append(
             f"app '{app_name}' gives namespace '{namespace}' which is "
             "not a valid DNS-1123 label (lowercase alphanumerics and '-' only)"
@@ -199,7 +303,11 @@ def _collisions(
 
 
 def check_new_project(project: str, existing: list[dict]) -> list[str]:
-    return _collisions(project_names(project), _claims(existing, project))
+    names = project_names(project)
+    errors = _platform_namespace_errors(names)
+    if project in PLATFORM_PROJECT_NAMES:
+        errors.append(f"project '{project}' is an AppProject of the platform")
+    return errors + _collisions(names, _claims(existing, project))
 
 
 def check_app(project: str, app: dict, existing: list[dict]) -> list[str]:
@@ -207,10 +315,13 @@ def check_app(project: str, app: dict, existing: list[dict]) -> list[str]:
     Check an app about to be added to, or refreshed in, ``project``.
 
     Apps already in the project's record are not re-checked: only the new
-    entry is, against every other project and against the project's other apps.
+    entry is, against every other project, the project's own names and the
+    project's other apps.
     """
     errors = check_app_name(project, app["name"])
     claims = _claims(existing, project)
+    for kind, name, source in project_names(project):
+        claims.setdefault((kind, name), (project, source))
     for record in existing:
         if project_name_of(record) != project:
             continue

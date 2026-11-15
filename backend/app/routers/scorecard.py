@@ -6,6 +6,7 @@ summarises.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -31,20 +32,24 @@ async def get_scorecard(
     token: CurrentUser,
     db: Session = Depends(get_db),
 ) -> scorecard.Scorecard:
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    deployment = await run_in_threadpool(
+        _get_app_or_404, db, token, deployment_id, ProjectRole.MEMBER
+    )
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
             status_code=400, detail="Only Kubernetes apps have a scorecard."
         )
 
     async def read_readme() -> str | None:
+        try:
+            repo = _extract_repo_full_name(deployment)
+        except HTTPException:
+            return None
         gh_token = await _get_github_token_for_deployment(deployment)
         try:
             content, _ = await get_file_content(
                 installation_token=gh_token,
-                repo_full_name=_extract_repo_full_name(
-                    deployment.github_repo_url or ""
-                ),
+                repo_full_name=repo,
                 file_path="README.md",
             )
         except FileNotInRepoError:

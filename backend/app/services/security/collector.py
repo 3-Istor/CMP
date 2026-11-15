@@ -13,7 +13,6 @@ starts a scan nor calls GitHub or the cluster.
 """
 
 import asyncio
-import json
 import logging
 import time
 from dataclasses import dataclass
@@ -32,8 +31,8 @@ from app.services.github_service import (
     GitHubAppError,
     get_default_branch,
     get_file_content,
-    get_installation_token,
     get_latest_artifact,
+    get_org_installation_token,
 )
 from app.services.kube_client import (
     OUTSIDE_CLUSTER_NOTICE,
@@ -372,16 +371,13 @@ async def collect_github_app(
     deployment = entry.deployments[app.name]
     scan = store.scan_state(db, entry.project, app.name, Source.CI)
     scan.collected_at = now
-    installation_id = json.loads(deployment.app_config or "{}").get(
-        "github_installation_id"
-    )
-    if not app.repo or not installation_id:
+    if not app.repo:
         scan.status, scan.message = "unavailable", "Pas de repo GitHub lié"
         db.commit()
         return []
 
     try:
-        token = await get_installation_token(installation_id)
+        token = await get_org_installation_token()
         branch = await get_default_branch(token, app.repo)
         artifact = await get_latest_artifact(
             token,

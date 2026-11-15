@@ -1,12 +1,14 @@
 """Reading and committing an app's values files for its environments."""
 
 import json
+import re
 from io import StringIO
 from typing import Any
 
 from ruamel.yaml import YAML
 
 from app.models.deployment import Deployment
+from app.services import app_repo
 from app.services import app_security_data as security_data
 from app.services.environments import layout
 from app.services.github_service import (
@@ -16,10 +18,13 @@ from app.services.github_service import (
     commit_files,
     get_branch_head,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
 )
 
 COMMIT_ATTEMPTS = 3
+# Same rule as ReleaseSettings.smoke_path: the repo can be edited outside the
+# CMP, and a path such as "@host:port/" would change the smoke GET's target.
+_SMOKE_PATH = re.compile(r"^/\S*$")
 
 _yaml = YAML()
 _yaml.preserve_quotes = True
@@ -47,23 +52,17 @@ def target_cloud(deployment: Deployment) -> str:
 
 
 def repo_of(deployment: Deployment) -> str:
-    if not deployment.github_repo_url:
-        raise GitOpsError("This app has no GitHub repository linked yet.")
-    return "/".join(
-        deployment.github_repo_url.rstrip("/")
-        .removesuffix(".git")
-        .split("/")[-2:]
-    )
-
-
-async def token_for(deployment: Deployment) -> str:
-    installation_id = json.loads(deployment.app_config or "{}").get(
-        "github_installation_id"
-    )
-    if not installation_id:
-        raise GitOpsError("No GitHub installation is linked to this app.")
     try:
-        return await get_installation_token(installation_id)
+        return app_repo.bound_repo(
+            deployment.github_repo_url, deployment.name, deployment.status
+        )
+    except app_repo.RepoNotBound as exc:
+        raise GitOpsError(str(exc)) from exc
+
+
+async def token_for(_deployment: Deployment) -> str:
+    try:
+        return await get_org_installation_token()
     except GitHubAppError as exc:
         raise GitOpsError(f"GitHub token: {exc}") from exc
 
@@ -109,11 +108,12 @@ async def read_base(
 
 def smoke_path(values: dict[str, Any]) -> str:
     release = values.get("release") or {}
-    return (
-        (release.get("smoke") or {}).get("path")
-        or (values.get("monitoring") or {}).get("path")
-        or "/"
-    )
+    path = (release.get("smoke") or {}).get("path") or (
+        values.get("monitoring") or {}
+    ).get("path")
+    if isinstance(path, str) and _SMOKE_PATH.match(path) and len(path) <= 200:
+        return path
+    return "/"
 
 
 async def commit(token: str, repo: str, build, message: str) -> str:

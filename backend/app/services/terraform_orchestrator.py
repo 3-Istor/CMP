@@ -8,6 +8,7 @@ Manages the full lifecycle of Terraform-based deployments:
 - Destroy resources
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -15,10 +16,16 @@ from pathlib import Path
 
 import httpx
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
-from app.services import customer_identity, notifications
-from app.services.github_service import get_installation_token
+from app.services import app_inputs, customer_identity, notifications
+from app.services.app_repo import is_platform_repo_name, repo_url_for
+from app.services.github_service import (
+    GitHubAppError,
+    get_org_installation_token,
+)
+from app.services.observability import reconcile as obs_reconcile
 from app.services.template_repository import get_repository
 from app.services.terraform_executor import create_executor
 
@@ -54,86 +61,6 @@ def run_deployment(deployment_id: int) -> None:
         )
 
         try:
-            # Parse user configuration
-            logger.debug("Parsing app_config...")
-            app_config = json.loads(deployment.app_config or "{}")
-            logger.info(f"Original app_config keys: {list(app_config.keys())}")
-
-            # CRITICAL: Inject app_name from deployment name
-            # This ensures Terraform resources are named correctly
-            app_config["app_name"] = deployment.name
-            logger.debug(f"Injected app_name={deployment.name} into config")
-
-            # CRITICAL: Inject project_name (required by k3s-gitops-app template)
-            if "project_name" not in app_config:
-                if deployment.project_id:
-                    app_config["project_name"] = deployment.project_id
-                    logger.debug(
-                        f"Injected project_name={deployment.project_id} from deployment.project_id"
-                    )
-                else:
-                    # Fallback for deployments without project_id
-                    app_config["project_name"] = "default"
-                    logger.warning(
-                        "No project_id found, using default project_name='default'"
-                    )
-
-            # CRITICAL: Generate GitHub token for deployment
-            # The token is NOT stored in app_config (security), so we must generate it
-            if (
-                "github_installation_id" in app_config
-                and "github_token" not in app_config
-            ):
-                logger.info(
-                    "Generating GitHub installation token for deployment..."
-                )
-                try:
-                    import asyncio
-
-                    installation_token = asyncio.run(
-                        get_installation_token(
-                            int(app_config["github_installation_id"])
-                        )
-                    )
-                    app_config["github_token"] = installation_token
-                    logger.info("GitHub token generated successfully")
-
-                    # Remove github_installation_id from app_config before passing to Terraform
-                    # The template only needs github_token, not the installation_id
-                    del app_config["github_installation_id"]
-                    logger.debug(
-                        "Removed github_installation_id from app_config (not needed by Terraform)"
-                    )
-                except Exception as token_error:
-                    logger.error(
-                        f"Failed to generate GitHub token: {token_error}"
-                    )
-                    raise RuntimeError(
-                        f"Cannot deploy without GitHub token: {token_error}"
-                    )
-            elif deployment.template_id == "k3s-gitops-app":
-                if "github_token" not in app_config:
-                    error_msg = (
-                        "DEPLOYMENT BLOCKED: Missing GitHub Integration\n\n"
-                        "The k3s-gitops-app template requires:\n"
-                        "  • 'github_installation_id' in app_config\n"
-                        "  • 'project_name' in app_config\n\n"
-                        f"Current app_config keys: {list(app_config.keys())}\n"
-                        f"Expected keys: github_installation_id, project_name, github_owner, template_repo_name, app_type\n\n"
-                        "SOLUTION:\n"
-                        "1. User must link GitHub account in Account page\n"
-                        "2. Frontend must include github_installation_id in app_config\n"
-                        "3. Frontend must include project_name in app_config\n\n"
-                        "See: DEPLOYMENT_API_REQUIREMENTS.md for details"
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
-
-            logger.info(f"Final app_config keys: {list(app_config.keys())}")
-            logger.debug(
-                f"App config values (sanitized): {_sanitize_config_for_logging(app_config)}"
-            )
-
             # Get template from repository
             logger.debug("Fetching template from repository...")
             repo = get_repository()
@@ -158,6 +85,20 @@ def run_deployment(deployment_id: int) -> None:
                 )
 
             logger.debug(f"Template path verified: {template_path}")
+
+            app_config = _terraform_variables(deployment, template)
+            # App repos live in the org: a stored installation ID was sent by
+            # the client and is never used to mint a token.
+            if deployment.template_id == "k3s-gitops-app":
+                try:
+                    app_config["github_token"] = asyncio.run(
+                        get_org_installation_token()
+                    )
+                except GitHubAppError as token_error:
+                    raise RuntimeError(
+                        f"Cannot deploy without GitHub token: {token_error}"
+                    ) from token_error
+            logger.info(f"Terraform variables: {sorted(app_config)}")
 
             # Create Terraform executor
             logger.debug("Creating Terraform executor...")
@@ -238,10 +179,11 @@ def run_deployment(deployment_id: int) -> None:
             # present; the k3s-gitops-app template doesn't expose a
             # github_repo_url output, so reconstruct it from the deterministic
             # naming (repo name = app name, created under the GitHub org).
+            # Set only here, after a successful apply: the repository
+            # resource fails on an existing name, so this repo is the app's.
             repo_url = outputs.get("github_repo_url")
             if not repo_url and deployment.template_id == "k3s-gitops-app":
-                owner = app_config.get("github_owner", "3-Istor")
-                repo_url = f"https://github.com/{owner}/{deployment.name}"
+                repo_url = repo_url_for(deployment.name)
             if repo_url:
                 deployment.github_repo_url = repo_url
             if outputs.get("argocd_app_name"):
@@ -260,8 +202,6 @@ def run_deployment(deployment_id: int) -> None:
             if deployment.template_id == "k3s-gitops-app" and outputs.get(
                 "hostname"
             ):
-                import asyncio
-
                 from app.services.project_registry import (
                     RegistryError,
                     register_app,
@@ -326,6 +266,7 @@ def run_deployment(deployment_id: int) -> None:
                 f"Running - {output_msg}",
             )
             _notify(deployment, "deployment_succeeded")
+            obs_reconcile.request_sync()
 
             logger.info("=" * 80)
             logger.info(f"Deployment {deployment_id} completed successfully")
@@ -355,6 +296,9 @@ def backfill_gitops_repo_urls() -> None:
     Fill in ``github_repo_url`` for existing k3s-gitops-app deployments that
     predate repo-URL persistence. Idempotent: only touches rows where the column
     is empty. Safe to run on every startup.
+
+    Only rows whose apply went through (running or degraded): a failed row
+    never created its repository, and its name may be another app's.
     """
     db = SessionLocal()
     try:
@@ -362,6 +306,9 @@ def backfill_gitops_repo_urls() -> None:
             db.query(Deployment)
             .filter(
                 Deployment.template_id == "k3s-gitops-app",
+                Deployment.status.in_(
+                    [DeploymentStatus.RUNNING, DeploymentStatus.DEGRADED]
+                ),
                 (Deployment.github_repo_url.is_(None))
                 | (Deployment.github_repo_url == ""),
             )
@@ -369,13 +316,9 @@ def backfill_gitops_repo_urls() -> None:
         )
         updated = 0
         for d in rows:
-            owner = "3-Istor"
-            try:
-                cfg = json.loads(d.app_config or "{}")
-                owner = cfg.get("github_owner", owner)
-            except Exception:  # noqa: BLE001, best-effort config parse
-                pass
-            d.github_repo_url = f"https://github.com/{owner}/{d.name}"
+            if is_platform_repo_name(d.name):
+                continue
+            d.github_repo_url = repo_url_for(d.name)
             updated += 1
         if updated:
             db.commit()
@@ -450,82 +393,22 @@ def run_deletion(deployment_id: int) -> None:
                 f"Terraform executor created (working_dir={executor.working_dir})"
             )
 
-            # Parse original config for destroy
-            logger.debug("Parsing original app_config...")
-            app_config = json.loads(deployment.app_config or "{}")
-
-            # CRITICAL: Inject app_name for destroy to match apply
-            app_config["app_name"] = deployment.name
-            logger.debug(f"Injected app_name={deployment.name} into config")
-
-            # CRITICAL: Inject project_name (required by k3s-gitops-app template)
-            if "project_name" not in app_config:
-                if deployment.project_id:
-                    app_config["project_name"] = deployment.project_id
-                    logger.debug(
-                        f"Injected project_name={deployment.project_id} from deployment.project_id"
-                    )
-                else:
-                    # Fallback for old deployments without project_id
-                    app_config["project_name"] = "default"
-                    logger.warning(
-                        "No project_id found, using default project_name='default'"
-                    )
-
-            # CRITICAL: Regenerate GitHub token for destroy
-            # The token is NOT stored in app_config (security), so we must regenerate it
-            if "github_installation_id" in app_config:
-                logger.info(
-                    "Regenerating GitHub installation token for destroy..."
-                )
+            app_config = _terraform_variables(deployment, template)
+            # The token is never stored: mint one, or pass a placeholder so
+            # Terraform does not prompt for it.
+            app_config["github_token"] = "dummy-token-for-destroy"
+            if deployment.template_id == "k3s-gitops-app":
                 try:
-                    import asyncio
-
-                    installation_token = asyncio.run(
-                        get_installation_token(
-                            int(app_config["github_installation_id"])
-                        )
+                    app_config["github_token"] = asyncio.run(
+                        get_org_installation_token()
                     )
-                    app_config["github_token"] = installation_token
-                    logger.info("GitHub token regenerated successfully")
-
-                    # Remove github_installation_id from app_config before passing to Terraform
-                    # The template only needs github_token, not the installation_id
-                    del app_config["github_installation_id"]
-                    logger.debug(
-                        "Removed github_installation_id from app_config (not needed by Terraform)"
-                    )
-                except Exception as token_error:
+                except GitHubAppError as token_error:
                     logger.warning(
-                        f"Failed to regenerate GitHub token: {token_error}"
+                        f"Failed to regenerate GitHub token, destroying "
+                        f"anyway (GitHub resources may need manual cleanup): "
+                        f"{token_error}"
                     )
-                    logger.warning(
-                        "Continuing with destroy anyway (GitHub resources may need manual cleanup)"
-                    )
-                    # Remove github_installation_id even if token generation failed
-                    if "github_installation_id" in app_config:
-                        del app_config["github_installation_id"]
-                    # Set a dummy token to prevent Terraform from prompting
-                    app_config["github_token"] = "dummy-token-for-destroy"
-            else:
-                logger.warning("No github_installation_id in config")
-                logger.warning(
-                    "This deployment may have been created before GitHub integration"
-                )
-                # For k3s-gitops-app template, github_token is required
-                # Set a dummy token to prevent Terraform from blocking on input
-                if deployment.template_id == "k3s-gitops-app":
-                    logger.warning(
-                        "Setting dummy github_token for k3s-gitops-app template"
-                    )
-                    app_config["github_token"] = "dummy-token-for-destroy"
-
-            logger.info(
-                f"App config keys for destroy: {list(app_config.keys())}"
-            )
-            logger.debug(
-                f"App config values (sanitized): {_sanitize_config_for_logging(app_config)}"
-            )
+            logger.info(f"Terraform variables: {sorted(app_config)}")
 
             # Initialize Terraform backend before destroy
             logger.info("─" * 80)
@@ -563,8 +446,6 @@ def run_deletion(deployment_id: int) -> None:
                 deployment.template_id == "k3s-gitops-app"
                 and deployment.project_id
             ):
-                import asyncio
-
                 from app.services.project_registry import (
                     RegistryError,
                     unregister_app,
@@ -585,6 +466,8 @@ def run_deletion(deployment_id: int) -> None:
                         exc,
                     )
 
+            # The name is free again: another app may now own that repo.
+            deployment.github_repo_url = None
             _update(
                 db,
                 deployment,
@@ -592,6 +475,7 @@ def run_deletion(deployment_id: int) -> None:
                 "Resources destroyed",
             )
             _notify(deployment, "app_deleted")
+            obs_reconcile.request_sync()
 
             logger.info("=" * 80)
             logger.info(f"Deletion {deployment_id} completed successfully")
@@ -731,18 +615,11 @@ def _format_outputs_message(outputs: dict) -> str:
     return f"{first_key}: {outputs[first_key]}"
 
 
-def _sanitize_config_for_logging(config: dict) -> dict:
-    """
-    Sanitize sensitive values in config for logging.
-    Replaces tokens, passwords, and secrets with [REDACTED].
-    """
-    sanitized = {}
-    sensitive_keys = ["github_token", "password", "token", "secret", "key"]
-
-    for key, value in config.items():
-        if any(sensitive in key.lower() for sensitive in sensitive_keys):
-            sanitized[key] = "[REDACTED]"
-        else:
-            sanitized[key] = value
-
-    return sanitized
+def _terraform_variables(deployment: Deployment, template: dict) -> dict:
+    return app_inputs.terraform_variables(
+        template.get("variables", []),
+        deployment.app_config,
+        app_name=deployment.name,
+        project_name=deployment.project_id or "default",
+        gitops=deployment.template_id == "k3s-gitops-app",
+    )

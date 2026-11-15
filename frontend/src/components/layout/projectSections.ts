@@ -5,6 +5,7 @@ import {
   Settings,
   History,
   LayoutDashboard,
+  Network,
   Shield,
   Users,
   Wallet,
@@ -13,6 +14,7 @@ import {
 
 export type ProjectSectionKey =
   | "overview"
+  | "topology"
   | "members"
   | "costs"
   | "security"
@@ -30,6 +32,12 @@ export interface ProjectSectionEntry {
 
 export const PROJECT_SECTIONS: Record<ProjectSectionKey, ProjectSectionEntry> = {
   overview: { key: "overview", segment: "", icon: LayoutDashboard },
+  topology: {
+    key: "topology",
+    segment: "topology",
+    icon: Network,
+    capability: "topology.view",
+  },
   members: {
     key: "members",
     segment: "members",

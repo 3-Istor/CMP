@@ -77,11 +77,23 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _service_url(host: str, port: int, smoke_path: str) -> httpx.URL:
+    """Only the path and query come from the app: the authority stays fixed."""
+    path, _, query = smoke_path.partition("#")[0].partition("?")
+    url = httpx.URL(
+        scheme="http",
+        host=host,
+        port=port,
+        path=path if path.startswith("/") else "/",
+    )
+    return url.copy_with(query=query.encode()) if query else url
+
+
 def _service_urls(
     namespace: str, releases: dict[str, str], paths: dict[str, str]
-) -> dict[str, str]:
+) -> dict[str, httpx.URL]:
     """component -> URL of its main Service (not the canary's -stable/-canary pair)."""
-    urls: dict[str, str] = {}
+    urls: dict[str, httpx.URL] = {}
     for component, release in releases.items():
         services = kube_list(
             f"/api/v1/namespaces/{namespace}/services",
@@ -96,9 +108,10 @@ def _service_urls(
         if main:
             service = main[0]
             port = service["spec"]["ports"][0]["port"]
-            urls[component] = (
-                f"http://{service['metadata']['name']}.{namespace}.svc.cluster.local:"
-                f"{port}{paths.get(component, '/')}"
+            urls[component] = _service_url(
+                f"{service['metadata']['name']}.{namespace}.svc.cluster.local",
+                port,
+                paths.get(component, "/"),
             )
     return urls
 

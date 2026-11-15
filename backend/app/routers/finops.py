@@ -1200,7 +1200,7 @@ async def _apply_patch_to_gitops(
 
     try:
         token = await _get_github_token_for_deployment(deployment)
-        repo = _extract_repo_full_name(deployment.github_repo_url)
+        repo = _extract_repo_full_name(deployment)
         raw_content, sha = await get_file_content(
             installation_token=token,
             repo_full_name=repo,

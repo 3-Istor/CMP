@@ -11,7 +11,9 @@ import {
   FolderKanban,
   History,
   Home,
+  KeyRound,
   Shield,
+  UserCheck,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -26,13 +28,21 @@ export type PageKey =
   | "security"
   | "activity"
   | "alerts"
-  | "assistants";
+  | "assistants"
+  | "access"
+  | "accessReviews";
 
 export interface PageEntry {
   key: PageKey;
   href: string;
   icon: LucideIcon;
   isActive: (pathname: string) => boolean;
+  /** Shown only to members of one of these platform groups. */
+  platformRoles?: string[];
+}
+
+export function isPageVisible(page: PageEntry, roles: string[]): boolean {
+  return !page.platformRoles || page.platformRoles.some((r) => roles.includes(r));
 }
 
 export const HOME_PAGE: PageEntry = {
@@ -89,6 +99,21 @@ export const PLATFORM_PAGES: PageEntry[] = [
     href: "/connect-ai",
     icon: Bot,
     isActive: (pathname) => pathname.startsWith("/connect-ai"),
+  },
+  {
+    key: "access",
+    href: "/access",
+    icon: KeyRound,
+    isActive: (pathname) =>
+      pathname === "/access" || pathname.startsWith("/access/"),
+    platformRoles: ["infra"],
+  },
+  {
+    key: "accessReviews",
+    href: "/access-reviews",
+    icon: UserCheck,
+    isActive: (pathname) => pathname.startsWith("/access-reviews"),
+    platformRoles: ["infra", "security-auditor"],
   },
 ];
 

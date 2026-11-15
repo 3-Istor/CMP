@@ -19,11 +19,13 @@ from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
+from app.services import app_config_policy, app_inputs, app_repo
 from app.services import app_security_data as security_data
 from app.services import audit, terraform_orchestrator
 from app.services.authz import (
@@ -38,9 +40,10 @@ from app.services.deletion_protection import assert_deletable
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
-    get_installation_token,
+    get_org_installation_token,
     put_file_content,
 )
+from app.services.imports.service import imported_app_names
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     get_current_user,
@@ -52,6 +55,7 @@ from app.services.project_registry import (
     RegistryError,
     ensure_app_names_free,
 )
+from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/deployments", tags=["Deployments"])
 
@@ -212,19 +216,34 @@ async def create_deployment(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
+    if (
+        payload.template_id == "k3s-gitops-app"
+        and app_repo.is_platform_repo_name(payload.name)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{payload.name}' is the name of a platform "
+            "repository: choose another app name.",
+        )
+
+    if imported_app_names(db, payload.project_id) & {payload.name}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{payload.name}' is held by a repository import of the "
+            "project: choose another app name.",
+        )
+
+    fields = [f.model_dump() for f in template.fields]
+    try:
+        app_config = app_inputs.validate_request(
+            fields, payload.app_config, payload.project_id
+        )
+    except app_inputs.InvalidAppConfig as exc:
+        raise HTTPException(status_code=422, detail=exc.problems) from exc
+    app_config.update(app_inputs.platform_values(fields))
+    app_config["project_name"] = project_name = payload.project_id
+
     if payload.template_id == "k3s-gitops-app":
-        # Terraform deploys into app_config.project_name, not project_id: the
-        # two must agree or an admin of one project could deploy into another.
-        project_name = payload.app_config.get("project_name")
-        if project_name and project_name != payload.project_id:
-            raise HTTPException(
-                status_code=400,
-                detail="app_config.project_name must match project_id.",
-            )
-        if payload.project_id:
-            payload.app_config["project_name"] = project_name = (
-                payload.project_id
-            )
         # Forced from the DB: the Vault role mount depends on it, and a project
         # admin must not pick another cloud's mount.
         project_row = (
@@ -234,21 +253,25 @@ async def create_deployment(
         )
         cloud = project_row.target_cloud if project_row else TargetCloud.ONPREM
         await ensure_cluster_up(cloud)
-        payload.app_config["target_cloud"] = cloud.value
-        if project_name:
-            try:
-                await ensure_app_names_free(
-                    project_name,
-                    payload.name,
-                    payload.app_config.get("app_type", "static"),
-                )
-            except NameCollisionError as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
-            except RegistryError as exc:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Could not check the project registry: {exc}",
-                ) from exc
+        app_config["target_cloud"] = cloud.value
+        try:
+            await ensure_app_names_free(
+                project_name,
+                payload.name,
+                (
+                    "fullstack"
+                    if app_config.get("template_repo_name")
+                    == app_inputs.FULLSTACK_TEMPLATE_REPO
+                    else "static"
+                ),
+            )
+        except NameCollisionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except RegistryError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not check the project registry: {exc}",
+            ) from exc
 
     deployment = Deployment(
         name=payload.name,
@@ -263,7 +286,7 @@ async def create_deployment(
             else payload.provider_type
         ),
         project_id=payload.project_id,
-        app_config=json.dumps(payload.app_config),
+        app_config=json.dumps(app_config),
         status=DeploymentStatus.PENDING,
         step_message="Queued...",
         created_via=(token.get("cnp_agent") or {}).get("client"),
@@ -392,6 +415,15 @@ async def delete_deployment(
     Refused with 409 while the project's deletion protection is on.
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
+    assert_step_up(token)
+    if deployment.template_id.startswith("import-"):
+        # Its values live in cnp-projects and its namespace outlives Argo CD:
+        # only removing the import cleans both up.
+        raise HTTPException(
+            status_code=409,
+            detail="This app comes from a repository import: delete the "
+            "import from the project's Imports tab.",
+        )
     if deployment.status in (
         DeploymentStatus.DELETING,
         DeploymentStatus.DELETED,
@@ -452,23 +484,14 @@ def _get_kubernetes_deployment_or_404(
     return deployment
 
 
-def _extract_repo_full_name(github_repo_url: str) -> str:
-    """
-    Extract ``owner/repo`` from a GitHub HTTPS URL.
-
-    Examples:
-      ``https://github.com/3-istor/my-app``  → ``"3-istor/my-app"``
-      ``https://github.com/3-istor/my-app.git`` → ``"3-istor/my-app"``
-    """
-    # Strip trailing .git and take the last two path segments
-    clean = github_repo_url.rstrip("/").removesuffix(".git")
-    parts = clean.split("/")
-    if len(parts) < 2:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Cannot parse GitHub repo from URL: '{github_repo_url}'",
+def _extract_repo_full_name(deployment: Deployment) -> str:
+    """``owner/repo`` of the repository created for *deployment*, or 409."""
+    try:
+        return app_repo.bound_repo(
+            deployment.github_repo_url, deployment.name, deployment.status
         )
-    return "/".join(parts[-2:])
+    except app_repo.RepoNotBound as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _deep_merge(base: Any, updates: Any) -> Any:
@@ -493,30 +516,18 @@ def _deep_merge(base: Any, updates: Any) -> Any:
     return updates
 
 
-async def _get_github_token_for_deployment(deployment: Deployment) -> str:
+async def _get_github_token_for_deployment(_deployment: Deployment) -> str:
     """
     Retrieve a fresh GitHub installation token for the given deployment.
 
-    The installation ID is read from the deployment's ``app_config`` JSON.
+    App repositories live in the platform org, so the org installation is
+    used. The installation ID a client stored in ``app_config`` is ignored.
 
     Raises:
-        HTTPException 400, if no installation ID is stored.
         HTTPException 502, if GitHub token exchange fails.
     """
-    app_config: dict = json.loads(deployment.app_config or "{}")
-    installation_id: str | None = app_config.get("github_installation_id")
-
-    if not installation_id:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No GitHub installation ID found for this deployment. "
-                "The user must link their GitHub account first."
-            ),
-        )
-
     try:
-        return await get_installation_token(installation_id)
+        return await get_org_installation_token()
     except GitHubAppError as exc:
         raise HTTPException(
             status_code=502,
@@ -570,7 +581,7 @@ async def get_deployment_config(
     file_path = _config_file_for(app_type, component)
     # Named gh_token so it cannot shadow the caller's JWT above.
     gh_token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
 
     try:
         raw_content, sha = await get_file_content(
@@ -615,7 +626,7 @@ async def update_deployment_config(
                 "summary": "Enable database",
                 "value": {
                     "_sha": "abc123def456...",
-                    "database": {"enabled": True, "name": "my-app-db"},
+                    "db": {"enabled": True, "name": "my-app-db"},
                 },
             },
             "scale_replicas": {
@@ -636,6 +647,8 @@ async def update_deployment_config(
     - ``_sha`` *(required)*, the file SHA returned by ``GET /config``.
       GitHub uses this to prevent concurrent write conflicts (409 Conflict).
     - Any other keys to merge into the YAML file (supports nested objects).
+      Only the values in ``app_config_policy.EDITABLE_PREFIXES`` may change;
+      the others (project_name, secrets.*, ...) may only be echoed unchanged.
 
     **Merge strategy**: deep merge, existing keys not mentioned in the
     payload are preserved, including YAML comments.
@@ -649,6 +662,7 @@ async def update_deployment_config(
         403, Caller is not an admin of the application's project.
         404, Deployment not found.
         409, SHA conflict (another commit was pushed in between) or repo not linked.
+        422, The payload changes a value the platform manages.
         502, GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
@@ -675,7 +689,7 @@ async def update_deployment_config(
 
     # Named gh_token so it cannot shadow the caller's JWT above.
     gh_token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
 
     # ── 1. Fetch current file content ────────────────────────────────────
     try:
@@ -704,6 +718,16 @@ async def update_deployment_config(
         raise HTTPException(
             status_code=500,
             detail=f"'{file_path}' does not contain a YAML mapping.",
+        )
+
+    forbidden = app_config_policy.forbidden_changes(parsed, payload)
+    if forbidden:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "These values are managed by the platform and cannot be "
+                f"changed here: {', '.join(forbidden)}."
+            ),
         )
 
     audit.note(request, file=file_path, changes=audit.changes(parsed, payload))
@@ -794,7 +818,7 @@ async def get_security_data(
     )
 
     token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
     exposure_file, database_file = security_data.values_files_for(
         _app_type_of(deployment)
     )
@@ -844,7 +868,7 @@ async def update_security_data(
     )
 
     token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment.github_repo_url)
+    repo = _extract_repo_full_name(deployment)
     exposure_file, database_file = security_data.values_files_for(
         _app_type_of(deployment)
     )
