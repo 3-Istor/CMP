@@ -55,6 +55,8 @@ const K8S_VERB_KEYS: Record<string, string> = {
 const APP_ACTION_KEYS: Record<string, string> = {
   "app.sleep": "appSleep",
   "app.wake": "appWake",
+  "app.pause": "appPause",
+  "app.resume": "appResume",
   "app.restart": "appRestart",
   "app.icon.update": "iconUpdate",
   "app.icon.reset": "iconReset",

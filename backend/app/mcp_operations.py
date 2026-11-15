@@ -139,22 +139,29 @@ async def _optional(caller: Caller, path: str, **kwargs) -> Any:
 async def app_power(
     app_id: int,
     action: Annotated[
-        Literal["restart", "sleep", "wake"],
+        Literal["restart", "sleep", "wake", "pause", "resume"],
         Field(
             description="restart: roll the pods (same version). sleep: stop "
-            "it until woken, it costs nothing meanwhile. wake: start it again."
+            "it until woken, it costs nothing meanwhile. wake: start it again. "
+            "pause: stop it until resumed, the scheduled wake no longer starts "
+            "it (admin). resume: start a paused app (admin)."
         ),
     ],
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
 ) -> dict:
-    """Restart, put to sleep or wake an app."""
+    """Restart, put to sleep, wake, pause or resume an app."""
     caller = Caller()
+    permanent = action in ("pause", "resume")
     _, stop = await _app_gate(
         caller,
         app_id,
-        "app.restart" if action == "restart" else "app.sleep",
-        minimum=ProjectRole.MEMBER,
+        {
+            "restart": "app.restart",
+            "pause": "app.pause",
+            "resume": "app.pause",
+        }.get(action, "app.sleep"),
+        minimum=ProjectRole.ADMIN if permanent else ProjectRole.MEMBER,
         tool="app_power",
         arguments={"app_id": app_id, "action": action},
         summary=f"{action.capitalize()} the app '{{app}}'?",

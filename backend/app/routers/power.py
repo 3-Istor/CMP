@@ -20,9 +20,12 @@ CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 
 def _kubernetes_app(
-    db: Session, token: dict, deployment_id: int
+    db: Session,
+    token: dict,
+    deployment_id: int,
+    minimum: ProjectRole = ProjectRole.MEMBER,
 ) -> Deployment:
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    deployment = _get_app_or_404(db, token, deployment_id, minimum)
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
             status_code=400,
@@ -53,13 +56,21 @@ async def get_power(
         state = await asyncio.to_thread(power.read, deployment, cloud)
     except KubeUnavailableError as exc:
         raise _unavailable(exc) from exc
-    return {"asleep": state.asleep, "scheduled": state.scheduled}
+    return {
+        "asleep": state.asleep,
+        "scheduled": state.scheduled,
+        "paused": state.paused,
+    }
 
 
 async def _move(
-    deployment_id: int, token: dict, db: Session, target: str
+    deployment_id: int,
+    token: dict,
+    db: Session,
+    target: str,
+    minimum: ProjectRole = ProjectRole.MEMBER,
 ) -> dict[str, int]:
-    deployment = _kubernetes_app(db, token, deployment_id)
+    deployment = _kubernetes_app(db, token, deployment_id, minimum)
     cloud = project_cloud(db, deployment.project_id)
     try:
         moved = await asyncio.to_thread(
@@ -90,6 +101,26 @@ async def wake_deployment(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> dict[str, int]:
     return await _move(deployment_id, token, db, power.MANUAL_WAKE)
+
+
+@router.post("/{deployment_id}/pause")
+async def pause_deployment(
+    deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
+) -> dict[str, int]:
+    """Scale to zero until resumed: the offhours wake cron no longer starts it."""
+    return await _move(
+        deployment_id, token, db, power.PAUSED, ProjectRole.ADMIN
+    )
+
+
+@router.post("/{deployment_id}/resume")
+async def resume_deployment(
+    deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
+) -> dict[str, int]:
+    """Start a paused app; its offhours schedule applies again afterwards."""
+    return await _move(
+        deployment_id, token, db, power.MANUAL_WAKE, ProjectRole.ADMIN
+    )
 
 
 @router.post("/{deployment_id}/restart")

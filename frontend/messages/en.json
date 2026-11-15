@@ -1032,6 +1032,8 @@
       "detail": "({detail})",
       "appSleep": "put {app} to sleep",
       "appWake": "woke {app}",
+      "appPause": "paused {app}",
+      "appResume": "resumed {app}",
       "appRestart": "restarted {app}",
       "iconUpdate": "changed the icon of {app}",
       "iconReset": "reset the icon of {app}",
@@ -1923,7 +1925,9 @@
       "projectDeleting": "Deletion of project {name} started",
       "protectedOn": "Deletion protection turned on",
       "protectedOff": "Deletion protection turned off",
-      "customerAccess": "Customer access saved"
+      "customerAccess": "Customer access saved",
+      "paused": "{name} is paused",
+      "resumed": "{name} is starting"
     },
     "errors": {
       "loadTemplates": "Failed to load templates",
@@ -1933,7 +1937,9 @@
       "notAllowed": "Your role does not allow this action",
       "protect": "Could not change deletion protection: {message}",
       "customerAccess": "Could not change customer access: {message}"
-    }
+    },
+    "pause": "Pause",
+    "resume": "Resume"
   },
   "confirm": {
     "cancel": "Cancel",
@@ -1983,6 +1989,16 @@
       "title": "Turn off deletion protection for {name}?",
       "description": "Admins can then delete the project and its apps.",
       "confirm": "Turn off"
+    },
+    "pause": {
+      "title": "Pause {name}?",
+      "description": "The app stays stopped until someone resumes it: the scheduled wake no longer starts it. Its data is not touched.",
+      "confirm": "Pause"
+    },
+    "resume": {
+      "title": "Resume {name}?",
+      "description": "The app starts now, then follows its sleep schedule again.",
+      "confirm": "Resume"
     }
   },
   "environments": {
