@@ -3,7 +3,7 @@
 # ══════════════════════════════════════════════════════════════════════════
 # This is a placeholder Dockerfile. Replace with your actual build steps.
 
-FROM node:25-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY . .
 # ──────────────────────────────────────────────────────────────────────────
 # Production Stage
 # ──────────────────────────────────────────────────────────────────────────
-FROM node:25-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
