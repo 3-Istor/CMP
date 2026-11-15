@@ -3203,6 +3203,7 @@
     },
     "asleep": "En veille",
     "imported": "Importée",
+    "inboundPort": "Appelée sur le port {port}",
     "staged": "Prévue",
     "confidence": {
       "high": "Sûr",

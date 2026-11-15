@@ -3,18 +3,25 @@
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
+  getSmoothStepPath,
   type Edge,
   type EdgeProps,
 } from "@xyflow/react";
 import { useTranslations } from "next-intl";
 
+import { roundedPath, routeLabelPoint, type Point } from "@/lib/edgeRoute";
 import { cn } from "@/lib/utils";
 import { edgeVisual, type EdgeAction, type GraphEdge } from "@/lib/topology";
 
 export interface StateEdgeData extends Record<string, unknown> {
   edge: GraphEdge;
   dimmed: boolean;
+  /** Another node is hovered and this edge does not touch it. */
+  faded: boolean;
+  /** The layout route, null once an end node was dragged away from it. */
+  route: Point[] | null;
+  /** The label repeats what the target node shows: drawn only when selected. */
+  labelImplied: boolean;
   actions: EdgeAction[];
   onAction?: (edge: GraphEdge, action: EdgeAction) => void;
 }
@@ -38,16 +45,25 @@ export function StateEdge({
   markerEnd,
 }: EdgeProps<StateFlowEdge>) {
   const t = useTranslations("topology");
-  const [path, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-  });
   if (!data) return null;
-  const { edge, dimmed, actions, onAction } = data;
+  const { edge, dimmed, faded, route, labelImplied, actions, onAction } = data;
+  let path: string;
+  let labelX: number;
+  let labelY: number;
+  if (route) {
+    path = roundedPath(route);
+    ({ x: labelX, y: labelY } = routeLabelPoint(route));
+  } else {
+    [path, labelX, labelY] = getSmoothStepPath({
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      sourcePosition,
+      targetPosition,
+      borderRadius: 8,
+    });
+  }
   const visual = edgeVisual(edge.state);
   const label = [
     edge.alias && edge.port ? `${edge.alias}:${edge.port}` : edge.port ? String(edge.port) : null,
@@ -56,6 +72,7 @@ export function StateEdge({
     .filter(Boolean)
     .join(" ");
   const declare = actions.includes("declare");
+  const showLabel = Boolean(label) && (selected || !labelImplied);
 
   return (
     <>
@@ -67,10 +84,11 @@ export function StateEdge({
           stroke: visual.stroke,
           strokeWidth: selected ? visual.width + 1.5 : visual.width,
           strokeDasharray: dimmed ? "2 6" : visual.dash,
-          opacity: dimmed ? 0.5 : 1,
+          opacity: faded ? 0.15 : dimmed ? 0.5 : 1,
+          transition: "opacity 120ms",
         }}
       />
-      {(label || declare) && edge.state !== "entry" && (edge.state !== "draft" || selected) && (
+      {(showLabel || declare) && !faded && edge.state !== "entry" && (edge.state !== "draft" || selected) && (
         <EdgeLabelRenderer>
           <div
             className={cn(
@@ -82,7 +100,7 @@ export function StateEdge({
               pointerEvents: "all",
             }}
           >
-            {label && <span className="font-mono">{label}</span>}
+            {showLabel && <span className="font-mono">{label}</span>}
             {declare && onAction && (
               <button
                 type="button"

@@ -22,6 +22,7 @@ function load(file) {
 
 const topology = load("src/lib/topology.ts");
 const importPlan = load("src/lib/importPlan.ts");
+const edgeRoute = load("src/lib/edgeRoute.ts");
 const plan = JSON.parse(
   readFileSync(new URL("../backend/tests/fixtures/imports/epitweet-plan.json", root), "utf8"),
 );
@@ -367,4 +368,47 @@ test("the security auditor views the topology of any project but cannot link", (
     ],
     [true, false, false],
   );
+});
+
+test("an edge label is implied when the alias is the target name and no traffic is measured", () => {
+  const [declared] = topology.liveGraph({ nodes: [], edges: [edge("api", "db", "declared_only", true)] }).edges;
+
+  assert.equal(topology.edgeLabelImplied(declared, "db"), true);
+});
+
+test("an edge label is kept when the alias differs from the target name", () => {
+  const [declared] = topology.liveGraph({ nodes: [], edges: [edge("api", "db", "declared_only", true)] }).edges;
+
+  assert.equal(topology.edgeLabelImplied({ ...declared, alias: "cache" }, "db"), false);
+});
+
+test("an edge label is kept while traffic is measured", () => {
+  const [declared] = topology.liveGraph({ nodes: [], edges: [edge("api", "db", "declared_observed", true)] }).edges;
+
+  assert.equal(topology.edgeLabelImplied({ ...declared, rps: 3 }, "db"), false);
+});
+
+test("inbound ports list each port a node is called on once, without the entry edge", () => {
+  const graph = topology.liveGraph({
+    nodes: [node("web", { public: true }), node("db", { kind: "backing" })],
+    edges: [edge("web", "db", "declared_only", true), edge("api", "db", "declared_only", true)],
+  });
+
+  assert.deepEqual([...topology.inboundPorts(graph.edges)], [["db", [8080]]]);
+});
+
+test("a route bend is rounded by at most half of its shorter segment", () => {
+  const path = edgeRoute.roundedPath([{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 100 }], 8);
+
+  assert.equal(path, "M0,0 L2,0 Q4,0 4,2 L4,100");
+});
+
+test("a straight route is a single line", () => {
+  assert.equal(edgeRoute.roundedPath([{ x: 0, y: 5 }, { x: 50, y: 5 }]), "M0,5 L50,5");
+});
+
+test("the label of a route sits in the middle of its longest segment", () => {
+  const point = edgeRoute.routeLabelPoint([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 40 }, { x: 200, y: 40 }]);
+
+  assert.deepEqual(point, { x: 105, y: 40 });
 });

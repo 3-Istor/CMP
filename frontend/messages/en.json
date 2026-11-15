@@ -3203,6 +3203,7 @@
     },
     "asleep": "Asleep",
     "imported": "Imported",
+    "inboundPort": "Called on port {port}",
     "staged": "Planned",
     "confidence": {
       "high": "Sure",

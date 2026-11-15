@@ -49,6 +49,8 @@ export interface AppNodeData extends Record<string, unknown> {
   node: GraphNode;
   dimmed: boolean;
   connectable: boolean;
+  /** Ports other apps call this one on: edge labels leave them out. */
+  inboundPorts: number[];
 }
 
 export type AppFlowNode = Node<AppNodeData, "app">;
@@ -61,7 +63,7 @@ const handleClass = (visible: boolean) =>
 
 export function AppNode({ data, selected }: NodeProps<AppFlowNode>) {
   const t = useTranslations("topology");
-  const { node, dimmed, connectable } = data;
+  const { node, dimmed, connectable, inboundPorts } = data;
   const Icon = KIND_ICON[node.kind];
 
   if (node.kind === "internet") {
@@ -123,6 +125,15 @@ export function AppNode({ data, selected }: NodeProps<AppFlowNode>) {
             {t("asleep")}
           </span>
         )}
+        {inboundPorts.map((port) => (
+          <span
+            key={port}
+            title={t("inboundPort", { port })}
+            className="rounded border border-primary/30 bg-primary/5 px-1 font-mono text-primary"
+          >
+            :{port}
+          </span>
+        ))}
         {node.imported && (
           <span className="rounded border px-1 text-muted-foreground">{t("imported")}</span>
         )}
