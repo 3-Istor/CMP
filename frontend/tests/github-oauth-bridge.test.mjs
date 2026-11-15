@@ -41,6 +41,12 @@ function loadShared(env) {
   return exports;
 }
 
+function loadErrorBody() {
+  const exports = {};
+  new vm.Script(transpile("src/lib/errorBody.ts")).runInNewContext({ exports });
+  return exports;
+}
+
 function load(file, { session = { accessToken: cnpToken }, fetch = async () => {
   assert.fail("Unexpected backend request");
 }, env = {}, authFailure = false } = {}) {
@@ -65,6 +71,7 @@ function load(file, { session = { accessToken: cnpToken }, fetch = async () => {
       if (name === "next/server") return { NextRequest, NextResponse };
       if (name === "node:crypto") return dependency(name);
       if (name === "../shared") return loadShared(environment);
+      if (name === "./errorBody") return loadErrorBody();
       if (name === "./stepUp") return { parseStepUpHint: () => null, startStepUp: () => assert.fail("Unexpected step-up") };
       throw new Error(`Unexpected route dependency ${name}`);
     },

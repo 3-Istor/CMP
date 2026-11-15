@@ -404,8 +404,11 @@ async def _choices(
 ) -> tuple[str, str, ReleaseChoices]:
     """The app's GitHub token and repo, and the choices its tags give."""
     try:
-        token = await gitops.token_for(deployment)
         repo = gitops.repo_of(deployment)
+    except gitops.GitOpsError as exc:
+        raise _conflict(str(exc)) from exc
+    try:
+        token = await gitops.token_for(deployment)
         tags = await repo_ops.list_tags(token, repo)
         sha, message = await repo_ops.head_commit(token, repo)
     except (gitops.GitOpsError, GitHubAppError) as exc:

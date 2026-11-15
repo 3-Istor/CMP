@@ -28,7 +28,6 @@ PLATFORM_REPO_NAMES = frozenset(
         "infra-templates",
         "K3s",
         "keycloak-theme",
-        "landing",
         "project-template",
         "talos-config",
         "template-app-webapp-python-fastapi-react",
