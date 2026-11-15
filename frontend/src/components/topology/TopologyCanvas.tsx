@@ -12,6 +12,7 @@ import {
   type Connection,
   type EdgeChange,
   type NodeChange,
+  type NodeMouseHandler,
   type OnSelectionChangeParams,
 } from "@xyflow/react";
 import { Link2Off, Plus, Undo2, X } from "lucide-react";
@@ -22,7 +23,9 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
 import {
   edgeActions,
+  edgeLabelImplied,
   edgeVisual,
+  inboundPorts,
   planLinkKey,
   type EdgeAction,
   type Graph,
@@ -30,7 +33,7 @@ import {
   type GraphNode,
 } from "@/lib/topology";
 import { AppNode, type AppFlowNode } from "./AppNode";
-import { layoutGraph } from "./layout";
+import { layoutGraph, type GraphLayout } from "./layout";
 import { StateEdge, type StateFlowEdge } from "./StateEdge";
 
 const nodeTypes = { app: AppNode };
@@ -75,14 +78,18 @@ export function TopologyCanvas({
 }: TopologyCanvasProps) {
   const t = useTranslations("topology");
   const [theme] = useTheme();
-  const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+  const [layout, setLayout] = useState<GraphLayout>({ positions: new Map(), routes: new Map() });
   const [nodes, setNodes] = useState<AppFlowNode[]>([]);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  // Dragged nodes keep their place over a new layout, and their edges lose the layout route.
+  const [moved, setMoved] = useState<ReadonlySet<string>>(new Set());
   const laidOut = useRef<string>("");
 
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes]);
   const removed = useMemo(() => removedPlanLinks ?? new Set<string>(), [removedPlanLinks]);
   const key = structureKey(graph);
+  const ports = useMemo(() => inboundPorts(graph.edges), [graph.edges]);
 
   useEffect(() => {
     if (laidOut.current === key) return;
@@ -91,7 +98,7 @@ export function TopologyCanvas({
       .then((next) => {
         if (!cancelled) {
           laidOut.current = key;
-          setPositions(next);
+          setLayout(next);
         }
       })
       .catch(() => undefined);
@@ -102,13 +109,13 @@ export function TopologyCanvas({
 
   useEffect(() => {
     setNodes((current) => {
-      const dragged = new Map(current.map((n) => [n.id, n.position]));
+      const dragged = new Map(current.filter((n) => moved.has(n.id)).map((n) => [n.id, n.position]));
       return graph.nodes
-        .filter((node) => positions.has(node.id))
+        .filter((node) => layout.positions.has(node.id))
         .map((node) => ({
           id: node.id,
           type: "app" as const,
-          position: dragged.get(node.id) ?? positions.get(node.id)!,
+          position: dragged.get(node.id) ?? layout.positions.get(node.id)!,
           ariaLabel: t("nodeLabel", {
             name: node.name,
             kind: t(`kind.${node.kind}`),
@@ -120,10 +127,11 @@ export function TopologyCanvas({
             node,
             dimmed: dimmedNodes?.has(node.id) ?? false,
             connectable: linkMode && canEdit && node.linkable,
+            inboundPorts: ports.get(node.id) ?? [],
           },
         }));
     });
-  }, [graph.nodes, positions, linkMode, canEdit, dimmedNodes, t]);
+  }, [graph.nodes, layout, moved, ports, linkMode, canEdit, dimmedNodes, t]);
 
   const edges: StateFlowEdge[] = useMemo(
     () =>
@@ -148,18 +156,35 @@ export function TopologyCanvas({
             data: {
               edge,
               dimmed: edge.planLink ? removed.has(planLinkKey(edge.planLink)) : false,
+              faded: hoveredNode !== null && edge.source !== hoveredNode && edge.target !== hoveredNode,
+              route:
+                moved.has(edge.source) || moved.has(edge.target)
+                  ? null
+                  : (layout.routes.get(edge.id) ?? null),
+              labelImplied: edgeLabelImplied(edge, byId.get(edge.target)?.name),
               actions: edgeActions(edge, byId, canEdit, removed),
               onAction: onEdgeAction,
             },
           };
         }),
-    [graph.edges, byId, selectedEdge, canEdit, removed, onEdgeAction, t],
+    [graph.edges, byId, selectedEdge, hoveredNode, moved, layout, canEdit, removed, onEdgeAction, t],
   );
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange<AppFlowNode>[]) => setNodes((current) => applyNodeChanges(changes, current)),
+  const onNodesChange = useCallback((changes: NodeChange<AppFlowNode>[]) => {
+    setNodes((current) => applyNodeChanges(changes, current));
+    const dragged = changes.flatMap((c) => (c.type === "position" && c.dragging ? [c.id] : []));
+    if (dragged.length > 0) {
+      setMoved((current) =>
+        dragged.every((id) => current.has(id)) ? current : new Set([...current, ...dragged]),
+      );
+    }
+  }, []);
+
+  const onNodeMouseEnter: NodeMouseHandler<AppFlowNode> = useCallback(
+    (_, node) => setHoveredNode(node.id),
     [],
   );
+  const onNodeMouseLeave = useCallback(() => setHoveredNode(null), []);
 
   const handleConnect = useCallback(
     (connection: Connection) => {
@@ -220,6 +245,8 @@ export function TopologyCanvas({
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
         onSelectionChange={handleSelection}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         nodesConnectable={linkMode && canEdit}
         nodesFocusable
         edgesFocusable

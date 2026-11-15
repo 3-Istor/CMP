@@ -115,7 +115,30 @@ export function edgeActions(
   return [];
 }
 
-/** Columns, left to right: public entry, frontends, services, backing. */
+/**
+ * The edge label says nothing the map does not already show: the target name
+ * is on the node and its port in the node's inbound ports.
+ */
+export function edgeLabelImplied(edge: GraphEdge, targetName: string | undefined): boolean {
+  return !edge.rps && (edge.alias === null || edge.alias === targetName);
+}
+
+/** The ports each node is called on, by node id, sorted. */
+export function inboundPorts(edges: GraphEdge[]): Map<string, number[]> {
+  const ports = new Map<string, Set<number>>();
+  for (const edge of edges) {
+    if (edge.state === "entry" || edge.port === null) continue;
+    const set = ports.get(edge.target) ?? new Set<number>();
+    set.add(edge.port);
+    ports.set(edge.target, set);
+  }
+  return new Map([...ports].map(([id, set]) => [id, [...set].sort((a, b) => a - b)]));
+}
+
+/**
+ * Rank 0 is pinned to the first column and rank 3 to the last; the layout
+ * orders the ranks between them by who calls whom.
+ */
 export function nodeRank(kind: GraphNodeKind, isPublic: boolean): number {
   if (kind === "internet") return 0;
   if (kind === "static" || kind === "fullstack") return 1;
