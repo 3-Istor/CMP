@@ -7,7 +7,9 @@ import pytest
 
 from app import mcp_operations as ops
 from app import mcp_server
-from app.services.agents import policy
+from app.core.roles import ProjectRole
+from app.services import audit
+from app.services.agents import internal_api, policy
 
 STOPPED = {"ok": False, "status": "needs_user_confirmation"}
 
@@ -24,6 +26,7 @@ class FakeApi:
                 "project_id": "demo",
                 "k8s_namespace": "demo-shop",
             },
+            "/api/deployments/7/config": {"_sha": "abc", "config": {}},
             **(reads or {}),
         }
 
@@ -43,10 +46,12 @@ def api(monkeypatch):
     caller = SimpleNamespace(
         api=fake,
         require_write=mock.Mock(),
+        require_role=mock.AsyncMock(),
         username="alice",
         grant_id=1,
     )
     monkeypatch.setattr(ops, "Caller", lambda: caller)
+    monkeypatch.setattr(ops.settings, "STEP_UP_ENABLED", False)
     gate = mock.AsyncMock(return_value=("go", None))
     monkeypatch.setattr(ops, "_gate", gate)
     fake.gate = gate
@@ -86,7 +91,6 @@ def test_every_policy_action_used_by_the_tools_is_defined():
         "security.exception",
         "db.backup",
         "db.restore",
-        "alert.update",
     }
 
     assert used <= set(policy.rules()["actions"])
@@ -575,21 +579,255 @@ def test_real_restore_stopped_by_policy_restores_nothing(api):
 # --- alerts ------------------------------------------------------------------
 
 
-def test_update_alert_scopes_to_the_project_and_app(api):
-    run(
-        ops.update_alert("demo", "high-latency", True, {"ms": 500}, app="shop")
-    )
+def test_alert_rules_are_read_for_the_project_and_app(api):
+    run(ops.get_alert_rules("demo", app="shop"))
 
-    assert api.writes() == [
+    assert api.calls == [
         (
-            "PUT",
-            "/api/alerting/high-latency",
-            {
-                "params": {"project": "demo", "app": "shop"},
-                "json": {"enabled": True, "params": {"ms": 500}},
-            },
+            "GET",
+            "/api/alerting",
+            {"params": {"project": "demo", "app": "shop"}},
         )
     ]
+
+
+def test_assistants_cannot_change_or_mute_an_alert():
+    tools = {tool.name for tool in run(mcp_server.mcp.list_tools())}
+
+    assert "update_alert" not in tools
+    assert "alert.update" not in policy.rules()["actions"]
+
+
+# --- roles: checked before anyone is asked to approve ------------------------
+
+
+@pytest.mark.parametrize(
+    "call,project,minimum",
+    [
+        (lambda: ops.app_power(7, "restart"), "demo", ProjectRole.MEMBER),
+        (
+            lambda: ops.update_app_config(7, {"replicaCount": 2}),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (lambda: ops.staging(7, "enable"), "demo", ProjectRole.ADMIN),
+        (lambda: ops.staging(7, "disable"), "demo", ProjectRole.ADMIN),
+        (lambda: ops.staging(7, "wake"), "demo", ProjectRole.MEMBER),
+        (
+            lambda: ops.promotion(
+                7, "accept_step", promotion_id=3, step_index=1
+            ),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (
+            lambda: ops.promotion(7, "cancel", promotion_id=3),
+            "demo",
+            ProjectRole.MEMBER,
+        ),
+        (
+            lambda: ops.set_promotion_policy(7, auto_promote=True),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (
+            lambda: ops.ci_run(7, "start", "prod", suite="smoke"),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (
+            lambda: ops.ci_run(7, "start", "staging", suite="smoke"),
+            "demo",
+            ProjectRole.MEMBER,
+        ),
+        (lambda: ops.release_traffic(7, "start"), "demo", ProjectRole.MEMBER),
+        (
+            lambda: ops.update_release_settings(7, {"strategy": "canary"}),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (
+            lambda: ops.project_member("demo", "add", "bob"),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (lambda: ops.delete_project("demo"), "demo", ProjectRole.ADMIN),
+        (lambda: ops.set_budget("demo", 50), "demo", ProjectRole.OWNER),
+        (
+            lambda: ops.security_scan("demo", "shop"),
+            "demo",
+            ProjectRole.MEMBER,
+        ),
+        (
+            lambda: ops.database_backup("demo", "shop"),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (
+            lambda: ops.database_restore("demo", "shop", "b1"),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+        (
+            lambda: ops.database_restore("demo", "shop", "b1", dry_run=False),
+            "demo",
+            ProjectRole.ADMIN,
+        ),
+    ],
+)
+def test_each_write_checks_the_role_its_route_requires(
+    api, call, project, minimum
+):
+    run(call())
+
+    api.caller.require_role.assert_awaited_once_with(project, minimum)
+
+
+def test_a_member_is_refused_before_any_approval_is_requested(api):
+    api.caller.require_role.side_effect = internal_api.ApiError(
+        403, "Project admins only."
+    )
+
+    result = run(ops.update_release_settings(7, {"strategy": "canary"}))
+
+    assert result["ok"] is False
+    api.gate.assert_not_awaited()
+    assert api.writes() == []
+
+
+# --- journal: every write an assistant makes leaves an audit event ----------
+
+
+EVERY_WRITE = [
+    lambda: ops.app_power(7, "restart"),
+    lambda: ops.app_power(7, "sleep"),
+    lambda: ops.app_power(7, "wake"),
+    lambda: ops.update_app_config(7, {"replicaCount": 2}),
+    lambda: ops.staging(7, "enable"),
+    lambda: ops.staging(7, "disable"),
+    lambda: ops.staging(7, "wake"),
+    lambda: ops.staging(7, "schedule", sleep_at="0 19 * * 1-5"),
+    lambda: ops.promotion(7, "start"),
+    lambda: ops.promotion(7, "accept_step", promotion_id=3, step_index=1),
+    lambda: ops.promotion(7, "cancel", promotion_id=3),
+    lambda: ops.set_promotion_policy(7, soak_minutes=30),
+    lambda: ops.ci_run(7, "start", suite="smoke"),
+    lambda: ops.ci_run(7, "cancel", run_id=4),
+    lambda: ops.release_traffic(7, "start"),
+    lambda: ops.release_traffic(7, "stop"),
+    lambda: ops.update_release_settings(7, {"strategy": "canary"}),
+    lambda: ops.project_member("demo", "add", "bob"),
+    lambda: ops.project_member("demo", "remove", "bob"),
+    lambda: ops.delete_project("demo"),
+    lambda: ops.set_budget("demo", 50),
+    lambda: ops.cost_recommendation("demo", "r1", "apply"),
+    lambda: ops.cost_recommendation("demo", "r1", "ignore"),
+    lambda: ops.cost_recommendation("demo", "r1", "notify"),
+    lambda: ops.security_scan("demo", "shop"),
+    lambda: ops.request_security_exception(
+        "demo", "fp1", "accepted_risk", "Only reachable from the VPN."
+    ),
+    lambda: ops.database_backup("demo", "shop"),
+    lambda: ops.database_restore("demo", "shop", "b1", dry_run=False),
+]
+
+
+@pytest.mark.parametrize("call", EVERY_WRITE)
+def test_every_route_an_operations_tool_writes_to_is_journaled(api, call):
+    api.reads["/api/finops/recommendations"] = [
+        {"id": "r1", "title": "t", "app_name": "shop"}
+    ]
+
+    run(call())
+
+    writes = api.writes()
+    assert writes
+    unjournaled = [
+        (method, path)
+        for method, path, _ in writes
+        if audit.match_action(method, path)[0] is None
+    ]
+    assert not unjournaled
+
+
+# --- passkey: what the CMP gates behind a step-up stays in the CMP ----------
+
+
+def test_starting_a_promotion_is_refused_when_the_cmp_asks_for_a_passkey(
+    api, monkeypatch
+):
+    monkeypatch.setattr(ops.settings, "STEP_UP_ENABLED", True)
+
+    result = run(ops.promotion(7, "start", rollback_to=4, user_confirmed=True))
+
+    assert result["status"] == "not_allowed_for_assistants"
+    api.gate.assert_not_awaited()
+    assert api.writes() == []
+
+
+def test_deleting_a_project_is_refused_when_the_cmp_asks_for_a_passkey(
+    api, monkeypatch
+):
+    monkeypatch.setattr(ops.settings, "STEP_UP_ENABLED", True)
+
+    result = run(ops.delete_project("demo", user_confirmed=True))
+
+    assert result["status"] == "not_allowed_for_assistants"
+    api.gate.assert_not_awaited()
+    assert api.writes() == []
+
+
+def test_cancelling_a_promotion_needs_no_passkey(api, monkeypatch):
+    monkeypatch.setattr(ops.settings, "STEP_UP_ENABLED", True)
+
+    run(ops.promotion(7, "cancel", promotion_id=3))
+
+    assert api.writes()[0][1] == "/api/deployments/7/promotions/3/cancel"
+
+
+# --- config: only the values a project admin may change ----------------------
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"secrets": {"vaultRole": "platform-admin"}},
+        {"project_name": "other"},
+        {"ingress": {"host": "cmp.example.org"}},
+    ],
+)
+def test_update_app_config_refuses_platform_values_before_approval(
+    api, changes
+):
+    api.reads["/api/deployments/7/config"] = {
+        "_sha": "abc",
+        "config": {
+            "project_name": "demo",
+            "secrets": {"vaultRole": "demo-shop"},
+            "ingress": {"host": "shop.example.org", "enabled": True},
+        },
+    }
+
+    result = run(ops.update_app_config(7, changes))
+
+    assert result["ok"] is False
+    api.gate.assert_not_awaited()
+    assert api.writes() == []
+
+
+def test_update_app_config_accepts_platform_values_echoed_unchanged(api):
+    api.reads["/api/deployments/7/config"] = {
+        "_sha": "abc",
+        "config": {"secrets": {"vaultRole": "demo-shop"}, "replicaCount": 1},
+    }
+
+    run(
+        ops.update_app_config(
+            7, {"secrets": {"vaultRole": "demo-shop"}, "replicaCount": 3}
+        )
+    )
+
+    assert api.writes()[0][2]["json"]["replicaCount"] == 3
 
 
 # --- slow writes -------------------------------------------------------------

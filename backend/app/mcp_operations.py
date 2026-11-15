@@ -1,12 +1,14 @@
 """
 MCP tools for running apps and projects after they exist: power, config,
 staging and promotions, CI runs, canary traffic, members, costs, security,
-database backups and alerts.
+database backups and alert rules.
 
 Every tool calls the CMP API with the user's token, so the API keeps checking
-roles; ``_gate`` adds the stake policy on top (policy.yaml). Approving an
-assistant or a promotion, deletion protection, customer access and finance
-admin stay in the CMP on purpose (CNP-233).
+roles; the tool checks the same role first, so nobody is asked to approve a
+call the API would refuse, and ``_gate`` adds the stake policy on top
+(policy.yaml). Approving an assistant or a promotion, anything behind a
+passkey, deletion protection, customer access, finance admin and muting
+alerts stay in the CMP on purpose (CNP-233, CNP-185 D21).
 """
 
 from datetime import date, datetime
@@ -15,6 +17,8 @@ from typing import Annotated, Any, Literal
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from app.core.config import settings
+from app.core.roles import ProjectRole
 from app.mcp_server import (
     PENDING,
     PUBLIC_URL,
@@ -22,9 +26,11 @@ from app.mcp_server import (
     Caller,
     _bounded,
     _gate,
+    _passkey_only,
     mcp,
     tool_errors,
 )
+from app.services import app_config_policy
 
 # Values keys with a tool and a rule of their own (a restore is a db.restore
 # patch, release is release.settings), or that switch off a safety net.
@@ -48,16 +54,22 @@ async def _app_gate(
     app_id: int,
     action: str,
     *,
+    minimum: ProjectRole,
     tool: str,
     arguments: dict,
     summary: str,
     user_confirmed: bool,
     confirmation_id: str | None = None,
+    passkey: bool = False,
 ) -> tuple[dict, dict | None]:
     """The app, and the answer to return instead when the policy stops it.
-    ``{app}`` in ``summary`` becomes the app's name."""
+    ``{app}`` in ``summary`` becomes the app's name. *passkey*: the route
+    asks for a passkey step-up, which an assistant never holds."""
     caller.require_write()
     app = await caller.api("GET", f"/api/deployments/{app_id}")
+    await caller.require_role(app["project_id"], minimum)
+    if passkey and (refused := _passkey_only(app)):
+        return app, refused
     verdict, answer = await _gate(
         caller,
         action,
@@ -78,13 +90,24 @@ async def _project_gate(
     project: str,
     action: str,
     *,
+    minimum: ProjectRole,
     tool: str,
     arguments: dict,
     summary: str,
     user_confirmed: bool,
     confirmation_id: str | None = None,
+    passkey: bool = False,
 ) -> dict | None:
     caller.require_write()
+    await caller.require_role(project, minimum)
+    if passkey and settings.STEP_UP_ENABLED:
+        return {
+            "ok": False,
+            "status": "not_allowed_for_assistants",
+            "message": "This action needs a passkey: the user does it in "
+            "the CMP.",
+            "cmp_link": f"{PUBLIC_URL}/projects/{project}",
+        }
     verdict, answer = await _gate(
         caller,
         action,
@@ -131,6 +154,7 @@ async def app_power(
         caller,
         app_id,
         "app.restart" if action == "restart" else "app.sleep",
+        minimum=ProjectRole.MEMBER,
         tool="app_power",
         arguments={"app_id": app_id, "action": action},
         summary=f"{action.capitalize()} the app '{{app}}'?",
@@ -199,10 +223,23 @@ async def update_app_config(
             )
         )
     caller = Caller()
+    params = {"component": component} if component else None
+    view = await caller.api(
+        "GET", f"/api/deployments/{app_id}/config", params=params
+    )
+    forbidden = app_config_policy.forbidden_changes(
+        view.get("config", {}), changes
+    )
+    if forbidden:
+        raise ValueError(
+            "These values are managed by the platform and cannot be "
+            f"changed: {', '.join(forbidden)}."
+        )
     _, stop = await _app_gate(
         caller,
         app_id,
         "app.config",
+        minimum=ProjectRole.ADMIN,
         tool="update_app_config",
         arguments={
             "app_id": app_id,
@@ -215,10 +252,6 @@ async def update_app_config(
     )
     if stop:
         return stop
-    params = {"component": component} if component else None
-    view = await caller.api(
-        "GET", f"/api/deployments/{app_id}/config", params=params
-    )
     result = await caller.api(
         "PATCH",
         f"/api/deployments/{app_id}/config",
@@ -303,6 +336,7 @@ async def staging(
         caller,
         app_id,
         "staging.manage",
+        minimum=ProjectRole.MEMBER if action == "wake" else ProjectRole.ADMIN,
         tool="staging",
         arguments=arguments,
         summary={
@@ -363,8 +397,9 @@ async def promotion(
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
 ) -> dict:
-    """Promote staging to prod, accept a step, or cancel. A promotion that
-    needs an approval is approved by a person in the CMP."""
+    """Follow a promotion of staging to prod: accept a step, or cancel it.
+    Starting one (rollbacks included) asks for a passkey, so the user does it
+    in the CMP; so does approving one."""
     if action != "start" and promotion_id is None:
         raise ValueError("promotion_id is required; see get_environments.")
     if action == "accept_step" and step_index is None:
@@ -385,6 +420,11 @@ async def promotion(
         caller,
         app_id,
         "release.abort" if action == "cancel" else "release.promote",
+        minimum=(
+            ProjectRole.MEMBER
+            if action == "cancel" or (action == "start" and not emergency)
+            else ProjectRole.ADMIN
+        ),
         tool="promotion",
         arguments=arguments,
         summary={
@@ -402,6 +442,7 @@ async def promotion(
         }[action],
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        passkey=action == "start",
     )
     if stop:
         return stop
@@ -464,6 +505,7 @@ async def set_promotion_policy(
         caller,
         app_id,
         "promotion.policy",
+        minimum=ProjectRole.ADMIN,
         tool="set_promotion_policy",
         arguments={"app_id": app_id, **changes},
         summary=f"Change the promotion policy of '{{app}}': {changes}?",
@@ -505,6 +547,11 @@ async def ci_run(
         caller,
         app_id,
         "ci.run",
+        minimum=(
+            ProjectRole.ADMIN
+            if action == "start" and environment == "prod"
+            else ProjectRole.MEMBER
+        ),
         tool="ci_run",
         arguments={
             "app_id": app_id,
@@ -563,6 +610,7 @@ async def release_traffic(
         caller,
         app_id,
         "release.traffic",
+        minimum=ProjectRole.MEMBER,
         tool="release_traffic",
         arguments={
             "app_id": app_id,
@@ -614,6 +662,7 @@ async def update_release_settings(
         caller,
         app_id,
         "release.settings",
+        minimum=ProjectRole.ADMIN,
         tool="update_release_settings",
         arguments={"app_id": app_id, "changes": changes},
         summary=f"Change the release settings of '{{app}}': {changes}?",
@@ -661,6 +710,7 @@ async def project_member(
         caller,
         project,
         "project.members",
+        minimum=ProjectRole.ADMIN,
         tool="project_member",
         arguments={
             "project": project,
@@ -698,17 +748,20 @@ async def delete_project(
     confirmation_id: str | None = None,
 ) -> dict:
     """Delete an empty project (delete its apps first with delete_app). Only
-    sandbox and demo projects; elsewhere a person does it in the CMP."""
+    sandbox and demo projects, and only while the CMP does not ask for a
+    passkey; otherwise a person does it in the CMP."""
     caller = Caller()
     stop = await _project_gate(
         caller,
         project,
         "project.delete",
+        minimum=ProjectRole.ADMIN,
         tool="delete_project",
         arguments={"project": project},
         summary=f"Delete the project '{project}'? This cannot be undone.",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        passkey=True,
     )
     if stop:
         return stop
@@ -758,12 +811,14 @@ async def set_budget(
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
 ) -> dict:
-    """Set the monthly budget of a project and when it alerts (percent)."""
+    """Set the monthly budget of a project and when it alerts (percent).
+    Only the project's owner may."""
     caller = Caller()
     stop = await _project_gate(
         caller,
         project,
         "finops.budget",
+        minimum=ProjectRole.OWNER,
         tool="set_budget",
         arguments={
             "project": project,
@@ -822,6 +877,7 @@ async def cost_recommendation(
         caller,
         project,
         "finops.apply" if action == "apply" else "finops.triage",
+        minimum=ProjectRole.ADMIN,
         tool="cost_recommendation",
         arguments={
             "project": project,
@@ -903,6 +959,7 @@ async def security_scan(
         caller,
         project,
         "security.scan",
+        minimum=ProjectRole.MEMBER,
         tool="security_scan",
         arguments={"project": project, "app": app, "source": source},
         summary=f"Scan '{app}' in '{project}' again ({source})?",
@@ -962,6 +1019,7 @@ async def request_security_exception(
         caller,
         project,
         "security.exception",
+        minimum=ProjectRole.MEMBER,
         tool="request_security_exception",
         arguments={
             "project": project,
@@ -1029,6 +1087,7 @@ async def database_backup(
         caller,
         project,
         "db.backup",
+        minimum=ProjectRole.ADMIN,
         tool="database_backup",
         arguments={"project": project, "app": app},
         summary=f"Back up the database of '{app}' now?",
@@ -1076,6 +1135,7 @@ async def database_restore(
             caller,
             project,
             "db.restore",
+            minimum=ProjectRole.ADMIN,
             tool="database_restore",
             arguments={**body, "dry_run": False},
             summary=f"Replace the database of '{app}' with the backup "
@@ -1089,6 +1149,7 @@ async def database_restore(
             return stop
     else:
         caller.require_write()
+        await caller.require_role(project, ProjectRole.ADMIN)
     result = await caller.api(
         "POST",
         "/api/security/restores",
@@ -1105,57 +1166,10 @@ async def database_restore(
 
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
-async def list_alerts(project: str, app: str | None = None) -> dict:
-    """The alerts a project or app can have, whether each is on, and its
-    thresholds."""
+async def get_alert_rules(project: str, app: str | None = None) -> dict:
+    """The alert rules a project or app can have, whether each is on, and
+    its thresholds. What fires now is get_alerts. Changing a rule or muting
+    one is done by the user in the CMP."""
     caller = Caller()
     params = {"project": project} | ({"app": app} if app else {})
     return await caller.api("GET", "/api/alerting", params=params)
-
-
-@mcp.tool(annotations=WRITE)
-@tool_errors
-async def update_alert(
-    project: str,
-    alert_id: Annotated[str, Field(description="From list_alerts")],
-    enabled: bool,
-    params: Annotated[
-        dict[str, int] | None,
-        Field(description="Thresholds to change, names from list_alerts"),
-    ] = None,
-    app: str | None = None,
-    user_confirmed: bool = False,
-    confirmation_id: str | None = None,
-) -> dict:
-    """Switch an alert on or off, or change its thresholds."""
-    caller = Caller()
-    stop = await _project_gate(
-        caller,
-        project,
-        "alert.update",
-        tool="update_alert",
-        arguments={
-            "project": project,
-            "alert_id": alert_id,
-            "enabled": enabled,
-            "params": params or {},
-            "app": app,
-        },
-        summary=f"{'Enable' if enabled else 'Disable'} the alert {alert_id} "
-        f"in '{project}'"
-        + (f" for '{app}'" if app else "")
-        + (f" with {params}" if params else "")
-        + "?",
-        user_confirmed=user_confirmed,
-        confirmation_id=confirmation_id,
-    )
-    if stop:
-        return stop
-    query = {"project": project} | ({"app": app} if app else {})
-    result = await caller.api(
-        "PUT",
-        f"/api/alerting/{alert_id}",
-        params=query,
-        json={"enabled": enabled, "params": params or {}},
-    )
-    return {"ok": True, "alert": result}

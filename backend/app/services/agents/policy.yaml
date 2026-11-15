@@ -41,11 +41,10 @@ actions:
   finops.budget:        {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   finops.apply:         {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   finops.triage:        {sandbox: allow, demo: allow, standard: allow, critical: ask}
-  security.scan:        {sandbox: allow, demo: allow, standard: allow, critical: allow}
+  security.scan:        {sandbox: allow, demo: allow, standard: allow, critical: ask}
   security.exception:   {sandbox: ask,   demo: ask,   standard: confirm, critical: confirm}
   db.backup:            {sandbox: allow, demo: allow, standard: allow, critical: ask}
   db.restore:           {sandbox: ask,   demo: ask,   standard: confirm, critical: confirm}
-  alert.update:         {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   # Repository import (CNP-243). An analysis only reads the repository and
   # deploys nothing; on a critical project the user still says yes. The
   # plan an assistant proposes is applied by a person in the CMP, with a

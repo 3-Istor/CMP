@@ -123,6 +123,51 @@ ACTIONS: dict[tuple[str, str], str] = {
         "DELETE",
         "/api/deployments/{deployment_id}/release/traffic",
     ): "release.traffic.stop",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/environments/staging",
+    ): "app.staging.enable",
+    (
+        "DELETE",
+        "/api/deployments/{deployment_id}/environments/staging",
+    ): "app.staging.disable",
+    (
+        "PUT",
+        "/api/deployments/{deployment_id}/environments/staging/offhours",
+    ): "app.staging.schedule",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/environments/staging/wake",
+    ): "app.staging.wake",
+    (
+        "PUT",
+        "/api/deployments/{deployment_id}/promotion-policy",
+    ): "app.promotion_policy.update",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/environments/{environment}/runs",
+    ): "app.run.start",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/runs/{run_id}/cancel",
+    ): "app.run.cancel",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/promotions",
+    ): "app.promotion.start",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/promotions/{promotion_id}/approve",
+    ): "app.promotion.approve",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/promotions/{promotion_id}/steps/"
+        "{index}/accept",
+    ): "app.promotion.step.accept",
+    (
+        "POST",
+        "/api/deployments/{deployment_id}/promotions/{promotion_id}/cancel",
+    ): "app.promotion.cancel",
     ("PUT", "/api/deployments/{deployment_id}/icon"): "app.icon.update",
     ("DELETE", "/api/deployments/{deployment_id}/icon"): "app.icon.reset",
     ("POST", "/api/deployments/{deployment_id}/sleep"): "app.sleep",
