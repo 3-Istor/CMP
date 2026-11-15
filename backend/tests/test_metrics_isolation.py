@@ -86,3 +86,108 @@ def test_a_new_namespace_rewrites_the_config():
 def test_render_refuses_empty_namespaces():
     with pytest.raises(ValueError):
         mi.render({"": "shop"})
+
+
+def test_without_new_stores_the_config_is_the_legacy_one_byte_for_byte():
+    legacy = {
+        "users": [
+            {
+                "username": mi.username(p),
+                "password": mi.password(p),
+                "url_prefix": mi.url_prefix(
+                    sorted(n for n, q in NS.items() if q == p)
+                ),
+            }
+            for p in ("shop", "shopping")
+        ]
+    }
+
+    assert mi.render(NS, {"shop": 7}) == json.dumps(legacy, indent=2) + "\n"
+
+
+@pytest.fixture
+def stores():
+    with (
+        mock.patch.object(mi.settings, "OBS_VMSINGLE_URL", "http://vms:8428"),
+        mock.patch.object(mi.settings, "OBS_VLOGS_URL", "http://vl:9428"),
+        mock.patch.object(mi.settings, "OBS_VTRACES_URL", "http://vt:10428"),
+    ):
+        yield
+
+
+def _entries(project, accounts=None):
+    user = {
+        u["username"]: u
+        for u in json.loads(mi.render(NS, accounts or {"shop": 7}))["users"]
+    }[f"project-{project}"]
+    return user
+
+
+def test_with_stores_a_user_has_no_catch_all_route(stores):
+    user = _entries("shop")
+
+    assert ("url_prefix" in user, len(user["url_map"])) == (False, 3)
+
+
+def test_traces_force_the_projects_own_tenant(stores):
+    traces = _entries("shop")["url_map"][2]
+
+    assert traces["headers"] == ["AccountID: 7", "ProjectID: 0"]
+
+
+def test_a_project_without_a_tenant_gets_no_traces_route(stores):
+    assert len(_entries("shopping")["url_map"]) == 2
+
+
+def test_logs_pin_every_filter_spelling_and_the_single_tenant(stores):
+    logs = _entries("shop")["url_map"][1]
+    query = parse_qs(urlsplit(logs["url_prefix"]).query)
+
+    assert (
+        query["extra_filters"],
+        query["extra_filters[]"],
+        query["extra_stream_filters"],
+        query["extra_stream_filters[]"],
+        logs["headers"],
+    ) == (
+        ['namespace:in("shop-system","shop-web")'],
+        ['namespace:in("shop-system","shop-web")'],
+        ['{namespace in ("shop-system","shop-web")}'],
+        ['{namespace in ("shop-system","shop-web")}'],
+        ["AccountID: 0", "ProjectID: 0"],
+    )
+
+
+def test_the_logs_filter_is_an_exact_namespace_filter_never_project(stores):
+    logs = _entries("shop")["url_map"][1]
+    query = parse_qs(urlsplit(logs["url_prefix"]).query)
+
+    assert not any("project" in v for values in query.values() for v in values)
+
+
+def test_metrics_go_to_vmsingle_with_both_filter_spellings(stores):
+    metrics = _entries("shop")["url_map"][0]
+    query = parse_qs(urlsplit(metrics["url_prefix"]).query)
+
+    assert (
+        metrics["url_prefix"].startswith("http://vms:8428?"),
+        set(query),
+    ) == (True, {"extra_filters", "extra_filters[]"})
+
+
+def test_no_route_reaches_admin_write_or_tenant_paths(stores):
+    paths = [p for e in _entries("shop")["url_map"] for p in e["src_paths"]]
+
+    assert not any(
+        word in p
+        for p in paths
+        for word in (
+            "tenant_ids",
+            "delete",
+            "internal",
+            "insert",
+            "import",
+            "write",
+            "admin",
+        )
+    )

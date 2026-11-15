@@ -121,6 +121,10 @@ EXCLUDED_TABLES: dict[str, tuple[str, str]] = {
         "the actions it took are in the audit journal, which is exported.",
     ),
     "agent_access_tokens": (PLATFORM, "Token hashes: credentials."),
+    "trace_tenants": (
+        PLATFORM,
+        "The trace store's tenant numbers: plumbing, not project data.",
+    ),
     "access_requests": (
         PLATFORM,
         "Just-in-time elevations of platform administrators.",
