@@ -29,6 +29,7 @@ from app.routers import (
     infra,
     links,
     notifications,
+    observability,
     power,
     project_export,
     projects,
@@ -416,6 +417,7 @@ app.include_router(infra.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(observability.router, prefix="/api")
 app.include_router(project_export.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
