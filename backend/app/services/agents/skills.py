@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 
 from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 
 from app.core.config import settings
 from app.services.agents import repo as repo_ops
@@ -45,7 +46,12 @@ def _front_matter(text: str) -> dict:
     end = text.find("\n---", 3)
     if end == -1:
         return {}
-    return YAML(typ="safe").load(text[3:end]) or {}
+    try:
+        meta = YAML(typ="safe").load(text[3:end])
+    except YAMLError as exc:
+        logger.warning("Skipping invalid guide front matter: %s", exc)
+        return {}
+    return meta if isinstance(meta, dict) else {}
 
 
 async def _refresh() -> None:
