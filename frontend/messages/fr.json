@@ -1032,6 +1032,8 @@
       "detail": "({detail})",
       "appSleep": "a mis {app} en veille",
       "appWake": "a réveillé {app}",
+      "appPause": "a mis {app} en pause",
+      "appResume": "a repris {app}",
       "appRestart": "a redémarré {app}",
       "iconUpdate": "a changé l'icône de {app}",
       "iconReset": "a réinitialisé l'icône de {app}",
@@ -1923,7 +1925,9 @@
       "projectDeleting": "Suppression du projet {name} lancée",
       "protectedOn": "Protection contre la suppression activée",
       "protectedOff": "Protection contre la suppression désactivée",
-      "customerAccess": "Accès des clients enregistré"
+      "customerAccess": "Accès des clients enregistré",
+      "paused": "{name} est en pause",
+      "resumed": "{name} redémarre"
     },
     "errors": {
       "loadTemplates": "Impossible de charger les modèles",
@@ -1933,7 +1937,9 @@
       "notAllowed": "Votre rôle ne permet pas cette action",
       "protect": "Échec du changement de protection : {message}",
       "customerAccess": "Échec du changement d'accès des clients : {message}"
-    }
+    },
+    "pause": "Mettre en pause",
+    "resume": "Reprendre"
   },
   "confirm": {
     "cancel": "Annuler",
@@ -1983,6 +1989,16 @@
       "title": "Désactiver la protection contre la suppression de {name} ?",
       "description": "Les admins pourront alors supprimer le projet et ses applications.",
       "confirm": "Désactiver"
+    },
+    "pause": {
+      "title": "Mettre {name} en pause ?",
+      "description": "L'application est arrêtée jusqu'à ce que quelqu'un la reprenne : le réveil planifié ne la relance plus. Ses données ne sont pas touchées.",
+      "confirm": "Mettre en pause"
+    },
+    "resume": {
+      "title": "Reprendre {name} ?",
+      "description": "L'application redémarre maintenant, puis suit à nouveau sa planification de mise en veille.",
+      "confirm": "Reprendre"
     }
   },
   "environments": {

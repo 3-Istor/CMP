@@ -28,6 +28,8 @@ RESTARTED_AT = "kubectl.kubernetes.io/restartedAt"
 
 MANUAL_SLEEP = "MANUAL_SLEEP"
 MANUAL_WAKE = "MANUAL_WAKE"
+# Stays at zero through the wake cron until a manual wake (offhours-guard >= 1.2).
+PAUSED = "PAUSED"
 
 
 class NoScheduleError(Exception):
@@ -42,6 +44,7 @@ class AsleepError(Exception):
 class PowerState:
     asleep: bool
     scheduled: bool
+    paused: bool
 
 
 def prod_namespace(deployment: Deployment) -> str:
@@ -52,7 +55,13 @@ def read(deployment: Deployment, cloud: TargetCloud) -> PowerState:
     namespace = prod_namespace(deployment)
     schedules = kube_list(SCHEDULES.format(ns=namespace), cloud=cloud)
     state = observe.of(deployment, "prod")
-    return PowerState(asleep=state.asleep, scheduled=bool(schedules))
+    paused = any(
+        (schedule.get("status") or {}).get("currentState") == PAUSED
+        for schedule in schedules
+    )
+    return PowerState(
+        asleep=state.asleep, scheduled=bool(schedules), paused=paused
+    )
 
 
 def set_state(deployment: Deployment, target: str, cloud: TargetCloud) -> int:

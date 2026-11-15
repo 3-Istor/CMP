@@ -15,7 +15,7 @@ from app.services import power
 from app.services.environments import observe
 from app.services.environments.observe import ComponentState, EnvironmentState
 from app.services.kube_client import KubeUnavailableError
-from tests.test_release_api import USER_TOKENS, keycloak  # noqa: F401
+from tests.test_release_api import ROLES, USER_TOKENS, keycloak  # noqa: F401
 
 SCHEDULE = {"metadata": {"name": "shop-web-schedule"}}
 
@@ -186,4 +186,48 @@ class TestPowerState:
         with mock.patch.object(observe, "observe", return_value=_state(0)):
             response = client("dev").get("/api/deployments/7/power")
 
-        assert response.json() == {"asleep": True, "scheduled": True}
+        assert response.json() == {
+            "asleep": True,
+            "scheduled": True,
+            "paused": False,
+        }
+
+    def test_the_power_state_reports_a_paused_schedule(self, client, kube):
+        kube.list.return_value = [
+            {**SCHEDULE, "status": {"currentState": "PAUSED"}}
+        ]
+
+        response = client("dev").get("/api/deployments/7/power")
+
+        assert response.json()["paused"] is True
+
+
+class TestPause:
+    @pytest.fixture(autouse=True)
+    def alice_is_admin(self):
+        with mock.patch.dict(ROLES, {("uid-alice", "shop"): "admin"}):
+            yield
+
+    def test_pause_asks_offhours_guard_for_a_permanent_pause(
+        self, client, kube
+    ):
+        response = client("dev").post("/api/deployments/7/pause")
+
+        assert response.json() == {"schedules": 1}
+        assert kube.patch.call_args.args[1] == {
+            "status": {"currentState": "PAUSED"}
+        }
+
+    def test_resume_wakes_the_app_by_hand(self, client, kube):
+        client("dev").post("/api/deployments/7/resume")
+
+        assert kube.patch.call_args.args[1] == {
+            "status": {"currentState": "MANUAL_WAKE"}
+        }
+
+    def test_a_member_cannot_pause_the_app(self, client, kube):
+        with mock.patch.dict(ROLES, {("uid-alice", "shop"): "member"}):
+            response = client("dev").post("/api/deployments/7/pause")
+
+        assert response.status_code == 403
+        kube.patch.assert_not_called()

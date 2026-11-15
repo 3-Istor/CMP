@@ -31,6 +31,8 @@ import {
   getDeletionProtection,
   getDeploymentLinks,
   getPower,
+  pauseDeployment,
+  resumeDeployment,
   restartDeployment,
   sleepDeployment,
   wakeDeployment,
@@ -47,6 +49,8 @@ import {
   Image as ImageIcon,
   MoreHorizontal,
   Moon,
+  Pause,
+  Play,
   RefreshCw,
   Rocket,
   ScrollText,
@@ -91,11 +95,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const ta = useTranslations("actions");
   const tc = useTranslations("confirm");
   const [confirming, setConfirming] = useState<
-    "sleep" | "restart" | "delete" | null
+    "sleep" | "pause" | "resume" | "restart" | "delete" | null
   >(null);
 
   const canDelete = can("app.delete");
   const canEditIcon = can("app.editIcon");
+  const canPause = can("app.pause");
   const [iconOpen, setIconOpen] = useState(false);
   const tIcon = useTranslations("appIcon");
   const canOperate = can("app.operate");
@@ -152,6 +157,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const [power, setPower] = useState<{
     asleep: boolean;
     scheduled: boolean;
+    paused: boolean;
   } | null>(null);
   const [powerFailed, setPowerFailed] = useState(false);
   const loadPower = useCallback(() => {
@@ -194,6 +200,18 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const handleSleep = async () => {
     await sleepDeployment(appId);
     toast.success(ta("toasts.sleeping", { name: current.name }));
+    loadPower();
+  };
+
+  const handlePause = async () => {
+    await pauseDeployment(appId);
+    toast.success(ta("toasts.paused", { name: current.name }));
+    loadPower();
+  };
+
+  const handleResume = async () => {
+    await resumeDeployment(appId);
+    toast.success(ta("toasts.resumed", { name: current.name }));
     loadPower();
   };
 
@@ -381,7 +399,26 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   <DropdownMenuContent align="end" className="min-w-[15rem]">
                     {canOperate && isKubernetes && (
                       <>
-                        {power?.asleep ? (
+                        {canPause && (
+                          <DropdownMenuItem
+                            className="gap-2"
+                            disabled={powerReason() !== null}
+                            onClick={() =>
+                              setConfirming(power?.paused ? "resume" : "pause")
+                            }
+                          >
+                            {power?.paused ? (
+                              <Play className="h-4 w-4" aria-hidden />
+                            ) : (
+                              <Pause className="h-4 w-4" aria-hidden />
+                            )}
+                            <MenuText
+                              label={ta(power?.paused ? "resume" : "pause")}
+                              reason={powerReason()}
+                            />
+                          </DropdownMenuItem>
+                        )}
+                        {power?.paused ? null : power?.asleep ? (
                           <DropdownMenuItem
                             className="gap-2"
                             disabled={powerReason() !== null}
@@ -517,6 +554,24 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         description={tc("sleep.description")}
         confirmLabel={tc("sleep.confirm")}
         onConfirm={handleSleep}
+      />
+      <ConfirmDialog
+        open={confirming === "pause"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        level={1}
+        title={tc("pause.title", { name: current.name })}
+        description={tc("pause.description")}
+        confirmLabel={tc("pause.confirm")}
+        onConfirm={handlePause}
+      />
+      <ConfirmDialog
+        open={confirming === "resume"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        level={1}
+        title={tc("resume.title", { name: current.name })}
+        description={tc("resume.description")}
+        confirmLabel={tc("resume.confirm")}
+        onConfirm={handleResume}
       />
       <ConfirmDialog
         open={confirming === "restart"}
