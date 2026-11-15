@@ -227,6 +227,14 @@ class Settings(BaseSettings):
         "http://vtraces-cnp.observability.svc:10428"
         "/insert/opentelemetry/v1/traces"
     )
+    # CNP-185 wave V5: the app's Overview, Logs, Traces, Alerts and Costs
+    # read the stores above directly, each tab once its store is set. The
+    # project Grafana orgs get a traces datasource and the CMP's dashboards
+    # once this is on; the project's vmauth user reads through this URL.
+    OBS_GRAFANA_PROVISIONING_ENABLED: bool = False
+    OBS_VMAUTH_PROJECTS_URL: str = (
+        "http://vmauth-projects.observability.svc.cluster.local:8427"
+    )
 
     # FinOps: "simulated" keeps the demo engine, "real" reads cost_line_items.
     FINOPS_PROVIDER: str = "simulated"

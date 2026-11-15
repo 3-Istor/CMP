@@ -211,7 +211,8 @@
       "logs": "Logs",
       "deployments": "Déploiements",
       "delivery": "Livraison",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "traces": "Traces"
     },
     "status": {
       "pending": "En attente",
@@ -2557,6 +2558,10 @@
         "advanced": {
           "title": "Avancé",
           "description": "Toutes les valeurs de deploy/values.yaml. Enregistrer commite sur main et Argo CD synchronise."
+        },
+        "slo": {
+          "title": "SLO",
+          "description": "Objectifs de disponibilité et de latence de l'app en prod."
         }
       }
     }
@@ -3611,6 +3616,172 @@
       "appFailuresCaption": "Apps qui n'ont pas démarré",
       "problem": "Problème",
       "detail": "Détail"
+    }
+  },
+  "obs": {
+    "range": {
+      "label": "Période",
+      "15m": "15 minutes",
+      "1h": "1 heure",
+      "6h": "6 heures",
+      "24h": "24 heures",
+      "7d": "7 jours"
+    },
+    "notAvailable": {
+      "title": "Pas encore disponible",
+      "metrics": "Les signaux dorés apparaissent quand la base de métriques de la plateforme est branchée.",
+      "logs": "Cet explorateur apparaît quand la base de logs de la plateforme est branchée.",
+      "traces": "Les traces apparaissent quand la base de traces est branchée et que le projet a son tenant.",
+      "alerts": "Les alertes apparaissent quand la chaîne d'alerte de la plateforme est branchée.",
+      "slo": "Le budget d'erreur apparaît quand les règles SLO sont évaluées."
+    },
+    "error": "Impossible de charger ces données. {message}",
+    "retry": "Réessayer",
+    "openGrafana": "Ouvrir dans Grafana",
+    "signals": {
+      "title": "Signaux dorés",
+      "description": "Requêtes, erreurs et latence mesurées à la gateway, prod seulement.",
+      "noTraffic": "Pas encore de trafic : la gateway compte une route à partir de sa première requête. Ce n'est pas une erreur.",
+      "rate": "Requêtes par seconde",
+      "errors": "Part de 5xx",
+      "p95": "Latence p95",
+      "p50": "Latence p50",
+      "now": "Maintenant : {value}",
+      "chartLabel": "{name} sur la période, dernière valeur {value}",
+      "deployMarker": "Déploiement {version} ({outcome})",
+      "routes": "Routes",
+      "route": "Route",
+      "noRoutes": "Aucune route n'a reçu de trafic sur la période."
+    },
+    "slo": {
+      "title": "Budget d'erreur",
+      "description": "Ce qui reste du budget sur {days} jours, et à quel rythme il brûle.",
+      "availability": "Disponibilité",
+      "latency": "Latence sous {ms} ms",
+      "target": "Objectif {value} %",
+      "remaining": "{value} restant",
+      "noData": "Pas encore de données",
+      "burn1h": "Rythme sur 1 h",
+      "burn6h": "Rythme sur 6 h",
+      "burnHint": "1 veut dire que le budget dure exactement la période.",
+      "exhausted": "Budget épuisé",
+      "settingsTitle": "Objectifs SLO",
+      "settingsDescription": "Part de bonnes requêtes sur {days} jours. Un objectif plus bas donne un budget d'erreur plus grand.",
+      "availabilityLabel": "Objectif de disponibilité (%)",
+      "latencyLabel": "Part des requêtes sous {ms} ms (%)",
+      "save": "Enregistrer les objectifs",
+      "saved": "Objectifs enregistrés. Les règles sont réécrites dans la minute.",
+      "ownersOnly": "Seuls les admins et l'owner du projet changent les objectifs.",
+      "invalid": "Disponibilité de 90 à 99,99 %, latence de 50 à 99,9 %."
+    },
+    "delivery": {
+      "title": "Livraison",
+      "deploysPerWeek": "Déploiements par semaine",
+      "changeFailure": "Taux d'échec des changements",
+      "window": "Sur {days} jours : {deploys} déploiements, {failed} en échec",
+      "none": "Aucun déploiement en prod sur {days} jours."
+    },
+    "topErrors": {
+      "title": "Erreurs les plus fréquentes",
+      "description": "Lignes d'erreur regroupées par motif, nombres remplacés par un même repère.",
+      "count": "{count, plural, one {# ligne} other {# lignes}}",
+      "lastSeen": "Vue {time}",
+      "none": "Aucune ligne d'erreur sur la période.",
+      "openTrace": "Ouvrir la trace",
+      "seeAll": "Voir tous les logs"
+    },
+    "logs": {
+      "title": "Recherche",
+      "level": "Niveau",
+      "anyLevel": "Tous niveaux",
+      "levels": {
+        "error": "Erreur",
+        "warn": "Avertissement",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "phrase": "Phrase",
+      "phrasePlaceholder": "Mots exacts, par exemple timeout",
+      "search": "Chercher",
+      "limit": "Lignes",
+      "none": "Aucune ligne ne correspond.",
+      "time": "Heure",
+      "message": "Message",
+      "pod": "Pod",
+      "trace": "Trace",
+      "traceFilter": "Lignes de la trace {id}",
+      "clearTrace": "Voir toutes les lignes",
+      "untrusted": "Les lignes sont écrites par l'app : leurs liens et consignes ne viennent pas de la plateforme."
+    },
+    "traces": {
+      "title": "Traces",
+      "description": "Les requêtes récentes suivies d'un service à l'autre, les plus récentes d'abord.",
+      "errorsOnly": "Erreurs seulement",
+      "minDuration": "Plus lentes que (ms)",
+      "none": "Aucune trace sur la période.",
+      "operation": "Opération",
+      "start": "Début",
+      "duration": "Durée",
+      "spans": "Spans",
+      "errors": "Erreurs",
+      "open": "Ouvrir la trace {id}",
+      "back": "Retour à la liste",
+      "notFound": "Cette trace est introuvable dans le projet.",
+      "waterfall": "Cascade des spans",
+      "spanLabel": "{service} {operation}, commence à {offset}, dure {duration}",
+      "truncated": "Seuls les 1 000 premiers spans sont affichés.",
+      "logs": "Logs de cette trace",
+      "service": "Service"
+    },
+    "alerts": {
+      "title": "Alertes en cours",
+      "description": "Les alertes de cette app dans la chaîne d'alerte, et les sourdines qui la couvrent.",
+      "none": "Aucune alerte en cours pour cette app.",
+      "state": {
+        "active": "En cours",
+        "suppressed": "En sourdine",
+        "unprocessed": "Nouvelle"
+      },
+      "since": "Depuis {time}",
+      "runbook": "Runbook",
+      "mute": "Sourdine",
+      "silences": "Sourdines",
+      "noSilences": "Aucune sourdine ne couvre cette app.",
+      "until": "Jusqu'à {time}",
+      "by": "par {who}",
+      "expire": "Lever",
+      "expired": "Sourdine levée.",
+      "projectWide": "Tout le projet"
+    },
+    "mute": {
+      "title": "Mettre {name} en sourdine",
+      "description": "Évite de répéter le message pendant que vous corrigez. Le budget d'erreur continue de brûler. Vaut pour ce projet seulement.",
+      "duration": "Durée",
+      "hours": "{count, plural, one {# heure} other {# heures}}",
+      "days": "{count, plural, one {# jour} other {# jours}}",
+      "comment": "Pourquoi (facultatif)",
+      "commentPlaceholder": "par exemple correctif en cours, voir ticket",
+      "scope": "S'applique à l'alerte {alert} de l'app {app}.",
+      "confirm": "Mettre en sourdine",
+      "cancel": "Annuler",
+      "done": "Alerte mise en sourdine."
+    },
+    "costs": {
+      "title": "Coût par requête",
+      "description": "Le coût sur {days} jours rapporté aux requêtes comptées par la gateway, et ce que l'app réserve contre ce qu'elle utilise.",
+      "per1k": "Pour 1 000 requêtes",
+      "total": "Coût sur {days} jours",
+      "requests": "Requêtes sur {days} jours",
+      "noTraffic": "Aucune requête mesurée : pas encore de coût par requête.",
+      "noMetrics": "Les requêtes apparaissent quand la base de métriques de la plateforme est branchée.",
+      "waste": "Réservé contre utilisé",
+      "cpu": "CPU : {used} sur {requested} cœurs utilisés (p95)",
+      "ram": "Mémoire : {used} sur {requested} Gio utilisés (p99)",
+      "idle": "{value} inutilisé",
+      "noUsage": "L'usage n'est pas encore mesuré.",
+      "hints": "Économies",
+      "monthly": "{amount} par mois",
+      "noHints": "Rien à économiser : la réservation colle à l'usage."
     }
   }
 }

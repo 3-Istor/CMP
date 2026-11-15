@@ -81,7 +81,7 @@ class SloUpdate(BaseModel):
     latency: float = Field(ge=50.0, le=99.9)
 
 
-def _slo_read(db: Session, project: str, app: str, role: str) -> SloRead:
+def slo_read(db: Session, project: str, app: str, role: str) -> SloRead:
     setting = db.scalar(
         select(SloSetting).where(
             SloSetting.project == project, SloSetting.app == app
@@ -115,7 +115,7 @@ async def get_slo(
     _enabled()
     role = await _role(token, project)
     _deployment(db, project, app)
-    return _slo_read(db, project, app, role)
+    return slo_read(db, project, app, role)
 
 
 @router.put("/slo", response_model=SloRead)
@@ -141,7 +141,7 @@ async def set_slo(
     db.add(setting)
     db.commit()
     reconcile.request_sync()
-    return _slo_read(db, payload.project, payload.app, "admin")
+    return slo_read(db, payload.project, payload.app, "admin")
 
 
 class Matcher(BaseModel):

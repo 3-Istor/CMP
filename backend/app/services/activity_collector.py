@@ -22,6 +22,7 @@ from app.services.kube_client import (
     KubeUnavailableError,
     in_cluster,
 )
+from app.services.observability import grafana_project
 from app.services.observability import reconcile as obs_reconcile
 from app.services.observability import trace_routing, trace_tenants
 
@@ -161,6 +162,7 @@ async def collect_once() -> None:
         except KubeUnavailableError as exc:
             logger.warning("Trace routing not written: %s", exc)
     await obs_reconcile.sync_quietly()
+    await grafana_project.sync_quietly()
     for source in QUERIES:
         try:
             added = await collect_source(source, ns_projects)

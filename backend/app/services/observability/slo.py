@@ -87,7 +87,7 @@ def _num(value: float) -> str:
     return f"{value:.6g}"
 
 
-def _envoy_selector(namespace: str) -> str:
+def envoy_selector(namespace: str) -> str:
     return (
         f'namespace="{settings.OBS_GATEWAY_NAMESPACE}", container="envoy", '
         f'envoy_cluster_name=~"httproute/{namespace}/.+"'
@@ -113,7 +113,7 @@ def _awake(expr: str, namespace: str) -> str:
 
 
 def _requests(kind: str, namespace: str) -> str:
-    sel = _envoy_selector(namespace)
+    sel = envoy_selector(namespace)
     metric = (
         "envoy_cluster_upstream_rq_xx"
         if kind == "availability"
@@ -123,7 +123,7 @@ def _requests(kind: str, namespace: str) -> str:
 
 
 def _errors(kind: str, namespace: str) -> str:
-    sel = _envoy_selector(namespace)
+    sel = envoy_selector(namespace)
     total = _requests(kind, namespace)
     if kind == "availability":
         failed = (
