@@ -2834,6 +2834,33 @@
       "description": "Actions that cannot be undone.",
       "delete": "Delete the project",
       "deleteHint": "Removes the project with its Vault secrets, Grafana org, Keycloak realm and Argo CD project."
+    },
+    "export": {
+      "sectionTitle": "Reversibility",
+      "sectionDescription": "Get everything the platform holds for this project, in a machine-readable format (Data Act).",
+      "title": "Export the project",
+      "hint": "An archive with the CMP tables, repositories, Kubernetes objects, database dumps, buckets and logs, plus a manifest with sha256 sums. It stays downloadable for 30 days.",
+      "start": "Export",
+      "running": "Export running",
+      "started": "Export started, it will show here once ready",
+      "loadFailed": "Could not read the project's exports",
+      "download": "Download",
+      "linkFailed": "Could not get the link: {message}",
+      "availableUntil": "available until {date}",
+      "problems": "{count, plural, one {# item missing} other {# items missing}}",
+      "status": {
+        "pending": "pending",
+        "running": "running",
+        "ready": "ready",
+        "partial": "ready, incomplete",
+        "failed": "failed",
+        "expired": "expired"
+      },
+      "confirm": {
+        "title": "Export {name}?",
+        "description": "The archive holds the project's data, including its databases and logs. A passkey confirmation is asked, and the export is logged.",
+        "confirm": "Export"
+      }
     }
   },
   "overview": {

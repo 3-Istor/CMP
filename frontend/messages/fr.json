@@ -2834,6 +2834,33 @@
       "description": "Des actions sans retour possible.",
       "delete": "Supprimer le projet",
       "deleteHint": "Supprime le projet avec ses secrets Vault, son org Grafana, son realm Keycloak et son projet Argo CD."
+    },
+    "export": {
+      "sectionTitle": "Réversibilité",
+      "sectionDescription": "Récupérez tout ce que la plateforme garde pour ce projet, dans un format lisible par machine (Data Act).",
+      "title": "Exporter le projet",
+      "hint": "Une archive avec les tables du CMP, les dépôts, les objets Kubernetes, les dumps des bases, les buckets et les logs, et un manifest avec les sommes sha256. Elle reste téléchargeable 30 jours.",
+      "start": "Exporter",
+      "running": "Export en cours",
+      "started": "Export lancé, il apparaîtra ici une fois prêt",
+      "loadFailed": "Impossible de lire les exports du projet",
+      "download": "Télécharger",
+      "linkFailed": "Impossible d'obtenir le lien : {message}",
+      "availableUntil": "disponible jusqu'au {date}",
+      "problems": "{count, plural, one {# élément manquant} other {# éléments manquants}}",
+      "status": {
+        "pending": "en attente",
+        "running": "en cours",
+        "ready": "prêt",
+        "partial": "prêt, incomplet",
+        "failed": "échec",
+        "expired": "expiré"
+      },
+      "confirm": {
+        "title": "Exporter {name} ?",
+        "description": "L'archive contient les données du projet, y compris ses bases et ses logs. Une confirmation par passkey est demandée, et l'export est journalisé.",
+        "confirm": "Exporter"
+      }
     }
   },
   "overview": {

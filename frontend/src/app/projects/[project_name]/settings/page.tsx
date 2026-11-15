@@ -5,6 +5,7 @@ import {
   ProjectSection,
   useProjectContext,
 } from "@/components/projects/ProjectContext";
+import { ProjectExportCard } from "@/components/projects/ProjectExportCard";
 import { AlertsCard } from "@/components/security/AlertsCard";
 import { ProjectPolicyCard } from "@/components/security/SettingsCard";
 import { Button } from "@/components/ui/button";
@@ -115,6 +116,7 @@ export default function ProjectSettingsPage() {
   const { projectName, can, apps } = useProjectContext();
   const canProtect = can("project.protect");
   const canDelete = can("project.delete");
+  const canExport = can("project.export");
 
   // null until read: a control never shows a state it has not loaded.
   const [protectedOn, setProtectedOn] = useState<boolean | null>(null);
@@ -264,6 +266,15 @@ export default function ProjectSettingsPage() {
             />
           )}
         </Section>
+
+        {canExport && (
+          <Section
+            title={t("export.sectionTitle")}
+            description={t("export.sectionDescription")}
+          >
+            <ProjectExportCard project={projectName} />
+          </Section>
+        )}
 
         {canDelete && (
           <Section
