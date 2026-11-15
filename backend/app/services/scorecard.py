@@ -262,10 +262,12 @@ def _read_costs(deployment: Deployment) -> tuple[float, list[str]]:
     return spent, [rec.id for rec in provider.recommendations(specs)]
 
 
-async def _read_cost(db: Session, deployment: Deployment) -> CostInput:
-    spent, recommendation_ids = await run_in_threadpool(
-        _read_costs, deployment
-    )
+def _read_cost_states(
+    db: Session,
+    deployment: Deployment,
+    spent: float,
+    recommendation_ids: list[str],
+) -> CostInput:
     closed = {
         state.rec_id
         for state in db.query(RecommendationState).filter(
@@ -282,6 +284,15 @@ async def _read_cost(db: Session, deployment: Deployment) -> CostInput:
         month_to_date_eur=spent,
         budget_eur=(budget.monthly_amount_eur or None) if budget else None,
         open_recommendations=len(set(recommendation_ids) - closed),
+    )
+
+
+async def _read_cost(db: Session, deployment: Deployment) -> CostInput:
+    spent, recommendation_ids = await run_in_threadpool(
+        _read_costs, deployment
+    )
+    return await _read_db(
+        db, _read_cost_states, deployment, spent, recommendation_ids
     )
 
 
@@ -311,6 +322,22 @@ def clear_cache() -> None:
     _cache.clear()
 
 
+async def _read_db[T](db: Session, read: Callable[..., T], *args: object) -> T:
+    # A project page asks for every card at once. Each card holding its
+    # connection while it waits on GitHub, Kubernetes or the cost store
+    # (which takes connections of its own) drained the pool, and a pool
+    # wait on the event loop froze /health until the liveness probe killed
+    # the pod.
+
+    def read_and_release() -> T:
+        try:
+            return read(db, *args)
+        finally:
+            db.close()
+
+    return await run_in_threadpool(read_and_release)
+
+
 async def _guarded(
     key: str, compute: Callable[[], Awaitable[Criterion]]
 ) -> Criterion:
@@ -330,7 +357,9 @@ async def compute_scorecard(
     today = today or date.today()
 
     async def security() -> Criterion:
-        return security_criterion(_read_security(db, deployment))
+        return security_criterion(
+            await _read_db(db, _read_security, deployment)
+        )
 
     async def cost() -> Criterion:
         return cost_criterion(await _read_cost(db, deployment), today)
@@ -342,7 +371,9 @@ async def compute_scorecard(
         return documentation_criterion(await read_readme())
 
     async def owner() -> Criterion:
-        return owner_criterion(_read_project_owner(db, deployment))
+        return owner_criterion(
+            await _read_db(db, _read_project_owner, deployment)
+        )
 
     return assemble(
         [

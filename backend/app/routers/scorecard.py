@@ -6,6 +6,7 @@ summarises.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -31,7 +32,9 @@ async def get_scorecard(
     token: CurrentUser,
     db: Session = Depends(get_db),
 ) -> scorecard.Scorecard:
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    deployment = await run_in_threadpool(
+        _get_app_or_404, db, token, deployment_id, ProjectRole.MEMBER
+    )
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
             status_code=400, detail="Only Kubernetes apps have a scorecard."
