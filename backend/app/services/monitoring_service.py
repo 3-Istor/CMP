@@ -431,7 +431,6 @@ async def _get_openstack_backend_health(
 
     Searches for ALL servers matching pattern: {deployment_name}-*
     This includes DB nodes, web nodes, K3s nodes, tiebreakers, etc.
-    Searches across all projects to ensure VMs are found regardless of current scope.
     """
 
     def _fetch():
@@ -439,8 +438,7 @@ async def _get_openstack_backend_health(
             conn = _get_openstack_connection()
             servers = []
 
-            # Search for ALL servers belonging to this deployment across all projects
-            for server in conn.compute.servers(all_projects=True):
+            for server in conn.compute.servers():
                 if server.name.startswith(f"{deployment_name}-"):
                     # Extract fixed IP
                     fixed_ip = None
