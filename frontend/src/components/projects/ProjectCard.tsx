@@ -135,7 +135,7 @@ export function ProjectCard({ project, onRetried, deletingApps = 0 }: Props) {
                     {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
                 </CardDescription>
                 {deletingApps > 0 && !isInFlight && (
-                    <p className="flex items-center gap-1 text-xs text-destructive">
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
                         {t("card.appsDeleting", { count: deletingApps })}
                     </p>

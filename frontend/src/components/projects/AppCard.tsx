@@ -7,6 +7,7 @@ import { AppIcon } from "@/components/app-icon/AppIcon";
 import { intlLocale } from "@/components/finops/format";
 
 import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
+import { DeletingBadge } from "@/components/projects/DeletingBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -102,6 +103,9 @@ export function AppCard({ app, projectName }: Props) {
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <ScoreBadge card={card} />
+              {app.status === "deleting" ? (
+                <DeletingBadge />
+              ) : (
               <Badge
                 variant={STATUS_VARIANT[app.status]}
                 className={cn(
@@ -113,6 +117,7 @@ export function AppCard({ app, projectName }: Props) {
                 <StatusIcon status={app.status} />
                 {t(`status.${app.status}`)}
               </Badge>
+              )}
               <FavoriteToggle kind="app" id={app.id} />
             </div>
           </div>

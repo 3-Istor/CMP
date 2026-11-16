@@ -19,6 +19,7 @@ import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { MenuText } from "@/components/projects/MenuText";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { Button } from "@/components/ui/button";
+import { DeletingBadge } from "@/components/projects/DeletingBadge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -314,7 +315,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                       status={health?.status ?? null}
                     />
                   )}
-                  {(inProgress || current.status === "failed") && (
+                  {current.status === "deleting" && <DeletingBadge />}
+                  {((inProgress && current.status !== "deleting") || current.status === "failed") && (
                     <span
                       className={cn(
                         "text-xs text-muted-foreground",

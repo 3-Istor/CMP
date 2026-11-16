@@ -2582,7 +2582,7 @@
         "hint": "Removes the app, its repo and its data.",
         "delete": "Delete app",
         "importTitle": "Remove this import",
-        "importHint": "Removes the imported app with its repo import and its data.",
+        "importHint": "Removes the import with all its apps, their repo link and data.",
         "removeImport": "Remove import"
       }
     }

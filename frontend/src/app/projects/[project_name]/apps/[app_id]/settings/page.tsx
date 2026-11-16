@@ -13,16 +13,22 @@ import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
 import { ReleaseSettingsCard } from "@/components/release/ReleaseSettingsCard";
 import { AlertsCard } from "@/components/security/AlertsCard";
 import { AppSettingsCard } from "@/components/security/SettingsCard";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { deleteDeployment, getSecurityRole } from "@/lib/api";
+import {
+  deleteDeployment,
+  deleteImport,
+  getDeletionProtection,
+  getImports,
+  getSecurityRole,
+} from "@/lib/api";
 import { useRelease } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { Search, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
+import type { ImportSourceView } from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -155,8 +161,29 @@ export default function AppSettingsPage() {
   const ta = useTranslations("actions");
   const { appId, projectName, deployment, markDeleting } = useAppContext();
   const { can } = useProjectContext();
+  const ti = useTranslations("imports.list");
   const [deleting, setDeleting] = useState(false);
+  const [protectedOn, setProtectedOn] = useState(false);
+  const [source, setSource] = useState<ImportSourceView | null>(null);
   const imported = deployment.template_id.startsWith("import-");
+  const canDelete = can("app.delete");
+  const canImport = can("import.manage");
+  useEffect(() => {
+    if (!canDelete) return;
+    getDeletionProtection(projectName)
+      .then(({ enabled }) => setProtectedOn(enabled))
+      .catch(() => setProtectedOn(false));
+  }, [canDelete, projectName]);
+  useEffect(() => {
+    if (!imported || !canImport) return;
+    getImports(projectName)
+      .then((all) =>
+        setSource(
+          all.find((i) => i.services.some((x) => x.deployment_id === appId)) ?? null,
+        ),
+      )
+      .catch(() => setSource(null));
+  }, [imported, canImport, projectName, appId]);
   const isRunning = deployment.status === "running";
   const [securityAdmin, setSecurityAdmin] = useState(false);
   const [active, setActive] = useState<string>("general");
@@ -189,7 +216,7 @@ export default function AppSettingsPage() {
       (id !== "delivery" || can("release.view")) &&
       (id !== "slo" || sloShown) &&
       (id !== "security" || can("app.viewObservability")) &&
-      (id !== "danger" || can("app.delete")),
+      (id !== "danger" || canDelete),
   );
   const sectionsKey = visibleSections.join();
 
@@ -208,6 +235,13 @@ export default function AppSettingsPage() {
     return () => observer.disconnect();
   }, [allowed, sectionsKey]);
 
+
+  const handleRemoveImport = async () => {
+    if (!source) return;
+    await deleteImport(projectName, source.id);
+    toast.success(ti("deleteStarted"));
+    markDeleting();
+  };
 
   const handleDelete = async () => {
     await deleteDeployment(appId);
@@ -337,7 +371,7 @@ export default function AppSettingsPage() {
             )}
           </SettingsSection>
 
-          {can("app.delete") && (
+          {canDelete && (
             <SettingsSection
               id="danger"
               title={ts("sections.danger.title")}
@@ -350,27 +384,24 @@ export default function AppSettingsPage() {
                       {ts(imported ? "danger.importTitle" : "danger.title")}
                     </p>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      {ts(imported ? "danger.importHint" : "danger.hint")}
+                      {!imported && protectedOn
+                        ? ta("reasons.protected")
+                        : ts(imported ? "danger.importHint" : "danger.hint")}
                     </p>
                   </div>
-                  {imported ? (
-                    <Link
-                      href={`/projects/${encodeURIComponent(projectName)}#imports-title`}
-                      className={buttonVariants({ variant: "destructive" })}
-                    >
-                      <Trash2 aria-hidden />
-                      {ts("danger.removeImport")}
-                    </Link>
-                  ) : (
-                    <Button
-                      variant="destructive"
-                      disabled={["deleting", "deleted"].includes(deployment.status)}
-                      onClick={() => setDeleting(true)}
-                    >
-                      <Trash2 aria-hidden />
-                      {ts("danger.delete")}
-                    </Button>
-                  )}
+                  <Button
+                    variant="destructive"
+                    disabled={
+                      protectedOn ||
+                      ["deleting", "deleted"].includes(deployment.status) ||
+                      (imported && (!canImport || !source))
+                    }
+                    onClick={() => setDeleting(true)}
+                  >
+                    <Trash2 aria-hidden />
+                    {ts(imported ? "danger.removeImport" : "danger.delete")}
+                  </Button>
+                
                 </CardContent>
               </Card>
             </SettingsSection>
@@ -379,7 +410,23 @@ export default function AppSettingsPage() {
       </div>
 
       <ConfirmDialog
-        open={deleting}
+        open={deleting && imported}
+        onOpenChange={setDeleting}
+        level={2}
+        destructive
+        title={ti("deleteTitle", { repo: source?.repo_full_name ?? "" })}
+        description={ti("deleteDescription")}
+        consequences={[
+          ti("deleteApps", { count: source?.services.length ?? 0 }),
+          ti("deleteData"),
+          ti("deleteLinks"),
+        ]}
+        expectedName={source?.repo_full_name}
+        confirmLabel={ti("deleteConfirm")}
+        onConfirm={handleRemoveImport}
+      />
+      <ConfirmDialog
+        open={deleting && !imported}
         onOpenChange={setDeleting}
         level={2}
         destructive

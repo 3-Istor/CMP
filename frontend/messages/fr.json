@@ -2582,7 +2582,7 @@
         "hint": "Supprime l'app, son dépôt et ses données.",
         "delete": "Supprimer l'app",
         "importTitle": "Retirer cet import",
-        "importHint": "Retire l'app importée avec l'import de son dépôt et ses données.",
+        "importHint": "Retire l'import avec toutes ses apps, le lien du dépôt et les données.",
         "removeImport": "Retirer l'import"
       }
     }

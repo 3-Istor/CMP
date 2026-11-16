@@ -282,7 +282,7 @@ export default function ProjectSettingsPage() {
             description={t("danger.description")}
             danger
           >
-            <Card className="border-destructive/40">
+            <Card className="ring-destructive/40">
               <CardContent className="flex flex-wrap items-center justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{t("danger.delete")}</p>
