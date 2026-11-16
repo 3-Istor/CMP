@@ -2583,7 +2583,11 @@
         "delete": "Supprimer l'app",
         "importTitle": "Retirer cet import",
         "importHint": "Retire l'import avec toutes ses apps, le lien du dépôt et les données.",
-        "removeImport": "Retirer l'import"
+        "removeImport": "Retirer l'import",
+        "noPermission": "Vous ne pouvez pas retirer d'imports",
+        "importFailed": "Impossible de charger l'import.",
+        "importMissing": "L'import de cette app est introuvable",
+        "retry": "Réessayer"
       }
     }
   },

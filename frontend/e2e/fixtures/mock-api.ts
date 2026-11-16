@@ -73,6 +73,15 @@ export const VARIANTS: Record<string, Record<string, Override>> = {
       },
     },
   },
+  importmissing: {
+    "/projects/demo/apps": { json: [{ ...app, template_id: "import-service" }] },
+    "/deployments/1": { json: { ...app, template_id: "import-service" } },
+  },
+  protectedimported: {
+    "/projects/demo/apps": { json: [{ ...app, template_id: "import-service" }] },
+    "/deployments/1": { json: { ...app, template_id: "import-service" } },
+    "/projects/demo/deletion-protection": { json: { enabled: true } },
+  },
   protected: { "/projects/demo/deletion-protection": { json: { enabled: true } } },
   member: { "/projects/": { json: [{ ...projects[0], role: "member" }] } },
   notconnected: {

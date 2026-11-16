@@ -106,17 +106,17 @@ export function AppCard({ app, projectName }: Props) {
               {app.status === "deleting" ? (
                 <DeletingBadge />
               ) : (
-              <Badge
-                variant={STATUS_VARIANT[app.status]}
-                className={cn(
-                  "capitalize gap-1",
-                  app.status === "running" &&
-                    "border-green-600/30 bg-green-500/10 text-green-700 dark:text-green-400",
-                )}
-              >
-                <StatusIcon status={app.status} />
-                {t(`status.${app.status}`)}
-              </Badge>
+                <Badge
+                  variant={STATUS_VARIANT[app.status]}
+                  className={cn(
+                    "capitalize gap-1",
+                    app.status === "running" &&
+                      "border-green-600/30 bg-green-500/10 text-green-700 dark:text-green-400",
+                  )}
+                >
+                  <StatusIcon status={app.status} />
+                  {t(`status.${app.status}`)}
+                </Badge>
               )}
               <FavoriteToggle kind="app" id={app.id} />
             </div>

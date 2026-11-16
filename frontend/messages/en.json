@@ -2583,7 +2583,11 @@
         "delete": "Delete app",
         "importTitle": "Remove this import",
         "importHint": "Removes the import with all its apps, their repo link and data.",
-        "removeImport": "Remove import"
+        "removeImport": "Remove import",
+        "noPermission": "You cannot remove imports",
+        "importFailed": "Could not load the import.",
+        "importMissing": "This app's import was not found",
+        "retry": "Retry"
       }
     }
   },

@@ -164,7 +164,9 @@ export default function AppSettingsPage() {
   const ti = useTranslations("imports.list");
   const [deleting, setDeleting] = useState(false);
   const [protectedOn, setProtectedOn] = useState(false);
-  const [source, setSource] = useState<ImportSourceView | null>(null);
+  const [source, setSource] = useState<ImportSourceView | null | undefined>(undefined);
+  const [importFailed, setImportFailed] = useState(false);
+  const [importAttempt, setImportAttempt] = useState(0);
   const imported = deployment.template_id.startsWith("import-");
   const canDelete = can("app.delete");
   const canImport = can("import.manage");
@@ -177,13 +179,14 @@ export default function AppSettingsPage() {
   useEffect(() => {
     if (!imported || !canImport) return;
     getImports(projectName)
-      .then((all) =>
+      .then((all) => {
+        setImportFailed(false);
         setSource(
           all.find((i) => i.services.some((x) => x.deployment_id === appId)) ?? null,
-        ),
-      )
-      .catch(() => setSource(null));
-  }, [imported, canImport, projectName, appId]);
+        );
+      })
+      .catch(() => setImportFailed(true));
+  }, [imported, canImport, projectName, appId, importAttempt]);
   const isRunning = deployment.status === "running";
   const [securityAdmin, setSecurityAdmin] = useState(false);
   const [active, setActive] = useState<string>("general");
@@ -236,8 +239,21 @@ export default function AppSettingsPage() {
   }, [allowed, sectionsKey]);
 
 
+  // Why "Remove import" is disabled, in priority order.
+  const importReason = !imported
+    ? null
+    : protectedOn
+      ? ta("reasons.protected")
+      : !canImport
+        ? ts("danger.noPermission")
+        : importFailed
+          ? ts("danger.importFailed")
+          : source === null
+            ? ts("danger.importMissing")
+            : null;
+
   const handleRemoveImport = async () => {
-    if (!source) return;
+    if (!source || protectedOn) return;
     await deleteImport(projectName, source.id);
     toast.success(ti("deleteStarted"));
     markDeleting();
@@ -377,7 +393,7 @@ export default function AppSettingsPage() {
               title={ts("sections.danger.title")}
               description={ts("sections.danger.description")}
             >
-              <Card className="border-destructive/40">
+              <Card className="ring-destructive/40">
                 <CardContent className="flex flex-wrap items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">
@@ -389,19 +405,37 @@ export default function AppSettingsPage() {
                         : ts(imported ? "danger.importHint" : "danger.hint")}
                     </p>
                   </div>
-                  <Button
-                    variant="destructive"
-                    disabled={
-                      protectedOn ||
-                      ["deleting", "deleted"].includes(deployment.status) ||
-                      (imported && (!canImport || !source))
-                    }
-                    onClick={() => setDeleting(true)}
-                  >
-                    <Trash2 aria-hidden />
-                    {ts(imported ? "danger.removeImport" : "danger.delete")}
-                  </Button>
-                
+                  <div className="flex flex-col items-end gap-1">
+                    <Button
+                      variant="destructive"
+                      disabled={
+                        protectedOn ||
+                        ["deleting", "deleted"].includes(deployment.status) ||
+                        (imported && (!canImport || !source))
+                      }
+                      onClick={() => setDeleting(true)}
+                    >
+                      <Trash2 aria-hidden />
+                      {ts(imported ? "danger.removeImport" : "danger.delete")}
+                    </Button>
+                    {importReason && (
+                      <p className="text-xs text-muted-foreground">
+                        {importReason}
+                        {importFailed && canImport && !protectedOn && (
+                          <>
+                            {" "}
+                            <button
+                              type="button"
+                              className="text-primary underline"
+                              onClick={() => setImportAttempt((n) => n + 1)}
+                            >
+                              {ts("danger.retry")}
+                            </button>
+                          </>
+                        )}
+                      </p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </SettingsSection>
