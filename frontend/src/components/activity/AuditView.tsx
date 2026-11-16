@@ -41,6 +41,10 @@ import { FilterBar } from "./FilterBar";
 import { HeatmapCard, LoginsCard } from "./InsightCards";
 import { NativeSelect } from "./NativeSelect";
 
+const PAGE_SIZE = 100;
+
+type Cursor = { until: string | null; before_id: string | null };
+
 const TOOLTIP_STYLE = {
   borderRadius: 8,
   fontSize: 12,
@@ -322,11 +326,15 @@ export function AuditView({
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [more, setMore] = useState(true);
+  // Cursors of the pages before this one; page N has N - 1 of them.
+  const [back, setBack] = useState<Cursor[]>([]);
   const t = useTranslations("activity");
   const locale = useLocale();
 
-  const set = (patch: Partial<ActivityFilters>) =>
-    setFilters((f) => ({ ...f, ...patch, until: null }));
+  const set = (patch: Partial<ActivityFilters>) => {
+    setBack([]);
+    setFilters((f) => ({ ...f, ...patch, until: null, before_id: null }));
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -338,7 +346,7 @@ export function AuditView({
       setSummary(s);
       setEvents(feed.events);
       setUnavailable([...new Set([...s.unavailable, ...feed.unavailable])]);
-      setMore(feed.events.length >= 100);
+      setMore(feed.events.length >= PAGE_SIZE);
       setError(null);
     } catch (e) {
       setError(e);
@@ -351,20 +359,18 @@ export function AuditView({
     load();
   }, [load]);
 
-  const loadMore = async () => {
-    if (!events?.length) return;
-    setLoading(true);
-    try {
-      const last = events[events.length - 1];
-      const feed = await getActivity(project, { ...filters, until: last.time });
-      const seen = new Set(events.map((e) => e.id));
-      setEvents([...events, ...feed.events.filter((e) => !seen.has(e.id))]);
-      setMore(feed.events.length >= 100);
-    } catch (e) {
-      setError(e);
-    } finally {
-      setLoading(false);
-    }
+  const older = () => {
+    const last = events?.[events.length - 1];
+    if (!last) return;
+    setBack((b) => [...b, { until: filters.until ?? null, before_id: filters.before_id ?? null }]);
+    setFilters((f) => ({ ...f, until: last.time, before_id: last.id }));
+  };
+
+  const newer = () => {
+    const prev = back[back.length - 1];
+    if (!prev) return;
+    setBack(back.slice(0, -1));
+    setFilters((f) => ({ ...f, ...prev }));
   };
 
   const actors = useMemo(() => {
@@ -607,16 +613,19 @@ export function AuditView({
               />
             ))
           )}
-          {events && events.length > 0 && more && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={loadMore}
-              disabled={loading}
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {t("audit.loadMore")}
-            </Button>
+          {events && (events.length > 0 || back.length > 0) && (
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <Button variant="outline" onClick={newer} disabled={loading || back.length === 0}>
+                {t("audit.newer")}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {loading && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
+                {t("audit.page", { page: back.length + 1, size: PAGE_SIZE })}
+              </span>
+              <Button variant="outline" onClick={older} disabled={loading || !more}>
+                {t("audit.older")}
+              </Button>
+            </div>
           )}
         </div>
         {selected && (

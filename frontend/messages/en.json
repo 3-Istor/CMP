@@ -1113,7 +1113,9 @@
         "refused": "refused"
       },
       "empty": "No events match these filters.",
-      "loadMore": "Load more",
+      "newer": "Newer",
+      "older": "Older",
+      "page": "Page {page} · {size} events per page",
       "detail": {
         "title": "Event details",
         "close": "Close",
@@ -2691,7 +2693,9 @@
     "markAllRead": "Mark all as read",
     "empty": "No notifications yet.",
     "error": "Could not load notifications.",
-    "loadMore": "Load more",
+    "newer": "Newer",
+    "older": "Older",
+    "page": "Page {page}",
     "unread": "Unread",
     "titles": {
       "deployment_succeeded": "{app} was deployed",

@@ -1113,7 +1113,9 @@
         "refused": "refusé"
       },
       "empty": "Aucun événement pour ces filtres.",
-      "loadMore": "Charger plus",
+      "newer": "Plus récent",
+      "older": "Plus ancien",
+      "page": "Page {page} · {size} événements par page",
       "detail": {
         "title": "Détail de l'événement",
         "close": "Fermer",
@@ -2691,7 +2693,9 @@
     "markAllRead": "Tout marquer comme lu",
     "empty": "Aucune notification pour le moment.",
     "error": "Impossible de charger les notifications.",
-    "loadMore": "Charger plus",
+    "newer": "Plus récent",
+    "older": "Plus ancien",
+    "page": "Page {page}",
     "unread": "Non lue",
     "titles": {
       "deployment_succeeded": "{app} a été déployée",

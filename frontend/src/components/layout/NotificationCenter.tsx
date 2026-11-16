@@ -110,11 +110,19 @@ export function NotificationCenter({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  // Cursors of the pages before this one (undefined = first page).
+  const [back, setBack] = useState<(number | undefined)[]>([]);
+  const [cursor, setCursor] = useState<number | undefined>();
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // Reopening starts on the first page.
+      setCursor(undefined);
+      setBack([]);
+      return;
+    }
     let cancelled = false;
-    getNotifications({ limit: PAGE_SIZE })
+    getNotifications({ limit: PAGE_SIZE, before: cursor })
       .then((page) => {
         if (cancelled) return;
         setItems(page);
@@ -130,21 +138,20 @@ export function NotificationCenter({
     return () => {
       cancelled = true;
     };
-  }, [open, count]);
+  }, [open, count, cursor]);
 
-  const loadMore = async () => {
+  const older = () => {
     const last = items[items.length - 1];
     if (!last) return;
     setLoading(true);
-    try {
-      const page = await getNotifications({ limit: PAGE_SIZE, before: last.id });
-      setItems((current) => [...current, ...page]);
-      setHasMore(page.length === PAGE_SIZE);
-    } catch {
-      setFailed(true);
-    } finally {
-      setLoading(false);
-    }
+    setBack((b) => [...b, cursor]);
+    setCursor(last.id);
+  };
+
+  const newer = () => {
+    setLoading(true);
+    setCursor(back[back.length - 1]);
+    setBack(back.slice(0, -1));
   };
 
   const markRead = async (item: AppNotification) => {
@@ -248,15 +255,26 @@ export function NotificationCenter({
                 />
               ))}
             </ul>
-            {hasMore && (
-              <div className="p-2">
+            {(hasMore || back.length > 0) && (
+              <div className="flex items-center justify-between gap-2 p-2 text-sm">
                 <button
                   type="button"
-                  onClick={() => void loadMore()}
-                  disabled={loading}
-                  className="w-full rounded-md px-2 py-1.5 text-sm text-primary transition-colors hover:bg-accent disabled:opacity-50"
+                  onClick={newer}
+                  disabled={loading || back.length === 0}
+                  className="rounded-md px-2 py-1.5 text-primary transition-colors hover:bg-accent disabled:opacity-50"
                 >
-                  {t("loadMore")}
+                  {t("newer")}
+                </button>
+                <span className="text-muted-foreground">
+                  {t("page", { page: back.length + 1 })}
+                </span>
+                <button
+                  type="button"
+                  onClick={older}
+                  disabled={loading || !hasMore}
+                  className="rounded-md px-2 py-1.5 text-primary transition-colors hover:bg-accent disabled:opacity-50"
+                >
+                  {t("older")}
                 </button>
               </div>
             )}
