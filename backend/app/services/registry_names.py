@@ -231,6 +231,11 @@ def app_hostname(project: str, app_name: str) -> str:
 
 def check_app_name(project: str, app_name: str) -> list[str]:
     errors: list[str] = []
+    if app_name == "backups":
+        errors.append(
+            f"app 'backups' is reserved: namespace '{project}-backups' "
+            "holds the project's backup buckets"
+        )
     if app_name == "system":
         errors.append(
             f"app 'system' is reserved: namespace '{project}-system' "

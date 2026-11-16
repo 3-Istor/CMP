@@ -4,6 +4,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.models.project import TargetCloud
+
+# Cloud apps reach the on-prem Ceph RGW through the VPN, with the key from Vault.
+CLOUD_BACKUP_ENDPOINT = "http://onprem-apps.cnp-vpn.svc.cluster.local:18084"
 RETENTION_PATTERN = r"^[1-9][0-9]*[dwm]$"
 
 PROJECT_MEMBERS_GROUPS = ["project-members", "project-admins"]
@@ -157,7 +161,9 @@ def exposure_commit_label(preset: ExposurePreset) -> str:
     return f"set exposure to {_PRESET_LABELS[preset]}"
 
 
-def backup_patch(update: BackupUpdate) -> dict:
+def backup_patch(
+    update: BackupUpdate, cloud: TargetCloud = TargetCloud.ONPREM
+) -> dict:
     backup: dict[str, Any] = {}
     if update.enabled is not None:
         backup["enabled"] = update.enabled
@@ -165,6 +171,8 @@ def backup_patch(update: BackupUpdate) -> dict:
         backup["keepAfterDelete"] = update.keep_after_delete
     if update.retention_policy is not None:
         backup["retentionPolicy"] = update.retention_policy
+    if cloud != TargetCloud.ONPREM:
+        backup.update(bucket="vault", endpointURL=CLOUD_BACKUP_ENDPOINT)
     return {"db": {"backup": backup}}
 
 

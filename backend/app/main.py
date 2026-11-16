@@ -49,6 +49,7 @@ from app.services.access_review.jobs import access_review_loop
 from app.services.activity_collector import activity_collector_loop
 from app.services.agents import internal_api
 from app.services.audit import AuditMiddleware, audit_retention_loop
+from app.services.cloud_backups import cloud_backups_loop
 from app.services.clusters.state import not_connected_response
 from app.services.environments.loop import environment_loop
 from app.services.finops import alert_poller, monthly_report
@@ -302,6 +303,7 @@ async def lifespan(app: FastAPI):
     activity_collector_task = asyncio.create_task(activity_collector_loop())
     release_recorder_task = asyncio.create_task(release_recorder_loop())
     environment_task = asyncio.create_task(environment_loop())
+    cloud_backups_task = asyncio.create_task(cloud_backups_loop())
     access_sweep_task = asyncio.create_task(access_sweep_loop())
     access_review_task = asyncio.create_task(access_review_loop())
     export_retention_task = asyncio.create_task(
@@ -334,6 +336,7 @@ async def lifespan(app: FastAPI):
     activity_collector_task.cancel()
     release_recorder_task.cancel()
     environment_task.cancel()
+    cloud_backups_task.cancel()
     access_sweep_task.cancel()
     access_review_task.cancel()
     export_retention_task.cancel()
@@ -349,6 +352,7 @@ async def lifespan(app: FastAPI):
         activity_collector_task,
         release_recorder_task,
         environment_task,
+        cloud_backups_task,
         access_sweep_task,
         access_review_task,
         export_retention_task,
