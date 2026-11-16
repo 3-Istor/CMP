@@ -76,10 +76,10 @@ export function AppCard({ app, projectName }: Props) {
   return (
     <Link
       href={`/projects/${projectName}/apps/${app.id}`}
-      className="group block"
+      className="group block min-w-0"
     >
       <Card className="h-full transition-shadow group-hover:shadow-md group-hover:border-primary/30">
-        <CardHeader className="pb-2">
+        <CardHeader className="grid-cols-[minmax(0,1fr)] pb-2">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <AppIcon

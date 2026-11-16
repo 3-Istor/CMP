@@ -24,7 +24,7 @@ export function FavoritesSection({ onRetried }: { onRetried: () => void }) {
 
   return (
     <section id="favorites" className="scroll-mt-6">
-      <h2 className="mb-4 text-xl font-semibold">{t("title")}</h2>
+      <h2 className="mb-3 text-base font-semibold">{t("title")}</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {favProjects.map((p) => (
           <ProjectCard
