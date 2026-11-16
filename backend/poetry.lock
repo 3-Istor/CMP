@@ -1109,20 +1109,19 @@ referencing = ">=0.31.0"
 
 [[package]]
 name = "keystoneauth1"
-version = "5.14.0"
+version = "5.16.0"
 description = "Authentication Library for OpenStack Identity"
 optional = false
-python-versions = ">=3.10"
+python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "keystoneauth1-5.14.0-py3-none-any.whl", hash = "sha256:f8c503a95fdd83b5b72736657e4ffbb53d4b28b01763f23013f0294ed8a0e4b9"},
-    {file = "keystoneauth1-5.14.0.tar.gz", hash = "sha256:7b942084d3db27dd285c13253cdfee10b05be0436db1c01e15dc744902197a7f"},
+    {file = "keystoneauth1-5.16.0-py3-none-any.whl", hash = "sha256:ccf33516fd1b880c508b34b4d74d3a1c29345119a5a381d446083b39b6fcb3b0"},
+    {file = "keystoneauth1-5.16.0.tar.gz", hash = "sha256:c0fd79fa8f541e4954b5c6c935b9910e6d8041c8c88e071c1b4995891a7d7ccc"},
 ]
 
 [package.dependencies]
 iso8601 = ">=2.0.0"
 os-service-types = ">=1.2.0"
-pbr = ">=2.0.0"
 requests = ">=2.14.2"
 stevedore = ">=1.20.0"
 typing-extensions = ">=4.12"
@@ -1335,14 +1334,14 @@ et-xmlfile = "*"
 
 [[package]]
 name = "openstacksdk"
-version = "4.18.0"
+version = "4.22.0"
 description = "An SDK for building applications to work with OpenStack"
 optional = false
 python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "openstacksdk-4.18.0-py3-none-any.whl", hash = "sha256:17d033c19a07df90116b67c0750b2218acdc45cdcf659d4c137f084667b26993"},
-    {file = "openstacksdk-4.18.0.tar.gz", hash = "sha256:466f2f869bcf6dec717a5e6c65c0522b1bd061d53310c7bf11982e0d9244f70c"},
+    {file = "openstacksdk-4.22.0-py3-none-any.whl", hash = "sha256:e5aafe38e4c338bcb3844f1f446d7761c68477db8cec0e4bb91f4de9d35877c1"},
+    {file = "openstacksdk-4.22.0.tar.gz", hash = "sha256:757f399346f804d0a70b83fead919c498521e509889cd8973ece5cf7a640e6f9"},
 ]
 
 [package.dependencies]
@@ -1352,7 +1351,7 @@ decorator = ">=4.4.1"
 iso8601 = ">=0.1.11"
 jmespath = ">=0.9.0"
 jsonpatch = ">=1.16,!=1.20"
-keystoneauth1 = ">=5.10.0"
+keystoneauth1 = ">=5.16.0"
 os-service-types = ">=1.8.1"
 pbr = ">=2.0.0,!=2.1.0"
 platformdirs = ">=3"
