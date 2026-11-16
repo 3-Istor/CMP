@@ -8,6 +8,7 @@ the next generation of the database from the chosen backup.
 
 import difflib
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from io import StringIO
 
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
+from app.models.deployment import Deployment
 from app.routers.deployments import _deep_merge, _yaml
 from app.routers.security import (
     CurrentUser,
@@ -197,6 +199,71 @@ async def list_databases(
     )
 
 
+async def _commit_restore(
+    token: dict,
+    deployment: Deployment,
+    label: str,
+    make_patch: Callable[[dict], dict],
+    dry_run: bool,
+) -> dict[str, str]:
+    """Merge ``make_patch(values)`` into the backend values file and commit it."""
+    app_type = security_data.app_type_of(
+        deployment.app_config, deployment.terraform_outputs
+    )
+    _, values_file = security_data.values_files_for(app_type)
+    installation_token, repo = await _github_token(deployment)
+    try:
+        branch = await get_default_branch(installation_token, repo)
+        raw, sha = await get_file_content(
+            installation_token, repo, values_file, branch
+        )
+        values = _yaml.load(raw)
+        if not isinstance(values, dict) or not security_data.has_database(
+            values
+        ):
+            raise HTTPException(
+                status_code=409, detail="This app has no database."
+            )
+        if not security_data.read_backup(values).enabled:
+            raise HTTPException(
+                status_code=409,
+                detail="Les sauvegardes de cette base sont désactivées.",
+            )
+        _deep_merge(values, make_patch(values))
+        out = StringIO()
+        _yaml.dump(values, out)
+        message = f"chore(cmp): {label} ({_username(token)})"
+        if dry_run:
+            return {
+                "message": message,
+                "diff": "".join(
+                    difflib.unified_diff(
+                        raw.splitlines(keepends=True),
+                        out.getvalue().splitlines(keepends=True),
+                        fromfile=f"a/{values_file}",
+                        tofile=f"b/{values_file}",
+                    )
+                ),
+            }
+        result = await put_file_content(
+            installation_token,
+            repo,
+            values_file,
+            out.getvalue(),
+            message,
+            sha,
+            branch,
+        )
+    except FileNotInRepoError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except GitHubAppError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "message": message,
+        "commit": (result.get("commit") or {}).get("sha", ""),
+    }
+
+
 class RestoreRequest(BaseModel):
     project: str
     app: str
@@ -253,59 +320,15 @@ async def request_restore(
     except restores.RestoreError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    app_type = security_data.app_type_of(
-        deployment.app_config, deployment.terraform_outputs
+    result = await _commit_restore(
+        token,
+        deployment,
+        restores.commit_label(target),
+        lambda values: restores.restore_patch(values, target),
+        dry_run,
     )
-    _, values_file = security_data.values_files_for(app_type)
-    installation_token, repo = await _github_token(deployment)
-    try:
-        branch = await get_default_branch(installation_token, repo)
-        raw, sha = await get_file_content(
-            installation_token, repo, values_file, branch
-        )
-        values = _yaml.load(raw)
-        if not isinstance(values, dict) or not security_data.has_database(
-            values
-        ):
-            raise HTTPException(
-                status_code=409, detail="This app has no database."
-            )
-        if not security_data.read_backup(values).enabled:
-            raise HTTPException(
-                status_code=409,
-                detail="Les sauvegardes de cette base sont désactivées.",
-            )
-        _deep_merge(values, restores.restore_patch(values, target))
-        out = StringIO()
-        _yaml.dump(values, out)
-        message = (
-            f"chore(cmp): {restores.commit_label(target)} ({_username(token)})"
-        )
-        if dry_run:
-            return {
-                "message": message,
-                "diff": "".join(
-                    difflib.unified_diff(
-                        raw.splitlines(keepends=True),
-                        out.getvalue().splitlines(keepends=True),
-                        fromfile=f"a/{values_file}",
-                        tofile=f"b/{values_file}",
-                    )
-                ),
-            }
-        result = await put_file_content(
-            installation_token,
-            repo,
-            values_file,
-            out.getvalue(),
-            message,
-            sha,
-            branch,
-        )
-    except FileNotInRepoError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except GitHubAppError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if dry_run:
+        return result
     logger.info(
         "Security: %s restored %s/%s from %s",
         _username(token),
@@ -313,7 +336,65 @@ async def request_restore(
         payload.app,
         payload.backup,
     )
-    return {
-        "message": message,
-        "commit": (result.get("commit") or {}).get("sha", ""),
-    }
+    return result
+
+
+class LatestRestoreRequest(BaseModel):
+    project: str
+    app: str
+
+
+@router.post("/restores/latest")
+async def request_restore_latest(
+    payload: LatestRestoreRequest,
+    token: CurrentUser,
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """
+    Recover the app's database from its WAL archive, all WAL replayed: the way
+    back after a cloud was recreated, when no Backup object exists. No health
+    check, a fresh cluster cannot archive yet.
+    """
+    await _require_admin(token, payload.project)
+    deployment = _app_deployment(db, payload.project, payload.app)
+    try:
+        clusters = await run_in_threadpool(
+            kube_list,
+            f"/apis/postgresql.cnpg.io/v1/namespaces/{payload.project}-{payload.app}/clusters",
+            cloud=project_cloud(db, payload.project),
+        )
+    except KubeUnavailableError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    names = [
+        c["metadata"]["name"]
+        for c in clusters
+        if restores.database_read(c).backups_enabled
+    ]
+    if not names:
+        raise HTTPException(
+            status_code=409, detail="No database with backups enabled"
+        )
+
+    def make_patch(values: dict) -> dict:
+        # Generation 0 is the chart's own cluster, N the -db-r<N> recovered one.
+        generation = restores.current_generation(values)
+        suffix = f"-db-r{generation}" if generation else "-db"
+        current = [n for n in names if n.endswith(suffix)]
+        if len(current) != 1:
+            raise HTTPException(
+                status_code=409, detail="Cannot tell which database is current"
+            )
+        return restores.latest_patch(values, current[0])
+
+    result = await _commit_restore(
+        token, deployment, "restore to latest", make_patch, dry_run
+    )
+    if not dry_run:
+        logger.info(
+            "Security: %s restored %s/%s to latest",
+            _username(token),
+            payload.project,
+            payload.app,
+        )
+    return result

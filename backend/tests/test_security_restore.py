@@ -105,3 +105,20 @@ def test_database_read_reports_what_a_restored_cluster_came_from():
         "b1",
         False,
     )
+
+
+def test_latest_patch_bumps_generation():
+    patch = restore.latest_patch(
+        {"db": {"restore": {"generation": 2}}}, "x-db-r2"
+    )
+
+    assert patch == {
+        "db": {
+            "restore": {
+                "generation": 3,
+                "sourceServer": "x-db-r2",
+                "backupID": "",
+                "targetTime": "",
+            }
+        }
+    }
