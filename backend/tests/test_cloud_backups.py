@@ -73,6 +73,7 @@ class World:
         self.commits: list[tuple[str, str, str]] = []
         self.archiving: str | None = "True"  # None: condition absent
         self.cluster_down = False
+        self.cluster_name = "shop-api-backend-db"
 
         async def read_kv(mount, path):
             return self.vault.get((mount, path), {})
@@ -81,21 +82,24 @@ class World:
             self.vault[(mount, path)] = data
 
         def kube_get(path, params=None, cloud=TargetCloud.ONPREM):
-            if "/clusters/" in path:
-                if self.cluster_down:
-                    raise ClusterNotConnectedError("down")
-                conditions = (
-                    []
-                    if self.archiving is None
-                    else [
-                        {
-                            "type": "ContinuousArchiving",
-                            "status": self.archiving,
-                        }
-                    ]
-                )
-                return {"status": {"conditions": conditions}}
             return self.secrets.get(path.rsplit("/", 1)[-1])
+
+        def kube_list(path, params=None, cloud=TargetCloud.ONPREM):
+            if self.cluster_down:
+                raise ClusterNotConnectedError(TargetCloud.AWS)
+            conditions = (
+                []
+                if self.archiving is None
+                else [
+                    {"type": "ContinuousArchiving", "status": self.archiving}
+                ]
+            )
+            return [
+                {
+                    "metadata": {"name": self.cluster_name},
+                    "status": {"conditions": conditions},
+                }
+            ]
 
         async def token():
             return "tok"
@@ -113,6 +117,7 @@ class World:
         monkeypatch.setattr(cb.vault_client, "read_kv", read_kv)
         monkeypatch.setattr(cb.vault_client, "write_kv", write_kv)
         monkeypatch.setattr(cb, "kube_get", kube_get)
+        monkeypatch.setattr(cb, "kube_list", kube_list)
         monkeypatch.setattr(cb, "get_org_installation_token", token)
         monkeypatch.setattr(cb, "get_file_content", get_file)
         monkeypatch.setattr(cb, "put_file_content", put_file)
@@ -318,4 +323,15 @@ def test_sync_does_not_settle_while_the_cloud_is_down(world):
 
     world.cluster_down = False
     world.sync()
+    assert len(world.commits) == 1
+
+
+def test_sync_flips_for_a_restored_cluster(world):
+    world.add()
+    world.secret()
+    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.cluster_name = "shop-api-backend-db-r1"
+
+    world.sync()
+
     assert len(world.commits) == 1

@@ -22,7 +22,11 @@ from app.services.github_service import (
     get_org_installation_token,
     put_file_content,
 )
-from app.services.kube_client import ClusterNotConnectedError, kube_get
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    kube_get,
+    kube_list,
+)
 from app.services.security.collector import K8S_TEMPLATE
 
 logger = logging.getLogger(__name__)
@@ -92,15 +96,16 @@ def _read_key(target: BackupTarget) -> dict[str, str] | None:
 
 
 def _archiving(target: BackupTarget, cloud: TargetCloud) -> bool:
-    cluster = kube_get(
+    # Any Cluster of the namespace: a restore renames it to <name>-r<N>.
+    clusters = kube_list(
         f"/apis/postgresql.cnpg.io/v1/namespaces/{target.project}-{target.app}"
-        f"/clusters/{target.secret_name.removesuffix('-backup')}",
+        "/clusters",
         cloud=cloud,
     )
-    conditions = ((cluster or {}).get("status") or {}).get("conditions") or []
     return any(
         c.get("type") == "ContinuousArchiving" and c.get("status") == "True"
-        for c in conditions
+        for cluster in clusters
+        for c in (cluster.get("status") or {}).get("conditions") or []
     )
 
 
