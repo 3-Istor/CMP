@@ -80,7 +80,7 @@ export function AppCard({ app, projectName }: Props) {
     >
       <Card className="h-full transition-shadow group-hover:shadow-md group-hover:border-primary/30">
         <CardHeader className="grid-cols-[minmax(0,1fr)] pb-2">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <AppIcon
                 appId={app.id}

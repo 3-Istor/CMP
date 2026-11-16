@@ -92,7 +92,7 @@ export default function Home() {
         <HomeStats apps={apps} loading={loadingApps} health={health} />
 
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="space-y-8 lg:col-span-2">
+          <div className="min-w-0 space-y-8 lg:col-span-2">
             <section>
               <SectionTitle
                 title={to("recentApps")}
