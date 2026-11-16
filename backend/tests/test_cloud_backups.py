@@ -14,6 +14,7 @@ from app.models.environment import AppEnvironment
 from app.models.project import Project, TargetCloud
 from app.services import app_security_data as sd
 from app.services import cloud_backups as cb
+from app.services.kube_client import ClusterNotConnectedError
 
 BACKEND = "deploy/values-backend.yaml"
 KEY = {"AWS_ACCESS_KEY_ID": "AK", "AWS_SECRET_ACCESS_KEY": "SK"}
@@ -70,6 +71,8 @@ class World:
         self.vault: dict[tuple[str, str], dict] = {}
         self.values = "migrations:\n  backupBefore: false\n"
         self.commits: list[tuple[str, str, str]] = []
+        self.archiving: str | None = "True"  # None: condition absent
+        self.cluster_down = False
 
         async def read_kv(mount, path):
             return self.vault.get((mount, path), {})
@@ -78,6 +81,20 @@ class World:
             self.vault[(mount, path)] = data
 
         def kube_get(path, params=None, cloud=TargetCloud.ONPREM):
+            if "/clusters/" in path:
+                if self.cluster_down:
+                    raise ClusterNotConnectedError("down")
+                conditions = (
+                    []
+                    if self.archiving is None
+                    else [
+                        {
+                            "type": "ContinuousArchiving",
+                            "status": self.archiving,
+                        }
+                    ]
+                )
+                return {"status": {"conditions": conditions}}
             return self.secrets.get(path.rsplit("/", 1)[-1])
 
         async def token():
@@ -273,3 +290,32 @@ def test_sync_continues_after_a_failing_deployment(world, monkeypatch):
     monkeypatch.setattr(cb.vault_client, "write_kv", write_kv)
 
     assert world.sync() == ["api/backup"]
+
+
+def test_sync_does_not_flip_while_archiving_is_not_true(world):
+    world.add()
+    world.secret()
+    world.vault[("project-shop", "api/backup")] = dict(KEY)
+
+    for state in (None, "False"):
+        world.archiving = state
+        world.sync()
+        assert not world.commits
+
+    world.archiving = "True"
+    world.sync()
+    assert len(world.commits) == 1
+
+
+def test_sync_does_not_settle_while_the_cloud_is_down(world):
+    world.add()
+    world.secret()
+    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.cluster_down = True
+
+    world.sync()
+    assert not world.commits and not world.file_reads
+
+    world.cluster_down = False
+    world.sync()
+    assert len(world.commits) == 1

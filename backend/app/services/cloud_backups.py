@@ -22,7 +22,7 @@ from app.services.github_service import (
     get_org_installation_token,
     put_file_content,
 )
-from app.services.kube_client import kube_get
+from app.services.kube_client import ClusterNotConnectedError, kube_get
 from app.services.security.collector import K8S_TEMPLATE
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,19 @@ def _read_key(target: BackupTarget) -> dict[str, str] | None:
     }
 
 
+def _archiving(target: BackupTarget, cloud: TargetCloud) -> bool:
+    cluster = kube_get(
+        f"/apis/postgresql.cnpg.io/v1/namespaces/{target.project}-{target.app}"
+        f"/clusters/{target.secret_name.removesuffix('-backup')}",
+        cloud=cloud,
+    )
+    conditions = ((cluster or {}).get("status") or {}).get("conditions") or []
+    return any(
+        c.get("type") == "ContinuousArchiving" and c.get("status") == "True"
+        for c in conditions
+    )
+
+
 async def _enable_backup_before(deployment: Deployment) -> None:
     """Commit migrations.backupBefore: true when the file says false."""
     repo = app_repo.bound_repo(
@@ -120,7 +133,9 @@ async def _enable_backup_before(deployment: Deployment) -> None:
     )
 
 
-async def _sync_deployment(db: Session, deployment: Deployment) -> list[str]:
+async def _sync_deployment(
+    db: Session, deployment: Deployment, cloud: TargetCloud
+) -> list[str]:
     project, app = deployment.project_id, deployment.name
     staging = (
         db.query(AppEnvironment)
@@ -129,9 +144,9 @@ async def _sync_deployment(db: Session, deployment: Deployment) -> list[str]:
     )
     environments = [e for e in ENVIRONMENTS if e == "prod" or staging]
     written = []
-    prod_ready = False
+    prod_target = None
     for target in targets_for(project, app, environments):
-        key = _read_key(target)
+        key = await asyncio.to_thread(_read_key, target)
         if key is None:
             continue
         mount = f"project-{project}"
@@ -139,11 +154,16 @@ async def _sync_deployment(db: Session, deployment: Deployment) -> list[str]:
             await vault_client.write_kv(mount, target.vault_path, key)
             written.append(target.vault_path)
         elif target.environment == "prod":
-            # Already in Vault before this tick: VSO had a full cycle to deliver it.
-            prod_ready = True
-    if prod_ready and deployment.id not in _settled:
-        await _enable_backup_before(deployment)
-        _settled.add(deployment.id)
+            prod_target = target  # already in Vault before this tick
+    if prod_target and deployment.id not in _settled:
+        try:
+            # Archiving works only if Secret, flow and bucket all do: VSO delivery time is unbounded.
+            ready = await asyncio.to_thread(_archiving, prod_target, cloud)
+        except ClusterNotConnectedError:
+            return written
+        if ready:
+            await _enable_backup_before(deployment)
+            _settled.add(deployment.id)
     return written
 
 
@@ -166,7 +186,7 @@ async def sync_keys(db: Session) -> list[str]:
             cloud = project_cloud(db, deployment.project_id)
             if app_type != "fullstack" or cloud == TargetCloud.ONPREM:
                 continue
-            written += await _sync_deployment(db, deployment)
+            written += await _sync_deployment(db, deployment, cloud)
             _last_error.pop(deployment.id, None)
         except Exception as exc:  # one bad app must not block the others
             db.rollback()

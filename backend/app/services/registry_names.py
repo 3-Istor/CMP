@@ -151,6 +151,7 @@ def _is_reserved_vault_role(role: str) -> bool:
 def project_names(project: str) -> list[DerivedName]:
     return [
         ("namespace", f"{project}-system", "the project system namespace"),
+        ("namespace", f"{project}-backups", "the project backups namespace"),
         ("appproject", project, "the project AppProject"),
         ("appproject", f"{project}-platform", "the platform AppProject"),
         ("application", f"{project}-appproject", "the appproject Application"),
@@ -231,11 +232,6 @@ def app_hostname(project: str, app_name: str) -> str:
 
 def check_app_name(project: str, app_name: str) -> list[str]:
     errors: list[str] = []
-    if app_name == "backups":
-        errors.append(
-            f"app 'backups' is reserved: namespace '{project}-backups' "
-            "holds the project's backup buckets"
-        )
     if app_name == "system":
         errors.append(
             f"app 'system' is reserved: namespace '{project}-system' "

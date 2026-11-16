@@ -166,6 +166,20 @@ APP_CASES = [
         [record("foo")],
         ["hostname 'status-foo.3istor.com'", "the status hostname"],
     ),
+    (
+        "app namespace equals another project's backups namespace",
+        "my",
+        app("foo-backups"),
+        [record("my"), record("my-foo")],
+        ["namespace 'my-foo-backups'", "project 'my-foo'"],
+    ),
+    (
+        "app named backups collides with the project's own backups namespace",
+        "shop",
+        app("backups"),
+        [record("shop")],
+        ["namespace 'shop-backups'", "the project backups namespace"],
+    ),
 ]
 
 
@@ -316,11 +330,3 @@ def test_check_app_name_refuses_a_namespace_with_a_trailing_newline():
     errors = check_app_name("foo", "web\n")
 
     assert any("not a valid DNS-1123 label" in error for error in errors)
-
-
-def test_check_app_refuses_the_reserved_backups_app_name():
-    from app.services.registry_names import check_app_name
-
-    errors = check_app_name("shop", "backups")
-
-    assert any("reserved" in error for error in errors)
