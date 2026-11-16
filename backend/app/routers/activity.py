@@ -20,7 +20,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, false, or_, select, true
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -38,6 +38,7 @@ router = APIRouter(prefix="/activity", tags=["Activity"])
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 ALL_SOURCES = ("cmp", "deployment", "kubernetes", "vault", "keycloak")
+MAX_ROUNDS = 20  # bounds the over-fetch when a filter drops most rows
 PARIS = ZoneInfo("Europe/Paris")
 _LABEL_VALUE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
@@ -192,6 +193,42 @@ class RowFilter(NamedTuple):
 # ── Collection ───────────────────────────────────────────────────────────────
 
 
+def _tie(event_id: str) -> str:
+    """Event id as a string whose order matches the SQL order (cmp ids padded)."""
+    if event_id.startswith("cmp-") and event_id[4:].isdigit():
+        return f"cmp-{int(event_id[4:]):012d}"
+    return event_id
+
+
+def _key(event: ActivityEvent) -> tuple[datetime, str]:
+    return event.time, _tie(event.id)
+
+
+def _cmp_before(until: datetime, before_id: str | None):
+    """Rows strictly older than the cursor; ``before_id`` makes ties safe."""
+    older = AuditEvent.created_at < until
+    if before_id is None:
+        return older
+    if before_id.startswith("cmp-") and before_id[4:].isdigit():
+        tie = AuditEvent.id < int(before_id[4:])
+    else:
+        tie = true() if "cmp-" < before_id else false()
+    return or_(older, and_(AuditEvent.created_at == until, tie))
+
+
+def _record_before(until: datetime, before_id: str | None):
+    older = ActivityRecord.time < until
+    if before_id is None:
+        return older
+    return or_(
+        older,
+        and_(
+            ActivityRecord.time == until,
+            ActivityRecord.external_id < _tie(before_id),
+        ),
+    )
+
+
 def _cmp_rows(
     db: Session,
     project: str | None,
@@ -199,9 +236,10 @@ def _cmp_rows(
     until: datetime,
     limit: int,
     scope: RowFilter,
+    before_id: str | None = None,
 ) -> list[AuditEvent]:
     stmt = select(AuditEvent).where(
-        AuditEvent.created_at >= since, AuditEvent.created_at < until
+        AuditEvent.created_at >= since, _cmp_before(until, before_id)
     )
     if project:
         stmt = stmt.where(AuditEvent.project == project)
@@ -211,7 +249,9 @@ def _cmp_rows(
         stmt = stmt.where(AuditEvent.actor == scope.actor)
     if scope.action:
         stmt = stmt.where(AuditEvent.action.startswith(scope.action))
-    stmt = stmt.order_by(AuditEvent.id.desc()).limit(limit)
+    stmt = stmt.order_by(
+        AuditEvent.created_at.desc(), AuditEvent.id.desc()
+    ).limit(limit)
     return list(db.scalars(stmt))
 
 
@@ -266,11 +306,12 @@ def _collected_rows(
     limit: int,
     include_reads: bool,
     scope: RowFilter,
+    before_id: str | None = None,
 ) -> list[ActivityRecord]:
     stmt = select(ActivityRecord).where(
         ActivityRecord.source.in_(wanted),
         ActivityRecord.time >= since,
-        ActivityRecord.time < until,
+        _record_before(until, before_id),
     )
     if project:
         stmt = stmt.where(ActivityRecord.project == project)
@@ -282,7 +323,9 @@ def _collected_rows(
         stmt = stmt.where(ActivityRecord.action.startswith(scope.action))
     if not include_reads:
         stmt = stmt.where(ActivityRecord.is_read.is_(False))
-    stmt = stmt.order_by(ActivityRecord.time.desc()).limit(limit)
+    stmt = stmt.order_by(
+        ActivityRecord.time.desc(), ActivityRecord.external_id.desc()
+    ).limit(limit)
     return list(db.scalars(stmt))
 
 
@@ -295,17 +338,26 @@ async def _collect(
     limit: int,
     include_reads: bool,
     scope: RowFilter | None = None,
+    before_id: str | None = None,
 ) -> tuple[list[ActivityEvent], list[str]]:
     """The CMP journal and the collected sources, read from the database."""
     scope = scope or RowFilter()
     events: list[ActivityEvent] = []
     if "cmp" in wanted:
-        rows = _cmp_rows(db, project, since, until, limit, scope)
+        rows = _cmp_rows(db, project, since, until, limit, scope, before_id)
         events += [_from_row(r) for r in rows]
     collected = wanted - {"cmp"}
     if collected:
         records = _collected_rows(
-            db, project, collected, since, until, limit, include_reads, scope
+            db,
+            project,
+            collected,
+            since,
+            until,
+            limit,
+            include_reads,
+            scope,
+            before_id,
         )
         events += [_from_record(r) for r in records]
     return events, []
@@ -346,7 +398,7 @@ def _filter(
         for e in kept:
             # Where someone connects from is for the people who manage access.
             e.source_ip = None
-    kept.sort(key=lambda e: e.time, reverse=True)
+    kept.sort(key=_key, reverse=True)
     return kept
 
 
@@ -376,25 +428,51 @@ async def list_activity(
     app: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    before_id: str | None = None,
     include_reads: bool = False,
     notable_only: bool = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     db: Session = Depends(get_db),
 ) -> ActivityFeed:
-    """Newest first. Page by passing the last event's time as ``until``."""
+    """
+    Newest first. Page by passing the last event's time and id as ``until``
+    and ``before_id`` (``until`` alone skips events sharing that time).
+    """
     role = await _role(token, project)
     start, end = _window(since, until)
-    events, unavailable = await _collect(
-        db,
-        project,
-        _sources(source),
-        start,
-        end,
-        limit,
-        include_reads,
-        RowFilter(app, actor, action),
-    )
-    kept = _filter(events, role, token, actor, action, app, notable_only)
+    wanted = _sources(source)
+    scope = RowFilter(app, actor, action)
+    kept: list[ActivityEvent] = []
+    unavailable: list[str] = []
+    # Filters that SQL cannot express drop rows after the per-source limit,
+    # so read further back until a page is full or the sources run dry.
+    for _ in range(MAX_ROUNDS):
+        events, unavailable = await _collect(
+            db,
+            project,
+            wanted,
+            start,
+            end,
+            limit,
+            include_reads,
+            scope,
+            before_id,
+        )
+        # The journal and the collected table are each cut at ``limit``;
+        # nothing is certain below the highest oldest row of a full one.
+        groups = (
+            [e for e in events if e.source == "cmp"],
+            [e for e in events if e.source != "cmp"],
+        )
+        lows = [min(map(_key, g)) for g in groups if len(g) >= limit]
+        floor = max(lows) if lows else None
+        if floor is not None:
+            events = [e for e in events if _key(e) >= floor]
+        kept += _filter(events, role, token, actor, action, app, notable_only)
+        if floor is None or len(kept) >= limit:
+            break
+        end, before_id = floor[0], floor[1]
+    kept.sort(key=_key, reverse=True)
     return ActivityFeed(events=kept[:limit], unavailable=unavailable)
 
 
