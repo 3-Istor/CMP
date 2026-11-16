@@ -54,6 +54,9 @@ def test_targets_include_staging():
 
 class World:
     def __init__(self, monkeypatch):
+        cb._settled.clear()
+        cb._last_error.clear()
+        self.file_reads = 0
         engine = create_engine(
             "sqlite://",
             connect_args={"check_same_thread": False},
@@ -81,6 +84,7 @@ class World:
             return "tok"
 
         async def get_file(tok, repo, path, ref="main"):
+            self.file_reads += 1
             return self.values, "sha"
 
         async def put_file(**kw):
@@ -96,22 +100,30 @@ class World:
         monkeypatch.setattr(cb, "get_file_content", get_file)
         monkeypatch.setattr(cb, "put_file_content", put_file)
 
-    def add(self, cloud=TargetCloud.AWS, app_type="fullstack", staging=False):
+    def add(
+        self,
+        cloud=TargetCloud.AWS,
+        app_type="fullstack",
+        staging=False,
+        name="api",
+        project="shop",
+    ):
         with self.session_factory() as db:
-            db.add(
-                Project(
-                    project_name="shop",
-                    owner_username="o",
-                    target_cloud=cloud,
+            if not db.query(Project).filter_by(project_name=project).first():
+                db.add(
+                    Project(
+                        project_name=project,
+                        owner_username="o",
+                        target_cloud=cloud,
+                    )
                 )
-            )
             row = Deployment(
-                name="api",
+                name=name,
                 template_id="k3s-gitops-app",
                 provider_type=ProviderType.KUBERNETES,
-                project_id="shop",
+                project_id=project,
                 status=DeploymentStatus.RUNNING,
-                github_repo_url="https://github.com/3-istor/api",
+                github_repo_url=f"https://github.com/3-istor/{name}",
                 app_config=json.dumps({"app_type": app_type}),
             )
             db.add(row)
@@ -121,7 +133,7 @@ class World:
                     AppEnvironment(
                         deployment_id=row.id,
                         name="staging",
-                        state="ready",
+                        state=staging if isinstance(staging, str) else "ready",
                         updated_at=datetime.now(timezone.utc),
                     )
                 )
@@ -153,6 +165,8 @@ def test_sync_writes_key_then_enables_backup_before(world):
 
     assert written == ["api/backup"]
     assert world.vault == {("project-shop", "api/backup"): KEY}
+    assert not world.commits  # VSO gets one cycle before backups are on
+    assert world.sync() == []
     [(path, content, message)] = world.commits
     assert path == BACKEND
     assert "backupBefore: true" in content
@@ -170,6 +184,7 @@ def test_sync_copies_staging_key_without_second_commit(world):
     written = world.sync()
 
     assert written == ["api/backup", "api/staging/backup"]
+    world.sync()
     assert len(world.commits) == 1
 
 
@@ -221,3 +236,40 @@ def test_backup_patch_on_cloud_app_uses_vault():
     assert cloud["bucket"] == "vault"
     assert cloud["endpointURL"].startswith("http://onprem-apps.cnp-vpn")
     assert sd.backup_patch(update) == {"db": {"backup": {"enabled": True}}}
+
+
+def test_sync_reads_the_repo_once_per_deployment(world):
+    world.add()
+    world.secret()
+    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.values = "migrations:\n  backupBefore: true\n"
+
+    world.sync()
+    world.sync()
+
+    assert world.file_reads == 1
+
+
+def test_sync_skips_staging_that_is_not_ready(world):
+    world.add(staging="provisioning")
+    world.secret()
+    world.secret("shop-api-backend-stg-db-backup")
+
+    assert world.sync() == ["api/backup"]
+
+
+def test_sync_continues_after_a_failing_deployment(world, monkeypatch):
+    world.add(name="bad")
+    world.add(name="api")
+    world.secret()
+    world.secret("shop-bad-backend-db-backup")
+    real = world.vault
+
+    async def write_kv(mount, path, data):
+        if path.startswith("bad/"):
+            raise RuntimeError("vault down")
+        real[(mount, path)] = data
+
+    monkeypatch.setattr(cb.vault_client, "write_kv", write_kv)
+
+    assert world.sync() == ["api/backup"]

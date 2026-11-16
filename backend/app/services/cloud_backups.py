@@ -27,10 +27,15 @@ from app.services.security.collector import K8S_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
-# Matches the VSO reconciliationTime (Cloud/terraform/public/*/platform/vso-values.yaml).
+# Matches the VSO reconciliationTime (Cloud/terraform/public/*/*/platform/vso-values.yaml).
 TICK_SECONDS = 60.0
 COMMIT_MESSAGE = "chore(cmp): enable pre-migration backups (backup key ready)"
 KEY_FIELDS = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
+
+# Deployments whose backupBefore check is done, so the repo is not read every tick.
+_settled: set[int] = set()
+# Last error per deployment: a permanent failure is logged once, not every tick.
+_last_error: dict[int, str] = {}
 
 
 @dataclass(frozen=True)
@@ -133,9 +138,12 @@ async def _sync_deployment(db: Session, deployment: Deployment) -> list[str]:
         if await vault_client.read_kv(mount, target.vault_path) != key:
             await vault_client.write_kv(mount, target.vault_path, key)
             written.append(target.vault_path)
-        prod_ready = prod_ready or target.environment == "prod"
-    if prod_ready:
+        elif target.environment == "prod":
+            # Already in Vault before this tick: VSO had a full cycle to deliver it.
+            prod_ready = True
+    if prod_ready and deployment.id not in _settled:
         await _enable_backup_before(deployment)
+        _settled.add(deployment.id)
     return written
 
 
@@ -151,16 +159,22 @@ async def sync_keys(db: Session) -> list[str]:
         .all()
     )
     for deployment in deployments:
-        app_type = security_data.app_type_of(
-            deployment.app_config, deployment.terraform_outputs
-        )
-        cloud = project_cloud(db, deployment.project_id)
-        if app_type != "fullstack" or cloud == TargetCloud.ONPREM:
-            continue
         try:
+            app_type = security_data.app_type_of(
+                deployment.app_config, deployment.terraform_outputs
+            )
+            cloud = project_cloud(db, deployment.project_id)
+            if app_type != "fullstack" or cloud == TargetCloud.ONPREM:
+                continue
             written += await _sync_deployment(db, deployment)
-        except Exception:  # one bad app must not block the others
-            logger.exception("backup key sync failed for %s", deployment.name)
+            _last_error.pop(deployment.id, None)
+        except Exception as exc:  # one bad app must not block the others
+            db.rollback()
+            if _last_error.get(deployment.id) != repr(exc):
+                _last_error[deployment.id] = repr(exc)
+                logger.exception(
+                    "backup key sync failed for %s", deployment.name
+                )
     return written
 
 
