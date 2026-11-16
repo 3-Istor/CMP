@@ -3,7 +3,7 @@
 import { useCan, useProjectApps } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import type { Deployment } from "@/types";
-import { Boxes, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Boxes, ChevronDown, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -96,6 +96,16 @@ export function ProjectNav({
       aria-label={t("navigation")}
       className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3"
     >
+      <Link
+        href="/"
+        title={t("back")}
+        aria-label={collapsed ? t("back") : undefined}
+        onClick={onNavigate}
+        className={cn(linkClass(false, collapsed), "mb-1 text-muted-foreground")}
+      >
+        <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+        {!collapsed && <span className="flex-1 truncate">{t("platform")}</span>}
+      </Link>
       {renderSection(PROJECT_SECTIONS.overview)}
 
       {collapsed ? (

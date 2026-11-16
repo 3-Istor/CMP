@@ -1,6 +1,7 @@
 "use client";
 
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
+import { projectHref } from "@/components/layout/projectSections";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -168,11 +169,21 @@ export function ProjectSection({
   children: React.ReactNode;
 }) {
   const { can, roleLoading, projectName } = useProjectContext();
+  const tNav = useTranslations("projectNav");
   const allowed = !capability || can(capability);
 
   return (
     <div className="min-h-screen">
-      <PageHeader title={title} description={projectName} actions={actions} />
+      <PageHeader
+        title={title}
+        description={projectName}
+        actions={actions}
+        breadcrumbs={[
+          { label: tNav("projects"), href: "/projects" },
+          { label: projectName, href: projectHref(projectName) },
+          { label: title },
+        ]}
+      />
       <PageBody>
         {roleLoading && !allowed ? (
           <Skeleton className="h-48 w-full rounded-xl" />

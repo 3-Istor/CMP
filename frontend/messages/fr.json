@@ -35,7 +35,6 @@
     "links": {
       "label": "Liens et aide",
       "status": "Statut de la plateforme",
-      "roadmap": "Roadmap",
       "docs": "Documentation",
       "adminGroup": "Réservé aux admins",
       "adminOnly": "{count, plural, one {# lien réservé aux admins} other {# liens réservés aux admins}}"
@@ -47,8 +46,7 @@
       "system": "Système"
     },
     "profile": {
-      "myProfile": "Mon profil",
-      "accountSettings": "Paramètres du compte",
+      "account": "Compte",
       "language": "Langue",
       "logout": "Se déconnecter",
       "roleAdmin": "Admin plateforme",
@@ -1406,6 +1404,7 @@
     "searchProjects": "Rechercher un projet...",
     "noProject": "Aucun projet trouvé.",
     "back": "Retour à la plateforme",
+    "platform": "Plateforme",
     "projects": "Projets",
     "newProject": "Nouveau projet",
     "overview": "Vue d'ensemble",

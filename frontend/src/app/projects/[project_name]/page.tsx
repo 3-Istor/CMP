@@ -45,6 +45,7 @@ export default function ProjectPage() {
   const router = useRouter();
   const ta = useTranslations("actions");
   const t = useTranslations("projects.page");
+  const tNav = useTranslations("projectNav");
   const tRoles = useTranslations("projects");
   const tCommon = useTranslations("common");
   const tScore = useTranslations("scorecard");
@@ -162,6 +163,10 @@ export default function ProjectPage() {
             : t("kubernetes")
         }
         icon={FolderKanban}
+        breadcrumbs={[
+          { label: tNav("projects"), href: "/projects" },
+          { label: projectName },
+        ]}
         actions={
           <>
               <Badge variant="outline" className="font-mono text-xs">

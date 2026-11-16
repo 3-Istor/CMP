@@ -35,7 +35,6 @@
     "links": {
       "label": "Links and help",
       "status": "Platform status",
-      "roadmap": "Roadmap",
       "docs": "Documentation",
       "adminGroup": "Admins only",
       "adminOnly": "{count, plural, one {# link reserved for admins} other {# links reserved for admins}}"
@@ -47,8 +46,7 @@
       "system": "System"
     },
     "profile": {
-      "myProfile": "My profile",
-      "accountSettings": "Account settings",
+      "account": "Account",
       "language": "Language",
       "logout": "Sign out",
       "roleAdmin": "Platform admin",
@@ -1406,6 +1404,7 @@
     "searchProjects": "Search a project...",
     "noProject": "No project found.",
     "back": "Back to the platform",
+    "platform": "Platform",
     "projects": "Projects",
     "newProject": "New project",
     "overview": "Overview",

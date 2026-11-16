@@ -1,6 +1,8 @@
 "use client";
 
 import { AppIcon } from "@/components/app-icon/AppIcon";
+import { Breadcrumbs } from "@/components/layout/PageHeader";
+import { projectHref } from "@/components/layout/projectSections";
 import { AppIconDialog } from "@/components/app-icon/AppIconDialog";
 import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 
@@ -119,6 +121,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
 
   const tf = useTranslations("appPage");
+  const tNavProj = useTranslations("projectNav");
   const tFrame = useTranslations("apps.frame");
   const locale = intlLocale(useLocale());
   const [links, setLinks] = useState<ProjectLink[]>([]);
@@ -275,29 +278,24 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       visible: isKubernetes && canViewConfig,
     },
   ];
+  const activeTab = tabs.find((tab) => tab.segment === activeSegment);
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-7xl px-6 pt-4">
-          <nav aria-label={t("breadcrumb")} className="text-xs">
-            <ol className="flex items-center gap-1.5 text-muted-foreground">
-              <li>
-                <Link
-                  href={`/projects/${encodeURIComponent(projectName)}`}
-                  className="hover:text-foreground hover:underline"
-                >
-                  {t("applications")}
-                </Link>
-              </li>
-              <li aria-hidden>/</li>
-              <li aria-current="page" className="text-foreground">
-                {current.name}
-              </li>
-            </ol>
-          </nav>
+          <Breadcrumbs
+            items={[
+              { label: tNavProj("projects"), href: "/projects" },
+              { label: projectName, href: projectHref(projectName) },
+              { label: current.name, href: activeSegment ? base : undefined },
+              ...(activeSegment && activeTab
+                ? [{ label: t(activeTab.key) }]
+                : []),
+            ]}
+          />
 
-          <div className="mt-2 flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <AppIcon
                 appId={current.id}
