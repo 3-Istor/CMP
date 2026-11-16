@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, Copy, ShieldAlert } from "lucide-react";
+import { ArrowRight, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -22,34 +22,6 @@ function since(iso: string | null, t: (key: string, values?: Record<string, numb
   return t("assistant.since.days", { count: Math.round(hours / 24) });
 }
 
-function AskChip({ text }: { text: string }) {
-  const t = useTranslations("agents.assistant");
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          // Clipboard refused: nothing else to do, the text is on screen.
-        }
-      }}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-left text-xs text-foreground transition-colors hover:bg-primary/10"
-      title={t("copyHint")}
-    >
-      {copied ? (
-        <Check className="h-3 w-3 shrink-0 text-primary" />
-      ) : (
-        <Copy className="h-3 w-3 shrink-0 text-muted-foreground" />
-      )}
-      <span className="truncate">{text}</span>
-    </button>
-  );
-}
-
 export function AssistantCard() {
   const t = useTranslations("agents");
   const [summary, setSummary] = useState<AgentSummary | null>(null);
@@ -64,7 +36,7 @@ export function AssistantCard() {
   const connected = summary.assistants.length > 0;
 
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-start">
+    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
       <Mascot
         mood={connected ? "happy" : "idle"}
         className="h-14 w-16 shrink-0"
@@ -98,7 +70,7 @@ export function AssistantCard() {
             {summary.assistants.map((a) => (
               <span
                 key={a.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-2.5 py-0.5 text-xs text-primary"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/40 px-2.5 py-0.5 text-xs text-primary"
               >
                 {a.client_name}
                 <span className="text-muted-foreground">
@@ -110,7 +82,7 @@ export function AssistantCard() {
               </span>
             ))}
             {summary.pending_confirmations > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs text-amber-700 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs text-amber-700 dark:text-amber-300">
                 <ShieldAlert className="h-3 w-3" />
                 {t("assistant.waitingApproval", {
                   count: summary.pending_confirmations,
@@ -121,15 +93,6 @@ export function AssistantCard() {
         )}
 
         {!connected && <InstallButtons />}
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">
-            {t("assistant.tryAsking")}
-          </span>
-          {(t.raw("assistant.asks") as string[]).map((ask) => (
-            <AskChip key={ask} text={ask} />
-          ))}
-        </div>
       </div>
     </section>
   );

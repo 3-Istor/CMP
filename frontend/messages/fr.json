@@ -1325,7 +1325,7 @@
   "account": {
     "page": {
       "back": "Retour au tableau de bord",
-      "title": "Paramètres du compte",
+      "title": "Compte",
       "subtitle": "Gérez votre profil et vos préférences",
       "loading": "Chargement du profil…",
       "loadFailed": "Impossible de charger votre profil",
@@ -1508,24 +1508,17 @@
     },
     "liveStats": "apps créées via des assistants IA ce mois-ci, par {assistants, plural, one {# assistant connecté} other {# assistants connectés}}. Chiffre en direct.",
     "assistant": {
-      "asks": [
-        "Mettez en ligne une page avec le programme de notre prochain événement d'équipe.",
-        "Donnez-moi un état de mes projets, en une page, pour cette semaine.",
-        "Pourquoi mon app est-elle lente ? Lisez ses logs et dites-le-moi avant de rien modifier."
-      ],
       "since": {
         "minutes": "il y a {count} min",
         "hours": "il y a {count} h",
         "days": "il y a {count, plural, one {# jour} other {# jours}}"
       },
-      "copyHint": "Copier, puis coller dans votre assistant",
       "title": "Votre assistant IA",
       "connectedText": "{count, plural, one {# app créée} other {# apps créées}} via un assistant · dernière action {since}",
       "emptyText": "Demandez à Claude, ChatGPT ou Codex de créer et publier des applications pour vous, avec vos droits.",
       "connectAnother": "Connecter un autre assistant",
       "connectOne": "Connecter un assistant",
-      "waitingApproval": "{count} en attente de votre approbation",
-      "tryAsking": "Essayez :"
+      "waitingApproval": "{count} en attente de votre approbation"
     },
     "clients": {
       "claudeAi": {
@@ -2891,17 +2884,8 @@
       "costsForecast": "prévision {amount} en fin de mois",
       "platform": "Plateforme",
       "nodesValue": "{up} / {total} nœuds",
-      "cloudsHint": "{count, plural, =0 {clouds publics éteints} one {# cloud public allumé} other {# clouds publics allumés}}"
-    },
-    "infra": {
-      "title": "Infrastructure",
-      "unavailable": "État de l'infrastructure indisponible.",
-      "states": {
-        "up": "en ligne",
-        "down": "éteint",
-        "starting": "démarrage",
-        "unknown": "inconnu"
-      }
+      "cloudUp": "en ligne",
+      "cloudDown": "éteint"
     }
   },
   "securityFindings": {

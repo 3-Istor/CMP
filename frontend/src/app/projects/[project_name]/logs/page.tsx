@@ -19,7 +19,7 @@ function ProjectLogs() {
     <div className="min-h-screen">
       <PageHeader
         title={t("title")}
-        description={namespace ?? projectName}
+        description={namespace && namespace !== projectName ? namespace : undefined}
         icon={ScrollText}
         breadcrumbs={[
           { label: tNav("projects"), href: "/projects" },

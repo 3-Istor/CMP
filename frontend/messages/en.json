@@ -1325,7 +1325,7 @@
   "account": {
     "page": {
       "back": "Back to dashboard",
-      "title": "Account settings",
+      "title": "Account",
       "subtitle": "Manage your profile and preferences",
       "loading": "Loading profile…",
       "loadFailed": "Could not load your profile",
@@ -1508,24 +1508,17 @@
     },
     "liveStats": "apps created through AI assistants this month, by {assistants, plural, one {# connected assistant} other {# connected assistants}}. Live figure.",
     "assistant": {
-      "asks": [
-        "Put a page online with the agenda of our next team event.",
-        "Give me a one-screen status of my projects this week.",
-        "Why is my app slow? Read its logs and tell me before changing anything."
-      ],
       "since": {
         "minutes": "{count} min ago",
         "hours": "{count} h ago",
         "days": "{count, plural, one {# day} other {# days}} ago"
       },
-      "copyHint": "Copy, then paste it in your assistant",
       "title": "Your AI assistant",
       "connectedText": "{count, plural, one {# app created} other {# apps created}} through an assistant · last action {since}",
       "emptyText": "Ask Claude, ChatGPT or Codex to create and release apps for you, with your rights.",
       "connectAnother": "Connect another",
       "connectOne": "Connect an assistant",
-      "waitingApproval": "{count} waiting for your approval",
-      "tryAsking": "Try asking:"
+      "waitingApproval": "{count} waiting for your approval"
     },
     "clients": {
       "claudeAi": {
@@ -2891,17 +2884,8 @@
       "costsForecast": "forecast {amount} at month end",
       "platform": "Platform",
       "nodesValue": "{up} / {total} nodes",
-      "cloudsHint": "{count, plural, =0 {public clouds off} one {# public cloud on} other {# public clouds on}}"
-    },
-    "infra": {
-      "title": "Infrastructure",
-      "unavailable": "Infrastructure state unavailable.",
-      "states": {
-        "up": "up",
-        "down": "down",
-        "starting": "starting",
-        "unknown": "unknown"
-      }
+      "cloudUp": "up",
+      "cloudDown": "down"
     }
   },
   "securityFindings": {

@@ -176,7 +176,6 @@ export function ProjectSection({
     <div className="min-h-screen">
       <PageHeader
         title={title}
-        description={projectName}
         actions={actions}
         breadcrumbs={[
           { label: tNav("projects"), href: "/projects" },

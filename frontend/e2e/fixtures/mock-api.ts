@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import access from "./access.json";
+import agentsSummary from "./agents-summary.json";
 import accessReview1 from "./access-review-1.json";
 import accessReviewMine from "./access-review-mine.json";
 import accessReviews from "./access-reviews.json";
@@ -21,6 +22,7 @@ import topology from "./topology.json";
 const ROUTES: Record<string, unknown> = {
   "/account/me": me,
   "/access": access,
+  "/agents/summary": agentsSummary,
   "/access-reviews": accessReviews,
   "/access-reviews/campaigns/1": accessReview1,
   "/access-reviews/mine": accessReviewMine,

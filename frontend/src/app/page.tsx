@@ -3,7 +3,6 @@
 import { AssistantCard } from "@/components/agents/AssistantCard";
 import { AppsTable } from "@/components/dashboard/AppsTable";
 import { HomeStats } from "@/components/dashboard/HomeStats";
-import { InfraPanel } from "@/components/dashboard/InfraPanel";
 import { FavoritesSection } from "@/components/favorites/FavoritesSection";
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
@@ -55,7 +54,7 @@ export default function Home() {
   const { projects, loading: loadingProjects, refresh: refreshProjects } =
     useProjectsLive();
   const { deployments, loading: loadingApps } = useDeploymentsList(5000, 30000);
-  const { health, loading: loadingHealth } = useGlobalHealth(30_000);
+  const { health } = useGlobalHealth(30_000);
   const apps = deployments
     .filter((d) => d.status !== "deleted" && d.project_id !== null)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
@@ -92,8 +91,8 @@ export default function Home() {
       <PageBody className="space-y-8">
         <HomeStats apps={apps} loading={loadingApps} health={health} />
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <section>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <section className="lg:col-span-2">
             <SectionTitle
               title={to("recentApps")}
               href="/apps"
@@ -103,9 +102,8 @@ export default function Home() {
               <AppsTable apps={apps} loading={loadingApps} limit={HOME_APPS} />
             </Card>
           </section>
-          <aside className="space-y-6">
+          <aside className="lg:self-start">
             <AssistantCard />
-            <InfraPanel health={health} loading={loadingHealth} />
           </aside>
         </div>
 

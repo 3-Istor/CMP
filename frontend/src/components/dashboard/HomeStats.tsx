@@ -27,7 +27,9 @@ export function HomeStats({
   const core = security.reduce((sum, p) => sum + p.core, 0);
   const nodes = health?.openstack_hypervisors ?? [];
   const nodesUp = nodes.filter((n) => n.state === "up").length;
-  const cloudsUp = (health?.clusters ?? []).filter((c) => c.state === "up").length;
+  const clouds = (health?.clusters ?? [])
+    .map((c) => `${c.cloud.toUpperCase()} ${t(c.state === "up" ? "cloudUp" : "cloudDown")}`)
+    .join(" · ");
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -68,7 +70,7 @@ export function HomeStats({
         label={t("platform")}
         loading={!health}
         value={nodes.length > 0 ? t("nodesValue", { up: nodesUp, total: nodes.length }) : "-"}
-        hint={t("cloudsHint", { count: cloudsUp })}
+        hint={clouds}
         tone={nodes.length > 0 && nodesUp < nodes.length ? "warn" : "default"}
       />
     </div>
