@@ -1,0 +1,1 @@
+[{"name":"demo-app-db","phase":"Cluster in healthy state","healthy":true,"instances":2,"ready_instances":2,"backups_enabled":true,"restored_from":null,"restored_backup":null,"restored_to":null}]

@@ -829,6 +829,12 @@ export const requestSecurityRestore = (
     { method: "POST", body: JSON.stringify(payload) },
   );
 
+export const requestSecurityRestoreLatest = (project: string, app: string) =>
+  request<{ message: string; commit?: string }>("/security/restores/latest", {
+    method: "POST",
+    body: JSON.stringify({ project, app }),
+  });
+
 export const getSecurityBackups = (project: string, app: string) =>
   request<SecurityBackup[]>(`/security/backups?${securityQuery({ project, app })}`);
 

@@ -15,6 +15,10 @@ import platformStatus from "./platform-status.json";
 import projectApps from "./project-apps.json";
 import projectLinks from "./project-links.json";
 import projects from "./projects.json";
+import securityData from "./security-data.json";
+import securityDatabases from "./security-databases.json";
+import securityRole from "./security-role.json";
+import securitySummary from "./security-summary.json";
 import session from "./session.json";
 import topology from "./topology.json";
 
@@ -29,6 +33,14 @@ const ROUTES: Record<string, unknown> = {
   "/projects/demo/links": projectLinks,
   "/deployments/": projectApps,
   "/deployments/1": projectApps[0],
+  "/deployments/1/security-data": securityData,
+  "/security/summary": securitySummary,
+  "/security/findings": [],
+  "/security/trend": [],
+  "/security/exceptions": [],
+  "/security/me": securityRole,
+  "/security/databases": securityDatabases,
+  "/security/backups": [],
   "/infra/health": infraHealth,
   // Health badges only render with a health answer; without it axe never checks their colours.
   "/infra/deployments/1/health": appHealth,
@@ -43,7 +55,11 @@ const ROUTES: Record<string, unknown> = {
 
 export const unmockedRequests = new Set<string>();
 
-export async function installMockApi(page: Page): Promise<void> {
+export async function installMockApi(
+  page: Page,
+  overrides: Record<string, unknown> = {},
+): Promise<void> {
+  const routes = { ...ROUTES, ...overrides };
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -54,12 +70,12 @@ export async function installMockApi(page: Page): Promise<void> {
     }
 
     const apiPath = url.pathname.replace(/^\/api/, "");
-    if (!(apiPath in ROUTES)) {
+    if (!(apiPath in routes)) {
       unmockedRequests.add(`${request.method()} ${apiPath}`);
       await route.fulfill({ status: 404, json: { detail: "not mocked in e2e fixtures" } });
       return;
     }
 
-    await route.fulfill({ json: ROUTES[apiPath] });
+    await route.fulfill({ json: routes[apiPath] });
   });
 }

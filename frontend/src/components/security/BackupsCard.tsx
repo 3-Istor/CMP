@@ -3,12 +3,14 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NotConnected } from "@/components/clusters/NotConnected";
 import {
   getSecurityBackups,
   getSecurityDatabases,
   isNotConnected,
   requestSecurityBackup,
+  requestSecurityRestoreLatest,
   type SecurityBackup,
   type SecurityDatabase,
 } from "@/lib/api";
@@ -16,6 +18,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useProjects } from "@/lib/hooks";
 import { errorMessage, relativeTime } from "./labels";
 import { RestoreDialog } from "./RestoreDialog";
 
@@ -40,6 +43,9 @@ export function BackupsCard({
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState<SecurityBackup | null>(null);
+  const [restoringLatest, setRestoringLatest] = useState(false);
+  const { projects } = useProjects();
+  const onCloud = (projects.find((p) => p.name === project)?.target_cloud ?? "onprem") !== "onprem";
 
   const load = useCallback(
     () =>
@@ -87,10 +93,20 @@ export function BackupsCard({
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
           {canAdmin && (
-            <Button size="sm" variant="outline" onClick={backupNow} disabled={busy}>
-              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {t("finding.backupNow")}
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={backupNow} disabled={busy}>
+                {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {t("finding.backupNow")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={settling || !databases.some((d) => d.backups_enabled)}
+                onClick={() => setRestoringLatest(true)}
+              >
+                {t("backups.restoreLatest")}
+              </Button>
+            </>
           )}
         </div>
       </CardHeader>
@@ -136,7 +152,9 @@ export function BackupsCard({
         ) : backups === null ? (
           <p className="text-muted-foreground">{t("common.loading")}</p>
         ) : backups.length === 0 ? (
-          <p className="text-muted-foreground">{t("backups.emptyState")}</p>
+          <p className="text-muted-foreground">
+            {t(onCloud ? "backups.emptyStateCloud" : "backups.emptyState")}
+          </p>
         ) : (
           <table className="w-full">
             <thead className="text-left text-xs text-muted-foreground">
@@ -159,14 +177,11 @@ export function BackupsCard({
                     )}
                   </td>
                   <td className="py-2 text-muted-foreground">
-                    {relativeTime(b.stopped_at ?? b.started_at, locale) ??
-                      t("common.never")}
+                    {relativeTime(b.stopped_at ?? b.started_at, locale) ?? t("common.never")}
                   </td>
                   <td className="py-2">
                     <span className={b.phase === "failed" ? "text-destructive" : ""}>
-                      {PHASE_KEYS.includes(b.phase)
-                        ? t(`backups.phase.${b.phase}`)
-                        : b.phase}
+                      {PHASE_KEYS.includes(b.phase) ? t(`backups.phase.${b.phase}`) : b.phase}
                     </span>
                     {b.error && (
                       <span className="block text-xs text-muted-foreground">{b.error}</span>
@@ -192,6 +207,20 @@ export function BackupsCard({
           </table>
         )}
       </CardContent>
+      <ConfirmDialog
+        open={restoringLatest}
+        onOpenChange={setRestoringLatest}
+        level={1}
+        destructive
+        title={t("backups.restoreLatestTitle")}
+        description={t("backups.restoreLatestDescription")}
+        confirmLabel={t("backups.restoreLatest")}
+        onConfirm={async () => {
+          await requestSecurityRestoreLatest(project, app);
+          toast.success(t("restore.committed"));
+          await load();
+        }}
+      />
       {restoring && (
         <RestoreDialog
           project={project}

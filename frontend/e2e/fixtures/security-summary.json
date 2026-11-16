@@ -1,0 +1,14 @@
+{
+  "project": "demo",
+  "app": "demo-app",
+  "view": "developer",
+  "score": 92,
+  "grade": "A",
+  "actions": 0,
+  "core": 0,
+  "excepted": 0,
+  "segments": [],
+  "apps": [],
+  "scans": [],
+  "guarantees": []
+}

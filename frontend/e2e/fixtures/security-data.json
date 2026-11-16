@@ -1,0 +1,1 @@
+{"repo":"cnp/demo-app","can_edit":true,"exposure":null,"database":{"backup":{"enabled":true,"keep_after_delete":true,"retention_policy":"7d"}}}

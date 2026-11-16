@@ -880,7 +880,11 @@
       "when": "When",
       "status": "Status",
       "manual": "manual",
-      "restore": "Restore"
+      "restore": "Restore",
+      "restoreLatest": "Restore latest",
+      "restoreLatestTitle": "Restore the latest state",
+      "restoreLatestDescription": "The current database is replaced by its latest state, last backup plus archived WAL. The app restarts.",
+      "emptyStateCloud": "No backup on this cluster yet. Restore latest uses the archive kept on-prem."
     },
     "restore": {
       "title": "Restore database {database}",
