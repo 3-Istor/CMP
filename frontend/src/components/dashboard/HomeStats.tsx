@@ -71,6 +71,7 @@ export function HomeStats({
         loading={!health}
         value={nodes.length > 0 ? t("nodesValue", { up: nodesUp, total: nodes.length }) : "-"}
         hint={clouds}
+        title={nodes.map((n) => `${n.name} ${n.state}`).join("\n")}
         tone={nodes.length > 0 && nodesUp < nodes.length ? "warn" : "default"}
       />
     </div>

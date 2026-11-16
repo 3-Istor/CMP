@@ -37,14 +37,14 @@ export function AssistantCard() {
 
   return (
     <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
-      <Mascot
-        mood={connected ? "happy" : "idle"}
-        className="h-14 w-16 shrink-0"
-      />
+      {!connected && <Mascot mood="idle" className="h-14 w-16 shrink-0" />}
       <div className="min-w-0 flex-1 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-semibold">{t("assistant.title")}</h2>
+            <h2 className="flex items-center gap-2 font-semibold">
+              {connected && <Mascot mood="happy" className="h-7 w-8 shrink-0" />}
+              {t("assistant.title")}
+            </h2>
             <p className="text-sm text-muted-foreground">
               {connected
                 ? t("assistant.connectedText", {

@@ -92,22 +92,23 @@ export default function Home() {
         <HomeStats apps={apps} loading={loadingApps} health={health} />
 
         <div className="grid gap-6 lg:grid-cols-3">
-          <section className="lg:col-span-2">
-            <SectionTitle
-              title={to("recentApps")}
-              href="/apps"
-              linkLabel={to("allApps", { count: apps.length })}
-            />
-            <Card className="py-0">
-              <AppsTable apps={apps} loading={loadingApps} limit={HOME_APPS} />
-            </Card>
-          </section>
+          <div className="space-y-8 lg:col-span-2">
+            <section>
+              <SectionTitle
+                title={to("recentApps")}
+                href="/apps"
+                linkLabel={to("allApps", { count: apps.length })}
+              />
+              <Card className="py-0">
+                <AppsTable apps={apps} loading={loadingApps} limit={HOME_APPS} />
+              </Card>
+            </section>
+            <FavoritesSection onRetried={refreshProjects} />
+          </div>
           <aside className="lg:self-start">
             <AssistantCard />
           </aside>
         </div>
-
-        <FavoritesSection onRetried={refreshProjects} />
 
         <section>
           <SectionTitle

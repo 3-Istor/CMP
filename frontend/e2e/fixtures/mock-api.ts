@@ -13,6 +13,7 @@ import imports from "./imports.json";
 import infraHealth from "./infra-health.json";
 import me from "./me.json";
 import platformStatus from "./platform-status.json";
+import preferences from "./preferences.json";
 import projectApps from "./project-apps.json";
 import projectLinks from "./project-links.json";
 import projects from "./projects.json";
@@ -22,6 +23,7 @@ import topology from "./topology.json";
 const ROUTES: Record<string, unknown> = {
   "/account/me": me,
   "/access": access,
+  "/account/preferences": preferences,
   "/agents/summary": agentsSummary,
   "/access-reviews": accessReviews,
   "/access-reviews/campaigns/1": accessReview1,
