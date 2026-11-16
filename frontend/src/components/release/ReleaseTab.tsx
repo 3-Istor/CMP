@@ -268,11 +268,13 @@ export function ReleaseTab({
   projectName,
   showSettings = true,
   showHistory = true,
+  showNewRelease = true,
 }: {
   deploymentId: number;
   projectName: string;
   showSettings?: boolean;
   showHistory?: boolean;
+  showNewRelease?: boolean;
 }) {
   const t = useTranslations("release");
   const locale = intlLocale(useLocale());
@@ -354,7 +356,7 @@ export function ReleaseTab({
   if (!view.enabled) {
     return (
       <div className="space-y-6">
-        {canOperate && (
+        {canOperate && showNewRelease && (
           <div className="flex justify-end">
             <NewReleaseButton deploymentId={deploymentId} />
           </div>
@@ -408,7 +410,7 @@ export function ReleaseTab({
 
   return (
     <div className="space-y-6">
-      {canOperate && (
+      {canOperate && showNewRelease && (
         <div className="flex justify-end">
           <NewReleaseButton deploymentId={deploymentId} />
         </div>

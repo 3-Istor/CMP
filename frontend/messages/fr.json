@@ -112,7 +112,8 @@
       "creatingTitle": "Ce projet est en cours de création",
       "deletingTitle": "Ce projet est en cours de suppression",
       "createFailedTitle": "Ce projet n'a pas pu être créé",
-      "deleteFailedTitle": "Ce projet n'a pas pu être supprimé"
+      "deleteFailedTitle": "Ce projet n'a pas pu être supprimé",
+      "appsDeleting": "{count, plural, one {# app en suppression} other {# apps en suppression}}"
     },
     "create": {
       "title": "Créer un nouveau projet",
@@ -2570,7 +2571,19 @@
         "slo": {
           "title": "SLO",
           "description": "Objectifs de disponibilité et de latence de l'app en prod."
+        },
+        "danger": {
+          "title": "Zone de danger",
+          "description": "Actions irréversibles."
         }
+      },
+      "danger": {
+        "title": "Supprimer cette app",
+        "hint": "Supprime l'app, son dépôt et ses données.",
+        "delete": "Supprimer l'app",
+        "importTitle": "Retirer cet import",
+        "importHint": "Retire l'app importée avec l'import de son dépôt et ses données.",
+        "removeImport": "Retirer l'import"
       }
     }
   },

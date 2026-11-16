@@ -5,6 +5,7 @@ import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectsGrid } from "@/components/projects/ProjectsGrid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDeploymentsList } from "@/lib/hooks";
 import { useProjectsLive } from "@/lib/useProjectsLive";
 import { FolderKanban, FolderPlus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -16,6 +17,7 @@ export default function ProjectsPage() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { projects, loading, refresh } = useProjectsLive();
+  const { deployments } = useDeploymentsList(5000, 30000);
   const shown = projects.filter((p) =>
     p.name.toLowerCase().includes(query.trim().toLowerCase()),
   );
@@ -52,6 +54,7 @@ export default function ProjectsPage() {
       <PageBody>
         <ProjectsGrid
           projects={shown}
+          apps={deployments}
           loading={loading}
           onCreate={() => setOpen(true)}
           onRetried={refresh}

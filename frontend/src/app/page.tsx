@@ -118,6 +118,7 @@ export default function Home() {
           />
           <ProjectsGrid
             projects={projects}
+            apps={apps}
             loading={loadingProjects}
             onCreate={() => setCreateProjectOpen(true)}
             onRetried={refreshProjects}

@@ -2,11 +2,12 @@
 
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { HealthBadge } from "@/components/projects/DeploymentHealth";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppHealth } from "@/lib/hooks";
 import { appUrlOf, cn } from "@/lib/utils";
 import type { Deployment } from "@/types";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
@@ -18,6 +19,14 @@ function AppState({ app }: { app: Deployment }) {
   const t = useTranslations("appPage.deploymentStatus");
   const live = app.provider_type === "kubernetes" && app.status === "running";
   const { health, loading } = useAppHealth(live ? app.id : null, 60_000);
+  if (app.status === "deleting") {
+    return (
+      <Badge variant="destructive" className="gap-1">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+        {t("deleting")}
+      </Badge>
+    );
+  }
   if (!live) {
     return (
       <span

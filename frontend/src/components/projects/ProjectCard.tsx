@@ -34,6 +34,8 @@ interface Props {
     project: Project;
     /** Called after a retry was accepted, so the list picks up the new status. */
     onRetried?: () => void;
+    /** Apps of the project being deleted. */
+    deletingApps?: number;
 }
 
 const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
@@ -43,7 +45,7 @@ const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
     guest: Eye,
 };
 
-export function ProjectCard({ project, onRetried }: Props) {
+export function ProjectCard({ project, onRetried, deletingApps = 0 }: Props) {
     const t = useTranslations("projects");
     const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
@@ -132,6 +134,12 @@ export function ProjectCard({ project, onRetried }: Props) {
                 <CardDescription className="text-xs">
                     {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
                 </CardDescription>
+                {deletingApps > 0 && !isInFlight && (
+                    <p className="flex items-center gap-1 text-xs text-destructive">
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                        {t("card.appsDeleting", { count: deletingApps })}
+                    </p>
+                )}
             </CardHeader>
             <CardContent className="pt-0 space-y-1.5">
                 {isInFlight ? (

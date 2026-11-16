@@ -112,7 +112,8 @@
       "creatingTitle": "This project is still being created",
       "deletingTitle": "This project is being deleted",
       "createFailedTitle": "This project could not be created",
-      "deleteFailedTitle": "This project could not be deleted"
+      "deleteFailedTitle": "This project could not be deleted",
+      "appsDeleting": "{count, plural, one {# app deleting} other {# apps deleting}}"
     },
     "create": {
       "title": "Create a new project",
@@ -2570,7 +2571,19 @@
         "slo": {
           "title": "SLO",
           "description": "Availability and latency targets of the app in prod."
+        },
+        "danger": {
+          "title": "Danger zone",
+          "description": "Actions that cannot be undone."
         }
+      },
+      "danger": {
+        "title": "Delete this app",
+        "hint": "Removes the app, its repo and its data.",
+        "delete": "Delete app",
+        "importTitle": "Remove this import",
+        "importHint": "Removes the imported app with its repo import and its data.",
+        "removeImport": "Remove import"
       }
     }
   },

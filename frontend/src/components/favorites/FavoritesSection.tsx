@@ -3,6 +3,7 @@
 import { useVisibleWork } from "@/components/layout/shellData";
 import { AppCard } from "@/components/projects/AppCard";
 import { ProjectCard } from "@/components/projects/ProjectCard";
+import { countDeleting } from "@/components/projects/ProjectsGrid";
 import { useFavorites } from "@/lib/favorites";
 import { useTranslations } from "next-intl";
 
@@ -31,6 +32,7 @@ export function FavoritesSection({ onRetried }: { onRetried: () => void }) {
             key={`project-${p.name}`}
             project={p}
             onRetried={onRetried}
+            deletingApps={countDeleting(apps, p.name)}
           />
         ))}
         {favApps.map(({ app, projectName }) => (
