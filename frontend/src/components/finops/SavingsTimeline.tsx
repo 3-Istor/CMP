@@ -89,7 +89,7 @@ export function SavingsTimeline({ data }: { data: FinopsSavings["timeline"] }) {
             {SERIES.map((s) => (
               <Line
                 key={s.key}
-                type="monotone"
+                type="linear"
                 dataKey={s.key}
                 name={t(s.labelKey)}
                 stroke={s.color}

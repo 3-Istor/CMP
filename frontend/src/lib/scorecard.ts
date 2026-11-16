@@ -66,15 +66,17 @@ export function actionHref(
   const app = `/projects/${project}/apps/${appId}`;
   switch (action) {
     case "run_scan":
-    case "fix_critical":
-    case "fix_high":
       return `${app}/security`;
+    case "fix_critical":
+      return `${app}/security?tab=code&tier=core`;
+    case "fix_high":
+      return `${app}/security?tab=code&tier=important`;
     case "set_budget":
       return `/finops/budgets?project=${project}`;
     case "reduce_cost":
       return `${app}/costs`;
     case "apply_recommendations":
-      return "/finops/recommendations";
+      return `/finops/recommendations?project=${project}`;
     case "fix_health":
     case "fix_restarts":
       return `${app}/logs`;

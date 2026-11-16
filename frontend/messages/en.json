@@ -398,8 +398,8 @@
       "platform": "Fixed share per application of the platform's shared services"
     },
     "dataFreshness": {
-      "real": "actual",
-      "simulated": "simulated",
+      "real": "Actual",
+      "simulated": "Simulated",
       "estimated": "estimated",
       "estimateNote": "Part of the cost relies on a provisional price.",
       "updated": "updated {age}",
@@ -771,7 +771,8 @@
       "grade": "Grade",
       "appActions": "Actions",
       "appMandatory": "Mandatory",
-      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project."
+      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project.",
+      "clearTier": "Clear {tier} filter"
     },
     "score": {
       "nothingToDo": "Nothing to do",
@@ -2816,6 +2817,10 @@
       "fix_restarts": "Check the logs",
       "add_readme": "Add a README",
       "expand_readme": "Expand the README"
+    },
+    "tooltips": {
+      "reliability": "Health now, −5 if restarting",
+      "documentation": "README at repo root"
     }
   },
   "projectSettings": {

@@ -5,6 +5,7 @@ import accessReview1 from "./access-review-1.json";
 import accessReviewMine from "./access-review-mine.json";
 import accessReviews from "./access-reviews.json";
 import appHealth from "./app-health.json";
+import finopsMeta from "./finops-meta.json";
 import finopsOverview from "./finops-overview.json";
 import githubStatus from "./github-status.json";
 import importRepos from "./import-repos.json";
@@ -17,6 +18,8 @@ import preferences from "./preferences.json";
 import projectApps from "./project-apps.json";
 import projectLinks from "./project-links.json";
 import projects from "./projects.json";
+import scorecard from "./scorecard.json";
+import security from "./security.json";
 import session from "./session.json";
 import topology from "./topology.json";
 
@@ -38,6 +41,13 @@ const ROUTES: Record<string, unknown> = {
   "/infra/deployments/1/health": appHealth,
   "/activity/platform": platformStatus,
   "/finops/overview": finopsOverview,
+  "/finops/meta": finopsMeta,
+  "/deployments/1/scorecard": scorecard,
+  "/security/summary": security.summary,
+  "/security/findings": security.findings,
+  "/security/trend": security.trend,
+  "/security/exceptions": security.exceptions,
+  "/security/me": security.me,
   "/account/github": githubStatus,
   "/projects/demo/topology": topology,
   "/projects/demo/imports": imports,
