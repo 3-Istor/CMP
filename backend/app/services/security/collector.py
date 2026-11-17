@@ -33,6 +33,7 @@ from app.services.github_service import (
     get_file_content,
     get_latest_artifact,
     get_org_installation_token,
+    list_open_pulls,
 )
 from app.services.kube_client import (
     OUTSIDE_CLUSTER_NOTICE,
@@ -45,7 +46,7 @@ from app.services.kube_client import (
 from app.services.project_registry import RegistryError, read_record
 from app.services.security import alerts
 from app.services.security import settings as app_settings
-from app.services.security import sources, store
+from app.services.security import sources, store, upgrade_prs
 from app.services.security.model import CLUSTER_SOURCES, Source
 
 logger = logging.getLogger(__name__)
@@ -401,6 +402,15 @@ async def collect_github_app(
         scan.status, scan.message = "error", str(exc)
         db.commit()
         return []
+
+    try:
+        upgrade_prs.remember(
+            entry.project, app.name, await list_open_pulls(token, app.repo)
+        )
+    except GitHubAppError as exc:
+        logger.warning(
+            "Security: pull requests of '%s' unavailable: %s", app.repo, exc
+        )
 
     fresh = store.upsert_findings(
         db,

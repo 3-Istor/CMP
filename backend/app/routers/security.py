@@ -60,7 +60,7 @@ from app.services.project_registry import (
 from app.services.security import exceptions as rules
 from app.services.security import scoring
 from app.services.security import settings as app_settings
-from app.services.security import store
+from app.services.security import store, upgrade_prs
 from app.services.security.collector import (
     K8S_TEMPLATE,
     SECURITY_WORKFLOW,
@@ -165,6 +165,7 @@ class FindingRead(BaseModel):
     raw: str
     # {field: {key, params}} for the frontend's translations.
     i18n: dict | None = None
+    fix_pr: str | None = None
     sources: list[str]
     first_seen: datetime
     last_seen: datetime
@@ -279,7 +280,7 @@ def _exception_read(
 
 
 def _finding_read(
-    m: store.Merged, pending: dict[str, SecurityException]
+    project: str, m: store.Merged, pending: dict[str, SecurityException]
 ) -> FindingRead:
     exception = m.exception or pending.get(m.fingerprint)
     return FindingRead(
@@ -296,6 +297,7 @@ def _finding_read(
         link=m.link,
         raw=m.raw,
         i18n=json.loads(m.i18n) if m.i18n else None,
+        fix_pr=upgrade_prs.for_finding(project, m),
         sources=m.sources,
         first_seen=m.first_seen,
         last_seen=m.last_seen,
@@ -482,7 +484,7 @@ async def get_findings(
         e.fingerprint: e
         for e in store.active_exceptions(db, project, today).values()
     }
-    return [_finding_read(m, pending) for m in items]
+    return [_finding_read(project, m, pending) for m in items]
 
 
 @router.get("/trend", response_model=list[TrendPoint])
