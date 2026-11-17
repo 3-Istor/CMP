@@ -113,7 +113,14 @@
       "deletingTitle": "This project is being deleted",
       "createFailedTitle": "This project could not be created",
       "deleteFailedTitle": "This project could not be deleted",
-      "appsDeleting": "{count, plural, one {# app deleting} other {# apps deleting}}"
+      "appsDeleting": "{count, plural, one {# app deleting} other {# apps deleting}}",
+      "healthy": "Healthy",
+      "down": "{count} down",
+      "pending": "{count} pending",
+      "apps": "{count, plural, one {# app} other {# apps}}",
+      "healthyCount": "{count} healthy",
+      "security": "Security {grade}",
+      "alerts": "{count, plural, one {# alert} other {# alerts}}"
     },
     "create": {
       "title": "Create a new project",

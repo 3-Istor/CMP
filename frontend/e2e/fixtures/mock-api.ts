@@ -19,6 +19,7 @@ import projectApps from "./project-apps.json";
 import projectLinks from "./project-links.json";
 import appLinks from "./app-links.json";
 import projects from "./projects.json";
+import projectsHealth from "./projects-health.json";
 import scorecard from "./scorecard.json";
 import security from "./security.json";
 import session from "./session.json";
@@ -33,6 +34,8 @@ const ROUTES: Record<string, unknown> = {
   "/access-reviews/campaigns/1": accessReview1,
   "/access-reviews/mine": accessReviewMine,
   "/projects/": projects,
+  "/projects/health": projectsHealth,
+  "/security/overview": [{ project: "demo", score: 62, grade: "C", actions: 1, core: 1 }],
   "/projects/demo/apps": projectApps,
   "/projects/demo/links": projectLinks,
   "/deployments/1/links": appLinks,
@@ -76,6 +79,16 @@ const notConnected: Override = { status: 503, json: { detail: "cluster_not_conne
 
 // Named answers layered over ROUTES. A key ending in "*" is a prefix; exact keys win.
 export const VARIANTS: Record<string, Record<string, Override>> = {
+  // One project with an app down and firing alerts, one whose Argo CD and Alertmanager are unreadable.
+  healthdown: {
+    "/projects/": { json: [projects[0], { ...projects[0], name: "shop", role: "member" }] },
+    "/projects/health": {
+      json: [
+        { project: "demo", apps: 3, healthy: 2, down: 1, health: "degraded", sync: "synced", alerts: 2 },
+        { project: "shop", apps: 2, healthy: 0, down: 0, health: null, sync: null, alerts: null },
+      ],
+    },
+  },
   publicapps: {
     "/projects/demo/apps": { json: publicApps },
     "/deployments/": { json: publicApps },

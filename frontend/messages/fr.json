@@ -113,7 +113,14 @@
       "deletingTitle": "Ce projet est en cours de suppression",
       "createFailedTitle": "Ce projet n'a pas pu être créé",
       "deleteFailedTitle": "Ce projet n'a pas pu être supprimé",
-      "appsDeleting": "{count, plural, one {# app en suppression} other {# apps en suppression}}"
+      "appsDeleting": "{count, plural, one {# app en suppression} other {# apps en suppression}}",
+      "healthy": "Saine",
+      "down": "{count} en panne",
+      "pending": "{count} en attente",
+      "apps": "{count, plural, one {# app} other {# apps}}",
+      "healthyCount": "{count, plural, one {# saine} other {# saines}}",
+      "security": "Sécurité {grade}",
+      "alerts": "{count, plural, one {# alerte} other {# alertes}}"
     },
     "create": {
       "title": "Créer un nouveau projet",

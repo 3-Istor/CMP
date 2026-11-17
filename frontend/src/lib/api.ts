@@ -391,6 +391,9 @@ export async function startGitHubLink(
 export const getProjects = () =>
   request<import("@/types").Project[]>("/projects/");
 
+export const getProjectsHealth = () =>
+  request<import("@/types").ProjectHealth[]>("/projects/health");
+
 export const createProject = (
   project_name: string,
   target_cloud: import("@/types").TargetCloud = "onprem",
