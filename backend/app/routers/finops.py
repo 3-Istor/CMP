@@ -1190,35 +1190,34 @@ async def _apply_patch_to_gitops(
 
     from app.routers.deployments import (
         _app_type_of,
-        _config_file_for,
         _deep_merge,
         _extract_repo_full_name,
         _get_github_token_for_deployment,
+        _load_values_file,
         _yaml,
     )
-    from app.services.github_service import (
-        GitHubAppError,
-        get_file_content,
-        put_file_content,
-    )
+    from app.services.app_security_data import SINGLE_VALUES_FILE
+    from app.services.github_service import GitHubAppError, put_file_content
 
-    file_path = _config_file_for(_app_type_of(deployment), None)
+    if _app_type_of(deployment) == "fullstack":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "A fullstack app has one values file per component: change "
+                "its resources in the app settings."
+            ),
+        )
     try:
         token = await _get_github_token_for_deployment(deployment)
         repo = _extract_repo_full_name(deployment)
-        raw_content, sha = await get_file_content(
-            installation_token=token,
-            repo_full_name=repo,
-            file_path=file_path,
-        )
-        parsed = _yaml.load(raw_content)
+        parsed, sha = await _load_values_file(token, repo, SINGLE_VALUES_FILE)
         _deep_merge(parsed, patch)
         out = StringIO()
         _yaml.dump(parsed, out)
         result = await put_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=file_path,
+            file_path=SINGLE_VALUES_FILE,
             content=out.getvalue(),
             message="chore(finops): apply cost optimisation recommendation",
             sha=sha,

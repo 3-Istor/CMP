@@ -26,7 +26,11 @@ from app.services import metrics_isolation
 from app.services.environments.observe import CONTAINER
 from app.services.finops.engine import AppSpec
 from app.services.finops.ingest import fx, inputs
-from app.services.finops.recommendations import Recommendation, k8s_resources
+from app.services.finops.recommendations import (
+    SLEEP_HINT,
+    Recommendation,
+    k8s_resources,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +300,8 @@ def _advice(
                 rec_type="inactivity",
                 title="Mettre en hibernation (inactivité)",
                 justification=(
-                    "Aucun trafic réseau entrant significatif depuis 7 jours."
+                    "Aucun trafic réseau entrant significatif depuis 7 jours. "
+                    + SLEEP_HINT
                 ),
                 current={"cpu_cores": round(cpu_req, 2), "status": "running"},
                 recommended={"replicas": 0, "status": "hibernated"},
@@ -305,7 +310,6 @@ def _advice(
                 ),
                 confidence=_confidence(80, history),
                 effort="low",
-                patch={"replicaCount": 0} if single_deployment else None,
                 **common,
             )
         ]
@@ -377,7 +381,8 @@ def _advice(
     if saving <= 0:
         return []
     patch = None
-    if single_deployment:
+    # A shorter window would size the memory limit from a partial peak.
+    if single_deployment and history >= FULL_HISTORY_DAYS:
         patch = {
             "resources": _resources(
                 namespace, data, pod_cpu, pod_ram, new_cpu, new_ram

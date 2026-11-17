@@ -44,6 +44,11 @@ class Recommendation:
     patch: dict | None = field(default=None)
 
 
+# Hibernation is not applied by commit: the chart renders
+# `replicaCount | default 1`, so 0 would keep one pod running.
+SLEEP_HINT = "« Sleep now » dans le menu de l'app."
+
+
 def k8s_resources(
     cpu_cores: float | None, ram_gib: float | None
 ) -> dict[str, str]:
@@ -177,13 +182,14 @@ def recommendations_for_app(
                 project_id=app.project_id,
                 rec_type="inactivity",
                 title="Mettre en hibernation (inactivité)",
-                justification="Aucun trafic réseau significatif depuis 7 jours.",
+                justification=(
+                    f"Aucun trafic réseau significatif depuis 7 jours. {SLEEP_HINT}"
+                ),
                 current={"replicas": q.replicas, "status": "running"},
                 recommended={"replicas": 0, "status": "hibernated"},
                 monthly_saving_eur=_saving(app, replace(q, replicas=0), ref),
                 confidence=80,
                 effort="low",
-                patch={"replicaCount": 0},
             )
         )
 

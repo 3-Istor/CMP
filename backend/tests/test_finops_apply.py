@@ -1,4 +1,5 @@
 from datetime import datetime
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -6,10 +7,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.database import get_db
+from app.models.finops import RecommendationState
 from app.routers import deployments as deployments_router
 from app.routers import finops as router
 from app.services import github_service
-from app.services.finops import engine
+from app.services.finops import engine, usage
 from app.services.finops.recommendations import (
     Recommendation,
     k8s_resources,
@@ -63,11 +65,11 @@ class _Provider:
         ]
 
 
-def _apply(session_factory, monkeypatch, app_type, files):
+def _apply(session_factory, monkeypatch, app_type, files, put=None):
     deployment_id = add_deployment(session_factory, app_type)
     repo = FakeRepo(files)
-    monkeypatch.setattr(github_service, "get_file_content", repo.get)
-    monkeypatch.setattr(github_service, "put_file_content", repo.put)
+    monkeypatch.setattr(deployments_router, "get_file_content", repo.get)
+    monkeypatch.setattr(github_service, "put_file_content", put or repo.put)
     monkeypatch.setattr(
         deployments_router,
         "get_org_installation_token",
@@ -87,17 +89,20 @@ def _apply(session_factory, monkeypatch, app_type, files):
     response = TestClient(app).post(
         f"/api/finops/recommendations/{deployment_id}:rightsizing/apply"
     )
-    return response, repo
+    with session_factory() as db:
+        states = [s.status for s in db.query(RecommendationState)]
+    return response, repo, states
 
 
 def test_apply_commits_the_patch_to_the_values_file(
     session_factory, monkeypatch
 ):
-    response, repo = _apply(
+    response, repo, states = _apply(
         session_factory, monkeypatch, "static", {"deploy/values.yaml": VALUES}
     )
 
     assert response.status_code == 200
+    assert states == ["applied"]
     assert response.json()["commit_sha"]
     content = repo.files["deploy/values.yaml"]
     assert "cpu: 130m" in content and "memory: 614Mi" in content
@@ -105,17 +110,47 @@ def test_apply_commits_the_patch_to_the_values_file(
     assert "ingress:" in content
 
 
-def test_apply_commits_the_patch_to_the_fullstack_frontend_values(
-    session_factory, monkeypatch
-):
+def test_apply_refuses_a_fullstack_app(session_factory, monkeypatch):
+    # One values file per component: a single patch cannot size both.
     files = {
         "deploy/values-frontend.yaml": VALUES,
         "deploy/values-backend.yaml": "db:\n  enabled: true\n",
     }
-    response, repo = _apply(session_factory, monkeypatch, "fullstack", files)
+    response, repo, states = _apply(
+        session_factory, monkeypatch, "fullstack", files
+    )
 
-    assert response.status_code == 200
-    assert [c[0] for c in repo.commits] == ["deploy/values-frontend.yaml"]
+    assert response.status_code == 400
+    assert not repo.commits and not states
+
+
+def test_apply_reports_a_github_failure_and_stays_pending(
+    session_factory, monkeypatch
+):
+    async def down(**_kwargs):
+        raise github_service.GitHubAppError("boom")
+
+    response, _, states = _apply(
+        session_factory,
+        monkeypatch,
+        "static",
+        {"deploy/values.yaml": VALUES},
+        put=down,
+    )
+
+    assert response.status_code == 502
+    assert not states
+
+
+def test_apply_refuses_a_values_file_that_is_not_a_mapping(
+    session_factory, monkeypatch
+):
+    response, repo, _ = _apply(
+        session_factory, monkeypatch, "static", {"deploy/values.yaml": ""}
+    )
+
+    assert response.status_code == 500
+    assert not repo.commits
 
 
 def test_simulated_rightsizing_patch_keeps_requests_within_limits():
@@ -144,3 +179,25 @@ def test_simulated_rightsizing_patch_keeps_requests_within_limits():
 def test_k8s_resources_formats_quantities():
     assert k8s_resources(0.13, 0.3) == {"cpu": "130m", "memory": "308Mi"}
     assert k8s_resources(None, 1) == {"memory": "1024Mi"}
+
+
+def test_simulated_hibernation_is_not_applicable(monkeypatch):
+    # The chart renders `replicaCount | default 1`: 0 would keep one pod.
+    monkeypatch.setattr(usage, "is_inactive", lambda *a, **k: True)
+    app = engine.app_spec_from_deployment(
+        SimpleNamespace(
+            id=1,
+            name="app1",
+            project_id="p",
+            app_config=None,
+            created_at=datetime(2026, 1, 1),
+        )
+    )
+
+    [rec] = [
+        r
+        for r in recommendations_for_apps([app])
+        if r.rec_type == "inactivity"
+    ]
+
+    assert rec.patch is None

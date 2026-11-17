@@ -22,13 +22,13 @@
     "project_id": "demo",
     "rec_type": "inactivity",
     "title": "Mettre en hibernation (inactivité)",
-    "justification": "Aucun trafic réseau entrant significatif depuis 7 jours.",
+    "justification": "Aucun trafic réseau entrant significatif depuis 7 jours. « Sleep now » dans le menu de l'app.",
     "current": { "cpu_cores": 0.5, "status": "running" },
     "recommended": { "replicas": 0, "status": "hibernated" },
     "monthly_saving_eur": 9.1,
     "confidence": 80,
     "effort": "low",
     "status": "ignored",
-    "can_apply": true
+    "can_apply": false
   }
 ]

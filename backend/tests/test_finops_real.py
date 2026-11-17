@@ -349,14 +349,22 @@ def test_rightsizing_memory_limit_covers_the_peak_when_request_equals_limit(
     assert rec.patch["resources"]["limits"]["memory"] == "738Mi"
 
 
-def test_hibernation_has_no_patch_when_the_namespace_runs_several_deployments(
-    monkeypatch,
-):
-    _vm(monkeypatch, _usage(network=10, deployments=2))
+def test_hibernation_is_not_applicable(monkeypatch):
+    # The chart renders `replicaCount | default 1`: 0 would keep one pod.
+    _vm(monkeypatch, _usage(network=10))
 
     rec = recs.recommendations_for_apps([_app()], REF)[0]
 
     assert rec.id == "1:inactivity"
+    assert rec.patch is None
+
+
+def test_rightsizing_has_no_patch_before_a_full_history(monkeypatch):
+    _vm(monkeypatch, _usage(replicas=1, history=2, app=_PER_POD))
+
+    rec = recs.recommendations_for_apps([_app()], REF)[0]
+
+    assert rec.id == "1:rightsizing"
     assert rec.patch is None
 
 
