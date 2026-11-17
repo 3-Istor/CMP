@@ -117,11 +117,9 @@
     },
     "create": {
       "title": "Créer un nouveau projet",
-      "description": "Un projet regroupe vos applications Kubernetes au sein d'une équipe Keycloak, d'une politique Vault et d'un AppProject ArgoCD communs. Le bootstrap s'exécute en arrière-plan et prend environ 30 secondes.",
       "name": "Nom du projet",
       "namePlaceholder": "mon-equipe",
       "nameHint": "Minuscules, avec des tirets. Par exemple <code>platform-team</code>",
-      "cloud": "Cloud cible",
       "clusterState": {
         "checking": "Vérification…",
         "down": "Arrêté",
@@ -131,42 +129,34 @@
       "clouds": {
         "onprem": {
           "label": "Sur site",
-          "advantage1": "Pas de coût de sortie de données",
-          "advantage2": "Contrôle total de l'infrastructure",
-          "advantage3": "Déjà en service, aucune attente de mise en place"
+          "hint": "Datacenter 3istor"
         },
         "aws": {
-          "label": "AWS",
-          "advantage1": "Catalogue de services managés le plus large",
-          "advantage2": "IAM et outils de conformité éprouvés",
-          "advantage3": "Couverture de régions mondiale étendue"
+          "label": "AWS"
         },
         "gcp": {
-          "label": "GCP",
-          "advantage1": "Héritage Kubernetes natif",
-          "advantage2": "Tarification de calcul généralement la plus compétitive",
-          "advantage3": "Outils data et IA performants"
+          "label": "GCP"
+        },
+        "public": {
+          "label": "Cloud public",
+          "hint": "AWS ou GCP"
         }
       },
-      "cloudNote": "AWS et GCP ne peuvent être choisis que lorsque leur cluster tourne. <strong>Ce choix ne pourra pas être modifié.</strong> Pour changer de cloud, il faut recréer le projet.",
       "errors": {
         "tooShort": "Le nom doit contenir au moins 2 caractères.",
         "tooLong": "Le nom doit contenir au plus 40 caractères.",
         "invalid": "Utilisez uniquement des minuscules, des chiffres et des tirets. Le nom doit commencer et finir par une lettre ou un chiffre."
       },
-      "preview": {
-        "title": "Ce qui sera créé",
-        "keycloak": "Groupes Keycloak : <code>project-{name}-admins/members</code>",
-        "vault": "Politique Vault limitée au namespace",
-        "argocd": "AppProject ArgoCD sur <code>{cloud}</code>",
-        "registry": "Fiche de registre : <code>registry/projects/{name}.yaml</code>"
-      },
       "submit": "Créer le projet",
       "submitting": "Création…",
       "toasts": {
-        "created": "Le projet « {name} » est en cours de création sur {cloud}. Les groupes Keycloak et l'AppProject ArgoCD seront prêts dans quelques instants.",
+        "created": "Création de « {name} » ({cloud}).",
         "failed": "Échec de la création du projet : {message}"
-      }
+      },
+      "whereItRuns": "Où il tourne",
+      "compare": "Comparer",
+      "provider": "Fournisseur",
+      "auto": "Auto"
     },
     "members": {
       "onlyAdmins": "Seuls les admins du projet peuvent ajouter ou retirer des membres.",
@@ -1463,8 +1453,8 @@
     "notAllowedBody": "Votre rôle ne donne pas accès à cette section du projet.",
     "cloud": {
       "onprem": "Sur site",
-      "aws": "AWS",
-      "gcp": "GCP"
+      "aws": "Cloud public · AWS",
+      "gcp": "Cloud public · GCP"
     },
     "status": {
       "running": "En cours",

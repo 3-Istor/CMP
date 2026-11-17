@@ -117,11 +117,9 @@
     },
     "create": {
       "title": "Create a new project",
-      "description": "A project groups your Kubernetes applications under a shared Keycloak team, Vault policy and ArgoCD AppProject. Bootstrap runs in the background and takes about 30 seconds.",
       "name": "Project name",
       "namePlaceholder": "my-team",
       "nameHint": "Lowercase, with hyphens. For example <code>platform-team</code>",
-      "cloud": "Target cloud",
       "clusterState": {
         "checking": "Checking…",
         "down": "Stopped",
@@ -130,43 +128,35 @@
       },
       "clouds": {
         "onprem": {
-          "label": "On-premise",
-          "advantage1": "No data egress cost",
-          "advantage2": "Full infrastructure control",
-          "advantage3": "Already live, zero setup wait"
+          "label": "On-prem",
+          "hint": "3istor datacenter"
         },
         "aws": {
-          "label": "AWS",
-          "advantage1": "Widest catalog of managed services",
-          "advantage2": "Mature IAM and compliance tooling",
-          "advantage3": "Broad global region coverage"
+          "label": "AWS"
         },
         "gcp": {
-          "label": "GCP",
-          "advantage1": "Native Kubernetes heritage",
-          "advantage2": "Typically the most competitive compute pricing",
-          "advantage3": "Strong data and AI tooling"
+          "label": "GCP"
+        },
+        "public": {
+          "label": "Public cloud",
+          "hint": "AWS or GCP"
         }
       },
-      "cloudNote": "AWS and GCP can be chosen only while their cluster is running. <strong>This cannot be changed later.</strong> Moving a project means re-creating it.",
       "errors": {
         "tooShort": "The name must be at least 2 characters.",
         "tooLong": "The name must be at most 40 characters.",
         "invalid": "Use lowercase letters, numbers and hyphens only. The name must start and end with a letter or a number."
       },
-      "preview": {
-        "title": "What will be created",
-        "keycloak": "Keycloak groups: <code>project-{name}-admins/members</code>",
-        "vault": "Vault policy scoped to the namespace",
-        "argocd": "ArgoCD AppProject on <code>{cloud}</code>",
-        "registry": "Registry record: <code>registry/projects/{name}.yaml</code>"
-      },
       "submit": "Create project",
       "submitting": "Creating…",
       "toasts": {
-        "created": "Project “{name}” is being bootstrapped on {cloud}. Keycloak groups and the ArgoCD AppProject will be ready shortly.",
+        "created": "Creating “{name}” ({cloud}).",
         "failed": "Failed to create project: {message}"
-      }
+      },
+      "whereItRuns": "Where it runs",
+      "compare": "Compare",
+      "provider": "Provider",
+      "auto": "Auto"
     },
     "members": {
       "onlyAdmins": "Only project admins can add or remove members.",
@@ -1462,9 +1452,9 @@
     "notAllowedTitle": "Not available",
     "notAllowedBody": "Your role does not give access to this section of the project.",
     "cloud": {
-      "onprem": "On-premise",
-      "aws": "AWS",
-      "gcp": "GCP"
+      "onprem": "On-prem",
+      "aws": "Public cloud · AWS",
+      "gcp": "Public cloud · GCP"
     },
     "status": {
       "running": "Running",

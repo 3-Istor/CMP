@@ -47,6 +47,7 @@ const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
 
 export function ProjectCard({ project, onRetried, deletingApps = 0 }: Props) {
     const t = useTranslations("projects");
+    const tNav = useTranslations("projectNav");
     const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
@@ -131,7 +132,10 @@ export function ProjectCard({ project, onRetried, deletingApps = 0 }: Props) {
                         <FavoriteToggle kind="project" id={project.name} />
                     )}
                 </div>
-                <CardDescription className="text-xs">
+                <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <Badge variant="outline" className="text-xs">
+                        {tNav(`cloud.${project.target_cloud}`)}
+                    </Badge>
                     {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
                 </CardDescription>
                 {deletingApps > 0 && !isInFlight && (

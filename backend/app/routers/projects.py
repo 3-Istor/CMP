@@ -369,6 +369,13 @@ async def create_project(
         owner = existing_project.owner_username
         payload.target_cloud = existing_project.target_cloud
     else:
+        if payload.target_cloud in PUBLIC_CLOUDS and not is_cnp_admin(
+            token_payload
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only platform admins choose AWS or GCP; choose public.",
+            )
         try:
             leftovers = await run_in_threadpool(
                 find_leftovers, payload.project_name

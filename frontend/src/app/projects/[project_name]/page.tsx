@@ -52,6 +52,7 @@ export default function ProjectPage() {
   const {
     projectName,
     role,
+    targetCloud,
     can,
     apps,
     loadingApps,
@@ -169,6 +170,11 @@ export default function ProjectPage() {
         ]}
         actions={
           <>
+              {targetCloud && (
+                <Badge variant="outline" className="text-xs">
+                  {tNav(`cloud.${targetCloud}`)}
+                </Badge>
+              )}
               <Badge variant="outline" className="font-mono text-xs">
                 {t("appCount", { count: apps.length })}
               </Badge>
