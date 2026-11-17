@@ -23,7 +23,7 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.models.imports import ImportService, ImportSource
 from app.models.project import Project, TargetCloud
 from app.services import topology_cache
-from app.services.app_health import SCHEDULES_PATH, SLEEPING_STATES
+from app.services.app_health import SLEEPING_STATES
 from app.services.environments import gitops, layout
 from app.services.imports.app_links import reconcile_rows
 from app.services.kube_client import (
@@ -57,6 +57,10 @@ HEALTH_ORDER = (
 SYNC_ORDER = ("synced", "unknown", "outofsync")
 METRIC_PRESENT_TTL_SECONDS = 300.0
 KUBE_CONCURRENCY = 4
+# Every OffhoursSchedule of a project, in one list: infra-templates labels them
+# project=<name>, and the CMP's ClusterRole (Argo's admin secret on EKS/GKE)
+# lists them cluster-wide.
+ALL_SCHEDULES_PATH = "/apis/guard.3istor.com/v1alpha1/offhoursschedules"
 
 # {cloud: (expires at, metric present)}
 _metric_present: dict[str, tuple[float, bool]] = {}
@@ -227,14 +231,20 @@ async def observed_flows(
     namespaces = list(namespace_app)
     try:
         async with httpx.AsyncClient(base_url=VMSELECT, timeout=10) as client:
-            rates = await _vm_query(
-                client, flow_query(namespaces, "rate", RATE_WINDOW), cloud
+            rates, counts = await asyncio.gather(
+                _vm_query(
+                    client, flow_query(namespaces, "rate", RATE_WINDOW), cloud
+                ),
+                _vm_query(
+                    client,
+                    flow_query(namespaces, "increase", COUNT_WINDOW),
+                    cloud,
+                ),
+                return_exceptions=True,
             )
-            counts = await _vm_query(
-                client,
-                flow_query(namespaces, "increase", COUNT_WINDOW),
-                cloud,
-            )
+            for result in (rates, counts):
+                if isinstance(result, BaseException):
+                    raise result
             if not rates and not counts:
                 if not await _flow_metric_present(client, cloud):
                     return False, {}
@@ -295,33 +305,36 @@ def _argo_by_name(project: str) -> dict[str, dict]:
     return {item["metadata"]["name"]: item for item in items}
 
 
-def _asleep(namespace: str, cloud: TargetCloud) -> bool | None:
+def _asleep_by_namespace(
+    project: str, cloud: TargetCloud
+) -> dict[str, bool] | None:
+    """Whether a schedule sleeps in each namespace; None when unreadable."""
     try:
-        schedules = kube_list(SCHEDULES_PATH.format(namespace), cloud=cloud)
+        schedules = kube_list(
+            ALL_SCHEDULES_PATH,
+            {"labelSelector": f"project={project}"},
+            cloud=cloud,
+        )
     except (KubeUnavailableError, ClusterNotConnectedError):
         return None
-    return any(
-        (s.get("status") or {}).get("currentState") in SLEEPING_STATES
-        for s in schedules
-    )
+    asleep: dict[str, bool] = {}
+    for schedule in schedules:
+        namespace = (schedule.get("metadata") or {}).get("namespace", "")
+        sleeping = (schedule.get("status") or {}).get(
+            "currentState"
+        ) in SLEEPING_STATES
+        asleep[namespace] = asleep.get(namespace, False) or sleeping
+    return asleep
 
 
 async def _cluster_state(
-    project: str, apps: dict[str, str], cloud: TargetCloud
-) -> tuple[dict[str, dict], dict[str, bool | None]]:
-    """(Argo Applications by name, asleep by app); kube calls, threaded."""
-    limit = asyncio.Semaphore(KUBE_CONCURRENCY)
-
-    async def asleep(app: str) -> tuple[str, bool | None]:
-        async with limit:
-            namespace = layout.namespace(project, app, "prod")
-            return app, await asyncio.to_thread(_asleep, namespace, cloud)
-
-    applications, *states = await asyncio.gather(
+    project: str, cloud: TargetCloud
+) -> tuple[dict[str, dict], dict[str, bool] | None]:
+    """(Argo Applications by name, asleep by namespace); kube calls, threaded."""
+    return await asyncio.gather(
         asyncio.to_thread(_argo_by_name, project),
-        *(asleep(app) for app in apps),
+        asyncio.to_thread(_asleep_by_namespace, project, cloud),
     )
-    return applications, dict(states)
 
 
 def _node(
@@ -407,13 +420,6 @@ async def cached_build(db: Session, project: str) -> dict:
 
 
 async def build(db: Session, project: str) -> dict:
-    record = await read_record_cached(project)
-    record_apps = {
-        app["name"]: app
-        for app in ((record or ({}, ""))[0].get("spec") or {}).get("apps")
-        or []
-        if isinstance(app, dict) and _NAME.match(str(app.get("name", "")))
-    }
     rows = {
         row.name: row
         for row in db.query(Deployment)
@@ -437,12 +443,35 @@ async def build(db: Session, project: str) -> dict:
         if project_row and project_row.target_cloud
         else TargetCloud.ONPREM
     )
-    names = sorted(set(record_apps) | set(rows))
+    # The cluster reads need no app name: they run while the registry, then
+    # VictoriaMetrics, are read.
+    cluster = asyncio.ensure_future(_cluster_state(project, cloud))
+    try:
+        record = await read_record_cached(project)
+        record_apps = {
+            app["name"]: app
+            for app in ((record or ({}, ""))[0].get("spec") or {}).get("apps")
+            or []
+            if isinstance(app, dict) and _NAME.match(str(app.get("name", "")))
+        }
+        names = sorted(set(record_apps) | set(rows))
+        reconcile_rows(db, project, record_apps)
+        declared = _declared({n: record_apps[n] for n in record_apps})
+        (applications, asleep), (available, flows) = await asyncio.gather(
+            cluster,
+            observed_flows(
+                project,
+                names,
+                TargetCloud(cloud).value,
+                {(source, target) for source, target, _ in declared},
+            ),
+        )
+    finally:
+        # No-op once awaited; stops waiting on the cluster if the build failed.
+        cluster.cancel()
     kinds = {
         name: _kind(record_apps.get(name), rows.get(name)) for name in names
     }
-    reconcile_rows(db, project, record_apps)
-    applications, asleep = await _cluster_state(project, kinds, cloud)
     nodes = [
         _node(
             project,
@@ -452,18 +481,14 @@ async def build(db: Session, project: str) -> dict:
             rows.get(name),
             imported.get(name),
             applications,
-            asleep.get(name),
+            (
+                None
+                if asleep is None
+                else asleep.get(layout.namespace(project, name, "prod"), False)
+            ),
         )
         for name in names
     ]
-
-    declared = _declared({n: record_apps[n] for n in record_apps})
-    available, flows = await observed_flows(
-        project,
-        names,
-        TargetCloud(cloud).value,
-        {(source, target) for source, target, _ in declared},
-    )
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     edges = []
     seen_pairs = set()
