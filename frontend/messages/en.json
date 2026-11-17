@@ -131,6 +131,8 @@
       "repoLink": "Link GitHub",
       "repoOff": "Off",
       "waiting": "Creating the project…",
+      "repoFailed": "Repositories could not be loaded",
+      "failed": "The project could not be created",
       "title": "Create a new project",
       "description": "A project groups your Kubernetes applications under a shared Keycloak team, Vault policy and ArgoCD AppProject. Bootstrap runs in the background and takes about 30 seconds.",
       "name": "Project name",
@@ -214,7 +216,9 @@
       "prod": "Prod",
       "staging": "Staging",
       "openApp": "Open app",
-      "newTab": "opens in a new tab"
+      "newTab": "opens in a new tab",
+      "openAppLabel": "Open app:",
+      "stagingOf": "{app} · staging"
     },
     "nav": {
       "label": "Application sections",

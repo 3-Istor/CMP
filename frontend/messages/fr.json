@@ -131,6 +131,8 @@
       "repoLink": "Lier GitHub",
       "repoOff": "Désactivé",
       "waiting": "Création du projet…",
+      "repoFailed": "Les dépôts n'ont pas pu être chargés",
+      "failed": "Le projet n'a pas pu être créé",
       "title": "Créer un nouveau projet",
       "description": "Un projet regroupe vos applications Kubernetes au sein d'une équipe Keycloak, d'une politique Vault et d'un AppProject ArgoCD communs. Le bootstrap s'exécute en arrière-plan et prend environ 30 secondes.",
       "name": "Nom du projet",
@@ -214,7 +216,9 @@
       "prod": "Prod",
       "staging": "Staging",
       "openApp": "Ouvrir l'app",
-      "newTab": "s'ouvre dans un nouvel onglet"
+      "newTab": "s'ouvre dans un nouvel onglet",
+      "openAppLabel": "Ouvrir l'app :",
+      "stagingOf": "{app} · staging"
     },
     "nav": {
       "label": "Sections de l'application",

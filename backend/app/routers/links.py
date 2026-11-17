@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.roles import ProjectRole
+from app.core.roles import ProjectRole, at_least
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.environment import AppEnvironment
 from app.services import alerts_grafana as grafana
@@ -79,11 +79,14 @@ async def get_app_links(
         role = assert_project_role(
             db, token, deployment.project_id, ProjectRole.GUEST
         ).role
-    try:
-        org = await grafana.org_id(deployment.project_id or "")
-    except Exception:  # pylint: disable=broad-exception-caught
-        # No org yet or Grafana unreachable: the link is left out.
-        org = None
+    org = None
+    # The Grafana link is for members: guests and project-less apps skip the lookup.
+    if deployment.project_id and at_least(role, ProjectRole.MEMBER):
+        try:
+            org = await grafana.org_id(deployment.project_id)
+        except Exception:  # pylint: disable=broad-exception-caught
+            # No org yet or Grafana unreachable: the link is left out.
+            org = None
     return await run_in_threadpool(
         links.app_links, deployment, role, None, org
     )

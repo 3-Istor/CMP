@@ -107,11 +107,21 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                 setRepo(list[0]?.full_name ?? "");
             })
             .catch((err) => {
-                const off = err instanceof ApiError && err.status === 404;
-                setRepos(off ? "off" : []);
-                if (off) setSource("empty");
+                setSource("empty");
+                if (err instanceof ApiError && err.status === 404) {
+                    setRepos("off");
+                } else {
+                    // Left unloaded: the next click tries again.
+                    toast.error(t("repoFailed"));
+                }
             });
     };
+
+    // Parents pass an inline onClose: a ref keeps their re-renders from restarting the poll.
+    const onCloseRef = useRef(onClose);
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    });
 
     // Poll until the bootstrap ends, then open the import of the chosen repository.
     useEffect(() => {
@@ -124,21 +134,21 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                 if (project.status === "active") {
                     clearInterval(timer);
                     clearProjectsCache();
-                    onClose();
+                    onCloseRef.current();
                     router.push(
                         `/projects/${encodeURIComponent(waiting)}/import?repo=${encodeURIComponent(repo)}`,
                     );
                 } else if (isProjectFailed(project)) {
                     clearInterval(timer);
                     setWaiting(null);
-                    setError(project.step_message || t("toasts.failed", { message: "" }));
+                    setError(project.step_message || t("failed"));
                 }
             } catch {
                 // A missed poll is retried on the next tick.
             }
         }, WAIT_POLL_MS);
         return () => clearInterval(timer);
-    }, [open, waiting, repo, onClose, router, t]);
+    }, [open, waiting, repo, router, t]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

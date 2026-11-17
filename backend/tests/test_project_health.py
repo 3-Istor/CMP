@@ -210,3 +210,39 @@ def test_the_snapshot_is_cached(session_factory, kube, alerts):
     _get(session_factory)
 
     assert kube.call_count == 1
+
+
+def test_a_failed_app_without_an_application_is_down(session_factory, alerts):
+    with session_factory() as db:
+        db.add(_row(5, "broken", "shop", DeploymentStatus.FAILED))
+        db.commit()
+    with mock.patch.object(project_health, "kube_list") as kube_list:
+        kube_list.return_value = [_app("shop", "web", "app", "Healthy")]
+        shop = _get(session_factory)["shop"]
+
+    # web healthy, site not in Argo yet (pending), broken failed (down).
+    assert (shop["apps"], shop["healthy"], shop["down"]) == (3, 1, 1)
+    assert shop["health"] == "degraded"
+
+
+def test_an_application_without_a_row_is_ignored(session_factory, alerts):
+    with mock.patch.object(project_health, "kube_list") as kube_list:
+        kube_list.return_value = [
+            _app("shop", "web", "app", "Healthy"),
+            _app("shop", "site", "app", "Healthy"),
+            _app("shop", "leftover", "app", "Healthy"),
+        ]
+        shop = _get(session_factory)["shop"]
+
+    assert (shop["apps"], shop["healthy"], shop["down"]) == (2, 2, 0)
+
+
+def test_a_guest_sees_the_health_of_its_projects(
+    session_factory, kube, alerts
+):
+    with mock.patch.object(
+        deployments_router, "_user_project_names", return_value=["shop"]
+    ):
+        body = _get(session_factory, {"preferred_username": "vie"})
+
+    assert list(body) == ["shop"]

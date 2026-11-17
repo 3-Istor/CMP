@@ -7,6 +7,7 @@ import asyncio
 import logging
 import time
 
+from app.models.deployment import DeploymentStatus
 from app.schemas.project import ProjectHealthRead
 from app.services.kube_client import KubeUnavailableError, kube_list
 from app.services.links import APPLICATIONS_PATH
@@ -79,19 +80,36 @@ async def snapshot() -> tuple[dict | None, dict[str, int] | None]:
 
 def summarize(
     project: str,
-    apps: int,
+    rows: list[tuple[str, str]],
     argo: dict | None,
     alerts: dict[str, int] | None,
 ) -> ProjectHealthRead:
-    """One project's card from the snapshot; None fields when unreadable."""
-    found = ((argo or {}).get(project) or {}).values()
-    healths = [h for h, _ in found]
+    """
+    One project's card from its (app, status) rows and the snapshot. An app
+    the CMP failed is down even without an Application; one in Argo CD only
+    is not counted. None fields when unreadable.
+    """
+    found = (argo or {}).get(project) or {}
+    healths, syncs = [], []
+    for name, status in rows:
+        health, sync = found.get(name, (None, None))
+        if status == DeploymentStatus.FAILED:
+            health = "degraded"
+        elif status == DeploymentStatus.DELETING or health is None:
+            health = "progressing"
+        healths.append(health)
+        syncs.append(sync)
+    readable = argo is not None
     return ProjectHealthRead(
         project=project,
-        apps=apps,
-        healthy=healths.count("healthy"),
-        down=sum(h in ("degraded", "missing") for h in healths),
-        health=_worst(healths, HEALTH_ORDER),
-        sync=_worst([s for _, s in found], SYNC_ORDER),
+        apps=len(rows),
+        healthy=healths.count("healthy") if readable else 0,
+        down=(
+            sum(h in ("degraded", "missing") for h in healths)
+            if readable
+            else 0
+        ),
+        health=_worst(healths, HEALTH_ORDER) if readable else None,
+        sync=_worst([s for s in syncs if s], SYNC_ORDER) if readable else None,
         alerts=None if alerts is None else alerts.get(project, 0),
     )

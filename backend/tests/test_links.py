@@ -528,3 +528,13 @@ class TestAppLinks:
             "https://argocd.3istor.com/applications?proj=shop"
             "&labels=cnp.3istor.com%2Fapp%3Dweb"
         )
+
+
+def test_a_guest_does_not_trigger_the_grafana_lookup(
+    session_factory, keycloak, kube, grafana_org
+):
+    client = _client(session_factory, "viewer")
+
+    client.get("/api/deployments/1/links")
+
+    grafana_org.assert_not_awaited()

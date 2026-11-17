@@ -85,7 +85,7 @@ export function OpenAppMenu({ apps }: { apps: Deployment[] }) {
     const { app, prod } = pub[0];
     return (
       <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-        {t("openApp")}:
+        {t("openAppLabel")}
         <EnvLinks prod={prod} staging={app.staging_url} />
       </span>
     );
@@ -103,12 +103,17 @@ export function OpenAppMenu({ apps }: { apps: Deployment[] }) {
         {pub.flatMap(({ app, prod }) =>
           [
             { url: prod, label: app.name },
-            { url: app.staging_url, label: `${app.name} · ${t("staging").toLowerCase()}` },
+            { url: app.staging_url, label: t("stagingOf", { app: app.name }) },
           ].flatMap(({ url, label }) =>
             url
               ? [
                   <DropdownMenuItem key={url} asChild className="gap-2">
-                    <a href={url} target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${label}, ${t("newTab")}`}
+                    >
                       {label}
                       <ExternalLink className="ml-auto h-3 w-3" aria-hidden />
                     </a>

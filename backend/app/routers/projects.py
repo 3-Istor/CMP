@@ -23,7 +23,6 @@ from typing import Annotated
 import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -315,21 +314,18 @@ async def projects_health(
             db,
             token_payload,
         )
-    counts = dict(
-        db.query(
-            Deployment.project_id,
-            func.count(Deployment.id),  # pylint: disable=not-callable
-        )
-        .filter(
-            Deployment.project_id.in_(names),
-            Deployment.status != DeploymentStatus.DELETED,
-        )
-        .group_by(Deployment.project_id)
-        .all()
-    )
+    rows: dict[str, list[tuple[str, str]]] = {}
+    for project, name, state in db.query(
+        Deployment.project_id, Deployment.name, Deployment.status
+    ).filter(
+        Deployment.project_id.in_(names),
+        Deployment.status != DeploymentStatus.DELETED,
+        Deployment.provider_type == ProviderType.KUBERNETES,
+    ):
+        rows.setdefault(project, []).append((name, state))
     argo, alerts = await project_health.snapshot()
     return [
-        project_health.summarize(name, counts.get(name, 0), argo, alerts)
+        project_health.summarize(name, rows.get(name, []), argo, alerts)
         for name in sorted(names)
     ]
 
