@@ -1118,9 +1118,11 @@
       "newer": "Newer",
       "older": "Older",
       "page": "Page {page} · {size} events per page",
+      "retention": "Events are kept {days} days.",
       "detail": {
         "title": "Event details",
         "close": "Close",
+        "open": "Open",
         "who": "Who",
         "what": "What",
         "source": "Source",

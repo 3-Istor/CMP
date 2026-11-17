@@ -245,6 +245,54 @@ export function describe(e: ActivityEvent, t: Translate): string {
   return `${e.action} ${e.target}`.trim();
 }
 
+// Page under an app of each action family; first match wins.
+const APP_PAGES: [string, string][] = [
+  ["security.exception.", "/security?tab=ignored"],
+  ["security.", "/security"],
+  ["database.", "/security?tab=data"],
+  ["finops.", "/costs"],
+  ["deployment.sync", "/delivery"],
+  ["release.", "/delivery"],
+  ["app.promotion", "/delivery"],
+  ["app.run.", "/delivery"],
+  ["app.staging.", "/delivery"],
+  ["app.config.", "/settings"],
+  ["app.exposure.", "/settings"],
+  ["app.icon.", "/settings"],
+];
+
+const PROJECT_PAGES: [string, string][] = [
+  ["security.exception.", "/security?tab=ignored"],
+  ["project.member.", "/members"],
+  ["project.create", ""],
+  ["project.", "/settings"],
+  ["import.", "/import"],
+];
+
+/** Page of the object an event concerns, null when there is none to open. */
+export function objectHref(e: ActivityEvent): string | null {
+  const a = e.action;
+  const query = e.project ? `?project=${encodeURIComponent(e.project)}` : "";
+  if (a.startsWith("access_review.")) {
+    const id =
+      e.details.campaign_id ?? e.target.match(/^campaign:(\d+)$/)?.[1];
+    return id ? `/access-reviews?campaign=${id}` : "/access-reviews";
+  }
+  if (a.startsWith("access.")) return "/access";
+  if (a === "app.delete" || a === "project.delete") return null;
+  if (a === "finops.budget.update") return `/finops/budgets${query}`;
+  const project = e.project && `/projects/${encodeURIComponent(e.project)}`;
+  if (project && e.app_id) {
+    const page = APP_PAGES.find(([prefix]) => a.startsWith(prefix));
+    return `${project}/apps/${e.app_id}${page?.[1] ?? ""}`;
+  }
+  if (a.startsWith("finops.recommendation.")) {
+    return `/finops/recommendations${query}`;
+  }
+  const page = project && PROJECT_PAGES.find(([prefix]) => a.startsWith(prefix));
+  return page ? `${project}${page[1]}` : null;
+}
+
 export function timeLabel(t: Translate, locale: string, iso: string): string {
   const when = new Date(iso);
   const today = new Date();

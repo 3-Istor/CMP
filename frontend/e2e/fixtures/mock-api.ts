@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import access from "./access.json";
+import activity from "./activity.json";
 import agentsSummary from "./agents-summary.json";
 import accessReview1 from "./access-review-1.json";
 import accessReviewMine from "./access-review-mine.json";
@@ -40,6 +41,8 @@ const ROUTES: Record<string, unknown> = {
   "/infra/health": infraHealth,
   // Health badges only render with a health answer; without it axe never checks their colours.
   "/infra/deployments/1/health": appHealth,
+  "/activity": activity.feed,
+  "/activity/summary": activity.summary,
   "/activity/platform": platformStatus,
   "/finops/overview": finopsOverview,
   "/finops/meta": finopsMeta,

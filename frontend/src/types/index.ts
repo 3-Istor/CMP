@@ -723,11 +723,13 @@ export interface ActivityEvent {
   status_code: number | null;
   source_ip: string | null;
   details: Record<string, unknown>;
+  app_id?: number | null;
 }
 
 export interface ActivityFeed {
   events: ActivityEvent[];
   unavailable: ActivitySource[];
+  retention_days: number;
 }
 
 export interface ActivityKpi {
