@@ -232,7 +232,15 @@
       "aiCreated": "Created by an AI assistant on behalf of a user",
       "via": "via {source}",
       "legacy": "Legacy",
-      "deployedOn": "Deployed on {date}"
+      "deployedOn": "Deployed on {date}",
+      "stages": {
+        "creating": "Creating",
+        "deploying": "Deploying",
+        "waitingHealth": "Waiting for health",
+        "live": "Live"
+      },
+      "urlSoon": "URL appears once the app is healthy.",
+      "createdOn": "Created on {date}"
     },
     "context": {
       "loadFailed": "Failed to load the application",

@@ -232,7 +232,15 @@
       "aiCreated": "Créée par un assistant IA pour le compte d'un utilisateur",
       "via": "via {source}",
       "legacy": "Hérité",
-      "deployedOn": "Déployée le {date}"
+      "deployedOn": "Déployée le {date}",
+      "stages": {
+        "creating": "Création",
+        "deploying": "Déploiement",
+        "waitingHealth": "Attente de santé",
+        "live": "En ligne"
+      },
+      "urlSoon": "L'URL apparaît quand l'app est saine.",
+      "createdOn": "Créée le {date}"
     },
     "context": {
       "loadFailed": "Impossible de charger l'application",
