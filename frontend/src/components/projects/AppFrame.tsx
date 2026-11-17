@@ -49,6 +49,7 @@ import { intlLocale } from "@/components/finops/format";
 import { cn, appUrlOf } from "@/lib/utils";
 import type { Deployment, ProjectLink } from "@/types";
 import {
+  Check,
   ExternalLink,
   FileCode,
   Globe,
@@ -653,7 +654,7 @@ function DeployStages({ stage }: { stage: number }) {
             {i > 0 && " · "}
             <span className={cn(i === stage && "font-medium text-foreground")}>
               {t(key)}
-              {i < stage && " ✓"}
+              {i < stage && <Check aria-label="done" className="ml-0.5 inline size-3 align-[-1px]" />}
             </span>
           </Fragment>
         ))}
