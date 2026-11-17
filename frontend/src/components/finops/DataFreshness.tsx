@@ -43,15 +43,15 @@ export function DataFreshness({
       <span
         className={`${PILL} ${
           real
-            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-            : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+            : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
         }`}
       >
         {real ? t("dataFreshness.real") : t("dataFreshness.simulated")}
       </span>
       {detailed && meta.sources.some((s) => s.has_estimate) && (
         <span
-          className={`${PILL} bg-amber-500/15 text-amber-600 dark:text-amber-400`}
+          className={`${PILL} bg-amber-500/15 text-amber-700 dark:text-amber-400`}
           title={t("dataFreshness.estimateNote")}
         >
           {t("dataFreshness.estimated")}
