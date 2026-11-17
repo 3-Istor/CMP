@@ -790,7 +790,8 @@
       "noHistory": "No history yet."
     },
     "finding": {
-      "pending": "Ignored by {author}, awaiting approval from a project admin.",
+      "pending": "Ignored by {author}. Awaiting a project admin.",
+      "pendingCore": "Ignored by {author}. Awaiting a platform admin or security auditor.",
       "viewRun": "View run",
       "backupNow": "Back up now",
       "seenBy": "Seen by {sources} since {date}"
@@ -804,7 +805,8 @@
       "explanationPlaceholder": "What you checked, in one or two sentences",
       "expiresOn": "Expires on",
       "expiryHint": "Defaults to, and at the latest on, {date}. The alert comes back on its own on that date.",
-      "approvalNeeded": "Another project admin must approve it. Until then, the alert still counts.",
+      "approvalNeeded": "A project admin other than you must approve it. Until then, the alert still counts.",
+      "approvalNeededCore": "A platform admin or security auditor must approve it. Until then, the alert still counts.",
       "saved": "Exception saved, awaiting approval",
       "ignored": "Alert ignored",
       "hints": {
@@ -816,7 +818,14 @@
     },
     "exceptions": {
       "empty": "No ignored alert.",
-      "awaitingApproval": "Awaiting approval",
+      "awaitingProject": "Awaiting project admin",
+      "awaitingCore": "Awaiting platform admin or auditor",
+      "expired": "Expired",
+      "filters": {
+        "pending": "Pending",
+        "active": "Active",
+        "expired": "Expired"
+      },
       "byOn": "By {author} on {date}",
       "approvedBy": "approved by {approver}",
       "expiresOn": "expires on {date}",

@@ -790,7 +790,8 @@
       "noHistory": "Pas encore d'historique."
     },
     "finding": {
-      "pending": "Ignorée par {author}, en attente de validation par un admin du projet.",
+      "pending": "Ignorée par {author}. En attente d'un admin du projet.",
+      "pendingCore": "Ignorée par {author}. En attente d'un admin plateforme ou d'un auditeur sécurité.",
       "viewRun": "Voir le run",
       "backupNow": "Sauvegarder maintenant",
       "seenBy": "Vu par {sources} depuis le {date}"
@@ -804,7 +805,8 @@
       "explanationPlaceholder": "Ce que vous avez vérifié, en une ou deux phrases",
       "expiresOn": "Expire le",
       "expiryHint": "Par défaut et au plus tard le {date}. L'alerte revient d'elle-même à cette date.",
-      "approvalNeeded": "Un autre admin du projet devra valider. D'ici là, l'alerte reste comptée.",
+      "approvalNeeded": "Un admin du projet autre que vous devra valider. D'ici là, l'alerte reste comptée.",
+      "approvalNeededCore": "Un admin plateforme ou un auditeur sécurité devra valider. D'ici là, l'alerte reste comptée.",
       "saved": "Exception enregistrée, en attente de validation",
       "ignored": "Alerte ignorée",
       "hints": {
@@ -816,7 +818,14 @@
     },
     "exceptions": {
       "empty": "Aucune alerte ignorée.",
-      "awaitingApproval": "En attente de validation",
+      "awaitingProject": "En attente d'un admin projet",
+      "awaitingCore": "En attente d'un admin plateforme ou auditeur",
+      "expired": "Expirée",
+      "filters": {
+        "pending": "En attente",
+        "active": "Actives",
+        "expired": "Expirées"
+      },
       "byOn": "Par {author} le {date}",
       "approvedBy": "validée par {approver}",
       "expiresOn": "expire le {date}",

@@ -94,6 +94,8 @@ export const VARIANTS: Record<string, Record<string, Override>> = {
   },
   protected: { "/projects/demo/deletion-protection": { json: { enabled: true } } },
   member: { "/projects/": { json: [{ ...projects[0], role: "member" }] } },
+  reviewer: { "/security/me": { json: { role: "guest", cnp_admin: false, auditor: true, username: "aud" } } },
+  securitymember: { "/security/me": { json: { role: "member", cnp_admin: false, username: "demo" } } },
   notconnected: {
     "/deployments/1/*": notConnected,
     "/deployments/1/observability": {

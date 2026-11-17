@@ -78,7 +78,7 @@ export function FindingCard({
           {finding.fix && <p className="text-sm">{text(finding, "fix")}</p>}
           {pending && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              {t("finding.pending", { author: finding.exception?.author ?? "" })}
+              {t(finding.tier === "core" ? "finding.pendingCore" : "finding.pending", { author: finding.exception?.author ?? "" })}
             </p>
           )}
         </div>

@@ -46,7 +46,8 @@ export type Capability =
   | "agents.configure"
   | "topology.view"
   | "topology.link"
-  | "import.manage";
+  | "import.manage"
+  | "security.manage";
 
 /**
  * The weakest role that holds each capability.
@@ -82,6 +83,7 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "topology.view": "member",
   "topology.link": "admin",
   "import.manage": "admin",
+  "security.manage": "admin",
 };
 
 /**
