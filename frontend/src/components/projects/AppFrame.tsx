@@ -347,7 +347,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 </div>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                   {isKubernetes && canViewLogs && (
-                    <EnvLinks prod={appUrl} staging={isRunning ? current.staging_url : null} />
+                    <EnvLinks prod={appUrl} staging={live ? current.staging_url : null} />
                   )}
                   {isKubernetes && canViewLogs && urlSoon && (
                     <span>{tFrame("urlSoon")}</span>
