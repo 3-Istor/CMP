@@ -61,6 +61,12 @@ type Override = { status?: number; json: unknown };
 
 const app = projectApps[0];
 const notConnected: Override = { status: 503, json: { detail: "cluster_not_connected", cloud: "aws" } };
+const outputs = JSON.stringify({ app_url: "https://demo-app-demo.3istor.com" });
+// The app page in a deployment state, with its live health when given.
+const appIn = (fields: Record<string, unknown>, health?: string): Record<string, Override> => ({
+  "/deployments/1": { json: { ...app, ...fields } },
+  ...(health ? { "/infra/deployments/1/health": { json: { ...appHealth, status: health } } } : {}),
+});
 
 // Named answers layered over ROUTES. A key ending in "*" is a prefix; exact keys win.
 export const VARIANTS: Record<string, Record<string, Override>> = {
@@ -94,6 +100,12 @@ export const VARIANTS: Record<string, Record<string, Override>> = {
   },
   protected: { "/projects/demo/deletion-protection": { json: { enabled: true } } },
   member: { "/projects/": { json: [{ ...projects[0], role: "member" }] } },
+  creating: appIn({ status: "planning", step_message: "Planning deployment..." }),
+  waithealth: appIn({ status: "deploying", step_message: "Waiting for app to become accessible... (40s / 300s)", terraform_outputs: outputs }),
+  unhealthy: appIn({ status: "running", terraform_outputs: outputs }, "down"),
+  live: appIn({ status: "running", terraform_outputs: outputs }, "healthy"),
+  asleep: appIn({ status: "running", terraform_outputs: outputs }, "asleep"),
+  failed: appIn({ status: "failed", step_message: "Deployment failed: boom" }),
   notconnected: {
     "/deployments/1/*": notConnected,
     "/deployments/1/observability": {
