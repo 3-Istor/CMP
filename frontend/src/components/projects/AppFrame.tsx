@@ -17,9 +17,13 @@ import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
 import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { MenuText } from "@/components/projects/MenuText";
+import { EnvLinks } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { Button } from "@/components/ui/button";
-import { DeletingBadge } from "@/components/projects/DeletingBadge";
+import {
+  DeletingBadge,
+  ProgressBadge,
+} from "@/components/projects/DeletingBadge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -44,11 +48,10 @@ import { useAppHealth } from "@/lib/hooks";
 import { hasScorecard, useScorecards } from "@/lib/scorecard";
 import { intlLocale } from "@/components/finops/format";
 import { cn, appUrlOf } from "@/lib/utils";
-import type { ProjectLink } from "@/types";
+import type { Deployment, ProjectLink } from "@/types";
 import {
-  ExternalLink,
+  Check,
   FileCode,
-  Globe,
   Image as ImageIcon,
   MoreHorizontal,
   Moon,
@@ -69,7 +72,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const IN_PROGRESS_STATUSES = [
@@ -119,8 +122,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     appId,
     isKubernetes && canViewObservability,
   ).data;
-  const isRunning = current.status === "running";
-  const appUrl = isRunning ? appUrlOf(current.terraform_outputs) : null;
 
   const tf = useTranslations("appPage");
   const tNavProj = useTranslations("projectNav");
@@ -150,6 +151,24 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     loading: healthLoading,
   } = useAppHealth(healthReady ? appId : null, 15_000);
   const gone = current.status === "deleted";
+  const outputsUrl = appUrlOf(current.terraform_outputs);
+  // URL and "Deployed" once the run finished and the app is healthy (or asleep
+  // on its schedule); legacy apps have no live health.
+  const live =
+    current.status === "running" &&
+    (!isKubernetes ||
+      health?.status === "healthy" ||
+      health?.status === "asleep");
+  const appUrl = live ? outputsUrl : null;
+  const urlSoon =
+    Boolean(outputsUrl) &&
+    !live &&
+    !healthLoading &&
+    (current.status === "deploying" || current.status === "running");
+  const stage = stageOf(current);
+  // Healthy is the common case: no "Created on" flash before the first answer.
+  const deployedLabel =
+    live || (current.status === "running" && healthLoading);
   const scoreCard = useScorecards(
     [current.id],
     canViewLogs && hasScorecard(current),
@@ -317,39 +336,28 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                     />
                   )}
                   {current.status === "deleting" && <DeletingBadge />}
-                  {((inProgress && current.status !== "deleting") || current.status === "failed") && (
-                    <span
-                      className={cn(
-                        "text-xs text-muted-foreground",
-                        current.status === "failed" && "text-destructive",
-                      )}
-                    >
-                      {tf(`deploymentStatus.${current.status}`)}
+                  {stage !== null && <DeployStages stage={stage} />}
+                  {current.status === "failed" && (
+                    <span className="text-xs text-destructive">
+                      {tf("deploymentStatus.failed")}
                     </span>
                   )}
                   <ScoreBadge card={scoreCard} />
                   <FavoriteToggle kind="app" id={current.id} />
                 </div>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                  {isKubernetes && canViewLogs && appUrl && (
-                    <a
-                      href={appUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
-                      aria-label={`${ta("openApp")}, ${ta("externalLink")}`}
-                    >
-                      <Globe className="h-3 w-3" aria-hidden />
-                      {appUrl.replace(/^https?:\/\//, "")}
-                      <ExternalLink className="h-3 w-3" aria-hidden />
-                    </a>
+                  {isKubernetes && canViewLogs && (
+                    <EnvLinks prod={appUrl} staging={live ? current.staging_url : null} />
+                  )}
+                  {isKubernetes && canViewLogs && urlSoon && (
+                    <span>{tFrame("urlSoon")}</span>
                   )}
                   <span>{current.template_name || current.template_id}</span>
                   {current.k8s_namespace && (
                     <span className="font-mono">{current.k8s_namespace}</span>
                   )}
                   <span>
-                    {tFrame("deployedOn", {
+                    {tFrame(deployedLabel ? "deployedOn" : "createdOn", {
                       date: new Date(current.created_at).toLocaleDateString(
                         locale,
                         { day: "numeric", month: "short", year: "numeric" },
@@ -607,6 +615,40 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         onConfirm={handleDelete}
       />
     </div>
+  );
+}
+
+const STAGES = ["creating", "deploying", "waitingHealth", "live"] as const;
+
+function stageOf(deployment: Deployment): number | null {
+  if (["pending", "initializing", "planning"].includes(deployment.status)) {
+    return 0;
+  }
+  // Outputs are written after the apply, before the wait for the app URL.
+  if (deployment.status === "deploying") {
+    return deployment.terraform_outputs ? 2 : 1;
+  }
+  return null;
+}
+
+function DeployStages({ stage }: { stage: number }) {
+  const t = useTranslations("apps.frame.stages");
+  return (
+    <>
+      <ProgressBadge label={t(STAGES[stage])} />
+      {/* Narrow screens keep the pill only: the strip would wrap per stage. */}
+      <span className="hidden text-xs text-muted-foreground sm:inline">
+        {STAGES.map((key, i) => (
+          <Fragment key={key}>
+            {i > 0 && " · "}
+            <span className={cn(i === stage && "font-medium text-foreground")}>
+              {t(key)}
+              {i < stage && <Check aria-label="done" className="ml-0.5 inline size-3 align-[-1px]" />}
+            </span>
+          </Fragment>
+        ))}
+      </span>
+    </>
   );
 }
 

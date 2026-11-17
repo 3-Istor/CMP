@@ -1,0 +1,107 @@
+{
+  "activity": [
+    {
+      "time": "2026-11-17T10:00:05Z",
+      "namespace": "demo",
+      "pod": "demo-app-7c9d8f6b54-x2k9p",
+      "container": "demo-app",
+      "line": "{\"level\":\"info\",\"msg\":\"GET /api/orders 200\",\"trace_id\":\"4bf92f3577b34da6a3ce929d0e0e4736\",\"duration_ms\":42}"
+    },
+    {
+      "time": "2026-11-17T10:00:04Z",
+      "namespace": "demo",
+      "pod": "demo-app-7c9d8f6b54-q8m3z",
+      "container": "demo-app",
+      "line": "ERROR payment gateway timeout after 3000 ms order=1042"
+    },
+    {
+      "time": "2026-11-17T10:00:03Z",
+      "namespace": "demo",
+      "pod": "demo-app-7c9d8f6b54-q8m3z",
+      "container": "demo-app",
+      "line": "WARN retrying payment call attempt=2"
+    },
+    {
+      "time": "2026-11-17T10:00:02Z",
+      "namespace": "demo",
+      "pod": "demo-app-7c9d8f6b54-x2k9p",
+      "container": "demo-app",
+      "line": "INFO GET /healthz 200 1ms"
+    },
+    {
+      "time": "2026-11-17T10:00:01Z",
+      "namespace": "demo",
+      "pod": "demo-app-7c9d8f6b54-x2k9p",
+      "container": "demo-app",
+      "line": "INFO connected to postgres demo-db:5432"
+    },
+    {
+      "time": "2026-11-17T10:00:00Z",
+      "namespace": "demo",
+      "pod": "demo-app-7c9d8f6b54-q8m3z",
+      "container": "demo-app",
+      "line": "INFO server listening on :8080"
+    }
+  ],
+  "targets": {
+    "namespaces": ["demo"],
+    "pods": ["demo-app-7c9d8f6b54-q8m3z", "demo-app-7c9d8f6b54-x2k9p"],
+    "containers": ["demo-app"]
+  },
+  "obs": [
+    {
+      "time": "2026-11-17T10:00:05Z",
+      "message": "GET /api/orders 200",
+      "pod": "demo-app-7c9d8f6b54-x2k9p",
+      "container": "demo-app",
+      "level": "info",
+      "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+    },
+    {
+      "time": "2026-11-17T10:00:04Z",
+      "message": "payment gateway timeout after 3000 ms order=1042",
+      "pod": "demo-app-7c9d8f6b54-q8m3z",
+      "container": "demo-app",
+      "level": "error",
+      "trace_id": "a3ce929d0e0e47364bf92f3577b34da6"
+    },
+    {
+      "time": "2026-11-17T10:00:03Z",
+      "message": "retrying payment call attempt=2",
+      "pod": "demo-app-7c9d8f6b54-q8m3z",
+      "container": "demo-app",
+      "level": "warn",
+      "trace_id": null
+    },
+    {
+      "time": "2026-11-17T10:00:01Z",
+      "message": "connected to postgres demo-db:5432",
+      "pod": "demo-app-7c9d8f6b54-x2k9p",
+      "container": "demo-app",
+      "level": "info",
+      "trace_id": null
+    },
+    {
+      "time": "2026-11-17T10:00:00Z",
+      "message": "server listening on :8080",
+      "pod": "demo-app-7c9d8f6b54-q8m3z",
+      "container": "demo-app",
+      "level": "info",
+      "trace_id": null
+    }
+  ],
+  "topErrors": [
+    {
+      "pattern": "payment gateway timeout after <N> ms order=<N>",
+      "count": 12,
+      "trace_id": "a3ce929d0e0e47364bf92f3577b34da6",
+      "last_seen": "2026-11-17T10:00:04Z"
+    },
+    {
+      "pattern": "db connection reset by peer",
+      "count": 3,
+      "trace_id": null,
+      "last_seen": "2026-11-17T09:42:10Z"
+    }
+  ]
+}

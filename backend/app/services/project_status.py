@@ -62,27 +62,25 @@ _INTERRUPTED_PROJECTS = {
         "Teardown interrupted by a CMP restart. Delete again to resume.",
     ),
 }
-_INTERRUPTED_APPS = {
-    **dict.fromkeys(
-        (
-            DeploymentStatus.PENDING,
-            DeploymentStatus.INITIALIZING,
-            DeploymentStatus.PLANNING,
-            DeploymentStatus.DEPLOYING,
-        ),
-        "Deployment interrupted by a CMP restart.",
-    ),
-    DeploymentStatus.DELETING: (
-        "Deletion interrupted by a CMP restart. Delete again to resume."
-    ),
-}
+RESUME_MESSAGE = "Resuming after a CMP restart."
+_INTERRUPTED_RUNS = (
+    DeploymentStatus.PENDING,
+    DeploymentStatus.INITIALIZING,
+    DeploymentStatus.PLANNING,
+    DeploymentStatus.DEPLOYING,
+)
+_INTERRUPTED_DELETE_MESSAGE = (
+    "Deletion interrupted by a CMP restart. Delete again to resume."
+)
 
 
-def fail_interrupted_runs() -> None:
-    """Mark the runs a restart killed as failed, so they can be retried.
+def fail_interrupted_runs() -> list[int]:
+    """Fail interrupted projects, imports and deletions; return catalog runs.
 
-    Call at startup only: the backend is a single replica, so no run is alive.
+    Returned ids are reset to PENDING for the caller to run again. Call at
+    startup only: the backend is a single replica, so no run is alive.
     """
+    resumed: list[int] = []
     with SessionLocal() as db:
         for state, (failed, message) in _INTERRUPTED_PROJECTS.items():
             for project in db.query(Project).filter(Project.status == state):
@@ -92,12 +90,37 @@ def fail_interrupted_runs() -> None:
                     state.value,
                 )
                 project.status, project.step_message = failed, message
-        for state, message in _INTERRUPTED_APPS.items():
-            for app in db.query(Deployment).filter(Deployment.status == state):
-                logger.warning(
-                    "App '%s' was %s when the CMP stopped",
-                    app.name,
-                    state.value,
+        interrupted = (
+            db.query(Deployment)
+            .filter(
+                Deployment.status.in_(
+                    (*_INTERRUPTED_RUNS, DeploymentStatus.DELETING)
                 )
-                app.status, app.step_message = DeploymentStatus.FAILED, message
+            )
+            .order_by(Deployment.id)
+        )
+        for app in interrupted:
+            logger.warning(
+                "App '%s' was %s when the CMP stopped",
+                app.name,
+                app.status.value,
+            )
+            if app.status == DeploymentStatus.DELETING:
+                app.status = DeploymentStatus.FAILED
+                app.step_message = _INTERRUPTED_DELETE_MESSAGE
+            elif app.template_id.startswith("import-"):
+                # The import run resumes these itself.
+                app.status = DeploymentStatus.FAILED
+                app.step_message = "Deployment interrupted by a CMP restart."
+            elif app.resumed:
+                app.status = DeploymentStatus.FAILED
+                app.step_message = (
+                    "Deployment interrupted again by a CMP restart."
+                )
+            else:
+                app.status = DeploymentStatus.PENDING
+                app.step_message = RESUME_MESSAGE
+                app.resumed = True
+                resumed.append(app.id)
         db.commit()
+    return resumed

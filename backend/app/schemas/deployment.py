@@ -55,6 +55,8 @@ class DeploymentRead(BaseModel):
     icon: AppIconRead | None = None
 
     terraform_outputs: str | None  # JSON string
+    # Set by the routers from the app's ready staging environment.
+    staging_url: str | None = None
     resource_count: int | None
     created_at: datetime
     updated_at: datetime

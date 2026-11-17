@@ -230,7 +230,7 @@ CMP/
 │       │   └── ui/                    # Shadcn/UI components
 │       ├── lib/
 │       │   ├── api.ts             # Typed fetch wrappers
-│       │   └── hooks.ts           # useDeploymentPolling, useDeploymentsList
+│       │   └── hooks.ts           # useDeploymentsList, useAppHealth
 │       └── types/
 │           └── index.ts           # Shared TypeScript types
 │

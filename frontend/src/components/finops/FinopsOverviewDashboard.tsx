@@ -1,15 +1,13 @@
 "use client";
 
 import { AppCostTable } from "@/components/finops/AppCostTable";
-import { CostDonut } from "@/components/finops/CostDonut";
-import { CostTimeline } from "@/components/finops/CostTimeline";
+import { CostCharts } from "@/components/finops/CostCharts";
 import {
   FinopsFilters,
   type FinopsFilterState,
 } from "@/components/finops/FinopsFilters";
 import { CloudEstimateTable } from "@/components/finops/CloudEstimateTable";
 import { CloudSplit } from "@/components/finops/CloudSplit";
-import { DataFreshness } from "@/components/finops/DataFreshness";
 import { KpiCards } from "@/components/finops/KpiCards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,7 +20,6 @@ import {
   useFinopsOverview,
   useProjects,
 } from "@/lib/hooks";
-import type { FinopsResource } from "@/types";
 import { AlertCircle, Download } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
@@ -46,8 +43,6 @@ export function FinopsOverviewDashboard({
   });
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [selectedResource, setSelectedResource] =
-    useState<FinopsResource | null>(null);
 
   const { projects } = useProjects();
   const { data, loading, error } = useFinopsOverview(
@@ -159,47 +154,14 @@ export function FinopsOverviewDashboard({
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader className="flex-row items-center justify-between">
-                <div className="space-y-1">
-                  <CardTitle>{t("overview.costTrend")}</CardTitle>
-                  <DataFreshness meta={meta} />
-                </div>
-                {selectedResource && (
-                  <button
-                    onClick={() => setSelectedResource(null)}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    {t("overview.resetFilter")}
-                  </button>
-                )}
-              </CardHeader>
-              <CardContent>
-                <CostTimeline
-                  data={data.timeline}
-                  focus={selectedResource}
-                  forecast={daily ? (data.forecast ?? null) : null}
-                  granularity={filters.granularity}
-                  anomalies={anomalies}
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("overview.costBreakdown")}</CardTitle>
-                <DataFreshness meta={meta} />
-              </CardHeader>
-              <CardContent>
-                <CostDonut
-                  breakdown={data.summary.breakdown}
-                  selected={selectedResource}
-                  onSelect={setSelectedResource}
-                />
-              </CardContent>
-            </Card>
-          </div>
+          <CostCharts
+            timeline={data.timeline}
+            breakdown={data.summary.breakdown}
+            forecast={daily ? (data.forecast ?? null) : null}
+            granularity={filters.granularity}
+            anomalies={anomalies}
+            meta={meta}
+          />
 
           <Card>
             <CardHeader>

@@ -283,6 +283,9 @@ export const getSecurityRole = (project: string) =>
     `/security/me?${securityQuery({ project })}`,
   );
 
+export const getPendingSecurityExceptions = () =>
+  request<import("@/types").SecurityException[]>("/security/exceptions/pending");
+
 export const requestSecurityScan = (
   project: string,
   app: string,
@@ -457,9 +460,12 @@ export async function startGitHubLink(
 export const getProjects = (maxAgeMs = 0) =>
   cachedGet<import("@/types").Project[]>("/projects/", maxAgeMs);
 
+export const getProjectsHealth = () =>
+  request<import("@/types").ProjectHealth[]>("/projects/health");
+
 export const createProject = (
   project_name: string,
-  target_cloud: import("@/types").TargetCloud = "onprem",
+  target_cloud: import("@/types").TargetCloud | "public" = "onprem",
 ) =>
   request<import("@/types").ProjectCreateResponse>("/projects/", {
     method: "POST",
@@ -648,6 +654,7 @@ export const getFinopsOverview = (opts: {
   period?: string;
   granularity?: string;
   cloud?: string;
+  app?: number;
 } = {}) =>
   request<import("@/types").FinopsOverview>(
     `/finops/overview${finopsQuery(opts)}`,
@@ -788,9 +795,9 @@ export const getFinopsApps = (project?: string) =>
     `/finops/apps${finopsQuery({ project })}`,
   );
 
-export const getRecommendations = (project?: string) =>
+export const getRecommendations = (project?: string, app?: number) =>
   request<import("@/types").Recommendation[]>(
-    `/finops/recommendations${finopsQuery({ project })}`,
+    `/finops/recommendations${finopsQuery({ project, app })}`,
   );
 
 export const applyRecommendation = (recId: string) =>
@@ -1619,6 +1626,12 @@ export const unlinkApps = (
 };
 
 // Repository import (CNP-241)
+/** The caller's importable repositories, before any project exists. */
+export const getMyImportableRepos = () =>
+  request<{ repositories: import("@/types").ImportableRepo[] }>(
+    "/account/github/repos",
+  ).then((r) => r.repositories);
+
 export const getImportableRepos = (project: string) =>
   request<{ repositories: import("@/types").ImportableRepo[] }>(
     `${projectPath(project)}/import/repos`,

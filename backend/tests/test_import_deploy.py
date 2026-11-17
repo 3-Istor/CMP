@@ -285,6 +285,69 @@ def test_public_app_gets_its_cname(world):
     assert cluster.cnames == ["frontend-epitweet.3istor.com"]
 
 
+def test_an_imported_service_names_its_repository(world):
+    Session, _ = world
+
+    _deploy(_published_run(Session))
+
+    with Session() as db:
+        rows = db.query(Deployment).all()
+    services = {
+        r.github_repo_url for r in rows if r.template_id == "import-service"
+    }
+    mongo = next(r for r in rows if r.name == "mongodb")
+    assert (services, mongo.github_repo_url) == (
+        {"https://github.com/3-Istor/epitweet"},
+        None,
+    )
+
+
+def test_the_public_app_gets_its_url(world):
+    Session, _ = world
+
+    _deploy(_published_run(Session))
+
+    with Session() as db:
+        outputs = {r.name: r.terraform_outputs for r in db.query(Deployment)}
+    assert json.loads(outputs["frontend"]) == {
+        "app_url": "https://frontend-epitweet.3istor.com",
+        "hostname": "frontend-epitweet.3istor.com",
+    }
+    assert outputs["user-service"] is None
+
+
+def test_backfill_fills_existing_import_rows_once(world):
+    Session, _ = world
+    _deploy(_published_run(Session))
+    kept = "https://github.com/3-Istor/kept"
+    with Session() as db:
+        for row in db.query(Deployment):
+            row.github_repo_url = row.terraform_outputs = None
+            if row.name == "user-service":
+                row.github_repo_url = kept
+        db.commit()
+
+    def snapshot():
+        deploy.backfill_import_rows()
+        with Session() as db:
+            return {
+                r.name: (r.github_repo_url, r.terraform_outputs)
+                for r in db.query(Deployment)
+            }
+
+    first = snapshot()
+    second = snapshot()
+
+    repo, outputs = first["frontend"]
+    assert (repo, json.loads(outputs)["app_url"]) == (
+        "https://github.com/3-Istor/epitweet",
+        "https://frontend-epitweet.3istor.com",
+    )
+    assert first["user-service"][0] == kept
+    assert first["mongodb"] == (None, None)
+    assert second == first
+
+
 def test_a_failed_service_does_not_block_the_others(world):
     Session, cluster = world
     cluster.unhealthy.add("epitweet-search-service-app")

@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.audit import ActivityRecord, AuditEvent
 from app.models.deployment import Deployment
+from app.models.security import SecurityException
 from app.services import notifications
 from app.services.keycloak_service import decode_platform_token
 
@@ -490,6 +491,16 @@ def _deployment(deployment_id: Any) -> tuple[str | None, str | None]:
         return (row.project_id, row.name) if row else (None, None)
 
 
+def _exception(exception_id: Any) -> tuple[str | None, str | None]:
+    try:
+        key = int(exception_id)
+    except (TypeError, ValueError):
+        return None, None
+    with SessionLocal() as db:
+        row = db.get(SecurityException, key)
+        return (row.project, row.app) if row else (None, None)
+
+
 def _store(event: AuditEvent) -> None:
     with SessionLocal() as db:
         db.add(event)
@@ -571,21 +582,31 @@ async def _record(
     fields = _body_fields(raw)
     noted = dict(getattr(request.state, "audit", {}))
 
+    # What the route noted, then what the acted-on id belongs to, and only
+    # then what the client sent: a spoofed ?project= must not move the event.
+    id_project = id_app = None
+    # A recommendation id starts with its app's id.
+    deployment_id = params.get("deployment_id") or (
+        params["rec_id"].split(":", 1)[0] if "rec_id" in params else None
+    )
+    if deployment_id is not None:
+        id_project, id_app = await run_in_threadpool(
+            _deployment, deployment_id
+        )
+    elif "exception_id" in params:
+        id_project, id_app = await run_in_threadpool(
+            _exception, params["exception_id"]
+        )
     project = (
         noted.pop("project", None)
+        or id_project
         or params.get("project_name")
         or fields.get("project")
         or fields.get("project_id")
         or fields.get("project_name")
         or request.query_params.get("project")
     )
-    app = noted.pop("app", None) or fields.get("app")
-    if "deployment_id" in params:
-        dep_project, dep_name = await run_in_threadpool(
-            _deployment, params["deployment_id"]
-        )
-        project = project or dep_project
-        app = app or dep_name
+    app = noted.pop("app", None) or id_app or fields.get("app")
     if action == "app.create":
         app = app or fields.get("name")
 

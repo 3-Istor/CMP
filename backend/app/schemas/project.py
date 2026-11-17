@@ -70,7 +70,7 @@ class ProjectCreate(BaseModel):
             "Which cloud the project's workloads run on. Immutable after creation: "
             "changing it is a re-create, not a move. Defaults to on-prem so existing "
             "clients keep working unchanged. 'public' lets the platform pick an up "
-            "public cloud."
+            "public cloud; 'aws' and 'gcp' are for platform admins."
         ),
     )
 
@@ -117,3 +117,15 @@ class ProjectCreateResponse(BaseModel):
     project_name: str
     target_cloud: TargetCloud
     status: str = "bootstrapping"
+
+
+class ProjectHealthRead(BaseModel):
+    """Apps, Argo CD health and firing alerts of a project; None = unreadable."""
+
+    project: str
+    apps: int
+    healthy: int
+    down: int
+    health: str | None
+    sync: str | None
+    alerts: int | None

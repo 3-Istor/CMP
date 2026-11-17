@@ -1,13 +1,13 @@
 "use client";
 
 import { AppIcon } from "@/components/app-icon/AppIcon";
+import { EnvLinks } from "@/components/projects/EnvLinks";
 import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { DeletingBadge } from "@/components/projects/DeletingBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppsHealth } from "@/lib/hooks";
 import { appUrlOf, cn } from "@/lib/utils";
 import type { AppHealthResponse, Deployment } from "@/types";
-import { ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
@@ -122,18 +122,9 @@ export function AppsTable({
                   <AppState app={app} health={health[app.id]} loading={healthLoading} />
                 </td>
                 <td className="hidden px-4 py-2.5 md:table-cell">
-                  {url && (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      aria-label={t("openApp", { name: app.name })}
-                    >
-                      {url.replace(/^https:\/\//, "")}
-                      <ExternalLink className="h-3 w-3" aria-hidden />
-                    </a>
-                  )}
+                  <span className="flex items-center gap-3 text-xs">
+                    <EnvLinks prod={url} staging={app.staging_url} />
+                  </span>
                 </td>
               </tr>
             );

@@ -24,14 +24,17 @@ SHOP_URL = "https://github.com/3-Istor/shop"
 
 
 def test_running_app_resolves_to_its_own_repository():
-    repo = app_repo.bound_repo(SHOP_URL, "shop", "running")
+    repo = app_repo.bound_repo(SHOP_URL, "shop", "running", "k3s-gitops-app")
 
     assert repo == "3-Istor/shop"
 
 
 def test_an_app_named_landing_resolves_to_its_own_repository():
     repo = app_repo.bound_repo(
-        "https://github.com/3-Istor/landing", "landing", "running"
+        "https://github.com/3-Istor/landing",
+        "landing",
+        "running",
+        "k3s-gitops-app",
     )
 
     assert repo == "3-Istor/landing"
@@ -62,7 +65,12 @@ def test_repository_is_refused_unless_bound_to_a_running_app(
     url, name, status
 ):
     with pytest.raises(app_repo.RepoNotBound):
-        app_repo.bound_repo(url, name, status)
+        app_repo.bound_repo(url, name, status, "k3s-gitops-app")
+
+
+def test_imported_app_never_resolves_to_a_repository():
+    with pytest.raises(app_repo.RepoNotBound, match="imported"):
+        app_repo.bound_repo(SHOP_URL, "shop", "running", "import-service")
 
 
 @pytest.fixture
@@ -117,6 +125,7 @@ def _app(status: str, name: str = "shop", url: str = SHOP_URL) -> dict:
     return {
         "id": 5,
         "name": name,
+        "template_id": "k3s-gitops-app",
         "project_id": "attacker",
         "status": status,
         "github_repo_url": url,
@@ -254,6 +263,7 @@ def test_backfill_gives_a_url_only_to_apps_whose_apply_succeeded(
 def test_rest_day2_helpers_refuse_a_failed_app_holding_a_platform_url():
     deployment = Deployment(
         name="cnp-projects",
+        template_id="k3s-gitops-app",
         status=DeploymentStatus.FAILED,
         github_repo_url="https://github.com/3-Istor/cnp-projects",
     )

@@ -6,6 +6,7 @@ Implements the Project > Application hierarchy.
 Endpoints:
   GET    /api/projects/users/search                    - Keycloak user search (member autocomplete)
   GET    /api/projects                                 - List projects the current user belongs to
+  GET    /api/projects/health                          - Apps, health and alerts of every visible project
   POST   /api/projects                                 - Bootstrap a new project via Terraform
   GET    /api/projects/{project_name}/apps             - List applications in a project
   GET    /api/projects/{project_name}/members          - List project members
@@ -29,6 +30,8 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole, rank
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, ProjectStatus, TargetCloud
+from app.routers import deployments
+from app.routers.deployments import with_staging
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     AddMemberRequest,
@@ -36,12 +39,14 @@ from app.schemas.project import (
     DeletionProtectionUpdate,
     ProjectCreate,
     ProjectCreateResponse,
+    ProjectHealthRead,
     ProjectRead,
 )
 from app.services import (
     customer_identity,
     keycloak_admin,
     notifications,
+    project_health,
     vault_auth,
 )
 from app.services.authz import (
@@ -51,6 +56,7 @@ from app.services.authz import (
     assert_project_role,
     is_cnp_admin,
     platform_project_role,
+    reads_platform_security,
 )
 from app.services.clusters.state import (
     PUBLIC_CLOUDS,
@@ -296,6 +302,36 @@ def list_projects(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/health", response_model=list[ProjectHealthRead])
+async def projects_health(
+    token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> list[ProjectHealthRead]:
+    """Apps, Argo CD health and firing alerts of each project the caller sees."""
+    if reads_platform_security(token_payload):
+        names = [n for (n,) in db.query(Project.project_name).all()]
+    else:
+        names = await run_in_threadpool(
+            deployments._user_project_names,  # pylint: disable=protected-access
+            db,
+            token_payload,
+        )
+    rows: dict[str, list[tuple[str, str]]] = {}
+    for project, name, state in db.query(
+        Deployment.project_id, Deployment.name, Deployment.status
+    ).filter(
+        Deployment.project_id.in_(names),
+        Deployment.status != DeploymentStatus.DELETED,
+        Deployment.provider_type == ProviderType.KUBERNETES,
+    ):
+        rows.setdefault(project, []).append((name, state))
+    argo, alerts = await project_health.snapshot()
+    return [
+        project_health.summarize(name, rows.get(name, []), argo, alerts)
+        for name in sorted(names)
+    ]
+
+
 @router.post("/", response_model=ProjectCreateResponse, status_code=202)
 async def create_project(
     payload: ProjectCreate,
@@ -371,6 +407,13 @@ async def create_project(
         owner = existing_project.owner_username
         payload.target_cloud = existing_project.target_cloud
     else:
+        if payload.target_cloud in PUBLIC_CLOUDS and not is_cnp_admin(
+            token_payload
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only platform admins choose AWS or GCP; choose public.",
+            )
         try:
             leftovers = await run_in_threadpool(
                 find_leftovers, payload.project_name
@@ -563,13 +606,14 @@ async def list_project_apps(
         ctx.role.value,
     )
 
-    return (
+    return with_staging(
+        db,
         db.query(Deployment)
         .filter(
             Deployment.project_id == ctx.project_name,
             Deployment.status != DeploymentStatus.DELETED,
         )
-        .all()
+        .all(),
     )
 
 

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { createProject, deleteProject } from "@/lib/api";
 import { GROUP_SUFFIX } from "@/lib/permissions";
-import type { Project, ProjectRole } from "@/types";
+import type { Project, ProjectHealth, ProjectRole } from "@/types";
 import { isProjectFailed, isProjectInFlight } from "@/types";
 import {
     AlertTriangle,
@@ -36,6 +36,9 @@ interface Props {
     onRetried?: () => void;
     /** Apps of the project being deleted. */
     deletingApps?: number;
+    health?: ProjectHealth;
+    /** Security grade, when the overview has one. */
+    grade?: string;
 }
 
 const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
@@ -45,8 +48,25 @@ const ROLE_ICON: Record<ProjectRole, typeof Crown> = {
     guest: Eye,
 };
 
-export function ProjectCard({ project, onRetried, deletingApps = 0 }: Props) {
+function HealthPill({ health }: { health: ProjectHealth }) {
+    const t = useTranslations("projects.card");
+    const pending = health.apps - health.healthy - health.down;
+    const [label, tone] =
+        health.down > 0
+            ? [t("down", { count: health.down }), "border-destructive/30 bg-destructive/10 text-destructive"]
+            : pending > 0
+              ? [t("pending", { count: pending }), "border-amber-600/30 bg-amber-500/10 text-amber-800 dark:text-amber-300"]
+              : [t("healthy"), "border-green-600/30 bg-green-500/10 text-green-700 dark:text-green-400"];
+    return (
+        <Badge variant="outline" className={`shrink-0 whitespace-nowrap ${tone}`}>
+            {label}
+        </Badge>
+    );
+}
+
+export function ProjectCard({ project, onRetried, deletingApps = 0, health, grade }: Props) {
     const t = useTranslations("projects");
+    const tNav = useTranslations("projectNav");
     const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
@@ -55,6 +75,9 @@ export function ProjectCard({ project, onRetried, deletingApps = 0 }: Props) {
     const isDeleting = project.status === "decommissioning";
     const isFailed = isProjectFailed(project);
     const isInFlight = isProjectInFlight(project);
+    // Health means nothing while the project is created, deleted or broken.
+    const shownHealth = !isInFlight && !isFailed ? health : undefined;
+    const known = shownHealth?.health != null && shownHealth.apps > 0;
 
     // A failed bootstrap is retried by creating the project again, a failed
     // teardown by deleting it again. The backend resumes from what is left.
@@ -124,16 +147,39 @@ export function ProjectCard({ project, onRetried, deletingApps = 0 }: Props) {
                     )}
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                    <CardTitle className="text-base capitalize">
+                    <CardTitle className="min-w-0 truncate text-base capitalize">
                         {project.name}
                     </CardTitle>
-                    {!isInFlight && !isFailed && (
-                        <FavoriteToggle kind="project" id={project.name} />
-                    )}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        {known && <HealthPill health={shownHealth!} />}
+                        {!isInFlight && !isFailed && (
+                            <FavoriteToggle kind="project" id={project.name} />
+                        )}
+                    </div>
                 </div>
-                <CardDescription className="text-xs">
+                <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <Badge variant="outline" className="text-xs">
+                        {tNav(`cloud.${project.target_cloud}`)}
+                    </Badge>
                     {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
                 </CardDescription>
+                {shownHealth && (
+                    <p className="text-xs text-muted-foreground">
+                        {[
+                            t("card.apps", { count: shownHealth.apps }),
+                            ...(known ? [t("card.healthyCount", { count: shownHealth.healthy })] : []),
+                            ...(grade ? [t("card.security", { grade })] : []),
+                        ].join(" · ")}
+                        {shownHealth.alerts != null && (
+                            <>
+                                {" · "}
+                                <span className={shownHealth.alerts > 0 ? "text-amber-800 dark:text-amber-300" : undefined}>
+                                    {t("card.alerts", { count: shownHealth.alerts })}
+                                </span>
+                            </>
+                        )}
+                    </p>
+                )}
                 {deletingApps > 0 && !isInFlight && (
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" aria-hidden />

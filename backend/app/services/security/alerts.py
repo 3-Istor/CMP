@@ -144,7 +144,7 @@ def to_notify(
     The fresh findings worth a message. Every row of a sent alert is marked,
     so a second source or package does not resend it.
     """
-    exceptions = store.active_exceptions(db, project)
+    exceptions = store.active_exceptions(db, project, now.date())
     picked: dict[tuple[str | None, str], SecurityFinding] = {}
     for row in fresh:
         if row.tier != Tier.CORE.value or not _is_news(row, known):
