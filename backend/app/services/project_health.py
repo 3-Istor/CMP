@@ -7,6 +7,7 @@ import asyncio
 import logging
 import time
 
+from app.schemas.project import ProjectHealthRead
 from app.services.kube_client import KubeUnavailableError, kube_list
 from app.services.links import APPLICATIONS_PATH
 from app.services.observability import stores
@@ -16,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 # The home polls every 30 s: one read serves every poll in the window.
 TTL_SECONDS = 30.0
+
+SELECTOR = "cnp.3istor.com/project,cnp.3istor.com/app,cnp.3istor.com/env=prod"
 
 # (expires at, (argo, alerts))
 _cache: tuple[float, tuple[dict | None, dict[str, int] | None]] | None = None
@@ -28,7 +31,7 @@ def argo_by_project() -> (
     try:
         items = kube_list(
             APPLICATIONS_PATH,
-            {"labelSelector": "cnp.3istor.com/app,cnp.3istor.com/env=prod"},
+            {"labelSelector": SELECTOR},
         )
     except KubeUnavailableError as exc:
         logger.warning("Argo CD Applications: %s", exc)
@@ -72,3 +75,23 @@ async def snapshot() -> tuple[dict | None, dict[str, int] | None]:
     )
     _cache = (time.monotonic() + TTL_SECONDS, (argo, alerts))
     return argo, alerts
+
+
+def summarize(
+    project: str,
+    apps: int,
+    argo: dict | None,
+    alerts: dict[str, int] | None,
+) -> ProjectHealthRead:
+    """One project's card from the snapshot; None fields when unreadable."""
+    found = ((argo or {}).get(project) or {}).values()
+    healths = [h for h, _ in found]
+    return ProjectHealthRead(
+        project=project,
+        apps=apps,
+        healthy=healths.count("healthy"),
+        down=sum(h in ("degraded", "missing") for h in healths),
+        health=_worst(healths, HEALTH_ORDER),
+        sync=_worst([s for _, s in found], SYNC_ORDER),
+        alerts=None if alerts is None else alerts.get(project, 0),
+    )

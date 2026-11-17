@@ -25,10 +25,11 @@ MEMBER = {"preferred_username": "mem", "groups": []}
 def _app(project, app, component, health, sync="Synced"):
     return {
         "metadata": {
+            "name": f"{project}-{app}-{component}-prod",
             "labels": {
                 "cnp.3istor.com/project": project,
                 "cnp.3istor.com/app": app,
-            }
+            },
         },
         "status": {"health": {"status": health}, "sync": {"status": sync}},
     }
@@ -140,7 +141,10 @@ def test_applications_are_read_once_for_prod_only(
 
     kube.assert_called_once_with(
         project_health.APPLICATIONS_PATH,
-        {"labelSelector": "cnp.3istor.com/app,cnp.3istor.com/env=prod"},
+        {
+            "labelSelector": "cnp.3istor.com/project,cnp.3istor.com/app,"
+            "cnp.3istor.com/env=prod"
+        },
     )
 
 

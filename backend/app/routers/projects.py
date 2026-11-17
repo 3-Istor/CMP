@@ -104,7 +104,6 @@ from app.services.project_registry import (
     set_deletion_protection,
 )
 from app.services.step_up import assert_step_up
-from app.services.topology import HEALTH_ORDER, SYNC_ORDER, _worst
 
 logger = logging.getLogger(__name__)
 
@@ -329,22 +328,10 @@ async def projects_health(
         .all()
     )
     argo, alerts = await project_health.snapshot()
-    result = []
-    for name in sorted(names):
-        apps = ((argo or {}).get(name) or {}).values()
-        healths = [h for h, _ in apps]
-        result.append(
-            ProjectHealthRead(
-                project=name,
-                apps=counts.get(name, 0),
-                healthy=healths.count("healthy"),
-                down=sum(h in ("degraded", "missing") for h in healths),
-                health=_worst(healths, HEALTH_ORDER),
-                sync=_worst([s for _, s in apps], SYNC_ORDER),
-                alerts=None if alerts is None else alerts.get(name, 0),
-            )
-        )
-    return result
+    return [
+        project_health.summarize(name, counts.get(name, 0), argo, alerts)
+        for name in sorted(names)
+    ]
 
 
 @router.post("/", response_model=ProjectCreateResponse, status_code=202)
