@@ -12,6 +12,7 @@ choice, persisted in the DB, keeps matching the recomputed recommendation.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
@@ -43,11 +44,16 @@ class Recommendation:
     patch: dict | None = field(default=None)
 
 
-def k8s_resources(cpu_cores: float, ram_gib: float) -> dict[str, str]:
-    return {
-        "cpu": f"{round(cpu_cores * 1000)}m",
-        "memory": f"{round(ram_gib * 1024)}Mi",
-    }
+def k8s_resources(
+    cpu_cores: float | None, ram_gib: float | None
+) -> dict[str, str]:
+    """Kubernetes quantities; memory rounds up so it never lands under."""
+    out = {}
+    if cpu_cores:
+        out["cpu"] = f"{round(cpu_cores * 1000)}m"
+    if ram_gib:
+        out["memory"] = f"{math.ceil(ram_gib * 1024)}Mi"
+    return out
 
 
 def _avg_usage(app_id: int, resource: str, ref: date) -> float:

@@ -142,4 +142,5 @@ def test_simulated_rightsizing_patch_keeps_requests_within_limits():
 
 
 def test_k8s_resources_formats_quantities():
-    assert k8s_resources(0.13, 0.3) == {"cpu": "130m", "memory": "307Mi"}
+    assert k8s_resources(0.13, 0.3) == {"cpu": "130m", "memory": "308Mi"}
+    assert k8s_resources(None, 1) == {"memory": "1024Mi"}
