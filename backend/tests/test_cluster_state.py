@@ -175,14 +175,81 @@ def test_resync_syncs_the_clouds_unsynced_or_failed_applications():
     )
 
 
-def _refresh(before, after, **resync_kwargs):
+def _refresh(
+    before, after, platform_ready=True, keep_pending=False, **resync_kwargs
+):
     state._cache = dict(before)
+    if not keep_pending:
+        state._pending_resync.clear()
     with (
         mock.patch.object(state, "fresh_state", lambda c: after[c]),
+        mock.patch.object(state, "platform_ready", lambda c: platform_ready),
         mock.patch.object(state, "resync", **resync_kwargs) as resync,
     ):
         asyncio.run(state._refresh())
     return [c.args[0] for c in resync.call_args_list]
+
+
+def test_resync_waits_for_the_cloud_platform():
+    up = {AWS: "up", GCP: "down"}
+    assert _refresh({AWS: "down", GCP: "down"}, up, platform_ready=False) == []
+    assert _refresh(up, up, platform_ready=True, keep_pending=True) == [AWS]
+    assert _refresh(up, up, platform_ready=True, keep_pending=True) == []
+
+
+def test_a_failed_resync_is_retried_on_the_next_refresh():
+    up = {AWS: "up", GCP: "down"}
+    _refresh({AWS: "down"}, up, side_effect=KubeUnavailableError("boom"))
+    assert _refresh(up, up, keep_pending=True) == [AWS]
+
+
+def test_going_down_drops_a_pending_resync():
+    up, down = {AWS: "up", GCP: "down"}, {AWS: "down", GCP: "down"}
+    _refresh({AWS: "down"}, up, platform_ready=False)
+    _refresh(up, down, keep_pending=True)
+    assert _refresh(down, {AWS: "down", GCP: "down"}, keep_pending=True) == []
+    assert AWS not in state._pending_resync
+
+
+@pytest.mark.parametrize(
+    "app,expected",
+    [
+        (None, True),
+        (
+            {
+                "status": {
+                    "sync": {"status": "Synced"},
+                    "health": {"status": "Healthy"},
+                }
+            },
+            True,
+        ),
+        (
+            {
+                "status": {
+                    "sync": {"status": "Unknown"},
+                    "health": {"status": "Healthy"},
+                }
+            },
+            False,
+        ),
+        (
+            {
+                "status": {
+                    "sync": {"status": "Synced"},
+                    "health": {"status": "Progressing"},
+                }
+            },
+            False,
+        ),
+    ],
+)
+def test_platform_ready_needs_the_platform_application_synced_and_healthy(
+    app, expected
+):
+    with mock.patch.object(state, "kube_get", return_value=app) as get:
+        assert state.platform_ready(AWS) is expected
+    assert get.call_args.args[0].endswith("/platform-aws")
 
 
 @pytest.mark.parametrize("before", ["down", "unknown", "starting"])
