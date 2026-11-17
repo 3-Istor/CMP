@@ -45,7 +45,8 @@ const COMPACT_LINES = 50;
 // Backend bounds: the store search answers at most 500 lines, both searches take 200 chars.
 const OBS_LINES = 500;
 const MAX_SEARCH = 200;
-// The store has no `since`: the live poll re-reads this window.
+// The store has no `since`: the live poll re-reads its smallest range
+// (LOG_RANGE in the backend's app_observability.py).
 const OBS_LIVE_RANGE = "15m";
 
 const PERIODS: { value: string; label: string; ms: number }[] = [
@@ -197,7 +198,8 @@ export function LogsView({
     namespace: namespace ?? null,
   });
   const [searchInput, setSearchInput] = useState("");
-  // A trace link may come from a trace hours old.
+  // A trace link comes from the trace list, whose longest range is 24 h
+  // (TRACE_RANGE in the backend's app_observability.py).
   const [period, setPeriod] = useState(trace ? "24h" : "1h");
   const [lines, setLines] = useState<Row[] | null>(null);
   const [live, setLive] = useState(compact);
@@ -212,6 +214,9 @@ export function LogsView({
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const newest = useRef<string | null>(null);
+  // Answers of an older load or poll are dropped: they match older filters.
+  const generation = useRef(0);
+  const polling = useRef(false);
   const top = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -232,7 +237,7 @@ export function LogsView({
   /** Newest first from either store: the selected period, or the live window. */
   const fetchRows = useCallback(
     async (follow: boolean): Promise<Row[]> => {
-      const limit = follow ? 300 : compact ? COMPACT_LINES : obs ? OBS_LINES : 1000;
+      const limit = compact ? COMPACT_LINES : follow ? 300 : obs ? OBS_LINES : 1000;
       if (!obs || appId == null) {
         const ms = PERIODS.find((p) => p.value === period)?.ms ?? 3_600_000;
         const since = follow
@@ -261,19 +266,21 @@ export function LogsView({
   );
 
   const load = useCallback(async () => {
+    const id = ++generation.current;
     setLoading(true);
     setContext(null);
     try {
       const result = await fetchRows(false);
+      if (id !== generation.current) return;
       // The API answers newest first; a terminal reads oldest first.
       setLines([...result].reverse());
       newest.current = result[0]?.time ?? null;
       atBottom.current = true;
       setError(null);
     } catch (e) {
-      setError(e);
+      if (id === generation.current) setError(e);
     } finally {
-      setLoading(false);
+      if (id === generation.current) setLoading(false);
     }
   }, [fetchRows]);
 
@@ -284,10 +291,13 @@ export function LogsView({
   useEffect(() => {
     if (!live || !ready) return;
     const timer = setInterval(async () => {
-      if (document.hidden) return;
+      // A slow store must not pile up queries: skip the tick while one runs.
+      if (document.hidden || polling.current) return;
+      polling.current = true;
+      const id = generation.current;
       try {
         const fresh = await fetchRows(true);
-        if (fresh.length === 0) return;
+        if (id !== generation.current || fresh.length === 0) return;
         // The store re-reads a whole window: only unseen lines, none older
         // than the newest shown, so every line appears once and in order.
         const from = newest.current ? Date.parse(newest.current) : 0;
@@ -303,9 +313,12 @@ export function LogsView({
         if (Date.parse(fresh[0].time) >= from) newest.current = fresh[0].time;
         setError(null);
       } catch (e) {
+        if (id !== generation.current) return;
         setError(e);
         // The compact card has no Follow button: it keeps retrying instead.
         if (!compact) setLive(false);
+      } finally {
+        polling.current = false;
       }
     }, LIVE_MS);
     return () => clearInterval(timer);
@@ -622,7 +635,8 @@ export function LogsView({
           </p>
         ))}
 
-      {trace && (
+      {/* On Loki a typed phrase replaces the trace id as the search. */}
+      {trace && (obs || !filters.search) && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
           <span>{t("logs.traceFilter", { id: trace.slice(0, 12) })}</span>
           {onClearTrace && (

@@ -16,7 +16,7 @@ function ProjectLogs() {
   const search = useSearchParams();
   const namespace = search.get("namespace") ?? undefined;
   // Opened from an app: read that app's store.
-  const app = Number(search.get("app") || NaN);
+  const app = Number(search.get("app"));
 
   return (
     <div className="min-h-screen">
@@ -34,7 +34,7 @@ function ProjectLogs() {
         <LogsView
           project={projectName}
           namespace={namespace}
-          appId={Number.isNaN(app) ? undefined : app}
+          appId={Number.isInteger(app) && app > 0 ? app : undefined}
           fullPage
         />
       </main>

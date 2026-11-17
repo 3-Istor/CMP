@@ -43,3 +43,26 @@ test("reads the activity logs without the store", async ({ page }) => {
   await expect(level).toBeVisible();
   await expect(level.getByRole("option", { name: "Info" })).toHaveCount(0);
 });
+
+test("drops an answer that came back after the filters changed", async ({ page }) => {
+  await installMockApi(page, VARIANTS.obslogs);
+  const OLD = { ...A, message: "line of the last hour" };
+  const NEW = { ...A, message: "line of the last 15 minutes" };
+  await page.route("**/api/deployments/1/observability/logs?**", async (route) => {
+    const hour = new URL(route.request().url()).searchParams.get("range") === "1h";
+    if (hour) await new Promise((resolve) => setTimeout(resolve, 2000));
+    await route.fulfill({ json: hour ? [OLD] : [NEW] });
+  });
+  const hourSearch = (url: string) => url.includes("/observability/logs?") && url.includes("range=1h");
+  const slow = page.waitForRequest((r) => hourSearch(r.url()));
+  await page.goto("/projects/demo/apps/1/logs");
+  await slow;
+  const slowAnswer = page.waitForResponse((r) => hourSearch(r.url()));
+
+  await page.getByRole("combobox", { name: "Period" }).selectOption("15m");
+  await expect(page.getByText(NEW.message)).toBeVisible();
+  await slowAnswer;
+  await page.waitForTimeout(500);
+  await expect(page.getByText(OLD.message)).toHaveCount(0);
+  await expect(page.getByText(NEW.message)).toBeVisible();
+});
