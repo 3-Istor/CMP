@@ -150,7 +150,7 @@
       "submit": "Créer le projet",
       "submitting": "Création…",
       "toasts": {
-        "created": "Création de « {name} » sur {cloud}.",
+        "created": "Création de « {name} » ({cloud}).",
         "failed": "Échec de la création du projet : {message}"
       },
       "whereItRuns": "Où il tourne",

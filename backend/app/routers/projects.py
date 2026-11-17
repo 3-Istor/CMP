@@ -369,7 +369,7 @@ async def create_project(
         owner = existing_project.owner_username
         payload.target_cloud = existing_project.target_cloud
     else:
-        if payload.target_cloud in ("aws", "gcp") and not is_cnp_admin(
+        if payload.target_cloud in PUBLIC_CLOUDS and not is_cnp_admin(
             token_payload
         ):
             raise HTTPException(

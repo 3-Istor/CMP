@@ -128,7 +128,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
 
     return (
         <Dialog open={open} onOpenChange={(v) => !loading && !v && onClose()}>
-            <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+            <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>{t("title")}</DialogTitle>
                 </DialogHeader>
@@ -171,7 +171,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         <div className="flex items-center justify-between">
                             <Label>{t("whereItRuns")}</Label>
                             <a
-                                href={`${DOCS_URL}06-multicloud/08-placement-cloud-public/`}
+                                href={`${DOCS_URL}06-multicloud/08-placement-cloud-public/#comparaison-affichee`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
@@ -243,9 +243,6 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                                             type="button"
                                             role="radio"
                                             aria-checked={provider === value}
-                                            aria-label={
-                                                value === "auto" ? t("auto") : t(`clouds.${value}.label`)
-                                            }
                                             disabled={loading || (value !== "auto" && stateOf(value) !== "up")}
                                             onClick={() => setProvider(value)}
                                             className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${

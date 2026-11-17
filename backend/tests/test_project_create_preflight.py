@@ -276,6 +276,8 @@ def test_a_member_cannot_choose_aws_or_gcp(db, seams, cloud):
 
     assert excinfo.value.status_code == 403
     gate.assert_not_called()
+    seams.leftovers.assert_not_called()
+    seams.names.assert_not_awaited()
     seams.publish.assert_not_called()
     states.assert_not_called()
 

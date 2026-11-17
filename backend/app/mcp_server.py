@@ -70,7 +70,7 @@ How to work:
 - Stacks: "static" (HTML/CSS/JS served by nginx) or "fullstack" (FastAPI +
   React + PostgreSQL). Prefer static unless the app must store data.
 - A project runs on one cloud for good (create_project cloud): on-prem by
-  default; aws or gcp only while whoami shows that cloud up.
+  default, or public (the platform picks AWS or GCP among the clouds up).
 - A release is a git tag vX.Y.Z (cut_release); an app with a staging
   environment gets release candidates vX.Y.Z-rc.N, promoted to prod from the
   CMP; promotion follows one (accept a step, cancel). CI builds the image,
