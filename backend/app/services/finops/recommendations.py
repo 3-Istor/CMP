@@ -39,7 +39,7 @@ class Recommendation:
     monthly_saving_eur: float
     confidence: int  # 0..100
     effort: str  # low | medium | high
-    # k8s patch to apply to deploy/values.yaml (None → cannot auto-apply)
+    # k8s patch merged into the app's values file (None → cannot auto-apply)
     patch: dict | None = field(default=None)
 
 

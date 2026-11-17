@@ -304,14 +304,12 @@ def _advice(
         ]
 
     cpu_p95 = data["cpu_p95"].get(namespace)
-    ram_p99 = data["ram_p99"].get(namespace, 0.0) / 2**30
     if cpu_p95 is None or cpu_req <= 0:
         return []
 
     replicas = int(data["replicas"].get(namespace, 0))
     single_deployment = data["deployments"].get(namespace, 0) == 1
     cpu_ratio = cpu_p95 / cpu_req
-    ram_ratio = ram_p99 / ram_req if ram_req > 0 else 1.0
 
     if single_deployment and replicas > 1 and cpu_ratio < OVERSIZED_RATIO:
         per_replica_cpu = cpu_req / replicas

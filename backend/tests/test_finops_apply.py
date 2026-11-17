@@ -73,7 +73,7 @@ def _apply(session_factory, monkeypatch, app_type, files):
         "get_org_installation_token",
         mock.AsyncMock(return_value="tok"),
     )
-    monkeypatch.setattr(router, "get_cost_provider", lambda: _Provider())
+    monkeypatch.setattr(router, "get_cost_provider", _Provider)
     monkeypatch.setattr(router, "_require_project_role", lambda *a: None)
     app = FastAPI()
     app.include_router(router.router, prefix="/api")
