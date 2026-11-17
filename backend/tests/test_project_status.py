@@ -336,9 +336,9 @@ def test_other_users_are_refused_a_failed_teardown_without_groups(
     assert raised.value.status_code == 403
 
 
-def add_app(factory, name, status):
+def add_app(factory, name, status, template_id="k3s"):
     with factory() as db:
-        db.add(Deployment(name=name, template_id="k3s", status=status))
+        db.add(Deployment(name=name, template_id=template_id, status=status))
         db.commit()
 
 
@@ -347,23 +347,30 @@ def read_app(factory, name):
         return db.query(Deployment).filter_by(name=name).one()
 
 
-def test_restart_fails_the_runs_it_interrupted(session_factory):
+def test_restart_resumes_catalog_runs_and_fails_the_others(session_factory):
     add_project(session_factory, "creating", status=ProjectStatus.PROVISIONING)
     add_project(
         session_factory, "deleting", status=ProjectStatus.DECOMMISSIONING
     )
     add_project(session_factory, "live", status=ProjectStatus.ACTIVE)
-    for status in (
+    runs = (
         DeploymentStatus.PENDING,
         DeploymentStatus.INITIALIZING,
         DeploymentStatus.PLANNING,
         DeploymentStatus.DEPLOYING,
-        DeploymentStatus.DELETING,
-    ):
+    )
+    for status in runs:
         add_app(session_factory, status.value, status)
+    add_app(
+        session_factory,
+        "imported",
+        DeploymentStatus.DEPLOYING,
+        template_id="import-service",
+    )
+    add_app(session_factory, "removing", DeploymentStatus.DELETING)
     add_app(session_factory, "up", DeploymentStatus.RUNNING)
 
-    project_status.fail_interrupted_runs()
+    resumed = project_status.fail_interrupted_runs()
 
     creating = read_project(session_factory, "creating")
     assert creating.status == ProjectStatus.FAILED
@@ -372,17 +379,32 @@ def test_restart_fails_the_runs_it_interrupted(session_factory):
     assert deleting.status == ProjectStatus.DECOMMISSION_FAILED
     assert "restart" in deleting.step_message
     assert read_project(session_factory, "live").status == ProjectStatus.ACTIVE
-    for status in (
-        "pending",
-        "initializing",
-        "planning",
-        "deploying",
-        "deleting",
-    ):
-        app = read_app(session_factory, status)
+    ids = []
+    for status in runs:
+        app = read_app(session_factory, status.value)
+        assert app.status == DeploymentStatus.PENDING
+        assert app.step_message == "Resuming after a CMP restart."
+        assert app.resumed is True
+        ids.append(app.id)
+    assert resumed == ids
+    for name in ("imported", "removing"):
+        app = read_app(session_factory, name)
         assert app.status == DeploymentStatus.FAILED
         assert "restart" in app.step_message
     assert read_app(session_factory, "up").status == DeploymentStatus.RUNNING
+
+
+def test_a_run_interrupted_after_its_resume_fails(session_factory):
+    add_app(session_factory, "again", DeploymentStatus.DEPLOYING)
+    with session_factory() as db:
+        db.query(Deployment).filter_by(name="again").one().resumed = True
+        db.commit()
+
+    assert project_status.fail_interrupted_runs() == []
+
+    app = read_app(session_factory, "again")
+    assert app.status == DeploymentStatus.FAILED
+    assert "restart" in app.step_message
 
 
 def test_bootstrap_commands_release_a_lock_left_by_a_dead_pod(tmp_path):

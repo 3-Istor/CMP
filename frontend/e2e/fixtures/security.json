@@ -1,0 +1,555 @@
+{
+ "summary": {
+  "project": "demo",
+  "app": "demo-app",
+  "view": "developer",
+  "score": 62,
+  "grade": "C",
+  "actions": 5,
+  "core": 1,
+  "excepted": 0,
+  "segments": [
+   {
+    "category": "leaks",
+    "label": "leaks",
+    "worst": "core",
+    "counts": {
+     "core": 1
+    },
+    "points_lost": 1
+   },
+   {
+    "category": "dependencies",
+    "label": "dependencies",
+    "worst": "important",
+    "counts": {
+     "important": 1
+    },
+    "points_lost": 1
+   },
+   {
+    "category": "container",
+    "label": "container",
+    "worst": "important",
+    "counts": {
+     "important": 1,
+     "recommended": 1
+    },
+    "points_lost": 2
+   },
+   {
+    "category": "access",
+    "label": "access",
+    "worst": "recommended",
+    "counts": {
+     "recommended": 1
+    },
+    "points_lost": 1
+   },
+   {
+    "category": "data",
+    "label": "data",
+    "worst": null,
+    "counts": {},
+    "points_lost": 0
+   },
+   {
+    "category": "journal",
+    "label": "journal",
+    "worst": null,
+    "counts": {},
+    "points_lost": 0
+   }
+  ],
+  "apps": [],
+  "scans": [],
+  "guarantees": []
+ },
+ "findings": [
+  {
+   "fingerprint": "a",
+   "app": "demo-app",
+   "category": "leaks",
+   "tier": "core",
+   "audience": "developer",
+   "rule": "gitleaks.generic-api-key",
+   "title": "Secret in repository",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": {
+    "title": {
+     "key": "leak.title",
+     "params": {}
+    },
+    "detail": {
+     "key": "leak.detail",
+     "params": {
+      "rule": "generic-api-key"
+     }
+    },
+    "fix": {
+     "key": "leak.fix",
+     "params": {}
+    }
+   },
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": {
+    "id": 1,
+    "project": "demo",
+    "app": "demo-app",
+    "fingerprint": "a",
+    "rule": "gitleaks.generic-api-key",
+    "kind": "secret",
+    "status": "false_positive",
+    "justification": null,
+    "statement": "Test key from the docs, not a real credential.",
+    "expires_on": "2026-12-15",
+    "author": "hugo.guillet",
+    "created_at": "2026-11-10T09:00:00",
+    "approved_by": null,
+    "approved_at": null,
+    "revoked_by": null,
+    "revoked_at": null,
+    "pending_approval": true,
+    "critical": true,
+    "expired": false,
+    "title": "Secret in repository",
+    "i18n": {
+     "title": {
+      "key": "leak.title",
+      "params": {}
+     },
+     "detail": {
+      "key": "leak.detail",
+      "params": {
+       "rule": "generic-api-key"
+      }
+     },
+     "fix": {
+      "key": "leak.fix",
+      "params": {}
+     }
+    }
+   }
+  },
+  {
+   "fingerprint": "b",
+   "app": "demo-app",
+   "category": "dependencies",
+   "tier": "important",
+   "audience": "developer",
+   "rule": "CVE-2021-23337",
+   "title": "Vulnerable dependency",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": {
+    "title": {
+     "key": "vuln.title",
+     "params": {
+      "id": "CVE-2021-23337",
+      "package": "lodash",
+      "installed": "4.17.20"
+     }
+    },
+    "fix": {
+     "key": "vuln.fixBump",
+     "params": {
+      "package": "lodash",
+      "installed": "4.17.20",
+      "fixed": "4.17.21"
+     }
+    }
+   },
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null,
+   "fix_pr": "https://github.com/3-Istor/demo-app/pull/42"
+  },
+  {
+   "fingerprint": "c",
+   "app": "demo-app",
+   "category": "container",
+   "tier": "recommended",
+   "audience": "developer",
+   "rule": "kyverno.run_as_root",
+   "title": "Image runs as root",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": {
+    "title": {
+     "key": "kyverno.run_as_root.title",
+     "params": {}
+    },
+    "fix": {
+     "key": "kyverno.run_as_root.fix",
+     "params": {}
+    }
+   },
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  },
+  {
+   "fingerprint": "d",
+   "app": "demo-app",
+   "category": "access",
+   "tier": "recommended",
+   "audience": "developer",
+   "rule": "exposure.public",
+   "title": "Image runs as root",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": {
+    "title": {
+     "key": "exposure.public.title",
+     "params": {}
+    },
+    "fix": {
+     "key": "exposure.public.fix",
+     "params": {}
+    }
+   },
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  },
+  {
+   "fingerprint": "e",
+   "app": "demo-app",
+   "category": "container",
+   "tier": "important",
+   "audience": "developer",
+   "rule": "imageSecret",
+   "title": "Image runs as root",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": {
+    "title": {
+     "key": "imageSecret.title",
+     "params": {
+      "name": "id_rsa"
+     }
+    },
+    "fix": {
+     "key": "imageSecret.fix",
+     "params": {
+      "name": "id_rsa"
+     }
+    }
+   },
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  }
+ ],
+ "trend": [],
+ "exceptions": [
+  {
+   "id": 1,
+   "project": "demo",
+   "app": "demo-app",
+   "fingerprint": "a",
+   "rule": "gitleaks.generic-api-key",
+   "kind": "secret",
+   "status": "false_positive",
+   "justification": null,
+   "statement": "Test key from the docs, not a real credential.",
+   "expires_on": "2026-12-15",
+   "author": "hugo.guillet",
+   "created_at": "2026-11-10T09:00:00",
+   "approved_by": null,
+   "approved_at": null,
+   "revoked_by": null,
+   "revoked_at": null,
+   "pending_approval": true,
+   "critical": true,
+   "expired": false,
+   "title": "Secret in repository",
+   "i18n": {
+    "title": {
+     "key": "leak.title",
+     "params": {}
+    },
+    "detail": {
+     "key": "leak.detail",
+     "params": {
+      "rule": "generic-api-key"
+     }
+    },
+    "fix": {
+     "key": "leak.fix",
+     "params": {}
+    }
+   }
+  },
+  {
+   "id": 2,
+   "project": "demo",
+   "app": "demo-app",
+   "fingerprint": "b",
+   "rule": "CVE-2021-23337",
+   "kind": "vulnerability",
+   "status": "accepted_risk",
+   "justification": null,
+   "statement": "Fix planned next sprint.",
+   "expires_on": "2026-12-15",
+   "author": "demo",
+   "created_at": "2026-11-10T09:00:00",
+   "approved_by": null,
+   "approved_at": null,
+   "revoked_by": null,
+   "revoked_at": null,
+   "pending_approval": true,
+   "critical": false,
+   "expired": false,
+   "title": "Vulnerable dependency",
+   "i18n": {
+    "title": {
+     "key": "vuln.title",
+     "params": {
+      "id": "CVE-2021-23337",
+      "package": "lodash",
+      "installed": "4.17.20"
+     }
+    },
+    "fix": {
+     "key": "vuln.fixBump",
+     "params": {
+      "package": "lodash",
+      "installed": "4.17.20",
+      "fixed": "4.17.21"
+     }
+    }
+   }
+  },
+  {
+   "id": 3,
+   "project": "demo",
+   "app": "demo-app",
+   "fingerprint": "c",
+   "rule": "kyverno.run_as_root",
+   "kind": "other",
+   "status": "not_affected",
+   "justification": "vulnerable_code_not_in_execute_path",
+   "statement": "Runs behind a rootless runtime.",
+   "expires_on": "2026-12-15",
+   "author": "demo",
+   "created_at": "2026-11-10T09:00:00",
+   "approved_by": "hugo.guillet",
+   "approved_at": "2026-11-11T10:00:00",
+   "revoked_by": null,
+   "revoked_at": null,
+   "pending_approval": false,
+   "critical": false,
+   "expired": false,
+   "title": "Image runs as root",
+   "i18n": {
+    "title": {
+     "key": "kyverno.run_as_root.title",
+     "params": {}
+    },
+    "fix": {
+     "key": "kyverno.run_as_root.fix",
+     "params": {}
+    }
+   }
+  },
+  {
+   "id": 4,
+   "project": "demo",
+   "app": "demo-app",
+   "fingerprint": "e",
+   "rule": "imageSecret",
+   "kind": "other",
+   "status": "accepted_risk",
+   "justification": null,
+   "statement": "Accepted until the key is rotated.",
+   "expires_on": "2026-11-10",
+   "author": "demo",
+   "created_at": "2026-10-01T09:00:00",
+   "approved_by": "hugo.guillet",
+   "approved_at": "2026-10-02T10:00:00",
+   "revoked_by": null,
+   "revoked_at": null,
+   "pending_approval": false,
+   "critical": false,
+   "expired": true,
+   "title": "Secret baked into the image",
+   "i18n": {
+    "title": {
+     "key": "imageSecret.title",
+     "params": {
+      "name": "id_rsa"
+     }
+    },
+    "fix": {
+     "key": "imageSecret.fix",
+     "params": {
+      "name": "id_rsa"
+     }
+    }
+   }
+  }
+ ],
+ "me": {
+  "role": "admin",
+  "cnp_admin": false,
+  "username": "demo"
+ },
+ "pending": [
+  {
+   "id": 1,
+   "project": "demo",
+   "app": "demo-app",
+   "fingerprint": "a",
+   "rule": "gitleaks.generic-api-key",
+   "kind": "secret",
+   "status": "false_positive",
+   "justification": null,
+   "statement": "Test key from the docs, not a real credential.",
+   "expires_on": "2026-12-15",
+   "author": "hugo.guillet",
+   "created_at": "2026-11-10T09:00:00",
+   "approved_by": null,
+   "approved_at": null,
+   "revoked_by": null,
+   "revoked_at": null,
+   "pending_approval": true,
+   "critical": true,
+   "expired": false,
+   "title": "Secret in repository",
+   "i18n": {
+    "title": {
+     "key": "leak.title",
+     "params": {}
+    },
+    "detail": {
+     "key": "leak.detail",
+     "params": {
+      "rule": "generic-api-key"
+     }
+    },
+    "fix": {
+     "key": "leak.fix",
+     "params": {}
+    }
+   }
+  },
+  {
+   "id": 2,
+   "project": "demo",
+   "app": "demo-app",
+   "fingerprint": "b",
+   "rule": "CVE-2021-23337",
+   "kind": "vulnerability",
+   "status": "accepted_risk",
+   "justification": null,
+   "statement": "Fix planned next sprint.",
+   "expires_on": "2026-12-15",
+   "author": "demo",
+   "created_at": "2026-11-10T09:00:00",
+   "approved_by": null,
+   "approved_at": null,
+   "revoked_by": null,
+   "revoked_at": null,
+   "pending_approval": true,
+   "critical": false,
+   "expired": false,
+   "title": "Vulnerable dependency",
+   "i18n": {
+    "title": {
+     "key": "vuln.title",
+     "params": {
+      "id": "CVE-2021-23337",
+      "package": "lodash",
+      "installed": "4.17.20"
+     }
+    },
+    "fix": {
+     "key": "vuln.fixBump",
+     "params": {
+      "package": "lodash",
+      "installed": "4.17.20",
+      "fixed": "4.17.21"
+     }
+    }
+   }
+  },
+  {
+   "id": 5,
+   "project": "iot",
+   "app": "sensor-gw",
+   "fingerprint": "b",
+   "rule": "CVE-2021-23337",
+   "kind": "vulnerability",
+   "status": "accepted_risk",
+   "justification": null,
+   "statement": "Waiting for the vendor patch.",
+   "expires_on": "2026-12-15",
+   "author": "brian",
+   "created_at": "2026-11-12T09:00:00",
+   "approved_by": null,
+   "approved_at": null,
+   "revoked_by": null,
+   "revoked_at": null,
+   "pending_approval": true,
+   "critical": false,
+   "expired": false,
+   "title": "Vulnerable dependency",
+   "i18n": {
+    "title": {
+     "key": "vuln.title",
+     "params": {
+      "id": "CVE-2021-23337",
+      "package": "lodash",
+      "installed": "4.17.20"
+     }
+    },
+    "fix": {
+     "key": "vuln.fixBump",
+     "params": {
+      "package": "lodash",
+      "installed": "4.17.20",
+      "fixed": "4.17.21"
+     }
+    }
+   }
+  }
+ ]
+}

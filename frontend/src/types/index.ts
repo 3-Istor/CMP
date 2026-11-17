@@ -25,6 +25,7 @@ export interface Deployment {
   status: DeploymentStatus;
   step_message: string;
   terraform_outputs: string | null; // JSON string
+  staging_url?: string | null;
   resource_count: number | null;
   created_at: string;
   updated_at: string;
@@ -41,6 +42,17 @@ export interface Deployment {
 }
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────
+
+/** Apps and Argo CD health of a project; null when Argo or Alertmanager is unreadable. */
+export interface ProjectHealth {
+  project: string;
+  apps: number;
+  healthy: number;
+  down: number;
+  health: string | null;
+  sync: string | null;
+  alerts: number | null;
+}
 
 /**
  * A user's role on one project, strongest first.
@@ -587,9 +599,13 @@ export type SecurityView = "developer" | "platform";
 
 export interface SecurityException {
   id: number;
+  project: string;
   app: string | null;
   fingerprint: string;
   rule: string;
+  title?: string | null;
+  i18n?: SecurityFinding["i18n"];
+  expired?: boolean;
   kind: "vulnerability" | "secret" | "other";
   status: "not_affected" | "false_positive" | "accepted_risk" | "revoked";
   justification: string | null;
@@ -617,6 +633,7 @@ export interface SecurityFinding {
   fix: string;
   location: string;
   link: string | null;
+  fix_pr?: string | null;
   raw: string;
   i18n?: Partial<
     Record<
@@ -723,11 +740,13 @@ export interface ActivityEvent {
   status_code: number | null;
   source_ip: string | null;
   details: Record<string, unknown>;
+  app_id?: number | null;
 }
 
 export interface ActivityFeed {
   events: ActivityEvent[];
   unavailable: ActivitySource[];
+  retention_days: number;
 }
 
 export interface ActivityKpi {
@@ -776,6 +795,7 @@ export interface ActivityFilters {
   app?: string | null;
   days?: number;
   until?: string | null;
+  before_id?: string | null;
   include_reads?: boolean;
   notable_only?: boolean;
 }
@@ -799,7 +819,7 @@ export interface LogFilters {
   pod?: string | null;
   container?: string | null;
   search?: string | null;
-  level?: "error" | "warn" | null;
+  level?: "error" | "warn" | "info" | "debug" | null;
   since?: string | null;
   until?: string | null;
   limit?: number;

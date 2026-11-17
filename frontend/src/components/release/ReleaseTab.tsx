@@ -17,7 +17,6 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { DemoTrafficCard } from "./DemoTrafficCard";
-import { NewReleaseButton } from "./NewReleaseDialog";
 import { ReleaseHistoryTable } from "./ReleaseHistoryTable";
 import { ReleaseSettingsCard } from "./ReleaseSettingsCard";
 import { ReleaseStepper } from "./ReleaseStepper";
@@ -354,11 +353,6 @@ export function ReleaseTab({
   if (!view.enabled) {
     return (
       <div className="space-y-6">
-        {canOperate && (
-          <div className="flex justify-end">
-            <NewReleaseButton deploymentId={deploymentId} />
-          </div>
-        )}
         {showSettings && canReadSettings && (
           <ReleaseSettingsCard deploymentId={deploymentId} inProgress={false} />
         )}
@@ -408,11 +402,6 @@ export function ReleaseTab({
 
   return (
     <div className="space-y-6">
-      {canOperate && (
-        <div className="flex justify-end">
-          <NewReleaseButton deploymentId={deploymentId} />
-        </div>
-      )}
       <Banner view={view} />
 
       <Card>

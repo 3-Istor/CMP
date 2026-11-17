@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { logout } from "@/lib/logout";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { cn } from "@/lib/utils";
-import { LogOut, Settings, User } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -76,13 +76,7 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/account" onClick={onNavigate}>
             <User className="mr-2 h-4 w-4" aria-hidden />
-            {t("myProfile")}
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/account" onClick={onNavigate}>
-            <Settings className="mr-2 h-4 w-4" aria-hidden />
-            {t("accountSettings")}
+            {t("account")}
           </Link>
         </DropdownMenuItem>
         <div className="px-2 py-1.5">

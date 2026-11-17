@@ -13,14 +13,24 @@ import { SecurityDataPanel } from "@/components/projects/SecurityDataPanel";
 import { ReleaseSettingsCard } from "@/components/release/ReleaseSettingsCard";
 import { AlertsCard } from "@/components/security/AlertsCard";
 import { AppSettingsCard } from "@/components/security/SettingsCard";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { getSecurityRole } from "@/lib/api";
+import {
+  deleteDeployment,
+  deleteImport,
+  getDeletionProtection,
+  getImports,
+  getSecurityRole,
+} from "@/lib/api";
 import { useRelease } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { ImportSourceView } from "@/types";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 /**
  * A search box over its children: every match of the typed text is
@@ -118,7 +128,7 @@ function SearchHighlight({ children }: { children: React.ReactNode }) {
   );
 }
 
-const SECTIONS = ["general", "secrets", "delivery", "slo", "security", "advanced"] as const;
+const SECTIONS = ["general", "secrets", "delivery", "slo", "security", "advanced", "danger"] as const;
 
 function SettingsSection({
   id,
@@ -134,7 +144,9 @@ function SettingsSection({
   return (
     <section id={id} className="scroll-mt-40 space-y-4">
       <div className="border-b pb-2">
-        <h2 className="text-base font-semibold">{title}</h2>
+        <h2 className={cn("text-base font-semibold", id === "danger" && "text-destructive")}>
+          {title}
+        </h2>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       {children}
@@ -145,8 +157,36 @@ function SettingsSection({
 export default function AppSettingsPage() {
   const t = useTranslations("apps.config");
   const ts = useTranslations("appPage.settings");
-  const { appId, projectName, deployment } = useAppContext();
+  const tc = useTranslations("confirm");
+  const ta = useTranslations("actions");
+  const { appId, projectName, deployment, markDeleting } = useAppContext();
   const { can } = useProjectContext();
+  const ti = useTranslations("imports.list");
+  const [deleting, setDeleting] = useState(false);
+  const [protectedOn, setProtectedOn] = useState(false);
+  const [source, setSource] = useState<ImportSourceView | null | undefined>(undefined);
+  const [importFailed, setImportFailed] = useState(false);
+  const [importAttempt, setImportAttempt] = useState(0);
+  const imported = deployment.template_id.startsWith("import-");
+  const canDelete = can("app.delete");
+  const canImport = can("import.manage");
+  useEffect(() => {
+    if (!canDelete) return;
+    getDeletionProtection(projectName)
+      .then(({ enabled }) => setProtectedOn(enabled))
+      .catch(() => setProtectedOn(false));
+  }, [canDelete, projectName]);
+  useEffect(() => {
+    if (!imported || !canImport) return;
+    getImports(projectName)
+      .then((all) => {
+        setImportFailed(false);
+        setSource(
+          all.find((i) => i.services.some((x) => x.deployment_id === appId)) ?? null,
+        );
+      })
+      .catch(() => setImportFailed(true));
+  }, [imported, canImport, projectName, appId, importAttempt]);
   const isRunning = deployment.status === "running";
   const [securityAdmin, setSecurityAdmin] = useState(false);
   const [active, setActive] = useState<string>("general");
@@ -178,7 +218,8 @@ export default function AppSettingsPage() {
       (id !== "secrets" || isRunning) &&
       (id !== "delivery" || can("release.view")) &&
       (id !== "slo" || sloShown) &&
-      (id !== "security" || can("app.viewObservability")),
+      (id !== "security" || can("app.viewObservability")) &&
+      (id !== "danger" || canDelete),
   );
   const sectionsKey = visibleSections.join();
 
@@ -197,6 +238,32 @@ export default function AppSettingsPage() {
     return () => observer.disconnect();
   }, [allowed, sectionsKey]);
 
+
+  // Why "Remove import" is disabled, in priority order.
+  const importReason = !imported
+    ? null
+    : protectedOn
+      ? ta("reasons.protected")
+      : !canImport
+        ? ts("danger.noPermission")
+        : importFailed
+          ? ts("danger.importFailed")
+          : source === null
+            ? ts("danger.importMissing")
+            : null;
+
+  const handleRemoveImport = async () => {
+    if (!source || protectedOn) return;
+    await deleteImport(projectName, source.id);
+    toast.success(ti("deleteStarted"));
+    markDeleting();
+  };
+
+  const handleDelete = async () => {
+    await deleteDeployment(appId);
+    toast.success(ta("toasts.deleting", { name: deployment.name }));
+    markDeleting();
+  };
 
   return (
     <AppSection allowed={allowed}>
@@ -319,8 +386,95 @@ export default function AppSettingsPage() {
               </Card>
             )}
           </SettingsSection>
+
+          {canDelete && (
+            <SettingsSection
+              id="danger"
+              title={ts("sections.danger.title")}
+              description={ts("sections.danger.description")}
+            >
+              <Card className="ring-destructive/40">
+                <CardContent className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {ts(imported ? "danger.importTitle" : "danger.title")}
+                    </p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {!imported && protectedOn
+                        ? ta("reasons.protected")
+                        : ts(imported ? "danger.importHint" : "danger.hint")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <Button
+                      variant="destructive"
+                      disabled={
+                        protectedOn ||
+                        ["deleting", "deleted"].includes(deployment.status) ||
+                        (imported && (!canImport || !source))
+                      }
+                      onClick={() => setDeleting(true)}
+                    >
+                      <Trash2 aria-hidden />
+                      {ts(imported ? "danger.removeImport" : "danger.delete")}
+                    </Button>
+                    {importReason && (
+                      <p className="text-xs text-muted-foreground">
+                        {importReason}
+                        {importFailed && canImport && !protectedOn && (
+                          <>
+                            {" "}
+                            <button
+                              type="button"
+                              className="text-primary underline"
+                              onClick={() => setImportAttempt((n) => n + 1)}
+                            >
+                              {ts("danger.retry")}
+                            </button>
+                          </>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </SettingsSection>
+          )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deleting && imported}
+        onOpenChange={setDeleting}
+        level={2}
+        destructive
+        title={ti("deleteTitle", { repo: source?.repo_full_name ?? "" })}
+        description={ti("deleteDescription")}
+        consequences={[
+          ti("deleteApps", { count: source?.services.length ?? 0 }),
+          ti("deleteData"),
+          ti("deleteLinks"),
+        ]}
+        expectedName={source?.repo_full_name}
+        confirmLabel={ti("deleteConfirm")}
+        onConfirm={handleRemoveImport}
+      />
+      <ConfirmDialog
+        open={deleting && !imported}
+        onOpenChange={setDeleting}
+        level={2}
+        destructive
+        title={tc("deleteApp.title", { name: deployment.name })}
+        description={tc("deleteApp.description")}
+        consequences={[
+          tc("deleteApp.consequences.resources"),
+          tc("deleteApp.consequences.data"),
+          tc("deleteApp.consequences.users"),
+        ]}
+        expectedName={deployment.name}
+        confirmLabel={tc("deleteApp.confirm")}
+        onConfirm={handleDelete}
+      />
     </AppSection>
   );
 }

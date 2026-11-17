@@ -9,6 +9,7 @@ import { ImportsList } from "@/components/imports/ImportsList";
 import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { OpenAppMenu } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
@@ -45,12 +46,14 @@ export default function ProjectPage() {
   const router = useRouter();
   const ta = useTranslations("actions");
   const t = useTranslations("projects.page");
+  const tNav = useTranslations("projectNav");
   const tRoles = useTranslations("projects");
   const tCommon = useTranslations("common");
   const tScore = useTranslations("scorecard");
   const {
     projectName,
     role,
+    targetCloud,
     can,
     apps,
     loadingApps,
@@ -162,11 +165,21 @@ export default function ProjectPage() {
             : t("kubernetes")
         }
         icon={FolderKanban}
+        breadcrumbs={[
+          { label: tNav("projects"), href: "/projects" },
+          { label: projectName },
+        ]}
         actions={
           <>
+              {targetCloud && (
+                <Badge variant="outline" className="text-xs">
+                  {tNav(`cloud.${targetCloud}`)}
+                </Badge>
+              )}
               <Badge variant="outline" className="font-mono text-xs">
                 {t("appCount", { count: apps.length })}
               </Badge>
+              <OpenAppMenu apps={apps} />
               {canViewObservability && <ToolsMenu links={links} />}
               {canImport && (
                 <Link

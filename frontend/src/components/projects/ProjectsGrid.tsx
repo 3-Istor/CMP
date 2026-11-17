@@ -3,23 +3,31 @@
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Project } from "@/types";
+import { useProjectsHealth, useSecurityOverview } from "@/lib/hooks";
+import type { Deployment, Project } from "@/types";
 import { FolderOpen, FolderPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
+export const countDeleting = (apps: Deployment[], project: string) =>
+  apps.filter((a) => a.project_id === project && a.status === "deleting").length;
+
 export function ProjectsGrid({
   projects,
+  apps,
   loading,
   onCreate,
   onRetried,
 }: {
   projects: Project[];
+  apps: Deployment[];
   loading: boolean;
   onCreate: () => void;
   onRetried: () => void;
 }) {
   const t = useTranslations("projects.home");
+  const health = useProjectsHealth();
+  const security = useSecurityOverview();
   if (loading && projects.length === 0) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -53,7 +61,14 @@ export function ProjectsGrid({
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {projects.map((p) => (
-        <ProjectCard key={p.name} project={p} onRetried={onRetried} />
+        <ProjectCard
+          key={p.name}
+          project={p}
+          onRetried={onRetried}
+          deletingApps={countDeleting(apps, p.name)}
+          health={health[p.name]}
+          grade={security.find((s) => s.project === p.name)?.grade}
+        />
       ))}
     </div>
   );

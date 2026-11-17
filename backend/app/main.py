@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -258,12 +259,23 @@ async def lifespan(app: FastAPI):
     logger.info("Database tables ready")
 
     # Backfill github_repo_url for GitOps apps created before it was persisted
-    from app.services.terraform_orchestrator import backfill_gitops_repo_urls
+    from app.services.terraform_orchestrator import (
+        backfill_gitops_repo_urls,
+        run_deployment,
+    )
 
     backfill_gitops_repo_urls()
+    if settings.IMPORT_ENABLED:
+        from app.services.imports.deploy import backfill_import_rows
+
+        backfill_import_rows()
 
     # Before anything can start a new Terraform run.
-    fail_interrupted_runs()
+    for deployment_id in fail_interrupted_runs():
+        # Daemon: a shutdown must not wait for a Terraform run.
+        threading.Thread(
+            target=run_deployment, args=(deployment_id,), daemon=True
+        ).start()
     project_export_runner.fail_interrupted()
 
     import_reconcile_task = None

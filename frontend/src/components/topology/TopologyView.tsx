@@ -33,10 +33,11 @@ export function TopologyView() {
   const [linking, setLinking] = useState<{ from?: string; to?: string } | null>(null);
   const [unlinking, setUnlinking] = useState<GraphEdge | null>(null);
 
-  const refresh = useCallback(async () => {
+  // The Refresh button asks for a fresh build; polls may get the cached one.
+  const refresh = useCallback(async (fresh = false) => {
     setRefreshing(true);
     try {
-      setTopology(await getTopology(projectName));
+      setTopology(await getTopology(projectName, fresh));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -115,7 +116,7 @@ export function TopologyView() {
         <Button
           size="icon"
           variant="ghost"
-          onClick={() => void refresh()}
+          onClick={() => void refresh(true)}
           disabled={refreshing}
           aria-label={t("refresh")}
           title={t("refresh")}

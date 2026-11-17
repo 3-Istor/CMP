@@ -125,13 +125,11 @@ export const ALL_PAGES: PageEntry[] = [
 
 export type ExternalLinkKey =
   | "status"
-  | "roadmap"
   | "docs"
   | "argocd"
   | "grafana"
   | "vault"
-  | "keycloak"
-  | "n8n";
+  | "keycloak";
 
 export interface ExternalLinkEntry {
   key: ExternalLinkKey;
@@ -141,7 +139,6 @@ export interface ExternalLinkEntry {
 
 export const PUBLIC_LINKS: ExternalLinkEntry[] = [
   { key: "status", href: "https://status.3istor.com" },
-  { key: "roadmap", href: "https://roadmap.3istor.com" },
   { key: "docs", href: DOCS_URL },
 ];
 
@@ -150,7 +147,6 @@ export const ADMIN_LINKS: ExternalLinkEntry[] = [
   { key: "grafana", href: "https://grafana.3istor.com", label: "Grafana" },
   { key: "vault", href: "https://vault.3istor.com", label: "Vault" },
   { key: "keycloak", href: "https://auth.3istor.com/admin/", label: "Keycloak" },
-  { key: "n8n", href: "https://n8n.3istor.com", label: "n8n" },
 ];
 
 // Only deployments that belong to a visible project and are not deleted are

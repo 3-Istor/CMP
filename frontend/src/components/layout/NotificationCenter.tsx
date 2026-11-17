@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const POLL_INTERVAL_MS = 30_000;
 const PAGE_SIZE = 20;
@@ -110,11 +110,26 @@ export function NotificationCenter({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  // Cursors of the pages before this one (undefined = first page).
+  const [back, setBack] = useState<(number | undefined)[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [cursor, setCursor] = useState<number | undefined>();
+
+  // Reopening starts on the first page, without the old items.
+  const changeOpen = (next: boolean) => {
+    if (!next) {
+      setCursor(undefined);
+      setBack([]);
+      setItems([]);
+      setLoading(true);
+    }
+    setOpen(next);
+  };
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    getNotifications({ limit: PAGE_SIZE })
+    getNotifications({ limit: PAGE_SIZE, before: cursor })
       .then((page) => {
         if (cancelled) return;
         setItems(page);
@@ -130,21 +145,22 @@ export function NotificationCenter({
     return () => {
       cancelled = true;
     };
-  }, [open, count]);
+  }, [open, count, cursor]);
 
-  const loadMore = async () => {
+  const older = () => {
     const last = items[items.length - 1];
     if (!last) return;
     setLoading(true);
-    try {
-      const page = await getNotifications({ limit: PAGE_SIZE, before: last.id });
-      setItems((current) => [...current, ...page]);
-      setHasMore(page.length === PAGE_SIZE);
-    } catch {
-      setFailed(true);
-    } finally {
-      setLoading(false);
-    }
+    listRef.current?.scrollTo({ top: 0 });
+    setBack((b) => [...b, cursor]);
+    setCursor(last.id);
+  };
+
+  const newer = () => {
+    setLoading(true);
+    listRef.current?.scrollTo({ top: 0 });
+    setCursor(back[back.length - 1]);
+    setBack(back.slice(0, -1));
   };
 
   const markRead = async (item: AppNotification) => {
@@ -207,7 +223,7 @@ export function NotificationCenter({
         )}
       </button>
 
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={changeOpen}>
         <SheetContent side="right" className="w-96">
           <div className="flex items-start justify-between gap-2 border-b p-4">
             <div className="min-w-0">
@@ -226,14 +242,16 @@ export function NotificationCenter({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto" aria-busy={loading}>
+          <div ref={listRef} className="flex-1 overflow-y-auto" aria-busy={loading}>
             {failed && (
               <p role="alert" className="p-4 text-sm text-red-600 dark:text-red-400">
                 {t("error")}
               </p>
             )}
             {!failed && !loading && items.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">{t("empty")}</p>
+              <p className="p-4 text-sm text-muted-foreground">
+                {back.length > 0 ? t("noMore") : t("empty")}
+              </p>
             )}
             <ul className="divide-y">
               {items.map((item) => (
@@ -242,21 +260,32 @@ export function NotificationCenter({
                   item={item}
                   onOpen={() => {
                     void markRead(item);
-                    setOpen(false);
+                    changeOpen(false);
                     onNavigate?.();
                   }}
                 />
               ))}
             </ul>
-            {hasMore && (
-              <div className="p-2">
+            {(hasMore || back.length > 0) && (
+              <div className="flex items-center justify-between gap-2 p-2 text-sm">
                 <button
                   type="button"
-                  onClick={() => void loadMore()}
-                  disabled={loading}
-                  className="w-full rounded-md px-2 py-1.5 text-sm text-primary transition-colors hover:bg-accent disabled:opacity-50"
+                  onClick={newer}
+                  disabled={loading || back.length === 0}
+                  className="rounded-md px-2 py-1.5 text-primary transition-colors hover:bg-accent disabled:opacity-50"
                 >
-                  {t("loadMore")}
+                  {t("newer")}
+                </button>
+                <span className="text-muted-foreground">
+                  {t("page", { page: back.length + 1 })}
+                </span>
+                <button
+                  type="button"
+                  onClick={older}
+                  disabled={loading || !hasMore}
+                  className="rounded-md px-2 py-1.5 text-primary transition-colors hover:bg-accent disabled:opacity-50"
+                >
+                  {t("older")}
                 </button>
               </div>
             )}

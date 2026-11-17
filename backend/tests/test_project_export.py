@@ -447,6 +447,28 @@ def test_a_repository_outside_the_platform_organisation_is_listed_not_copied(
     assert repos.calls == [] and listing[0]["reason"] == "customer-owned"
 
 
+def test_an_imported_repository_is_neither_copied_nor_listed(tmp_path):
+    # Arrange
+    from tests.project_export_fakes import FakeRepos
+
+    repos = FakeRepos()
+    apps = [
+        {
+            "template_id": "import-service",
+            "github_repo_url": f"https://github.com/{settings.GITHUB_ORG}/shop",
+        }
+    ]
+
+    # Act
+    asyncio.run(
+        collectors.collect_repos(apps, repos, no_token, Bundle(tmp_path))
+    )
+
+    # Assert
+    listing = json.loads((tmp_path / "git/repositories.json").read_text())
+    assert (repos.calls, listing) == ([], [])
+
+
 def test_repositories_are_read_with_a_read_only_token_limited_to_them():
     # Arrange
     calls = []

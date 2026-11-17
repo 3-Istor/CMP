@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -8,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
+from app.models.deployment import Deployment
 from app.models.finops import SavingsEntry
 from app.routers import finops as router
 from app.services.keycloak_service import get_current_user
@@ -69,6 +72,36 @@ def _add(
             )
         )
         db.commit()
+
+
+def test_a_recommendation_on_an_imported_app_is_applied_without_a_commit(
+    client, monkeypatch
+):
+    app = Deployment(
+        id=4,
+        name="api",
+        template_id="import-service",
+        github_repo_url="https://github.com/3-Istor/api",
+    )
+    rec = SimpleNamespace(
+        id="4:rightsize",
+        project_id="qcm",
+        app_id=4,
+        rec_type="rightsize",
+        patch={"replicaCount": 1},
+    )
+    monkeypatch.setattr(
+        router, "_find_recommendation", lambda db, token, rec_id: (app, rec)
+    )
+    commit = mock.AsyncMock(return_value="abc123")
+    monkeypatch.setattr(router, "_apply_patch_to_gitops", commit)
+
+    response = client.post("/api/finops/recommendations/4:rightsize/apply")
+
+    assert response.json()["message"] == (
+        "Recommandation marquée comme appliquée."
+    )
+    commit.assert_not_awaited()
 
 
 def test_savings_returns_zeros_and_empty_lists_when_ledger_is_empty(client):

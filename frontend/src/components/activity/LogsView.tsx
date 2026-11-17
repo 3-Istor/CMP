@@ -2,8 +2,15 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getLogTargets, getProjectLogs, isNotConnected } from "@/lib/api";
+import {
+  getLogTargets,
+  getProjectLogs,
+  isNotConnected,
+  searchObsLogs,
+} from "@/lib/api";
 import { NotConnected } from "@/components/clusters/NotConnected";
+import { TopErrors } from "@/components/observability/OverviewObservability";
+import { useObsCapabilities } from "@/components/observability/shared";
 import { cn } from "@/lib/utils";
 import type { LogFilters, LogLine, LogTargets } from "@/types";
 import {
@@ -18,6 +25,8 @@ import {
   Play,
   RefreshCw,
   Search,
+  Waypoints,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
@@ -33,13 +42,37 @@ const LIVE_MS = 3000;
 const CONTEXT_MS = 60_000;
 const MAX_LINES = 3000;
 const COMPACT_LINES = 50;
+// Backend bounds: the store search answers at most 500 lines, both searches take 200 chars.
+const OBS_LINES = 500;
+const MAX_SEARCH = 200;
+// The store has no `since`: the live poll re-reads its smallest range
+// (LOG_RANGE in the backend's app_observability.py).
+const OBS_LIVE_RANGE = "15m";
 
 const PERIODS: { value: string; label: string; ms: number }[] = [
   { value: "15m", label: "15 minutes", ms: 15 * 60_000 },
   { value: "1h", label: "1 heure", ms: 3_600_000 },
   { value: "6h", label: "6 heures", ms: 6 * 3_600_000 },
   { value: "24h", label: "24 heures", ms: 24 * 3_600_000 },
+  { value: "7d", label: "7 jours", ms: 7 * 24 * 3_600_000 },
 ];
+
+/** A line from either store; the observability store also gives level and trace. */
+type Row = LogLine & { level?: string | null; trace_id?: string | null };
+
+const LEVELS: Record<string, "error" | "warn"> = {
+  error: "error",
+  err: "error",
+  fatal: "error",
+  critical: "error",
+  panic: "error",
+  warn: "warn",
+  warning: "warn",
+};
+
+function severity(row: Row): "error" | "warn" | null {
+  return row.level ? (LEVELS[row.level.toLowerCase()] ?? null) : severityOf(row.line);
+}
 
 // One colour per process, as docker compose does; readable on both themes.
 const PALETTE = [
@@ -142,12 +175,20 @@ function Colourised({
 export function LogsView({
   project,
   namespace,
+  appId,
+  trace = null,
+  onClearTrace,
   fullPage = false,
   compact = false,
 }: {
   project: string;
   /** Pins the view to one app's namespace (the app page). */
   namespace?: string;
+  /** The app these logs belong to: its observability store is read when it has one. */
+  appId?: number;
+  /** Lines of one trace (the Logs tab's ?trace=). */
+  trace?: string | null;
+  onClearTrace?: () => void;
   fullPage?: boolean;
   /** The last lines only, live, without filters: the app overview card. */
   compact?: boolean;
@@ -157,8 +198,10 @@ export function LogsView({
     namespace: namespace ?? null,
   });
   const [searchInput, setSearchInput] = useState("");
-  const [period, setPeriod] = useState("1h");
-  const [lines, setLines] = useState<LogLine[] | null>(null);
+  // A trace link comes from the trace list, whose longest range is 24 h
+  // (TRACE_RANGE in the backend's app_observability.py).
+  const [period, setPeriod] = useState(trace ? "24h" : "1h");
+  const [lines, setLines] = useState<Row[] | null>(null);
   const [live, setLive] = useState(compact);
   const [wrap, setWrap] = useState(true);
   const [showTime, setShowTime] = useState(true);
@@ -166,77 +209,120 @@ export function LogsView({
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [context, setContext] = useState<{
     anchor: string;
-    lines: LogLine[];
+    lines: Row[];
   } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const newest = useRef<string | null>(null);
+  // Answers of an older load or poll are dropped: they match older filters.
+  const generation = useRef(0);
+  const polling = useRef(false);
+  const top = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const t = useTranslations("activity");
   const locale = useLocale();
+  const caps = useObsCapabilities(appId ?? 0, appId != null);
+  const obs = appId != null && caps.data?.logs === true;
+  // A failed capabilities request means the activity logs.
+  const ready = appId == null || !caps.loading;
+  // The activity logs have no trace field: the trace id is searched as text.
+  const term = filters.search ?? trace;
 
   useEffect(() => {
-    if (compact) return;
+    if (compact || obs || !ready) return;
     getLogTargets(project).then(setTargets, (e) => setError(e));
-  }, [project, compact]);
+  }, [project, compact, obs, ready]);
+
+  /** Newest first from either store: the selected period, or the live window. */
+  const fetchRows = useCallback(
+    async (follow: boolean): Promise<Row[]> => {
+      const limit = compact ? COMPACT_LINES : follow ? 300 : obs ? OBS_LINES : 1000;
+      if (!obs || appId == null) {
+        const ms = PERIODS.find((p) => p.value === period)?.ms ?? 3_600_000;
+        const since = follow
+          ? (newest.current ?? new Date(Date.now() - LIVE_MS).toISOString())
+          : new Date(Date.now() - ms).toISOString();
+        return getProjectLogs(project, { ...filters, search: term, since, limit });
+      }
+      const found = await searchObsLogs(appId, {
+        range: follow ? OBS_LIVE_RANGE : period,
+        level: filters.level ?? undefined,
+        q: filters.search ?? undefined,
+        trace_id: trace ?? undefined,
+        limit,
+      });
+      return found.map((r) => ({
+        time: r.time,
+        namespace: namespace ?? "",
+        pod: r.pod,
+        container: r.container,
+        line: r.message,
+        level: r.level,
+        trace_id: r.trace_id,
+      }));
+    },
+    [obs, appId, project, filters, term, trace, period, namespace, compact],
+  );
 
   const load = useCallback(async () => {
+    const id = ++generation.current;
     setLoading(true);
     setContext(null);
     try {
-      const ms = PERIODS.find((p) => p.value === period)?.ms ?? 3_600_000;
-      const result = await getProjectLogs(project, {
-        ...filters,
-        since: new Date(Date.now() - ms).toISOString(),
-        limit: compact ? COMPACT_LINES : 1000,
-      });
+      const result = await fetchRows(false);
+      if (id !== generation.current) return;
       // The API answers newest first; a terminal reads oldest first.
       setLines([...result].reverse());
       newest.current = result[0]?.time ?? null;
       atBottom.current = true;
       setError(null);
     } catch (e) {
-      setError(e);
+      if (id === generation.current) setError(e);
     } finally {
-      setLoading(false);
+      if (id === generation.current) setLoading(false);
     }
-  }, [project, filters, period, compact]);
+  }, [fetchRows]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (ready) load();
+  }, [load, ready]);
 
   useEffect(() => {
-    if (!live) return;
+    if (!live || !ready) return;
     const timer = setInterval(async () => {
-      if (document.hidden) return;
+      // A slow store must not pile up queries: skip the tick while one runs.
+      if (document.hidden || polling.current) return;
+      polling.current = true;
+      const id = generation.current;
       try {
-        const since =
-          newest.current ?? new Date(Date.now() - LIVE_MS).toISOString();
-        const fresh = await getProjectLogs(project, {
-          ...filters,
-          since,
-          limit: 300,
-        });
-        if (fresh.length === 0) return;
+        const fresh = await fetchRows(true);
+        if (id !== generation.current || fresh.length === 0) return;
+        // The store re-reads a whole window: only unseen lines, none older
+        // than the newest shown, so every line appears once and in order.
+        const from = newest.current ? Date.parse(newest.current) : 0;
         setLines((current) => {
           const seen = new Set((current ?? []).map(key));
-          const added = [...fresh].reverse().filter((l) => !seen.has(key(l)));
+          const added = [...fresh]
+            .reverse()
+            .filter((l) => !seen.has(key(l)) && Date.parse(l.time) >= from);
           return [...(current ?? []), ...added].slice(
             -(compact ? COMPACT_LINES : MAX_LINES),
           );
         });
-        newest.current = fresh[0].time;
+        if (Date.parse(fresh[0].time) >= from) newest.current = fresh[0].time;
         setError(null);
       } catch (e) {
+        if (id !== generation.current) return;
         setError(e);
         // The compact card has no Follow button: it keeps retrying instead.
         if (!compact) setLive(false);
+      } finally {
+        polling.current = false;
       }
     }, LIVE_MS);
     return () => clearInterval(timer);
-  }, [live, project, filters, compact]);
+  }, [live, ready, fetchRows, compact]);
 
   // Follow the end like a terminal, unless the reader scrolled up.
   useEffect(() => {
@@ -314,9 +400,15 @@ export function LogsView({
     });
 
   const expanded = fullscreen || fullPage;
+  const tab = new URLSearchParams();
+  if (namespace) tab.set("namespace", namespace);
+  // The new tab reads the same store as this one.
+  if (appId != null) tab.set("app", String(appId));
+  const tabQuery = tab.toString();
 
   return (
     <div
+      ref={top}
       className={cn(
         "flex flex-col gap-4",
         fullscreen && "fixed inset-0 z-50 bg-background p-4",
@@ -327,7 +419,7 @@ export function LogsView({
       <FilterBar
         selects={
           <>
-            {!namespace && (
+            {!namespace && !obs && (
               <NativeSelect
                 aria-label={t("logs.aria.namespace")}
                 value={filters.namespace ?? ""}
@@ -341,34 +433,38 @@ export function LogsView({
                 ))}
               </NativeSelect>
             )}
-            <NativeSelect
-              aria-label={t("logs.aria.pod")}
-              value={filters.pod ?? ""}
-              onChange={(v) => set({ pod: v || null })}
-            >
-              <option value="">{t("logs.allPods")}</option>
-              {targets?.pods
-                .filter(
-                  (p) => !filters.namespace || p.startsWith(filters.namespace),
-                )
-                .map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-            </NativeSelect>
-            <NativeSelect
-              aria-label={t("logs.aria.container")}
-              value={filters.container ?? ""}
-              onChange={(v) => set({ container: v || null })}
-            >
-              <option value="">{t("logs.allContainers")}</option>
-              {targets?.containers.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </NativeSelect>
+            {!obs && (
+              <>
+                <NativeSelect
+                  aria-label={t("logs.aria.pod")}
+                  value={filters.pod ?? ""}
+                  onChange={(v) => set({ pod: v || null })}
+                >
+                  <option value="">{t("logs.allPods")}</option>
+                  {targets?.pods
+                    .filter(
+                      (p) => !filters.namespace || p.startsWith(filters.namespace),
+                    )
+                    .map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                </NativeSelect>
+                <NativeSelect
+                  aria-label={t("logs.aria.container")}
+                  value={filters.container ?? ""}
+                  onChange={(v) => set({ container: v || null })}
+                >
+                  <option value="">{t("logs.allContainers")}</option>
+                  {targets?.containers.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </>
+            )}
             <NativeSelect
               aria-label={t("logs.aria.level")}
               value={filters.level ?? ""}
@@ -379,6 +475,12 @@ export function LogsView({
               <option value="">{t("logs.allLevels")}</option>
               <option value="error">{t("logs.errors")}</option>
               <option value="warn">{t("logs.warnings")}</option>
+              {obs && (
+                <>
+                  <option value="info">{t("logs.info")}</option>
+                  <option value="debug">{t("logs.debug")}</option>
+                </>
+              )}
             </NativeSelect>
             <NativeSelect
               aria-label={t("logs.aria.period")}
@@ -392,7 +494,11 @@ export function LogsView({
               ))}
             </NativeSelect>
             <form
-              className="flex min-w-0 items-center gap-1"
+              // The store has no pod filters: the phrase takes their room.
+              className={cn(
+                "flex min-w-0 items-center gap-1",
+                obs && "col-span-2 md:col-span-1 xl:col-span-4",
+              )}
               onSubmit={(e) => {
                 e.preventDefault();
                 set({ search: searchInput.trim() || null });
@@ -401,6 +507,7 @@ export function LogsView({
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
+                maxLength={MAX_SEARCH}
                 placeholder={t("logs.search")}
                 className="h-8 min-w-0 flex-1"
               />
@@ -459,7 +566,7 @@ export function LogsView({
             </Button>
             {!fullPage && (
               <Link
-                href={`/projects/${encodeURIComponent(project)}/logs${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ""}`}
+                href={`/projects/${encodeURIComponent(project)}/logs${tabQuery ? `?${tabQuery}` : ""}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 title={t("logs.openNewTab")}
@@ -528,6 +635,19 @@ export function LogsView({
           </p>
         ))}
 
+      {/* On Loki a typed phrase replaces the trace id as the search. */}
+      {trace && (obs || !filters.search) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
+          <span>{t("logs.traceFilter", { id: trace.slice(0, 12) })}</span>
+          {onClearTrace && (
+            <Button variant="outline" size="sm" onClick={onClearTrace}>
+              <X className="mr-1.5 h-4 w-4" />
+              {t("logs.clearTrace")}
+            </Button>
+          )}
+        </div>
+      )}
+
       {context && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
           <span>{t("logs.contextBanner")}</span>
@@ -563,15 +683,15 @@ export function LogsView({
             // A new block starts when the process changes: a hairline and a
             // little air, and the name only at the top of the block.
             const first = i === 0 || streamOf(shown[i - 1], project) !== s;
-            const severity = severityOf(l.line);
+            const level = severity(l);
             return (
               <div
                 key={key(l)}
                 className={cn(
                   "group flex gap-3 border-l-2 border-transparent px-3 hover:bg-muted/60",
                   first && i > 0 && "mt-1 border-t border-t-border/70 pt-1",
-                  severity === "error" && "border-l-red-500 bg-red-500/5",
-                  severity === "warn" && "border-l-amber-500",
+                  level === "error" && "border-l-red-500 bg-red-500/5",
+                  level === "warn" && "border-l-amber-500",
                   context?.anchor === key(l) && "bg-primary/10",
                 )}
               >
@@ -598,9 +718,19 @@ export function LogsView({
                     wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre",
                   )}
                 >
-                  <Colourised text={l.line} term={filters.search} />
+                  <Colourised text={l.line} term={term} />
                 </span>
-                {!context && !compact && (
+                {l.trace_id && appId != null && (
+                  <Link
+                    href={`/projects/${encodeURIComponent(project)}/apps/${appId}/traces?trace=${encodeURIComponent(l.trace_id)}`}
+                    title={t("logs.openTrace")}
+                    aria-label={t("logs.openTrace")}
+                    className="flex h-5 shrink-0 items-center self-start rounded px-1 text-primary hover:bg-muted"
+                  >
+                    <Waypoints className="h-3.5 w-3.5" aria-hidden />
+                  </Link>
+                )}
+                {!context && !compact && !obs && (
                   // An explicit button: a click anywhere on the line used to
                   // switch views, which selecting text triggered by mistake.
                   <button
@@ -622,6 +752,19 @@ export function LogsView({
 
       {!compact && !fullscreen && (
         <>
+          {obs && appId != null && (
+            <TopErrors
+              appId={appId}
+              base={`/projects/${encodeURIComponent(project)}/apps/${appId}`}
+              range={period}
+              onPick={(row) => {
+                const words = row.pattern.split("<N>")[0].trim().slice(0, MAX_SEARCH);
+                setSearchInput(words);
+                set({ level: "error", search: words || null });
+                top.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            />
+          )}
           <VolumeCard project={project} namespace={namespace} />
           <NetworkPanel project={project} />
         </>

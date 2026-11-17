@@ -1,8 +1,10 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { getDeployment } from "@/lib/api";
-import { useDeploymentPolling } from "@/lib/hooks";
+import { cachedAnswer, getDeployment, projectAppsPath } from "@/lib/api";
+import { APPS_REFRESH_MS } from "@/components/layout/ProjectNav";
+import { useProjectContext } from "@/components/projects/ProjectContext";
+import { pollDue } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -23,6 +25,7 @@ const ACTIVE_STATUSES = new Set([
   "deploying",
   "deleting",
 ]);
+const SLOW_POLL_STATUSES = new Set(["failed", "degraded"]);
 
 interface AppContextValue {
   appId: number;
@@ -51,12 +54,40 @@ export function AppProvider({
 }) {
   const router = useRouter();
   const t = useTranslations("apps.context");
-  const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { refreshApps } = useProjectContext();
+  // A list row the sidebar fetched within its own poll shows the page at once;
+  // getDeployment still refreshes it.
+  const [deployment, setDeployment] = useState<Deployment | null>(
+    () =>
+      cachedAnswer<Deployment[]>(
+        projectAppsPath(projectName),
+        APPS_REFRESH_MS,
+      )?.find((a) => a.id === appId) ?? null,
+  );
+  const [loading, setLoading] = useState(!deployment);
 
-  const isActive = deployment ? ACTIVE_STATUSES.has(deployment.status) : false;
-  const polled = useDeploymentPolling(isActive ? appId : null);
-  const current = polled ?? deployment;
+  // Fast while a run is in progress (the old polling default); slow on failed
+  // and degraded, which the backend health poller moves once a minute.
+  const pollMs = !deployment
+    ? 0
+    : ACTIVE_STATUSES.has(deployment.status)
+      ? 3000
+      : SLOW_POLL_STATUSES.has(deployment.status)
+        ? 60_000
+        : 0;
+  useEffect(() => {
+    if (!pollMs) return;
+    // Reuses an answer younger than pollMs; a failed poll keeps the last one.
+    const read = () =>
+      getDeployment(appId, pollMs).then(
+        (d) => {
+          setDeployment(d);
+          return d;
+        },
+        () => undefined,
+      );
+    return pollDue(read, pollMs);
+  }, [appId, pollMs]);
 
   const fetchDeployment = useCallback(async () => {
     try {
@@ -76,17 +107,23 @@ export function AppProvider({
   // The deployment row is kept (status=deleted), not removed, once
   // teardown finishes, polling correctly stops, but nothing else takes the
   // user off a page for an app that no longer exists. Bounce back to the
-  // project after a beat. Watches `current`: after a delete started here,
+  // project after a beat. Watches `deployment`: after a delete started here,
   // the final "deleted" status only arrives through polling.
   useEffect(() => {
-    if (current?.status !== "deleted") return;
-    toast.info(t("deleted", { name: current.name }));
+    if (deployment?.status !== "deleted") return;
+    toast.info(t("deleted", { name: deployment.name }));
     const timer = setTimeout(
       () => router.push(`/projects/${projectName}`),
       2500,
     );
     return () => clearTimeout(timer);
-  }, [current?.status, current?.name, projectName, router, t]);
+  }, [deployment?.status, deployment?.name, projectName, router, t]);
+
+  // A GET that raced the backend's DELETING commit may leave a stale list row.
+  const status = deployment?.status;
+  useEffect(() => {
+    if (status === "deleting" || status === "deleted") void refreshApps();
+  }, [status, refreshApps]);
 
   const markDeleting = useCallback(() => {
     setDeployment((prev) =>
@@ -94,20 +131,22 @@ export function AppProvider({
         ? { ...prev, status: "deleting", step_message: t("destroying") }
         : prev,
     );
-  }, [t]);
+    // Lists read the project's apps: refresh them so no stale "Running" stays.
+    void refreshApps();
+  }, [t, refreshApps]);
 
   const value = useMemo(
     () =>
-      current
+      deployment
         ? {
             appId,
             projectName,
-            deployment: current,
+            deployment,
             refresh: fetchDeployment,
             markDeleting,
           }
         : null,
-    [appId, projectName, current, fetchDeployment, markDeleting],
+    [appId, projectName, deployment, fetchDeployment, markDeleting],
   );
 
   if (loading || !value) {

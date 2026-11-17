@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { intlLocale } from "@/components/finops/format";
-import { getObsCapabilities } from "@/lib/api";
+import { NotConnected } from "@/components/clusters/NotConnected";
+import { getObsCapabilities, isNotConnected } from "@/lib/api";
 import { useCardData, type CardData } from "@/lib/useCardData";
 import type { ObsCapabilities } from "@/types/observability";
 import { CircleSlash } from "lucide-react";
@@ -75,6 +76,8 @@ export function CardState<T>({
   const t = useTranslations("obs");
   if (card.loading && !card.data) return <Skeleton className={`${height} w-full rounded-xl`} />;
   if (card.error && !card.data) {
+    const nc = isNotConnected(card.error);
+    if (nc) return <NotConnected cloud={nc.cloud} />;
     if (card.error.includes('"not_available"')) return <NotAvailable signal={signal} />;
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-destructive/40 p-4 text-sm">

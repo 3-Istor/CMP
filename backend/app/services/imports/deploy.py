@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -145,6 +146,55 @@ async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
         )
 
 
+def import_fields(project: str, service: ImportService) -> dict:
+    """The repository and public URL an imported app row shows."""
+    host = generate.hostname(project, service.app_name)
+    return {
+        "github_repo_url": (
+            f"https://github.com/{service.source.repo_full_name}"
+            if service.kind == "service"
+            else None
+        ),
+        "terraform_outputs": (
+            json.dumps({"app_url": f"https://{host}", "hostname": host})
+            if service.spec.get("public")
+            else None
+        ),
+    }
+
+
+def backfill_import_rows() -> None:
+    """
+    Give import rows created before ``import_fields`` existed their
+    repository and URL. Idempotent: only empty columns are filled.
+    """
+    db = SessionLocal()
+    try:
+        pairs = (
+            db.query(Deployment, ImportService)
+            .join(ImportService, ImportService.deployment_id == Deployment.id)
+            .filter(
+                Deployment.template_id.in_(TEMPLATE_KIND.values()),
+                Deployment.status != DeploymentStatus.DELETED,
+            )
+            .all()
+        )
+        updated = 0
+        for row, service in pairs:
+            fields = import_fields(service.source.project_name, service)
+            for key, value in fields.items():
+                if value and not getattr(row, key):
+                    setattr(row, key, value)
+                    updated += 1
+        if updated:
+            db.commit()
+            logger.info("Backfilled %d field(s) of imported apps", updated)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning("Import rows backfill skipped: %s", exc)
+    finally:
+        db.close()
+
+
 def _upsert_deployment(
     db: Session, project: str, service: ImportService
 ) -> Deployment:
@@ -173,6 +223,8 @@ def _upsert_deployment(
     else:
         row.status = DeploymentStatus.DEPLOYING
         row.step_message = "Waiting for Argo CD"
+    for key, value in import_fields(project, service).items():
+        setattr(row, key, value)
     return row
 
 
@@ -675,10 +727,29 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
     )
 
 
+def _mark_deleted(project: str, source_id: str, app: str) -> None:
+    """Mark one app of the import deleted; the end of the cleanup retries."""
+    try:
+        with SessionLocal() as db:
+            source = db.get(ImportSource, source_id)
+            for service in source.services if source else []:
+                if service.deployment_id and service.app_name == app:
+                    row = db.get(Deployment, service.deployment_id)
+                    if row is not None:
+                        row.status = DeploymentStatus.DELETED
+            db.commit()
+    except SQLAlchemyError as exc:
+        logger.warning("Could not mark %s deleted yet: %s", app, exc)
+    topology_cache.invalidate(project)
+
+
 async def _cleanup_namespaces(
     project: str, apps: list[str], source_id: str
 ) -> None:
-    """Delete each namespace once Argo CD dropped its Application."""
+    """
+    Delete each namespace once Argo CD dropped its Application, and mark that
+    app deleted right away rather than when the last one is gone.
+    """
     deadline = asyncio.get_running_loop().time() + 600
     pending = list(apps)
     while pending and asyncio.get_running_loop().time() < deadline:
@@ -698,10 +769,11 @@ async def _cleanup_namespaces(
                         f"/api/v1/namespaces/{project}-{app}",
                     )
                     pending.remove(app)
+                    _mark_deleted(project, source_id, app)
             except kube_client.KubeUnavailableError as exc:
                 logger.warning("Namespace cleanup of %s: %s", app, exc)
         if pending:
-            await asyncio.sleep(10)
+            await asyncio.sleep(POLL_SECONDS)
     with SessionLocal() as db:
         source = db.get(ImportSource, source_id)
         for service in source.services if source else []:

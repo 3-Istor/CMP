@@ -70,7 +70,7 @@ How to work:
 - Stacks: "static" (HTML/CSS/JS served by nginx) or "fullstack" (FastAPI +
   React + PostgreSQL). Prefer static unless the app must store data.
 - A project runs on one cloud for good (create_project cloud): on-prem by
-  default; aws or gcp only while whoami shows that cloud up.
+  default, or public (the platform picks AWS or GCP among the clouds up).
 - A release is a git tag vX.Y.Z (cut_release); an app with a staging
   environment gets release candidates vX.Y.Z-rc.N, promoted to prod from the
   CMP; promotion follows one (accept a step, cancel). CI builds the image,
@@ -274,7 +274,10 @@ def _app_summary(app: dict) -> dict:
 
 async def _repo_token(app: dict) -> tuple[str, str]:
     repo = app_repo.bound_repo(
-        app.get("github_repo_url"), app["name"], app["status"]
+        app.get("github_repo_url"),
+        app["name"],
+        app["status"],
+        app["template_id"],
     )
     token = await get_org_installation_token()
     return token, repo
@@ -622,12 +625,13 @@ async def create_project(
         ),
     ] = "sandbox",
     cloud: Annotated[
-        Literal["onprem", "aws", "gcp", "public"],
+        Literal["onprem", "public", "aws", "gcp"],
         Field(
             description="Where its apps run, for good: changing it later "
-            "means re-creating the project. aws and gcp only while that "
-            "cloud is up (see clouds in whoami). public: an up public cloud "
-            "picked by the platform."
+            "means re-creating the project. onprem: the 3istor datacenter. "
+            "public: AWS or GCP, picked by the platform among the clouds "
+            "that are up (see clouds in whoami). aws and gcp: platform "
+            "admins only, while that cloud is up."
         ),
     ] = "onprem",
     user_confirmed: bool = False,

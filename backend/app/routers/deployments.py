@@ -37,6 +37,7 @@ from app.services.authz import (
 from app.services.catalog_service import get_template_by_id
 from app.services.clusters.state import ensure_cluster_up, project_cloud
 from app.services.deletion_protection import assert_deletable
+from app.services.environments import runs
 from app.services.github_service import (
     GitHubAppError,
     get_file_content,
@@ -46,6 +47,7 @@ from app.services.github_service import (
 from app.services.imports.service import imported_app_names
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
+    fetch_user_projects_live,
     get_current_user,
     get_project_role,
     get_user_id_from_token,
@@ -80,10 +82,12 @@ _FULLSTACK_COMPONENTS = ["frontend", "backend"]
 # ``assert_project_role`` takes.
 
 
-def _user_project_names(db: Session, token: dict) -> list[str]:
+def _user_project_names(
+    db: Session, token: dict, live: bool = False
+) -> list[str]:
     """
     Every project the caller can see: their Keycloak group memberships plus
-    anything they own.
+    anything they own. Listings read the cached memberships, *live* checks not.
 
     Owned projects are included separately because ownership lives in the
     database, not in a group, the same reason ``GET /api/projects/`` merges
@@ -92,7 +96,10 @@ def _user_project_names(db: Session, token: dict) -> list[str]:
     user_id = get_user_id_from_token(token)
     username = token.get("preferred_username") or user_id
 
-    names = {p["name"] for p in fetch_user_projects_from_keycloak(user_id)}
+    fetch = (
+        fetch_user_projects_live if live else fetch_user_projects_from_keycloak
+    )
+    names = {p["name"] for p in fetch(user_id)}
 
     if username:
         names.update(
@@ -144,6 +151,16 @@ def _get_app_or_404(
     return deployment
 
 
+def with_staging(db: Session, rows: list[Deployment]) -> list[DeploymentRead]:
+    urls = runs.staging_urls(db, [row.id for row in rows])
+    return [
+        DeploymentRead.model_validate(row).model_copy(
+            update={"staging_url": urls.get(row.id)}
+        )
+        for row in rows
+    ]
+
+
 @router.get("/", response_model=list[DeploymentRead])
 def list_deployments(
     token: CurrentUser,
@@ -163,18 +180,19 @@ def list_deployments(
         query = query.filter(
             Deployment.project_id.in_(_user_project_names(db, token))
         )
-        return query.all()
-    rows = query.all()
+        return with_staging(db, query.all())
+    rows = with_staging(db, query.all())
     if is_cnp_admin(token):
         return rows
-    # The auditor lists every app but reads outputs only where it is a member.
+    # The auditor lists every app but reads outputs and URLs only where it is
+    # a member.
     own = set(_user_project_names(db, token))
     return [
         (
             row
             if row.project_id in own
-            else DeploymentRead.model_validate(row).model_copy(
-                update={"terraform_outputs": None}
+            else row.model_copy(
+                update={"terraform_outputs": None, "staging_url": None}
             )
         )
         for row in rows
@@ -311,7 +329,8 @@ async def get_deployment(
     db: Session = Depends(get_db),
 ):
     """Access control: any role on the application's project."""
-    return _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    return with_staging(db, [deployment])[0]
 
 
 @router.get("/{deployment_id}/outputs")
@@ -333,7 +352,8 @@ async def get_deployment_outputs(
     if (
         is_auditor(token)
         and not is_cnp_admin(token)
-        and deployment.project_id not in set(_user_project_names(db, token))
+        and deployment.project_id
+        not in set(_user_project_names(db, token, live=True))
     ):
         return {}
 
@@ -462,7 +482,7 @@ def _get_kubernetes_deployment_or_404(
     """
     Fetch a Kubernetes deployment the caller may touch, raising
     appropriate HTTP errors if it doesn't exist, they lack the role, it is not
-    Kubernetes-type, or it has no GitHub repo linked.
+    Kubernetes-type, imported, or it has no GitHub repo linked.
     """
     deployment = _get_app_or_404(db, token, deployment_id, minimum)
 
@@ -471,6 +491,11 @@ def _get_kubernetes_deployment_or_404(
             status_code=400,
             detail="Day-2 config operations are only available for Kubernetes deployments.",
         )
+
+    # Imported rows carry the customer's repository URL: refused before any
+    # side effect (staging, promotions, config writes).
+    if deployment.template_id.startswith("import-"):
+        raise HTTPException(status_code=409, detail=app_repo.IMPORTED)
 
     if not deployment.github_repo_url:
         raise HTTPException(
@@ -488,7 +513,10 @@ def _extract_repo_full_name(deployment: Deployment) -> str:
     """``owner/repo`` of the repository created for *deployment*, or 409."""
     try:
         return app_repo.bound_repo(
-            deployment.github_repo_url, deployment.name, deployment.status
+            deployment.github_repo_url,
+            deployment.name,
+            deployment.status,
+            deployment.template_id,
         )
     except app_repo.RepoNotBound as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

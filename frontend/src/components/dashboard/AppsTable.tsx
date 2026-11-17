@@ -1,12 +1,13 @@
 "use client";
 
 import { AppIcon } from "@/components/app-icon/AppIcon";
+import { EnvLinks } from "@/components/projects/EnvLinks";
 import { HealthBadge } from "@/components/projects/DeploymentHealth";
+import { DeletingBadge } from "@/components/projects/DeletingBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAppHealth } from "@/lib/hooks";
+import { useAppsHealth } from "@/lib/hooks";
 import { appUrlOf, cn } from "@/lib/utils";
-import type { Deployment } from "@/types";
-import { ExternalLink } from "lucide-react";
+import type { AppHealthResponse, Deployment } from "@/types";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
@@ -14,10 +15,21 @@ function appHref(app: Deployment) {
   return `/projects/${encodeURIComponent(app.project_id ?? "")}/apps/${app.id}`;
 }
 
-function AppState({ app }: { app: Deployment }) {
+const isLive = (app: Deployment) =>
+  app.provider_type === "kubernetes" && app.status === "running";
+
+function AppState({
+  app,
+  health,
+  loading,
+}: {
+  app: Deployment;
+  health?: AppHealthResponse;
+  loading: boolean;
+}) {
   const t = useTranslations("appPage.deploymentStatus");
-  const live = app.provider_type === "kubernetes" && app.status === "running";
-  const { health, loading } = useAppHealth(live ? app.id : null, 60_000);
+  const live = isLive(app);
+  if (app.status === "deleting") return <DeletingBadge />;
   if (!live) {
     return (
       <span
@@ -49,6 +61,12 @@ export function AppsTable({
   showProject?: boolean;
 }) {
   const t = useTranslations("overview.apps");
+  const shown = limit ? apps.slice(0, limit) : apps;
+  // 60_000 = the per-row poll interval before the batch call.
+  const { health, loading: healthLoading } = useAppsHealth(
+    shown.filter(isLive).map((a) => a.id),
+    60_000,
+  );
   if (loading && apps.length === 0) {
     return (
       <div className="space-y-2 p-4">
@@ -61,7 +79,6 @@ export function AppsTable({
   if (apps.length === 0) {
     return <p className="p-6 text-center text-sm text-muted-foreground">{t("empty")}</p>;
   }
-  const shown = limit ? apps.slice(0, limit) : apps;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -102,21 +119,12 @@ export function AppsTable({
                   </td>
                 )}
                 <td className="px-4 py-2.5">
-                  <AppState app={app} />
+                  <AppState app={app} health={health[app.id]} loading={healthLoading} />
                 </td>
                 <td className="hidden px-4 py-2.5 md:table-cell">
-                  {url && (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      aria-label={t("openApp", { name: app.name })}
-                    >
-                      {url.replace(/^https:\/\//, "")}
-                      <ExternalLink className="h-3 w-3" aria-hidden />
-                    </a>
-                  )}
+                  <span className="flex items-center gap-3 text-xs">
+                    <EnvLinks prod={url} staging={app.staging_url} />
+                  </span>
                 </td>
               </tr>
             );

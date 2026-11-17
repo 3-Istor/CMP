@@ -4,7 +4,14 @@
     "projected_month_eur": 980,
     "previous_month_eur": 905,
     "trend_pct": 8.2,
-    "breakdown": { "cpu": 180, "ram": 120, "storage": 60, "network": 30, "ai": 0, "platform": 22.5 },
+    "breakdown": {
+      "cpu": 180,
+      "ram": 120,
+      "storage": 60,
+      "network": 30,
+      "ai": 0,
+      "platform": 22.5
+    },
     "potential_savings_eur": 75,
     "app_count": 1,
     "currency": "EUR"
@@ -23,10 +30,155 @@
     }
   ],
   "timeline": [
-    { "date": "2026-10-01", "cpu": 6, "ram": 4, "storage": 2, "network": 1, "ai": 0, "platform": 0.75, "total": 13.75 },
-    { "date": "2026-10-02", "cpu": 6, "ram": 4, "storage": 2, "network": 1, "ai": 0, "platform": 0.75, "total": 13.75 }
+    {
+      "date": "2026-10-01",
+      "cpu": 6.0,
+      "ram": 6.0,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 15.75
+    },
+    {
+      "date": "2026-10-02",
+      "cpu": 8.52,
+      "ram": 4.53,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 16.81
+    },
+    {
+      "date": "2026-10-03",
+      "cpu": 8.73,
+      "ram": 2.29,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 14.76
+    },
+    {
+      "date": "2026-10-04",
+      "cpu": 6.42,
+      "ram": 2.55,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 12.72
+    },
+    {
+      "date": "2026-10-05",
+      "cpu": 3.73,
+      "ram": 4.94,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 12.42
+    },
+    {
+      "date": "2026-10-06",
+      "cpu": 3.12,
+      "ram": 5.95,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 12.83
+    },
+    {
+      "date": "2026-10-07",
+      "cpu": 5.16,
+      "ram": 4.11,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 13.02
+    },
+    {
+      "date": "2026-10-08",
+      "cpu": 7.97,
+      "ram": 2.1,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 13.83
+    },
+    {
+      "date": "2026-10-09",
+      "cpu": 8.97,
+      "ram": 2.88,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 15.6
+    },
+    {
+      "date": "2026-10-10",
+      "cpu": 7.24,
+      "ram": 5.3,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 16.28
+    },
+    {
+      "date": "2026-10-11",
+      "cpu": 4.37,
+      "ram": 5.81,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 13.93
+    },
+    {
+      "date": "2026-10-12",
+      "cpu": 3.0,
+      "ram": 3.68,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 10.43
+    },
+    {
+      "date": "2026-10-13",
+      "cpu": 4.39,
+      "ram": 2.01,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 10.15
+    },
+    {
+      "date": "2026-10-14",
+      "cpu": 7.26,
+      "ram": 3.26,
+      "storage": 2,
+      "network": 1,
+      "ai": 0,
+      "platform": 0.75,
+      "total": 14.27
+    }
   ],
-  "by_cloud": { "onprem": 412.5, "aws": 0, "gcp": 0 },
-  "savings_ytd": { "avoided_eur": 1200, "realized_eur": 640 },
+  "by_cloud": {
+    "onprem": 412.5,
+    "aws": 0,
+    "gcp": 0
+  },
+  "savings_ytd": {
+    "avoided_eur": 1200,
+    "realized_eur": 640
+  },
   "forecast": null
 }

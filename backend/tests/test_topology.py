@@ -16,6 +16,7 @@ from app.models.imports import ImportRun, ImportService, ImportSource
 from app.routers import topology as topology_router
 from app.services import authz, topology, topology_cache
 from app.services.imports import app_links, service
+from app.services.kube_client import KubeUnavailableError
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
 DIGEST = "sha256:" + "a" * 64
@@ -72,6 +73,7 @@ class World:
         self.applications: list[dict] = []
         self.schedules: dict[str, list[dict]] = {}
         self.record_reads = 0
+        self.kube_paths: list[str] = []
 
     def db(self):
         return self.Session()
@@ -163,10 +165,15 @@ def world(monkeypatch):
         return "c0ffee"
 
     def kube_list(path, params=None, cloud=None):
+        world.kube_paths.append(path)
         if "applications" in path:
             return world.applications
-        namespace = path.split("/namespaces/")[1].split("/")[0]
-        return world.schedules.get(namespace, [])
+        assert params == {"labelSelector": "project=shop"}
+        return [
+            {**s, "metadata": {"namespace": namespace}}
+            for namespace, items in world.schedules.items()
+            for s in items
+        ]
 
     async def vm_query(client, query, cloud):
         world.queries.append(query)
@@ -310,6 +317,37 @@ def test_node_takes_health_and_sync_from_argo_and_sleep_from_offhours(
         nodes["worker"]["asleep"],
         nodes["api"]["asleep"],
     ) == ("degraded", "outofsync", True, False)
+
+
+def test_schedules_are_listed_once_for_the_whole_project(client, world):
+    world.schedules["shop-worker"] = [{"status": {"currentState": "SLEEPING"}}]
+    world.schedules["other-app"] = [{"status": {"currentState": "SLEEPING"}}]
+
+    nodes = client.get("/api/projects/shop/topology").json()["nodes"]
+
+    assert [p for p in world.kube_paths if "offhours" in p] == [
+        topology.ALL_SCHEDULES_PATH
+    ]
+    assert {n["id"]: n["asleep"] for n in nodes} == {
+        "api": False,
+        "cache": False,
+        "mongodb": False,
+        "web": False,
+        "worker": True,
+    }
+
+
+def test_unreadable_schedules_leave_sleep_unknown(client, world, monkeypatch):
+    def unreachable(path, params=None, cloud=None):
+        if "offhours" in path:
+            raise KubeUnavailableError("down")
+        return []
+
+    monkeypatch.setattr(topology, "kube_list", unreachable)
+
+    nodes = client.get("/api/projects/shop/topology").json()["nodes"]
+
+    assert {n["asleep"] for n in nodes} == {None}
 
 
 def test_declared_link_without_traffic_is_declared_only(client, world):
@@ -561,6 +599,14 @@ def test_topology_is_served_from_cache_within_its_ttl(client, world):
     assert world.record_reads == 1
 
 
+def test_a_fresh_read_rebuilds_the_cached_topology(client, world):
+    client.get("/api/projects/shop/topology")
+    client.get("/api/projects/shop/topology?fresh=true")
+    client.get("/api/projects/shop/topology")
+
+    assert world.record_reads == 2
+
+
 def test_a_new_link_invalidates_the_cached_topology(client, world):
     client.get("/api/projects/shop/topology")
 
@@ -589,6 +635,29 @@ def test_an_import_deploy_invalidates_the_cached_topology(client, world):
     client.get("/api/projects/shop/topology")
 
     assert world.record_reads == 2
+
+
+def test_concurrent_fresh_reads_share_one_build(monkeypatch):
+    builds = []
+
+    async def slow_build(_db, project):
+        builds.append(project)
+        await asyncio.sleep(0.01)
+        return {"project": project}
+
+    monkeypatch.setattr(topology, "build", slow_build)
+
+    async def three_refreshes():
+        return await asyncio.gather(
+            *(
+                topology.cached_build(None, "storm", fresh=True)
+                for _ in range(3)
+            )
+        )
+
+    results = asyncio.run(three_refreshes())
+
+    assert (builds, results) == (["storm"], [{"project": "storm"}] * 3)
 
 
 def test_a_build_overlapping_an_invalidation_is_not_cached():

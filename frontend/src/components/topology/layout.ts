@@ -1,5 +1,5 @@
 import type { ElkNode } from "elkjs/lib/elk-api";
-import ELK from "elkjs/lib/elk.bundled.js";
+import type ELK from "elkjs/lib/elk.bundled.js";
 import type { Point } from "@/lib/edgeRoute";
 import type { Graph } from "@/lib/topology";
 
@@ -21,7 +21,8 @@ let elk: InstanceType<typeof ELK> | null = null;
  * between them by who calls whom.
  */
 export async function layoutGraph(graph: Graph): Promise<GraphLayout> {
-  elk ??= new ELK();
+  // ELK weighs 1.6 MB: loaded on the first layout, not with the page.
+  elk ??= new (await import("elkjs/lib/elk.bundled.js")).default();
   const ids = new Set(graph.nodes.map((n) => n.id));
   const root: ElkNode = {
     id: "root",

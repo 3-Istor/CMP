@@ -1,7 +1,9 @@
 "use client";
 
 import { formatEUR, intlLocale } from "@/components/finops/format";
-import { useFinopsOverview, useSecurityOverview } from "@/lib/hooks";
+import { getFinopsSummary } from "@/lib/api";
+import { useSecurityOverview } from "@/lib/hooks";
+import { useCardData } from "@/lib/useCardData";
 import type { Deployment, GlobalHealthResponse } from "@/types";
 import { Boxes, Cloud, Shield, Wallet } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -19,7 +21,7 @@ export function HomeStats({
   const t = useTranslations("overview.stats");
   const locale = intlLocale(useLocale());
   const security = useSecurityOverview();
-  const { data: finops, loading: finopsLoading } = useFinopsOverview();
+  const { data: finops, loading: finopsLoading } = useCardData("finops-summary", getFinopsSummary);
 
   const running = apps.filter((a) => a.status === "running").length;
   const failed = apps.filter((a) => a.status === "failed").length;
@@ -27,7 +29,9 @@ export function HomeStats({
   const core = security.reduce((sum, p) => sum + p.core, 0);
   const nodes = health?.openstack_hypervisors ?? [];
   const nodesUp = nodes.filter((n) => n.state === "up").length;
-  const cloudsUp = (health?.clusters ?? []).filter((c) => c.state === "up").length;
+  const clouds = (health?.clusters ?? [])
+    .map((c) => `${c.cloud.toUpperCase()} ${t(`cloud.${c.state}`)}`)
+    .join(" · ");
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -53,11 +57,11 @@ export function HomeStats({
         icon={Wallet}
         label={t("costs")}
         loading={finopsLoading && !finops}
-        value={formatEUR(finops?.summary.month_to_date_eur ?? 0, "EUR", locale)}
+        value={formatEUR(finops?.month_to_date_eur ?? 0, "EUR", locale)}
         hint={
           finops
             ? t("costsForecast", {
-                amount: formatEUR(finops.summary.projected_month_eur, "EUR", locale),
+                amount: formatEUR(finops.projected_month_eur, "EUR", locale),
               })
             : undefined
         }
@@ -68,7 +72,8 @@ export function HomeStats({
         label={t("platform")}
         loading={!health}
         value={nodes.length > 0 ? t("nodesValue", { up: nodesUp, total: nodes.length }) : "-"}
-        hint={t("cloudsHint", { count: cloudsUp })}
+        hint={clouds}
+        title={nodes.map((n) => `${n.name} ${t(`cloud.${n.state === "up" ? "up" : "down"}`)}`).join("\n")}
         tone={nodes.length > 0 && nodesUp < nodes.length ? "warn" : "default"}
       />
     </div>

@@ -1,65 +1,36 @@
 "use client";
 
-import type { Deployment, Project } from "@/types";
+import type { Deployment, Project, ProjectHealth } from "@/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    getDeployment,
+    answerStamp,
+    cachedAnswer,
+    forgetAnswer,
+    getAppsHealth,
     getDeployments,
     getProjectApps,
     getProjects,
+    getProjectsHealth,
 } from "./api";
 import { can, canAsPlatform, type Capability } from "./permissions";
 import { usePlatformRoles } from "./usePlatformRoles";
 
-const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
-
-/** Poll a single deployment until it reaches a terminal state. */
-export function useDeploymentPolling(
-  id: number | null,
-  intervalMs = 3000,
-): Deployment | null {
-  const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const terminalReachedRef = useRef<number | null>(null);
-
-  const stop = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-  }, []);
-
-  useEffect(() => {
-    if (!id) return;
-
-    const poll = async () => {
-      try {
-        const d = await getDeployment(id);
-        setDeployment(d);
-
-        // When reaching terminal status, continue polling for 5 more cycles
-        // to ensure UI updates with final state (outputs, health, etc.)
-        if (TERMINAL_STATUSES.has(d.status)) {
-          if (terminalReachedRef.current === null) {
-            terminalReachedRef.current = 5;
-          } else {
-            terminalReachedRef.current--;
-            if (terminalReachedRef.current <= 0) {
-              stop();
-            }
-          }
-        }
-      } catch {
-        stop();
-      }
-    };
-
-    poll();
-    timerRef.current = setInterval(poll, intervalMs);
-    return () => {
-      stop();
-      terminalReachedRef.current = null;
-    };
-  }, [id, intervalMs, stop]);
-
-  return deployment;
+/** Run `read` now, then whenever its answer reaches `intervalMs` of age (a newer
+ * answer another poller fetched is reused): shown data never outlives the interval. */
+export function pollDue(read: () => Promise<unknown>, intervalMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  const run = async () => {
+    const data = await read();
+    if (stopped || intervalMs <= 0) return;
+    const at = answerStamp(data) ?? Date.now();
+    timer = setTimeout(run, Math.max(0, at + intervalMs - Date.now()));
+  };
+  void run();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
 }
 
 const ACTIVE_DEPLOYMENT_STATUSES = new Set([
@@ -82,29 +53,29 @@ export function useDeploymentsList(activeMs = 5000, idleMs = activeMs) {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  // Reads may reuse an answer younger than the current interval; refresh() forces.
+  const load = useCallback(async (maxAgeMs: number) => {
     try {
-      const data = await getDeployments();
+      const data = await getDeployments(maxAgeMs);
       setDeployments(data);
+      return data;
     } catch {
       // Backend offline - silently keep existing state
     } finally {
       setLoading(false);
     }
   }, []);
+  const refresh = useCallback(async () => {
+    await load(0);
+  }, [load]);
 
   const hasActive = deployments.some((d) =>
     ACTIVE_DEPLOYMENT_STATUSES.has(d.status),
   );
   const intervalMs = hasActive ? activeMs : idleMs;
 
-  useEffect(() => {
-    refresh();
-    // Don't poll if interval is 0 or negative (manual refresh only)
-    if (intervalMs <= 0) return;
-    const timer = setInterval(refresh, intervalMs);
-    return () => clearInterval(timer);
-  }, [refresh, intervalMs]);
+  // An interval of 0 or less reads once (manual refresh only).
+  useEffect(() => pollDue(() => load(intervalMs), intervalMs), [load, intervalMs]);
 
   return { deployments, loading, refresh };
 }
@@ -148,61 +119,78 @@ export function useAppHealth(deploymentId: number | null, intervalMs = 5000) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback(
+    async (maxAgeMs: number) => {
+      if (!deploymentId) return;
+      try {
+        const { getAppHealth } = await import("./api");
+        const data = await getAppHealth(deploymentId, maxAgeMs);
+        setHealth(data);
+        setError(null);
+        return data;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch health");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [deploymentId],
+  );
   const refresh = useCallback(async () => {
-    if (!deploymentId) return;
-    try {
-      const { getAppHealth } = await import("./api");
-      const data = await getAppHealth(deploymentId);
-      setHealth(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch health");
-    } finally {
-      setLoading(false);
-    }
-  }, [deploymentId]);
+    await load(0);
+  }, [load]);
 
   useEffect(() => {
     if (!deploymentId) {
       setLoading(false);
       return;
     }
-    refresh();
-    if (intervalMs <= 0) return;
-    const timer = setInterval(refresh, intervalMs);
-    return () => clearInterval(timer);
-  }, [refresh, intervalMs, deploymentId]);
+    return pollDue(() => load(intervalMs), intervalMs);
+  }, [load, intervalMs, deploymentId]);
 
   return { health, loading, error, refresh };
 }
 
-// ── Projects cache ──────────────────────────────────────────────────────────
-// The project list is now read for permissions as well as for display, so the
-// sidebar, the project page and the app page all want it at once. Each
-// getProjects() costs the backend a Keycloak Admin round-trip, so hold the
-// result briefly and share it. Same shape as the token cache in api.ts.
-let _projectsCache: { data: Project[]; at: number } | null = null;
-let _projectsInflight: Promise<Project[]> | null = null;
-const PROJECTS_TTL_MS = 15_000;
+/** Health of several apps in one polled call; no request when `ids` is empty. */
+export function useAppsHealth(ids: number[], intervalMs: number) {
+  const [health, setHealth] = useState<
+    Record<string, import("@/types").AppHealthResponse>
+  >({});
+  const key = [...ids].sort((a, b) => a - b).join(",");
+  // Loading until the first answer for this set of ids, like one row's hook.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
-async function loadProjects(force = false): Promise<Project[]> {
-  const now = Date.now();
-  if (!force && _projectsCache && now - _projectsCache.at < PROJECTS_TTL_MS) {
-    return _projectsCache.data;
-  }
-  if (_projectsInflight) return _projectsInflight;
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    const wanted = key.split(",").map(Number);
+    const read = async () => {
+      try {
+        const data = await getAppsHealth(wanted, intervalMs);
+        // An app missing from the answer keeps its last health, like one row's hook.
+        if (live) setHealth((prev) => ({ ...prev, ...data }));
+        return data;
+      } catch {
+        // Badges fall back to "unknown", like a failed single-app call.
+      } finally {
+        if (live) setLoadedKey(key);
+      }
+    };
+    const stop = pollDue(read, intervalMs);
+    return () => {
+      live = false;
+      stop();
+    };
+  }, [key, intervalMs]);
 
-  _projectsInflight = (async () => {
-    try {
-      const data = await getProjects();
-      _projectsCache = { data, at: Date.now() };
-      return data;
-    } finally {
-      _projectsInflight = null;
-    }
-  })();
-  return _projectsInflight;
+  return { health, loading: key !== "" && loadedKey !== key };
 }
+
+// ── Projects cache ──────────────────────────────────────────────────────────
+// Read for permissions and display by many components at once: mounts reuse
+// the shared answer (lib/api.ts) for this long.
+const PROJECTS_TTL_MS = 15_000;
+const PROJECTS_PATH = "/projects/";
 
 /**
  * Drop the cached project list.
@@ -211,7 +199,7 @@ async function loadProjects(force = false): Promise<Project[]> {
  * role, so the next read reflects it instead of waiting out the TTL.
  */
 export function clearProjectsCache() {
-  _projectsCache = null;
+  forgetAnswer(PROJECTS_PATH);
 }
 
 /**
@@ -223,20 +211,21 @@ export function clearProjectsCache() {
  */
 export function useProjects(intervalMs = 0) {
   const [projects, setProjects] = useState<Project[]>(
-    () => _projectsCache?.data ?? [],
+    () => cachedAnswer<Project[]>(PROJECTS_PATH) ?? [],
   );
-  const [loading, setLoading] = useState(!_projectsCache);
+  const [loading, setLoading] = useState(!cachedAnswer(PROJECTS_PATH));
   const [error, setError] = useState<string | null>(null);
-  const initialLoadDone = useRef(Boolean(_projectsCache));
+  const initialLoadDone = useRef(Boolean(cachedAnswer(PROJECTS_PATH)));
 
-  const load = useCallback(async (force: boolean) => {
+  const load = useCallback(async (maxAgeMs: number) => {
     // Only show full skeleton on first load; subsequent refreshes update silently
     if (!initialLoadDone.current) setLoading(true);
     try {
-      const data = await loadProjects(force);
+      const data = await getProjects(maxAgeMs);
       setProjects(data);
       setError(null);
       initialLoadDone.current = true;
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch projects");
     } finally {
@@ -246,13 +235,16 @@ export function useProjects(intervalMs = 0) {
 
   // Bypasses the cache: callers reach for refresh() precisely because they
   // just changed something.
-  const refresh = useCallback(() => load(true), [load]);
+  const refresh = useCallback(async () => {
+    await load(0);
+  }, [load]);
 
   useEffect(() => {
-    load(false);
-    if (intervalMs <= 0) return;
-    const timer = setInterval(() => load(true), intervalMs);
-    return () => clearInterval(timer);
+    if (intervalMs <= 0) {
+      void load(PROJECTS_TTL_MS);
+      return;
+    }
+    return pollDue(() => load(Math.min(PROJECTS_TTL_MS, intervalMs)), intervalMs);
   }, [load, intervalMs]);
 
   return { projects, loading, error, refresh };
@@ -297,27 +289,39 @@ export function useCan(projectName: string | null) {
   return { role, loading, error, refresh, can: check };
 }
 
-/** Fetch applications belonging to a specific project. */
-export function useProjectApps(projectName: string | null) {
+/**
+ * Fetch applications belonging to a specific project.
+ *
+ * @param pollMs when > 0, re-fetch on this cadence; mount and ticks may reuse an
+ *   answer younger than it, refresh() always fetches.
+ */
+export function useProjectApps(projectName: string | null, pollMs = 0) {
   const [apps, setApps] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const initialLoadDone = useRef(false);
 
+  const load = useCallback(
+    async (maxAgeMs: number) => {
+      if (!projectName) return;
+      if (!initialLoadDone.current) setLoading(true);
+      try {
+        const data = await getProjectApps(projectName, maxAgeMs);
+        setApps(data);
+        setError(null);
+        initialLoadDone.current = true;
+        return data;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch apps");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [projectName],
+  );
   const refresh = useCallback(async () => {
-    if (!projectName) return;
-    if (!initialLoadDone.current) setLoading(true);
-    try {
-      const data = await getProjectApps(projectName);
-      setApps(data);
-      setError(null);
-      initialLoadDone.current = true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch apps");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectName]);
+    await load(0);
+  }, [load]);
 
   useEffect(() => {
     if (!projectName) {
@@ -325,8 +329,8 @@ export function useProjectApps(projectName: string | null) {
       return;
     }
     initialLoadDone.current = false; // reset on projectName change
-    refresh();
-  }, [refresh, projectName]);
+    return pollDue(() => load(pollMs), pollMs);
+  }, [load, projectName, pollMs]);
 
   return { apps, loading, error, refresh };
 }
@@ -340,6 +344,7 @@ export function useFinopsOverview(
   period = "30d",
   granularity = "daily",
   cloud?: string,
+  app?: number,
 ) {
   const [data, setData] = useState<import("@/types").FinopsOverview | null>(
     null,
@@ -357,6 +362,7 @@ export function useFinopsOverview(
         period,
         granularity,
         cloud,
+        app,
       });
       setData(res);
       setError(null);
@@ -366,7 +372,7 @@ export function useFinopsOverview(
     } finally {
       setLoading(false);
     }
-  }, [project, period, granularity, cloud]);
+  }, [project, period, granularity, cloud, app]);
 
   useEffect(() => {
     refresh();
@@ -619,26 +625,49 @@ export function useProjectMembers(projectName: string | null) {
   return { members, guestsSupported, loading, error, refresh };
 }
 
+/** Health of every visible project by name; the home polls every 30 s, so does this. */
+export function useProjectsHealth(intervalMs = 30_000) {
+  const [health, setHealth] = useState<Record<string, ProjectHealth>>({});
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      getProjectsHealth()
+        .then((list) => {
+          if (alive) setHealth(Object.fromEntries(list.map((h) => [h.project, h])));
+        })
+        // Cards are a convenience: a failed refresh keeps the last value.
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, intervalMs);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [intervalMs]);
+
+  return health;
+}
+
 /** Security grade of every visible project, for badges. Polls slowly. */
 export function useSecurityOverview(intervalMs = 120000) {
   const [overview, setOverview] = useState<
     import("@/types").SecurityProjectOverview[]
   >([]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const { getSecurityOverview } = await import("./api");
-      setOverview(await getSecurityOverview());
-    } catch {
-      // Badges are a convenience: the security page reports its own errors.
-    }
-  }, []);
-
   useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, intervalMs);
-    return () => clearInterval(timer);
-  }, [refresh, intervalMs]);
+    const read = async () => {
+      try {
+        const { getSecurityOverview } = await import("./api");
+        const data = await getSecurityOverview(intervalMs);
+        setOverview(data);
+        return data;
+      } catch {
+        // Badges are a convenience: the security page reports its own errors.
+      }
+    };
+    return pollDue(read, intervalMs);
+  }, [intervalMs]);
 
   return overview;
 }

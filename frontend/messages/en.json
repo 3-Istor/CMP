@@ -35,7 +35,6 @@
     "links": {
       "label": "Links and help",
       "status": "Platform status",
-      "roadmap": "Roadmap",
       "docs": "Documentation",
       "adminGroup": "Admins only",
       "adminOnly": "{count, plural, one {# link reserved for admins} other {# links reserved for admins}}"
@@ -47,8 +46,7 @@
       "system": "System"
     },
     "profile": {
-      "myProfile": "My profile",
-      "accountSettings": "Account settings",
+      "account": "Account",
       "language": "Language",
       "logout": "Sign out",
       "roleAdmin": "Platform admin",
@@ -114,15 +112,31 @@
       "creatingTitle": "This project is still being created",
       "deletingTitle": "This project is being deleted",
       "createFailedTitle": "This project could not be created",
-      "deleteFailedTitle": "This project could not be deleted"
+      "deleteFailedTitle": "This project could not be deleted",
+      "appsDeleting": "{count, plural, one {# app deleting} other {# apps deleting}}",
+      "healthy": "Healthy",
+      "down": "{count} down",
+      "pending": "{count} pending",
+      "apps": "{count, plural, one {# app} other {# apps}}",
+      "healthyCount": "{count} healthy",
+      "security": "Security {grade}",
+      "alerts": "{count, plural, one {# alert} other {# alerts}}"
     },
     "create": {
+      "source": "Start from",
+      "sourceEmpty": "Empty project",
+      "sourceRepo": "From a repository",
+      "repo": "Repository",
+      "repoNone": "No repository",
+      "repoLink": "Link GitHub",
+      "repoOff": "Off",
+      "waiting": "Creating the project…",
+      "repoFailed": "Repositories could not be loaded",
+      "failed": "The project could not be created",
       "title": "Create a new project",
-      "description": "A project groups your Kubernetes applications under a shared Keycloak team, Vault policy and ArgoCD AppProject. Bootstrap runs in the background and takes about 30 seconds.",
       "name": "Project name",
       "namePlaceholder": "my-team",
       "nameHint": "Lowercase, with hyphens. For example <code>platform-team</code>",
-      "cloud": "Target cloud",
       "clusterState": {
         "checking": "Checking…",
         "down": "Stopped",
@@ -131,43 +145,35 @@
       },
       "clouds": {
         "onprem": {
-          "label": "On-premise",
-          "advantage1": "No data egress cost",
-          "advantage2": "Full infrastructure control",
-          "advantage3": "Already live, zero setup wait"
+          "label": "On-prem",
+          "hint": "3istor datacenter"
         },
         "aws": {
-          "label": "AWS",
-          "advantage1": "Widest catalog of managed services",
-          "advantage2": "Mature IAM and compliance tooling",
-          "advantage3": "Broad global region coverage"
+          "label": "AWS"
         },
         "gcp": {
-          "label": "GCP",
-          "advantage1": "Native Kubernetes heritage",
-          "advantage2": "Typically the most competitive compute pricing",
-          "advantage3": "Strong data and AI tooling"
+          "label": "GCP"
+        },
+        "public": {
+          "label": "Public cloud",
+          "hint": "AWS or GCP"
         }
       },
-      "cloudNote": "AWS and GCP can be chosen only while their cluster is running. <strong>This cannot be changed later.</strong> Moving a project means re-creating it.",
       "errors": {
         "tooShort": "The name must be at least 2 characters.",
         "tooLong": "The name must be at most 40 characters.",
         "invalid": "Use lowercase letters, numbers and hyphens only. The name must start and end with a letter or a number."
       },
-      "preview": {
-        "title": "What will be created",
-        "keycloak": "Keycloak groups: <code>project-{name}-admins/members</code>",
-        "vault": "Vault policy scoped to the namespace",
-        "argocd": "ArgoCD AppProject on <code>{cloud}</code>",
-        "registry": "Registry record: <code>registry/projects/{name}.yaml</code>"
-      },
       "submit": "Create project",
       "submitting": "Creating…",
       "toasts": {
-        "created": "Project “{name}” is being bootstrapped on {cloud}. Keycloak groups and the ArgoCD AppProject will be ready shortly.",
+        "created": "Creating “{name}” ({cloud}).",
         "failed": "Failed to create project: {message}"
-      }
+      },
+      "whereItRuns": "Where it runs",
+      "compare": "Compare",
+      "provider": "Provider",
+      "auto": "Auto"
     },
     "members": {
       "onlyAdmins": "Only project admins can add or remove members.",
@@ -196,10 +202,17 @@
     }
   },
   "apps": {
+    "env": {
+      "prod": "Prod",
+      "staging": "Staging",
+      "openApp": "Open app",
+      "newTab": "opens in a new tab",
+      "openAppLabel": "Open app:",
+      "stagingOf": "{app} · staging"
+    },
     "nav": {
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
-      "applications": "Applications",
       "app": "Overview",
       "release": "Release",
       "environments": "Environments",
@@ -234,15 +247,20 @@
       "aiCreated": "Created by an AI assistant on behalf of a user",
       "via": "via {source}",
       "legacy": "Legacy",
-      "deployedOn": "Deployed on {date}"
+      "deployedOn": "Deployed on {date}",
+      "stages": {
+        "creating": "Creating",
+        "deploying": "Deploying",
+        "waitingHealth": "Waiting for health",
+        "live": "Live"
+      },
+      "urlSoon": "URL appears once the app is healthy.",
+      "createdOn": "Created on {date}"
     },
     "context": {
       "loadFailed": "Failed to load the application",
       "deleted": "“{name}” has been deleted",
       "destroying": "Destroying resources…"
-    },
-    "costs": {
-      "projectLevel": "Costs are tracked at the project level."
     },
     "config": {
       "title": "Infrastructure configuration",
@@ -399,9 +417,9 @@
       "platform": "Fixed share per application of the platform's shared services"
     },
     "dataFreshness": {
-      "real": "actual",
-      "simulated": "simulated",
-      "estimated": "estimated",
+      "real": "Actual",
+      "simulated": "Simulated",
+      "estimated": "Estimated",
       "estimateNote": "Part of the cost relies on a provisional price.",
       "updated": "updated {age}",
       "finalUntil": "final until {date}"
@@ -637,6 +655,10 @@
       "chartCovered": "Covered",
       "chartUncovered": "Not covered"
     },
+    "appPanel": {
+      "projectCosts": "Project costs",
+      "recommendations": "Recommendations"
+    },
     "projectPanel": {
       "openDashboard": "Open FinOps dashboard"
     },
@@ -772,7 +794,8 @@
       "grade": "Grade",
       "appActions": "Actions",
       "appMandatory": "Mandatory",
-      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project."
+      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project.",
+      "clearTier": "Clear {tier} filter"
     },
     "score": {
       "nothingToDo": "Nothing to do",
@@ -791,7 +814,9 @@
       "noHistory": "No history yet."
     },
     "finding": {
-      "pending": "Ignored by {author}, awaiting approval from a project admin.",
+      "pending": "Ignored by {author}. Awaiting a project admin.",
+      "pendingCore": "Ignored by {author}. Awaiting a platform admin or security auditor.",
+      "upgradePr": "Open upgrade PR",
       "viewRun": "View run",
       "backupNow": "Back up now",
       "seenBy": "Seen by {sources} since {date}"
@@ -805,19 +830,36 @@
       "explanationPlaceholder": "What you checked, in one or two sentences",
       "expiresOn": "Expires on",
       "expiryHint": "Defaults to, and at the latest on, {date}. The alert comes back on its own on that date.",
-      "approvalNeeded": "Another project admin must approve it. Until then, the alert still counts.",
+      "approvalNeeded": "A project admin other than you must approve it. Until then, the alert still counts.",
+      "approvalNeededCore": "A platform admin or security auditor must approve it. Until then, the alert still counts.",
       "saved": "Exception saved, awaiting approval",
       "ignored": "Alert ignored",
       "hints": {
         "not_affected": "The flaw exists in the package but cannot be exploited here. Review in one year.",
         "false_positive": "The scanner is wrong. Review in one year.",
-        "accepted_risk": "The flaw affects us, we will fix it later. Expires within 90 days at most, and another project admin must approve.",
+        "accepted_risk": "The flaw affects us, we will fix it later. Expires within 90 days at most.",
         "revoked": "The secret was changed and the old one no longer works. Removing it from the history is not enough."
       }
     },
+    "approvals": {
+      "title": "Pending approvals",
+      "empty": "Nothing to approve.",
+      "project": "Project",
+      "finding": "Finding",
+      "by": "By",
+      "reject": "Reject",
+      "rejected": "Exception rejected"
+    },
     "exceptions": {
       "empty": "No ignored alert.",
-      "awaitingApproval": "Awaiting approval",
+      "awaitingProject": "Awaiting project admin",
+      "awaitingCore": "Awaiting platform admin or auditor",
+      "expired": "Expired",
+      "filters": {
+        "pending": "Pending",
+        "active": "Active",
+        "expired": "Expired"
+      },
       "byOn": "By {author} on {date}",
       "approvedBy": "approved by {approver}",
       "expiresOn": "expires on {date}",
@@ -1083,6 +1125,7 @@
       }
     },
     "audit": {
+      "summaryError": "Summary unavailable",
       "kpi": {
         "actions": "Actions · {days} d",
         "people": "Active people",
@@ -1117,10 +1160,15 @@
         "refused": "refused"
       },
       "empty": "No events match these filters.",
-      "loadMore": "Load more",
+      "noMore": "No more events",
+      "newer": "Newer",
+      "older": "Older",
+      "page": "Page {page} · {size} events per page",
+      "retention": "Events are kept {days} days.",
       "detail": {
         "title": "Event details",
         "close": "Close",
+        "open": "Open",
         "who": "Who",
         "what": "What",
         "source": "Source",
@@ -1165,7 +1213,12 @@
       "showContext": "Show the minute around this line",
       "contextBanner": "Context: one minute before and after the selected line, same container.",
       "backToResults": "Back to results",
-      "noLines": "No lines match these filters."
+      "noLines": "No lines match these filters.",
+      "info": "Info",
+      "debug": "Debug",
+      "traceFilter": "Lines of trace {id}",
+      "clearTrace": "Show all lines",
+      "openTrace": "Open the trace"
     },
     "volume": {
       "title": "Log volume",
@@ -1331,7 +1384,7 @@
   "account": {
     "page": {
       "back": "Back to dashboard",
-      "title": "Account settings",
+      "title": "Account",
       "subtitle": "Manage your profile and preferences",
       "loading": "Loading profile…",
       "loadFailed": "Could not load your profile",
@@ -1410,6 +1463,7 @@
     "searchProjects": "Search a project...",
     "noProject": "No project found.",
     "back": "Back to the platform",
+    "platform": "Platform",
     "projects": "Projects",
     "newProject": "New project",
     "overview": "Overview",
@@ -1427,9 +1481,9 @@
     "notAllowedTitle": "Not available",
     "notAllowedBody": "Your role does not give access to this section of the project.",
     "cloud": {
-      "onprem": "On-premise",
-      "aws": "AWS",
-      "gcp": "GCP"
+      "onprem": "On-prem",
+      "aws": "Public cloud · AWS",
+      "gcp": "Public cloud · GCP"
     },
     "status": {
       "running": "Running",
@@ -1513,24 +1567,17 @@
     },
     "liveStats": "apps created through AI assistants this month, by {assistants, plural, one {# connected assistant} other {# connected assistants}}. Live figure.",
     "assistant": {
-      "asks": [
-        "Put a page online with the agenda of our next team event.",
-        "Give me a one-screen status of my projects this week.",
-        "Why is my app slow? Read its logs and tell me before changing anything."
-      ],
       "since": {
         "minutes": "{count} min ago",
         "hours": "{count} h ago",
         "days": "{count, plural, one {# day} other {# days}} ago"
       },
-      "copyHint": "Copy, then paste it in your assistant",
       "title": "Your AI assistant",
       "connectedText": "{count, plural, one {# app created} other {# apps created}} through an assistant · last action {since}",
       "emptyText": "Ask Claude, ChatGPT or Codex to create and release apps for you, with your rights.",
       "connectAnother": "Connect another",
       "connectOne": "Connect an assistant",
-      "waitingApproval": "{count} waiting for your approval",
-      "tryAsking": "Try asking:"
+      "waitingApproval": "{count} waiting for your approval"
     },
     "clients": {
       "claudeAi": {
@@ -1826,6 +1873,8 @@
   "links": {
     "argocd_project": "Argo CD",
     "argocd_component": "Argo CD",
+    "argocd_app": "Argo CD · all",
+    "grafana_app": "Grafana dashboard",
     "status": "Status",
     "offhours": "Sleep schedule",
     "vault": "Vault",
@@ -1899,7 +1948,6 @@
       "admin": "Admin"
     },
     "toolsEmpty": "No tools available",
-    "openApp": "Open application",
     "more": "More actions",
     "refresh": "Refresh",
     "refreshed": "Data refreshed",
@@ -1919,7 +1967,8 @@
       "unavailable": "The cluster does not allow this action right now",
       "asleep": "Wake the application before restarting it",
       "busy": "An operation is running on the application",
-      "protected": "Deletion protection is on"
+      "protected": "Deletion protection is on",
+      "imported": "Remove it from Settings"
     },
     "toasts": {
       "sleeping": "{name} is going to sleep",
@@ -2582,7 +2631,23 @@
         "slo": {
           "title": "SLO",
           "description": "Availability and latency targets of the app in prod."
+        },
+        "danger": {
+          "title": "Danger zone",
+          "description": "Actions that cannot be undone."
         }
+      },
+      "danger": {
+        "title": "Delete this app",
+        "hint": "Removes the app, its repo and its data.",
+        "delete": "Delete app",
+        "importTitle": "Remove this import",
+        "importHint": "Removes the import with all its apps, their repo link and data.",
+        "removeImport": "Remove import",
+        "noPermission": "You cannot remove imports",
+        "importFailed": "Could not load the import.",
+        "importMissing": "This app's import was not found",
+        "retry": "Retry"
       }
     }
   },
@@ -2685,7 +2750,10 @@
     "markAllRead": "Mark all as read",
     "empty": "No notifications yet.",
     "error": "Could not load notifications.",
-    "loadMore": "Load more",
+    "noMore": "No more notifications",
+    "newer": "Newer",
+    "older": "Older",
+    "page": "Page {page}",
     "unread": "Unread",
     "titles": {
       "deployment_succeeded": "{app} was deployed",
@@ -2699,6 +2767,7 @@
       "cost_anomaly": "Cost anomaly on {app}",
       "member_added": "You are now {role, select, admin {administrator} guest {guest} other {member}} of {project}",
       "approval_request": "{user} needs your approval: {summary}",
+      "security_exception_pending": "{user} asks to ignore an alert in {app}",
       "unknown": "New notification",
       "access_requested": "{user} asks for {elevation}, your approval is needed",
       "access_approved": "{by} approved your {elevation} access",
@@ -2811,6 +2880,10 @@
       "fix_restarts": "Check the logs",
       "add_readme": "Add a README",
       "expand_readme": "Expand the README"
+    },
+    "tooltips": {
+      "reliability": "Health now, −5 if restarting",
+      "documentation": "README at repo root"
     }
   },
   "projectSettings": {
@@ -2881,8 +2954,7 @@
       "project": "Project",
       "state": "State",
       "url": "Address",
-      "empty": "No application yet.",
-      "openApp": "Open {name}, new tab"
+      "empty": "No application yet."
     },
     "stats": {
       "apps": "Applications",
@@ -2896,12 +2968,7 @@
       "costsForecast": "forecast {amount} at month end",
       "platform": "Platform",
       "nodesValue": "{up} / {total} nodes",
-      "cloudsHint": "{count, plural, =0 {public clouds off} one {# public cloud on} other {# public clouds on}}"
-    },
-    "infra": {
-      "title": "Infrastructure",
-      "unavailable": "Infrastructure state unavailable.",
-      "states": {
+      "cloud": {
         "up": "up",
         "down": "down",
         "starting": "starting",
@@ -2914,7 +2981,7 @@
       "pods": "{count, plural, one {# pod affected} other {# pods affected}}",
       "run_as_root": {
         "title": "The container runs as root",
-        "fix": "Add a non-root user at the end of the Dockerfile, for example `USER 10001`."
+        "fix": "Add `USER 10001` at the end of the Dockerfile."
       },
       "capabilities": {
         "title": "Linux capabilities not dropped",
@@ -2930,49 +2997,49 @@
       },
       "image_latest": {
         "title": "Image deployed as :latest",
-        "fix": "Deploy the image by version tag or by digest."
+        "fix": "Deploy a version tag or a digest."
       },
       "image_untagged": {
         "title": "Image deployed without a tag",
-        "fix": "Deploy the image by version tag or by digest."
+        "fix": "Deploy a version tag or a digest."
       },
       "resources": {
         "title": "No requests or limits",
-        "fix": "Set CPU and memory requests and a memory limit equal to the request in the chart."
+        "fix": "Set CPU and memory requests and a memory limit in the chart."
       },
       "other": {
         "title": "Pod security setting not compliant",
-        "fix": "Read the Kyverno message and fix the chart."
+        "fix": "Fix the chart as the Kyverno message says."
       }
     },
     "vuln": {
       "title": "{id} in {package} {installed}",
-      "fixBase": "Update the Dockerfile base image: {package} is fixed in {fixed}.",
-      "fixBump": "Upgrade {package} from {installed} to {fixed}.",
+      "fixBase": "Update the base image to get {package} {fixed}.",
+      "fixBump": "Upgrade {package} to {fixed}.",
       "noFix": "No fix published yet."
     },
     "imageSecret": {
       "title": "Secret baked into the image: {name}",
       "detail": "File {target} of the image",
-      "fix": "Rotate this secret, then remove the file from the image: secrets go through Vault, never into the image."
+      "fix": "Rebuild the image without the secret."
     },
     "dockerfile": {
       "seeRule": "See the rule details.",
       "DS-0001": {
         "title": "Base image on :latest",
-        "fix": "Pin the base image version in `FROM`, for example `python:3.13-slim`."
+        "fix": "Pin the base image version in `FROM`."
       },
       "DS-0002": {
         "title": "The image runs as root",
-        "fix": "Add a non-root user at the end of the Dockerfile, for example `USER 10001`."
+        "fix": "Add `USER 10001` at the end of the Dockerfile."
       },
       "DS-0004": {
         "title": "SSH port 22 exposed",
-        "fix": "Remove `EXPOSE 22`: nobody gets into a container over SSH."
+        "fix": "Remove `EXPOSE 22`."
       },
       "DS-0005": {
         "title": "ADD used instead of COPY",
-        "fix": "Replace `ADD` with `COPY`, unless you extract an archive."
+        "fix": "Replace `ADD` with `COPY`."
       },
       "DS-0026": {
         "title": "No HEALTHCHECK",
@@ -2986,7 +3053,7 @@
       "title": "Secret committed to the repo",
       "detail": "Rule {rule}",
       "detailCommit": "Rule {rule} · commit {commit}",
-      "fix": "Rotate this secret right away, then remove it from the code. Deleting it from history is not enough: it may have been copied."
+      "fix": "Rotate this secret."
     },
     "backup": {
       "backup-disabled": {
@@ -2997,29 +3064,29 @@
       "backup-failing": {
         "title": "Backups on but failing",
         "detail": "Archiving fails: {message}",
-        "fix": "Contact the platform team: the backup storage does not answer."
+        "fix": "Contact the platform team."
       },
       "backup-missing": {
         "title": "Backups on but never succeeded",
         "detail": "No successful backup since they were turned on.",
-        "fix": "Run a manual backup to see the error, or contact the platform team."
+        "fix": "Run a manual backup to see the error."
       },
       "backup-stale": {
         "title": "Backups late",
         "detail": "Last successful backup: {date} UTC",
-        "fix": "Run a manual backup to see the error, or contact the platform team."
+        "fix": "Run a manual backup to see the error."
       }
     },
     "exposure": {
       "public": {
         "title": "Public app, reachable without signing in",
         "detail": "Anyone on the Internet can open it.",
-        "fix": "If that is not intended, restrict it to project members. Otherwise, ignore this alert and say it is intended."
+        "fix": "Restrict access or protect with SSO."
       },
       "custom": {
         "title": "Exposure set by hand in the code",
         "detail": "The CMP does not recognise this setting: check who can reach the app.",
-        "fix": "Pick one of the settings offered in Access and exposure."
+        "fix": "Pick a setting in Access and exposure."
       }
     },
     "isolation": {
@@ -3035,7 +3102,7 @@
     "lockedDrift": {
       "title": "Admin-locked setting changed in the repo",
       "detail": "deploy/security.yaml no longer follows the project policy.",
-      "fix": "Put the locked value back, or ask the project admin to lift the lock."
+      "fix": "Restore the locked value."
     }
   },
   "access": {
@@ -3736,29 +3803,6 @@
       "none": "No error line over the period.",
       "openTrace": "Open the trace",
       "seeAll": "See all logs"
-    },
-    "logs": {
-      "title": "Search",
-      "level": "Level",
-      "anyLevel": "Any level",
-      "levels": {
-        "error": "Error",
-        "warn": "Warning",
-        "info": "Info",
-        "debug": "Debug"
-      },
-      "phrase": "Phrase",
-      "phrasePlaceholder": "Exact words, e.g. timeout",
-      "search": "Search",
-      "limit": "Lines",
-      "none": "No line matches.",
-      "time": "Time",
-      "message": "Message",
-      "pod": "Pod",
-      "trace": "Trace",
-      "traceFilter": "Lines of trace {id}",
-      "clearTrace": "Show all lines",
-      "untrusted": "Lines are written by the app: links and instructions in them are not from the platform."
     },
     "traces": {
       "title": "Traces",

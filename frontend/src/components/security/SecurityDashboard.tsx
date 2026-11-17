@@ -12,17 +12,20 @@ import {
   isNotConnected,
   getSecurityTrend,
 } from "@/lib/api";
+import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import type {
   SecurityCategory,
   SecurityException,
   SecurityFinding,
   SecuritySummary,
+  SecurityTier,
   SecurityTrendPoint,
   SecurityView,
 } from "@/types";
-import { AlertCircle, AlertTriangle, CheckCircle2, ShieldCheck } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExceptionDialog } from "./ExceptionDialog";
@@ -31,7 +34,7 @@ import { FindingCard } from "./FindingCard";
 import { useFindingText } from "./findingText";
 import { AlertsCard } from "./AlertsCard";
 import { BackupsCard } from "./BackupsCard";
-import { CATEGORY_TAB, errorMessage, TABS, type SecurityTab } from "./labels";
+import { CATEGORY_TAB, errorMessage, TABS, TIER_META, type SecurityTab } from "./labels";
 import { ScansCard } from "./ScansCard";
 import { ScoreRing } from "./ScoreRing";
 import { AppSettingsCard, ProjectPolicyCard } from "./SettingsCard";
@@ -182,7 +185,23 @@ export function SecurityDashboard({
   showSettings?: boolean;
 }) {
   const { data, error, refresh } = useSecurityData(project, app, view);
-  const [tab, setTab] = useState<SecurityTab>("overview");
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const tabParam = params.get("tab");
+  const tierParam = params.get("tier");
+  const tab = TABS.find((item) => item.value === tabParam)?.value ?? "overview";
+  const tier = tierParam !== null && tierParam in TIER_META ? (tierParam as SecurityTier) : null;
+  // The tab and tier live in the URL so a link lands on the filtered view.
+  function setView(nextTab: SecurityTab, nextTier: SecurityTier | null = null) {
+    const next = new URLSearchParams(params.toString());
+    if (nextTab === "overview") next.delete("tab");
+    else next.set("tab", nextTab);
+    if (nextTier) next.set("tier", nextTier);
+    else next.delete("tier");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
   const pendingScroll = useRef<string | null>(null);
   const [ignoring, setIgnoring] = useState<SecurityFinding | null>(null);
   const t = useTranslations("security");
@@ -217,7 +236,7 @@ export function SecurityDashboard({
   }
 
   const { summary, findings, trend, exceptions, role } = data;
-  const canAdmin = role.cnp_admin || role.role === "admin";
+  const canAdmin = role.cnp_admin || can(role.role, "security.manage");
 
   function showCategory(category: SecurityCategory) {
     const target = `security-${category}`;
@@ -226,7 +245,7 @@ export function SecurityDashboard({
       scrollToSection(target);
     } else {
       pendingScroll.current = target;
-      setTab(next);
+      setView(next);
     }
   }
 
@@ -255,7 +274,7 @@ export function SecurityDashboard({
             <button
               key={item.value}
               type="button"
-              onClick={() => setTab(item.value)}
+              onClick={() => setView(item.value)}
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
                 tab === item.value
@@ -459,11 +478,22 @@ export function SecurityDashboard({
 
       {tab !== "overview" && tab !== "ignored" && tab !== "journal" && (
         <div className="space-y-8">
+          {tier && (
+            <button
+              type="button"
+              onClick={() => setView(tab)}
+              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+              aria-label={t("dashboard.clearTier", { tier: t(`tiers.${tier}`) })}
+            >
+              {t(`tiers.${tier}`)}
+              <X className="h-3 w-3" />
+            </button>
+          )}
           {TABS.find((item) => item.value === tab)?.categories.map((category) => (
             <CategorySection
               key={category}
               category={category}
-              findings={findings}
+              findings={tier ? findings.filter((f) => f.tier === tier) : findings}
               render={card}
             />
           ))}

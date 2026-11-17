@@ -3,13 +3,17 @@
 import { useVisibleWork } from "@/components/layout/shellData";
 import { AppCard } from "@/components/projects/AppCard";
 import { ProjectCard } from "@/components/projects/ProjectCard";
+import { countDeleting } from "@/components/projects/ProjectsGrid";
 import { useFavorites } from "@/lib/favorites";
+import { useProjectsHealth, useSecurityOverview } from "@/lib/hooks";
 import { useTranslations } from "next-intl";
 
 export function FavoritesSection({ onRetried }: { onRetried: () => void }) {
   const t = useTranslations("favorites");
   const favorites = useFavorites();
   const { projects, apps } = useVisibleWork(0);
+  const health = useProjectsHealth();
+  const security = useSecurityOverview();
 
   const favProjects = projects.filter((p) =>
     favorites.projects.includes(p.name),
@@ -24,13 +28,16 @@ export function FavoritesSection({ onRetried }: { onRetried: () => void }) {
 
   return (
     <section id="favorites" className="scroll-mt-6">
-      <h2 className="mb-4 text-xl font-semibold">{t("title")}</h2>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <h2 className="mb-3 text-base font-semibold">{t("title")}</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {favProjects.map((p) => (
           <ProjectCard
             key={`project-${p.name}`}
             project={p}
             onRetried={onRetried}
+            deletingApps={countDeleting(apps, p.name)}
+            health={health[p.name]}
+            grade={security.find((s) => s.project === p.name)?.grade}
           />
         ))}
         {favApps.map(({ app, projectName }) => (

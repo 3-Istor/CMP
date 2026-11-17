@@ -3,11 +3,11 @@
 import { useCan, useProjectApps } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import type { Deployment } from "@/types";
-import { Boxes, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Boxes, ChevronDown, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   PROJECT_SECTIONS,
   projectHref,
@@ -16,7 +16,7 @@ import {
 } from "./projectSections";
 
 const MAX_LISTED_APPS = 8;
-const APPS_REFRESH_MS = 8000;
+export const APPS_REFRESH_MS = 8000;
 
 const STATUS_DOT: Record<Deployment["status"], string> = {
   running: "bg-green-500",
@@ -51,13 +51,8 @@ export function ProjectNav({
   const t = useTranslations("projectNav");
   const pathname = usePathname();
   const { can } = useCan(projectName);
-  const { apps, refresh } = useProjectApps(projectName);
+  const { apps } = useProjectApps(projectName, APPS_REFRESH_MS);
   const [appsOpen, setAppsOpen] = useState(true);
-
-  useEffect(() => {
-    const timer = setInterval(refresh, APPS_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [refresh]);
 
   const segment = projectSegmentFromPath(pathname);
   const onAppRoute = pathname.split("/")[3] === "apps";
@@ -96,6 +91,16 @@ export function ProjectNav({
       aria-label={t("navigation")}
       className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3"
     >
+      <Link
+        href="/"
+        title={t("back")}
+        aria-label={collapsed ? t("back") : undefined}
+        onClick={onNavigate}
+        className={cn(linkClass(false, collapsed), "mb-1 text-muted-foreground")}
+      >
+        <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+        {!collapsed && <span className="flex-1 truncate">{t("platform")}</span>}
+      </Link>
       {renderSection(PROJECT_SECTIONS.overview)}
 
       {collapsed ? (
