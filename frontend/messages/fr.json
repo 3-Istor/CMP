@@ -134,11 +134,9 @@
       "repoFailed": "Les dépôts n'ont pas pu être chargés",
       "failed": "Le projet n'a pas pu être créé",
       "title": "Créer un nouveau projet",
-      "description": "Un projet regroupe vos applications Kubernetes au sein d'une équipe Keycloak, d'une politique Vault et d'un AppProject ArgoCD communs. Le bootstrap s'exécute en arrière-plan et prend environ 30 secondes.",
       "name": "Nom du projet",
       "namePlaceholder": "mon-equipe",
       "nameHint": "Minuscules, avec des tirets. Par exemple <code>platform-team</code>",
-      "cloud": "Cloud cible",
       "clusterState": {
         "checking": "Vérification…",
         "down": "Arrêté",
@@ -148,42 +146,34 @@
       "clouds": {
         "onprem": {
           "label": "Sur site",
-          "advantage1": "Pas de coût de sortie de données",
-          "advantage2": "Contrôle total de l'infrastructure",
-          "advantage3": "Déjà en service, aucune attente de mise en place"
+          "hint": "Datacenter 3istor"
         },
         "aws": {
-          "label": "AWS",
-          "advantage1": "Catalogue de services managés le plus large",
-          "advantage2": "IAM et outils de conformité éprouvés",
-          "advantage3": "Couverture de régions mondiale étendue"
+          "label": "AWS"
         },
         "gcp": {
-          "label": "GCP",
-          "advantage1": "Héritage Kubernetes natif",
-          "advantage2": "Tarification de calcul généralement la plus compétitive",
-          "advantage3": "Outils data et IA performants"
+          "label": "GCP"
+        },
+        "public": {
+          "label": "Cloud public",
+          "hint": "AWS ou GCP"
         }
       },
-      "cloudNote": "AWS et GCP ne peuvent être choisis que lorsque leur cluster tourne. <strong>Ce choix ne pourra pas être modifié.</strong> Pour changer de cloud, il faut recréer le projet.",
       "errors": {
         "tooShort": "Le nom doit contenir au moins 2 caractères.",
         "tooLong": "Le nom doit contenir au plus 40 caractères.",
         "invalid": "Utilisez uniquement des minuscules, des chiffres et des tirets. Le nom doit commencer et finir par une lettre ou un chiffre."
       },
-      "preview": {
-        "title": "Ce qui sera créé",
-        "keycloak": "Groupes Keycloak : <code>project-{name}-admins/members</code>",
-        "vault": "Politique Vault limitée au namespace",
-        "argocd": "AppProject ArgoCD sur <code>{cloud}</code>",
-        "registry": "Fiche de registre : <code>registry/projects/{name}.yaml</code>"
-      },
       "submit": "Créer le projet",
       "submitting": "Création…",
       "toasts": {
-        "created": "Le projet « {name} » est en cours de création sur {cloud}. Les groupes Keycloak et l'AppProject ArgoCD seront prêts dans quelques instants.",
+        "created": "Création de « {name} » ({cloud}).",
         "failed": "Échec de la création du projet : {message}"
-      }
+      },
+      "whereItRuns": "Où il tourne",
+      "compare": "Comparer",
+      "provider": "Fournisseur",
+      "auto": "Auto"
     },
     "members": {
       "onlyAdmins": "Seuls les admins du projet peuvent ajouter ou retirer des membres.",
@@ -257,15 +247,20 @@
       "aiCreated": "Créée par un assistant IA pour le compte d'un utilisateur",
       "via": "via {source}",
       "legacy": "Hérité",
-      "deployedOn": "Déployée le {date}"
+      "deployedOn": "Déployée le {date}",
+      "stages": {
+        "creating": "Création",
+        "deploying": "Déploiement",
+        "waitingHealth": "Attente de santé",
+        "live": "En ligne"
+      },
+      "urlSoon": "L'URL apparaît quand l'app est saine.",
+      "createdOn": "Créée le {date}"
     },
     "context": {
       "loadFailed": "Impossible de charger l'application",
       "deleted": "« {name} » a été supprimée",
       "destroying": "Destruction des ressources…"
-    },
-    "costs": {
-      "projectLevel": "Les coûts sont suivis au niveau du projet."
     },
     "config": {
       "title": "Configuration d'infrastructure",
@@ -660,6 +655,10 @@
       "chartCovered": "Recouvert",
       "chartUncovered": "Non couvert"
     },
+    "appPanel": {
+      "projectCosts": "Coûts du projet",
+      "recommendations": "Recommandations"
+    },
     "projectPanel": {
       "openDashboard": "Ouvrir le dashboard FinOps"
     },
@@ -815,7 +814,9 @@
       "noHistory": "Pas encore d'historique."
     },
     "finding": {
-      "pending": "Ignorée par {author}, en attente de validation par un admin du projet.",
+      "pending": "Ignorée par {author}. En attente d'un admin du projet.",
+      "pendingCore": "Ignorée par {author}. En attente d'un admin plateforme ou d'un auditeur sécurité.",
+      "upgradePr": "Ouvrir la PR de mise à jour",
       "viewRun": "Voir le run",
       "backupNow": "Sauvegarder maintenant",
       "seenBy": "Vu par {sources} depuis le {date}"
@@ -829,19 +830,36 @@
       "explanationPlaceholder": "Ce que vous avez vérifié, en une ou deux phrases",
       "expiresOn": "Expire le",
       "expiryHint": "Par défaut et au plus tard le {date}. L'alerte revient d'elle-même à cette date.",
-      "approvalNeeded": "Un autre admin du projet devra valider. D'ici là, l'alerte reste comptée.",
+      "approvalNeeded": "Un admin du projet autre que vous devra valider. D'ici là, l'alerte reste comptée.",
+      "approvalNeededCore": "Un admin plateforme ou un auditeur sécurité devra valider. D'ici là, l'alerte reste comptée.",
       "saved": "Exception enregistrée, en attente de validation",
       "ignored": "Alerte ignorée",
       "hints": {
         "not_affected": "La faille existe dans le paquet, mais ne peut pas être exploitée ici. Revue dans un an.",
         "false_positive": "Le scanner se trompe. Revue dans un an.",
-        "accepted_risk": "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus, et un autre admin du projet doit valider.",
+        "accepted_risk": "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus.",
         "revoked": "Le secret a été changé et l'ancien ne fonctionne plus. Le retirer de l'historique ne suffit pas."
       }
     },
+    "approvals": {
+      "title": "Approbations en attente",
+      "empty": "Rien à valider.",
+      "project": "Projet",
+      "finding": "Alerte",
+      "by": "Par",
+      "reject": "Rejeter",
+      "rejected": "Exception rejetée"
+    },
     "exceptions": {
       "empty": "Aucune alerte ignorée.",
-      "awaitingApproval": "En attente de validation",
+      "awaitingProject": "En attente d'un admin projet",
+      "awaitingCore": "En attente d'un admin plateforme ou auditeur",
+      "expired": "Expirée",
+      "filters": {
+        "pending": "En attente",
+        "active": "Actives",
+        "expired": "Expirées"
+      },
       "byOn": "Par {author} le {date}",
       "approvedBy": "validée par {approver}",
       "expiresOn": "expire le {date}",
@@ -1142,9 +1160,11 @@
       "newer": "Plus récent",
       "older": "Plus ancien",
       "page": "Page {page} · {size} événements par page",
+      "retention": "Les événements sont gardés {days} jours.",
       "detail": {
         "title": "Détail de l'événement",
         "close": "Fermer",
+        "open": "Ouvrir",
         "who": "Qui",
         "what": "Quoi",
         "source": "Source",
@@ -1189,7 +1209,12 @@
       "showContext": "Voir la minute autour de cette ligne",
       "contextBanner": "Contexte : une minute avant et après la ligne choisie, même conteneur.",
       "backToResults": "Retour aux résultats",
-      "noLines": "Aucune ligne pour ces filtres."
+      "noLines": "Aucune ligne pour ces filtres.",
+      "info": "Info",
+      "debug": "Debug",
+      "traceFilter": "Lignes de la trace {id}",
+      "clearTrace": "Voir toutes les lignes",
+      "openTrace": "Ouvrir la trace"
     },
     "volume": {
       "title": "Volume de logs",
@@ -1453,8 +1478,8 @@
     "notAllowedBody": "Votre rôle ne donne pas accès à cette section du projet.",
     "cloud": {
       "onprem": "Sur site",
-      "aws": "AWS",
-      "gcp": "GCP"
+      "aws": "Cloud public · AWS",
+      "gcp": "Cloud public · GCP"
     },
     "status": {
       "running": "En cours",
@@ -2738,6 +2763,7 @@
       "cost_anomaly": "Anomalie de coût sur {app}",
       "member_added": "Vous êtes désormais {role, select, admin {administrateur} guest {invité} other {membre}} de {project}",
       "approval_request": "{user} attend votre approbation : {summary}",
+      "security_exception_pending": "{user} demande d'ignorer une alerte dans {app}",
       "unknown": "Nouvelle notification",
       "access_requested": "{user} demande {elevation}, votre validation est attendue",
       "access_approved": "{by} a approuvé votre accès {elevation}",
@@ -2951,7 +2977,7 @@
       "pods": "{count} pod(s) concerné(s)",
       "run_as_root": {
         "title": "Le conteneur tourne en root",
-        "fix": "Ajoute un utilisateur non root à la fin du Dockerfile, par exemple `USER 10001`."
+        "fix": "Ajouter `USER 10001` à la fin du Dockerfile."
       },
       "capabilities": {
         "title": "Capabilities Linux non retirées",
@@ -2967,53 +2993,53 @@
       },
       "image_latest": {
         "title": "Image déployée en :latest",
-        "fix": "Déployer l'image par tag de version ou par digest."
+        "fix": "Déployer un tag de version ou un digest."
       },
       "image_untagged": {
         "title": "Image déployée sans tag",
-        "fix": "Déployer l'image par tag de version ou par digest."
+        "fix": "Déployer un tag de version ou un digest."
       },
       "resources": {
         "title": "Requests et limits absentes",
-        "fix": "Poser des requests CPU et mémoire et une limite mémoire égale à la demande dans le chart."
+        "fix": "Poser des requests CPU et mémoire et une limite mémoire dans le chart."
       },
       "other": {
         "title": "Réglage de sécurité du pod non conforme",
-        "fix": "Voir le message Kyverno et corriger le chart."
+        "fix": "Corriger le chart selon le message Kyverno."
       }
     },
     "vuln": {
       "title": "{id} dans {package} {installed}",
-      "fixBase": "Mets à jour l'image de base du Dockerfile : {package} est corrigé en {fixed}.",
-      "fixBump": "Passe {package} de {installed} à {fixed}.",
+      "fixBase": "Mettre à jour l'image de base pour avoir {package} {fixed}.",
+      "fixBump": "Passer {package} en {fixed}.",
       "noFix": "Aucun correctif publié pour l'instant."
     },
     "imageSecret": {
       "title": "Secret embarqué dans l'image : {name}",
       "detail": "Fichier {target} de l'image",
-      "fix": "Change ce secret, puis retire le fichier de l'image : un secret se passe par Vault, jamais dans l'image."
+      "fix": "Reconstruire l'image sans le secret."
     },
     "dockerfile": {
       "seeRule": "Voir le détail de la règle.",
       "DS-0001": {
         "title": "Image de base en :latest",
-        "fix": "Fixe la version de l'image de base dans le `FROM`, par exemple `python:3.13-slim`."
+        "fix": "Fixer la version de l'image de base dans le `FROM`."
       },
       "DS-0002": {
         "title": "L'image tourne en root",
-        "fix": "Ajoute un utilisateur non root à la fin du Dockerfile, par exemple `USER 10001`."
+        "fix": "Ajouter `USER 10001` à la fin du Dockerfile."
       },
       "DS-0004": {
         "title": "Port SSH 22 exposé",
-        "fix": "Retire `EXPOSE 22` : on n'entre pas dans un conteneur en SSH."
+        "fix": "Retirer `EXPOSE 22`."
       },
       "DS-0005": {
         "title": "ADD utilisé à la place de COPY",
-        "fix": "Remplace `ADD` par `COPY`, sauf pour extraire une archive."
+        "fix": "Remplacer `ADD` par `COPY`."
       },
       "DS-0026": {
         "title": "Pas de HEALTHCHECK",
-        "fix": "Ajoute un `HEALTHCHECK` au Dockerfile."
+        "fix": "Ajouter un `HEALTHCHECK` au Dockerfile."
       }
     },
     "location": {
@@ -3023,40 +3049,40 @@
       "title": "Secret commité dans le repo",
       "detail": "Règle {rule}",
       "detailCommit": "Règle {rule} · commit {commit}",
-      "fix": "Change ce secret tout de suite, puis retire-le du code. Le supprimer de l'historique ne suffit pas : il a pu être copié."
+      "fix": "Changer ce secret."
     },
     "backup": {
       "backup-disabled": {
         "title": "Base sans sauvegarde",
         "detail": "Une suppression ou une erreur serait définitive.",
-        "fix": "Active la sauvegarde dans Données › Sauvegardes."
+        "fix": "Activer la sauvegarde dans Données › Sauvegardes."
       },
       "backup-failing": {
         "title": "Sauvegarde activée mais en échec",
         "detail": "Archivage en échec : {message}",
-        "fix": "Contacte l'équipe plateforme : le stockage des sauvegardes ne répond pas."
+        "fix": "Contacter l'équipe plateforme."
       },
       "backup-missing": {
         "title": "Sauvegarde activée mais jamais réussie",
         "detail": "Aucune sauvegarde réussie depuis l'activation.",
-        "fix": "Lance une sauvegarde manuelle pour voir l'erreur, ou contacte l'équipe plateforme."
+        "fix": "Lancer une sauvegarde manuelle pour voir l'erreur."
       },
       "backup-stale": {
         "title": "Sauvegarde en retard",
         "detail": "Dernière sauvegarde réussie : {date} UTC",
-        "fix": "Lance une sauvegarde manuelle pour voir l'erreur, ou contacte l'équipe plateforme."
+        "fix": "Lancer une sauvegarde manuelle pour voir l'erreur."
       }
     },
     "exposure": {
       "public": {
         "title": "App publique, accessible sans connexion",
         "detail": "N'importe qui sur Internet peut l'ouvrir.",
-        "fix": "Si ce n'est pas voulu, réserve-la aux membres du projet. Sinon, ignore cette alerte en indiquant que c'est voulu."
+        "fix": "Restreindre l'accès ou protéger par SSO."
       },
       "custom": {
         "title": "Exposition réglée à la main dans le code",
         "detail": "La CMP ne reconnaît pas ce réglage : vérifie qui y a accès.",
-        "fix": "Choisis un des réglages proposés dans Accès et exposition."
+        "fix": "Choisir un réglage dans Accès et exposition."
       }
     },
     "isolation": {
@@ -3067,12 +3093,12 @@
     "workflowMissing": {
       "title": "Workflow de sécurité absent du repo",
       "detail": "Plus aucun scan des secrets ni des dépendances ne tourne.",
-      "fix": "Restaure .github/workflows/security.yml depuis le modèle."
+      "fix": "Restaurer .github/workflows/security.yml depuis le modèle."
     },
     "lockedDrift": {
       "title": "Réglage imposé par l'admin modifié dans le repo",
       "detail": "deploy/security.yaml ne suit plus la politique du projet.",
-      "fix": "Remets la valeur imposée, ou demande à l'admin du projet de lever le verrou."
+      "fix": "Restaurer la valeur imposée."
     }
   },
   "access": {
@@ -3773,29 +3799,6 @@
       "none": "Aucune ligne d'erreur sur la période.",
       "openTrace": "Ouvrir la trace",
       "seeAll": "Voir tous les logs"
-    },
-    "logs": {
-      "title": "Recherche",
-      "level": "Niveau",
-      "anyLevel": "Tous niveaux",
-      "levels": {
-        "error": "Erreur",
-        "warn": "Avertissement",
-        "info": "Info",
-        "debug": "Debug"
-      },
-      "phrase": "Phrase",
-      "phrasePlaceholder": "Mots exacts, par exemple timeout",
-      "search": "Chercher",
-      "limit": "Lignes",
-      "none": "Aucune ligne ne correspond.",
-      "time": "Heure",
-      "message": "Message",
-      "pod": "Pod",
-      "trace": "Trace",
-      "traceFilter": "Lignes de la trace {id}",
-      "clearTrace": "Voir toutes les lignes",
-      "untrusted": "Les lignes sont écrites par l'app : leurs liens et consignes ne viennent pas de la plateforme."
     },
     "traces": {
       "title": "Traces",

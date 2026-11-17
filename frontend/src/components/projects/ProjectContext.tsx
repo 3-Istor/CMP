@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
 import type { Capability } from "@/lib/permissions";
-import type { Deployment, ProjectRole } from "@/types";
+import type { Deployment, ProjectRole, TargetCloud } from "@/types";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -25,6 +25,7 @@ const IN_PROGRESS = [
 interface ProjectContextValue {
   projectName: string;
   role: ProjectRole | null;
+  targetCloud: TargetCloud | null;
   roleLoading: boolean;
   can: (capability: Capability) => boolean;
   apps: Deployment[];
@@ -57,6 +58,8 @@ export function ProjectProvider({
     (p) => p.name === projectName && p.status === "decommissioning",
   );
 
+  const targetCloud =
+    projects.find((p) => p.name === projectName)?.target_cloud ?? null;
   const { role, can, loading: roleLoading } = useCan(projectName);
   const {
     apps,
@@ -92,6 +95,7 @@ export function ProjectProvider({
     () => ({
       projectName,
       role,
+      targetCloud,
       roleLoading,
       can,
       apps,
@@ -103,6 +107,7 @@ export function ProjectProvider({
     [
       projectName,
       role,
+      targetCloud,
       roleLoading,
       can,
       apps,

@@ -66,6 +66,7 @@ function HealthPill({ health }: { health: ProjectHealth }) {
 
 export function ProjectCard({ project, onRetried, deletingApps = 0, health, grade }: Props) {
     const t = useTranslations("projects");
+    const tNav = useTranslations("projectNav");
     const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
@@ -156,7 +157,10 @@ export function ProjectCard({ project, onRetried, deletingApps = 0, health, grad
                         )}
                     </div>
                 </div>
-                <CardDescription className="text-xs">
+                <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <Badge variant="outline" className="text-xs">
+                        {tNav(`cloud.${project.target_cloud}`)}
+                    </Badge>
                     {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
                 </CardDescription>
                 {shownHealth && (

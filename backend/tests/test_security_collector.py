@@ -10,7 +10,13 @@ from sqlalchemy.orm import sessionmaker
 from app.core.database import Base
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services.github_service import Artifact, GitHubAppError
-from app.services.security import collector, settings, sources, store
+from app.services.security import (
+    collector,
+    settings,
+    sources,
+    store,
+    upgrade_prs,
+)
 
 REPORT = {
     "scanners": {
@@ -52,7 +58,7 @@ def entry(db):
     return collector.kubernetes_projects(db)[0]
 
 
-def _github(artifact=None, error=None, files=None):
+def _github(artifact=None, error=None, files=None, pulls=(), pulls_error=None):
     if files is None:
         files = {settings.WORKFLOW_FILE: "name: Security Scans"}
     patches = {
@@ -60,6 +66,9 @@ def _github(artifact=None, error=None, files=None):
         "get_default_branch": mock.AsyncMock(return_value="main"),
         "get_latest_artifact": mock.AsyncMock(
             return_value=artifact, side_effect=error
+        ),
+        "list_open_pulls": mock.AsyncMock(
+            return_value=list(pulls), side_effect=pulls_error
         ),
         "_read_exposure": mock.AsyncMock(return_value="project_members"),
         "_read_optional": mock.AsyncMock(
@@ -104,6 +113,61 @@ def test_ci_findings_come_from_the_latest_default_branch_report(db, entry):
             db, "shop", datetime(2026, 10, 9).date()
         )
     ] == ["Secret commité dans le repo"]
+
+
+def _bump_finding():
+    i18n = {"fix": {"key": "vuln.fixBump", "params": {"package": "lodash"}}}
+    return store.Merged(
+        "f",
+        "api",
+        None,
+        None,
+        None,
+        "r",
+        "",
+        "",
+        "",
+        "",
+        None,
+        "",
+        [],
+        datetime(2026, 1, 1),
+        datetime(2026, 1, 1),
+        None,
+        json.dumps(i18n),
+    )
+
+
+def test_open_upgrade_prs_are_remembered(db, entry):
+    pull = {
+        "title": "Bump lodash from 4.17.20 to 4.17.21",
+        "html_url": "https://github.com/o/r/pull/7",
+        "head": {"ref": "dependabot/npm_and_yarn/lodash"},
+        "user": {"login": "dependabot[bot]"},
+    }
+
+    with _github(pulls=[pull]):
+        asyncio.run(collector.collect_github_app(db, entry, entry.apps[0]))
+
+    assert (
+        upgrade_prs.for_finding("shop", _bump_finding())
+        == "https://github.com/o/r/pull/7"
+    )
+
+
+@pytest.mark.parametrize("error", [GitHubAppError("boom"), ValueError("html")])
+def test_a_pulls_error_keeps_the_ci_findings(db, entry, error):
+    artifact = Artifact(
+        "42", datetime(2026, 10, 9, tzinfo=timezone.utc), REPORT
+    )
+
+    with _github(artifact, pulls_error=error):
+        asyncio.run(collector.collect_github_app(db, entry, entry.apps[0]))
+
+    assert (
+        store.scan_state(db, "shop", "api", sources.Source.CI).status == "ok"
+    )
+    assert store.merged_findings(db, "shop", datetime(2026, 10, 9).date())
 
 
 def test_a_github_error_keeps_known_findings_open(db, entry):

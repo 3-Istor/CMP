@@ -3,7 +3,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDeployment } from "@/lib/api";
 import { useProjectContext } from "@/components/projects/ProjectContext";
-import { useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -24,6 +23,7 @@ const ACTIVE_STATUSES = new Set([
   "deploying",
   "deleting",
 ]);
+const SLOW_POLL_STATUSES = new Set(["failed", "degraded"]);
 
 interface AppContextValue {
   appId: number;
@@ -56,9 +56,23 @@ export function AppProvider({
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isActive = deployment ? ACTIVE_STATUSES.has(deployment.status) : false;
-  const polled = useDeploymentPolling(isActive ? appId : null);
-  const current = polled ?? deployment;
+  // Fast while a run is in progress (the old polling default); slow on failed
+  // and degraded, which the backend health poller moves once a minute.
+  const pollMs = !deployment
+    ? 0
+    : ACTIVE_STATUSES.has(deployment.status)
+      ? 3000
+      : SLOW_POLL_STATUSES.has(deployment.status)
+        ? 60_000
+        : 0;
+  useEffect(() => {
+    if (!pollMs) return;
+    const timer = setInterval(() => {
+      // A failed poll keeps the last answer; the next one retries.
+      getDeployment(appId).then(setDeployment, () => {});
+    }, pollMs);
+    return () => clearInterval(timer);
+  }, [appId, pollMs]);
 
   const fetchDeployment = useCallback(async () => {
     try {
@@ -78,20 +92,20 @@ export function AppProvider({
   // The deployment row is kept (status=deleted), not removed, once
   // teardown finishes, polling correctly stops, but nothing else takes the
   // user off a page for an app that no longer exists. Bounce back to the
-  // project after a beat. Watches `current`: after a delete started here,
+  // project after a beat. Watches `deployment`: after a delete started here,
   // the final "deleted" status only arrives through polling.
   useEffect(() => {
-    if (current?.status !== "deleted") return;
-    toast.info(t("deleted", { name: current.name }));
+    if (deployment?.status !== "deleted") return;
+    toast.info(t("deleted", { name: deployment.name }));
     const timer = setTimeout(
       () => router.push(`/projects/${projectName}`),
       2500,
     );
     return () => clearTimeout(timer);
-  }, [current?.status, current?.name, projectName, router, t]);
+  }, [deployment?.status, deployment?.name, projectName, router, t]);
 
   // A GET that raced the backend's DELETING commit may leave a stale list row.
-  const status = current?.status;
+  const status = deployment?.status;
   useEffect(() => {
     if (status === "deleting" || status === "deleted") void refreshApps();
   }, [status, refreshApps]);
@@ -108,16 +122,16 @@ export function AppProvider({
 
   const value = useMemo(
     () =>
-      current
+      deployment
         ? {
             appId,
             projectName,
-            deployment: current,
+            deployment,
             refresh: fetchDeployment,
             markDeleting,
           }
         : null,
-    [appId, projectName, current, fetchDeployment, markDeleting],
+    [appId, projectName, deployment, fetchDeployment, markDeleting],
   );
 
   if (loading || !value) {

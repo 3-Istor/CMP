@@ -57,7 +57,17 @@ export function AccessReviewsPanel() {
       .then((overview) => {
         setData(overview);
         setForbidden(false);
-        setSelected((current) => current ?? overview.campaigns[0]?.id ?? null);
+        // ?campaign= comes from the activity feed's "Open" link.
+        const wanted = Number(
+          new URLSearchParams(window.location.search).get("campaign"),
+        );
+        setSelected(
+          (current) =>
+            current ??
+            overview.campaigns.find((c) => c.id === wanted)?.id ??
+            overview.campaigns[0]?.id ??
+            null,
+        );
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 403) setForbidden(true);

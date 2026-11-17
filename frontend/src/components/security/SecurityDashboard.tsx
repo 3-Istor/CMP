@@ -12,6 +12,7 @@ import {
   isNotConnected,
   getSecurityTrend,
 } from "@/lib/api";
+import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import type {
   SecurityCategory,
@@ -235,7 +236,7 @@ export function SecurityDashboard({
   }
 
   const { summary, findings, trend, exceptions, role } = data;
-  const canAdmin = role.cnp_admin || role.role === "admin";
+  const canAdmin = role.cnp_admin || can(role.role, "security.manage");
 
   function showCategory(category: SecurityCategory) {
     const target = `security-${category}`;

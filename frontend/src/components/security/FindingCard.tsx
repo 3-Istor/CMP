@@ -78,7 +78,7 @@ export function FindingCard({
           {finding.fix && <p className="text-sm">{text(finding, "fix")}</p>}
           {pending && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              {t("finding.pending", { author: finding.exception?.author ?? "" })}
+              {t(finding.tier === "core" ? "finding.pendingCore" : "finding.pending", { author: finding.exception?.author ?? "" })}
             </p>
           )}
         </div>
@@ -93,6 +93,17 @@ export function FindingCard({
               {finding.sources.includes("ci")
                 ? t("finding.viewRun")
                 : t("common.details")}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+          {finding.fix_pr && (
+            <a
+              href={finding.fix_pr}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-[0.8rem] font-medium hover:bg-accent"
+            >
+              {t("finding.upgradePr")}
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
