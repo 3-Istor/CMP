@@ -5,7 +5,7 @@
   "view": "developer",
   "score": 62,
   "grade": "C",
-  "actions": 3,
+  "actions": 5,
   "core": 1,
   "excepted": 0,
   "segments": [
@@ -30,18 +30,21 @@
    {
     "category": "container",
     "label": "container",
+    "worst": "important",
+    "counts": {
+     "important": 1,
+     "recommended": 1
+    },
+    "points_lost": 2
+   },
+   {
+    "category": "access",
+    "label": "access",
     "worst": "recommended",
     "counts": {
      "recommended": 1
     },
     "points_lost": 1
-   },
-   {
-    "category": "access",
-    "label": "access",
-    "worst": null,
-    "counts": {},
-    "points_lost": 0
    },
    {
     "category": "data",
@@ -69,14 +72,29 @@
    "category": "leaks",
    "tier": "core",
    "audience": "developer",
-   "rule": "r",
+   "rule": "gitleaks.generic-api-key",
    "title": "Secret in repository",
    "detail": "d",
    "fix": "f",
    "location": "l",
    "link": null,
    "raw": "",
-   "i18n": null,
+   "i18n": {
+    "title": {
+     "key": "leak.title",
+     "params": {}
+    },
+    "detail": {
+     "key": "leak.detail",
+     "params": {
+      "rule": "generic-api-key"
+     }
+    },
+    "fix": {
+     "key": "leak.fix",
+     "params": {}
+    }
+   },
    "sources": [
     "ci"
    ],
@@ -91,14 +109,31 @@
    "category": "dependencies",
    "tier": "important",
    "audience": "developer",
-   "rule": "r",
+   "rule": "CVE-2021-23337",
    "title": "Vulnerable dependency",
    "detail": "d",
    "fix": "f",
    "location": "l",
    "link": null,
    "raw": "",
-   "i18n": null,
+   "i18n": {
+    "title": {
+     "key": "vuln.title",
+     "params": {
+      "id": "CVE-2021-23337",
+      "package": "lodash",
+      "installed": "4.17.20"
+     }
+    },
+    "fix": {
+     "key": "vuln.fixBump",
+     "params": {
+      "package": "lodash",
+      "installed": "4.17.20",
+      "fixed": "4.17.21"
+     }
+    }
+   },
    "sources": [
     "ci"
    ],
@@ -113,14 +148,89 @@
    "category": "container",
    "tier": "recommended",
    "audience": "developer",
-   "rule": "r",
+   "rule": "kyverno.run_as_root",
    "title": "Image runs as root",
    "detail": "d",
    "fix": "f",
    "location": "l",
    "link": null,
    "raw": "",
-   "i18n": null,
+   "i18n": {
+    "title": {
+     "key": "kyverno.run_as_root.title",
+     "params": {}
+    },
+    "fix": {
+     "key": "kyverno.run_as_root.fix",
+     "params": {}
+    }
+   },
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  },
+  {
+   "fingerprint": "d",
+   "app": "demo-app",
+   "category": "access",
+   "tier": "recommended",
+   "audience": "developer",
+   "rule": "exposure.public",
+   "title": "Image runs as root",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": {
+    "title": {
+     "key": "exposure.public.title",
+     "params": {}
+    },
+    "fix": {
+     "key": "exposure.public.fix",
+     "params": {}
+    }
+   },
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  },
+  {
+   "fingerprint": "e",
+   "app": "demo-app",
+   "category": "container",
+   "tier": "important",
+   "audience": "developer",
+   "rule": "imageSecret",
+   "title": "Image runs as root",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": {
+    "title": {
+     "key": "imageSecret.title",
+     "params": {
+      "name": "id_rsa"
+     }
+    },
+    "fix": {
+     "key": "imageSecret.fix",
+     "params": {
+      "name": "id_rsa"
+     }
+    }
+   },
    "sources": [
     "ci"
    ],

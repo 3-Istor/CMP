@@ -810,7 +810,7 @@
       "hints": {
         "not_affected": "La faille existe dans le paquet, mais ne peut pas être exploitée ici. Revue dans un an.",
         "false_positive": "Le scanner se trompe. Revue dans un an.",
-        "accepted_risk": "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus, et un autre admin du projet doit valider.",
+        "accepted_risk": "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus.",
         "revoked": "Le secret a été changé et l'ancien ne fonctionne plus. Le retirer de l'historique ne suffit pas."
       }
     },
@@ -2926,7 +2926,7 @@
       "pods": "{count} pod(s) concerné(s)",
       "run_as_root": {
         "title": "Le conteneur tourne en root",
-        "fix": "Ajoute un utilisateur non root à la fin du Dockerfile, par exemple `USER 10001`."
+        "fix": "Ajouter `USER 10001` à la fin du Dockerfile."
       },
       "capabilities": {
         "title": "Capabilities Linux non retirées",
@@ -2942,49 +2942,49 @@
       },
       "image_latest": {
         "title": "Image déployée en :latest",
-        "fix": "Déployer l'image par tag de version ou par digest."
+        "fix": "Déployer un tag de version ou un digest."
       },
       "image_untagged": {
         "title": "Image déployée sans tag",
-        "fix": "Déployer l'image par tag de version ou par digest."
+        "fix": "Déployer un tag de version ou un digest."
       },
       "resources": {
         "title": "Requests et limits absentes",
-        "fix": "Poser des requests CPU et mémoire et une limite mémoire égale à la demande dans le chart."
+        "fix": "Poser des requests CPU et mémoire et une limite mémoire dans le chart."
       },
       "other": {
         "title": "Réglage de sécurité du pod non conforme",
-        "fix": "Voir le message Kyverno et corriger le chart."
+        "fix": "Corriger le chart selon le message Kyverno."
       }
     },
     "vuln": {
       "title": "{id} dans {package} {installed}",
-      "fixBase": "Mets à jour l'image de base du Dockerfile : {package} est corrigé en {fixed}.",
-      "fixBump": "Passe {package} de {installed} à {fixed}.",
+      "fixBase": "Mettre à jour l'image de base pour avoir {package} {fixed}.",
+      "fixBump": "Passer {package} en {fixed}.",
       "noFix": "Aucun correctif publié pour l'instant."
     },
     "imageSecret": {
       "title": "Secret embarqué dans l'image : {name}",
       "detail": "Fichier {target} de l'image",
-      "fix": "Change ce secret, puis retire le fichier de l'image : un secret se passe par Vault, jamais dans l'image."
+      "fix": "Reconstruire l'image sans le secret."
     },
     "dockerfile": {
       "seeRule": "Voir le détail de la règle.",
       "DS-0001": {
         "title": "Image de base en :latest",
-        "fix": "Fixe la version de l'image de base dans le `FROM`, par exemple `python:3.13-slim`."
+        "fix": "Fixer la version de l'image de base dans le `FROM`."
       },
       "DS-0002": {
         "title": "L'image tourne en root",
-        "fix": "Ajoute un utilisateur non root à la fin du Dockerfile, par exemple `USER 10001`."
+        "fix": "Ajouter `USER 10001` à la fin du Dockerfile."
       },
       "DS-0004": {
         "title": "Port SSH 22 exposé",
-        "fix": "Retire `EXPOSE 22` : on n'entre pas dans un conteneur en SSH."
+        "fix": "Retirer `EXPOSE 22`."
       },
       "DS-0005": {
         "title": "ADD utilisé à la place de COPY",
-        "fix": "Remplace `ADD` par `COPY`, sauf pour extraire une archive."
+        "fix": "Remplacer `ADD` par `COPY`."
       },
       "DS-0026": {
         "title": "Pas de HEALTHCHECK",
@@ -2998,7 +2998,7 @@
       "title": "Secret commité dans le repo",
       "detail": "Règle {rule}",
       "detailCommit": "Règle {rule} · commit {commit}",
-      "fix": "Change ce secret tout de suite, puis retire-le du code. Le supprimer de l'historique ne suffit pas : il a pu être copié."
+      "fix": "Changer ce secret."
     },
     "backup": {
       "backup-disabled": {
@@ -3009,29 +3009,29 @@
       "backup-failing": {
         "title": "Sauvegarde activée mais en échec",
         "detail": "Archivage en échec : {message}",
-        "fix": "Contacte l'équipe plateforme : le stockage des sauvegardes ne répond pas."
+        "fix": "Contacter l'équipe plateforme."
       },
       "backup-missing": {
         "title": "Sauvegarde activée mais jamais réussie",
         "detail": "Aucune sauvegarde réussie depuis l'activation.",
-        "fix": "Lance une sauvegarde manuelle pour voir l'erreur, ou contacte l'équipe plateforme."
+        "fix": "Lancer une sauvegarde manuelle pour voir l'erreur."
       },
       "backup-stale": {
         "title": "Sauvegarde en retard",
         "detail": "Dernière sauvegarde réussie : {date} UTC",
-        "fix": "Lance une sauvegarde manuelle pour voir l'erreur, ou contacte l'équipe plateforme."
+        "fix": "Lancer une sauvegarde manuelle pour voir l'erreur."
       }
     },
     "exposure": {
       "public": {
         "title": "App publique, accessible sans connexion",
         "detail": "N'importe qui sur Internet peut l'ouvrir.",
-        "fix": "Si ce n'est pas voulu, réserve-la aux membres du projet. Sinon, ignore cette alerte en indiquant que c'est voulu."
+        "fix": "Restreindre l'accès ou protéger par SSO."
       },
       "custom": {
         "title": "Exposition réglée à la main dans le code",
         "detail": "La CMP ne reconnaît pas ce réglage : vérifie qui y a accès.",
-        "fix": "Choisis un des réglages proposés dans Accès et exposition."
+        "fix": "Choisir un réglage dans Accès et exposition."
       }
     },
     "isolation": {
@@ -3047,7 +3047,7 @@
     "lockedDrift": {
       "title": "Réglage imposé par l'admin modifié dans le repo",
       "detail": "deploy/security.yaml ne suit plus la politique du projet.",
-      "fix": "Remets la valeur imposée, ou demande à l'admin du projet de lever le verrou."
+      "fix": "Restaurer la valeur imposée."
     }
   },
   "access": {
