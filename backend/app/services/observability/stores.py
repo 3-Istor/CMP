@@ -255,3 +255,28 @@ async def firing_alerts(project: str, app: str) -> list[dict]:
         if (a.get("labels") or {}).get("cnp_project") == project
         and (a.get("labels") or {}).get("cnp_app") == app
     ]
+
+
+async def firing_by_project() -> dict[str, int]:
+    """Firing alerts per ``cnp_project``; alerts without it are skipped."""
+    require("alerts")
+    try:
+        async with _client(settings.ALERTMANAGER_URL) as client:
+            response = await client.get(
+                "/api/v2/alerts",
+                params=[
+                    ("active", "true"),
+                    ("silenced", "false"),
+                    ("inhibited", "false"),
+                ],
+            )
+        response.raise_for_status()
+        found = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise StoreError(f"alerts: {exc}") from exc
+    counts: dict[str, int] = {}
+    for alert in found:
+        project = (alert.get("labels") or {}).get("cnp_project")
+        if project:
+            counts[project] = counts.get(project, 0) + 1
+    return counts

@@ -6,6 +6,7 @@ Implements the Project > Application hierarchy.
 Endpoints:
   GET    /api/projects/users/search                    - Keycloak user search (member autocomplete)
   GET    /api/projects                                 - List projects the current user belongs to
+  GET    /api/projects/health                          - Apps, health and alerts of every visible project
   POST   /api/projects                                 - Bootstrap a new project via Terraform
   GET    /api/projects/{project_name}/apps             - List applications in a project
   GET    /api/projects/{project_name}/members          - List project members
@@ -22,6 +23,7 @@ from typing import Annotated
 import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -29,6 +31,7 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole, rank
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, ProjectStatus, TargetCloud
+from app.routers import deployments
 from app.routers.deployments import with_staging
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
@@ -37,12 +40,14 @@ from app.schemas.project import (
     DeletionProtectionUpdate,
     ProjectCreate,
     ProjectCreateResponse,
+    ProjectHealthRead,
     ProjectRead,
 )
 from app.services import (
     customer_identity,
     keycloak_admin,
     notifications,
+    project_health,
     vault_auth,
 )
 from app.services.authz import (
@@ -52,6 +57,7 @@ from app.services.authz import (
     assert_project_role,
     is_cnp_admin,
     platform_project_role,
+    reads_platform_security,
 )
 from app.services.clusters.state import (
     PUBLIC_CLOUDS,
@@ -98,6 +104,7 @@ from app.services.project_registry import (
     set_deletion_protection,
 )
 from app.services.step_up import assert_step_up
+from app.services.topology import HEALTH_ORDER, SYNC_ORDER, _worst
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +300,51 @@ def list_projects(
 # ---------------------------------------------------------------------------
 # POST /api/projects
 # ---------------------------------------------------------------------------
+
+
+@router.get("/health", response_model=list[ProjectHealthRead])
+async def projects_health(
+    token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> list[ProjectHealthRead]:
+    """Apps, Argo CD health and firing alerts of each project the caller sees."""
+    if reads_platform_security(token_payload):
+        names = [n for (n,) in db.query(Project.project_name).all()]
+    else:
+        names = await run_in_threadpool(
+            deployments._user_project_names,  # pylint: disable=protected-access
+            db,
+            token_payload,
+        )
+    counts = dict(
+        db.query(
+            Deployment.project_id,
+            func.count(Deployment.id),  # pylint: disable=not-callable
+        )
+        .filter(
+            Deployment.project_id.in_(names),
+            Deployment.status != DeploymentStatus.DELETED,
+        )
+        .group_by(Deployment.project_id)
+        .all()
+    )
+    argo, alerts = await project_health.snapshot()
+    result = []
+    for name in sorted(names):
+        apps = ((argo or {}).get(name) or {}).values()
+        healths = [h for h, _ in apps]
+        result.append(
+            ProjectHealthRead(
+                project=name,
+                apps=counts.get(name, 0),
+                healthy=healths.count("healthy"),
+                down=sum(h in ("degraded", "missing") for h in healths),
+                health=_worst(healths, HEALTH_ORDER),
+                sync=_worst([s for _, s in apps], SYNC_ORDER),
+                alerts=None if alerts is None else alerts.get(name, 0),
+            )
+        )
+    return result
 
 
 @router.post("/", response_model=ProjectCreateResponse, status_code=202)

@@ -117,3 +117,15 @@ class ProjectCreateResponse(BaseModel):
     project_name: str
     target_cloud: TargetCloud
     status: str = "bootstrapping"
+
+
+class ProjectHealthRead(BaseModel):
+    """Apps, Argo CD health and firing alerts of a project; None = unreadable."""
+
+    project: str
+    apps: int
+    healthy: int
+    down: int
+    health: str | None
+    sync: str | None
+    alerts: int | None
