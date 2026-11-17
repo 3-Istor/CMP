@@ -74,6 +74,15 @@ def test_matches(title, body, package, expected):
     )
 
 
+def test_the_renovate_onboarding_pr_is_not_an_upgrade():
+    upgrade_prs.remember(
+        "shop",
+        "api",
+        [_pull("Bump lodash", "alice", "renovate/configure")],
+    )
+    assert upgrade_prs.for_finding("shop", _finding()) is None
+
+
 def test_only_bot_prs_are_kept():
     upgrade_prs.remember(
         "shop", "api", [_pull("Bump lodash", "alice", "fix/x")]

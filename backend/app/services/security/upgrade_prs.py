@@ -10,6 +10,7 @@ import re
 from app.services.security import store
 
 _BOT_REFS = ("renovate/", "dependabot/")
+_ONBOARDING_REF = "renovate/configure"
 _BOT_LOGINS = ("renovate[bot]", "dependabot[bot]")
 
 # ponytail: in-process, refilled by the hourly GitHub pass; one backend replica
@@ -20,6 +21,8 @@ _prs: dict[tuple[str, str], list[dict]] = {}
 def _is_bot(pull: dict) -> bool:
     ref = (pull.get("head") or {}).get("ref") or ""
     login = (pull.get("user") or {}).get("login") or ""
+    if ref == _ONBOARDING_REF:  # Renovate's setup PR, not an upgrade
+        return False
     return ref.startswith(_BOT_REFS) or login in _BOT_LOGINS
 
 

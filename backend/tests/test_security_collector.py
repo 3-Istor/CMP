@@ -155,12 +155,13 @@ def test_open_upgrade_prs_are_remembered(db, entry):
     )
 
 
-def test_a_pulls_error_keeps_the_ci_findings(db, entry):
+@pytest.mark.parametrize("error", [GitHubAppError("boom"), ValueError("html")])
+def test_a_pulls_error_keeps_the_ci_findings(db, entry, error):
     artifact = Artifact(
         "42", datetime(2026, 10, 9, tzinfo=timezone.utc), REPORT
     )
 
-    with _github(artifact, pulls_error=GitHubAppError("boom")):
+    with _github(artifact, pulls_error=error):
         asyncio.run(collector.collect_github_app(db, entry, entry.apps[0]))
 
     assert (

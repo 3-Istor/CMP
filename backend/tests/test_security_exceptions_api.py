@@ -43,7 +43,8 @@ def _finding(db, project="shop", fp="f1", tier=Tier.IMPORTANT):
         title="Leak",
         i18n='{"title": {"key": "leak.title", "params": {}}}',
     )
-    store.upsert_findings(db, project, [draft], (Source.CI,), {"web"}, NOW)
+    # No app given: adds the finding without resolving the others.
+    store.upsert_findings(db, project, [draft], (Source.CI,), set(), NOW)
 
 
 def _exception(db, project="shop", fp="f1", **kw):
@@ -99,7 +100,9 @@ def test_exception_read_carries_the_finding_title(session_factory):
 def test_an_expired_exception_is_listed_as_expired(session_factory):
     with session_factory() as db:
         _finding(db)
-        _exception(db, expires_on=TODAY - timedelta(days=1))
+        _exception(
+            db, status="accepted_risk", expires_on=TODAY - timedelta(days=1)
+        )
 
     [read] = _list(session_factory)
 
@@ -147,6 +150,20 @@ def test_pending_queue_lists_every_project_core_first(session_factory):
         ("shop", "core"),
         ("other", "risk"),
     ]
+
+
+def test_pending_queue_skips_resolved_findings(session_factory):
+    with session_factory() as db:
+        _finding(db, fp="fixed")
+        store.upsert_findings(db, "shop", [], (Source.CI,), {"web"}, NOW)
+        _finding(db, fp="open")
+        _exception(db, fp="fixed", status="accepted_risk")
+        _exception(db, fp="open", status="accepted_risk")
+        _exception(db, fp="unknown", status="accepted_risk")
+
+    result = _queue(session_factory, AUDITOR)
+
+    assert {r.fingerprint for r in result} == {"open", "unknown"}
 
 
 def test_pending_queue_is_refused_to_a_project_admin(session_factory):
@@ -258,6 +275,36 @@ def test_an_accepted_risk_notifies_the_project_admins(session_factory):
     assert notify.call_args.kwargs["link"] == (
         "/security?project=shop&tab=ignored"
     )
+
+
+def test_an_accepted_risk_without_another_admin_notifies_the_reviewers(
+    session_factory,
+):
+    groups = {"infra": {"root", "dev"}, "security-auditor": {"aud"}}
+    with (
+        mock.patch.object(
+            security, "list_group_usernames", lambda g: groups[g]
+        ),
+        mock.patch.object(
+            security.notifications,
+            "project_recipients",
+            lambda p, role: {"dev"},
+        ),
+        mock.patch.object(security.notifications, "notify_users") as notify,
+    ):
+        _create(session_factory, rules.Status.ACCEPTED_RISK, Tier.IMPORTANT)
+
+    assert set(notify.call_args.args[0]) == {"root", "aud"}
+
+
+def test_a_keycloak_failure_still_creates_the_exception(session_factory):
+    with mock.patch.object(
+        security, "list_group_usernames", side_effect=RuntimeError("down")
+    ):
+        _create(session_factory, rules.Status.NOT_AFFECTED, Tier.CORE)
+
+    with session_factory() as db:
+        assert db.query(SecurityException).count() == 1
 
 
 def test_a_not_affected_exception_notifies_nobody(session_factory):

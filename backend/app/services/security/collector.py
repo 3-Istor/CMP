@@ -407,7 +407,7 @@ async def collect_github_app(
         upgrade_prs.remember(
             entry.project, app.name, await list_open_pulls(token, app.repo)
         )
-    except GitHubAppError as exc:
+    except (GitHubAppError, ValueError) as exc:  # ValueError: non-JSON reply
         logger.warning(
             "Security: pull requests of '%s' unavailable: %s", app.repo, exc
         )

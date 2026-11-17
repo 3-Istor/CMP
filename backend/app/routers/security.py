@@ -246,11 +246,16 @@ def _exception_read(
     e: SecurityException, finding: store.Merged | None
 ) -> ExceptionRead:
     critical = finding is not None and finding.tier is Tier.CORE
-    pending = e.revoked_at is None and (
-        (critical and not e.approved_by_reviewer)
-        or (
-            e.status == rules.Status.ACCEPTED_RISK.value
-            and e.approved_at is None
+    expired = e.expires_on < utcnow().date()
+    pending = (
+        e.revoked_at is None
+        and not expired
+        and (
+            (critical and not e.approved_by_reviewer)
+            or (
+                e.status == rules.Status.ACCEPTED_RISK.value
+                and e.approved_at is None
+            )
         )
     )
     i18n = json.loads(finding.i18n) if finding and finding.i18n else {}
@@ -273,7 +278,7 @@ def _exception_read(
         revoked_at=e.revoked_at,
         pending_approval=pending,
         critical=critical,
-        expired=e.expires_on < utcnow().date(),
+        expired=expired,
         title=finding.title if finding else None,
         i18n={"title": i18n["title"]} if "title" in i18n else None,
     )
@@ -690,16 +695,18 @@ async def create_exception(
 def _notify_approvers(row: SecurityException, critical: bool) -> None:
     """Tell whoever can approve; never fails the creation."""
     try:
-        if critical:
+        recipients: set[str] = set()
+        link = f"/security?project={row.project}&tab=ignored"
+        if not critical:
+            recipients = notifications.project_recipients(
+                row.project, ProjectRole.ADMIN
+            ) - {row.author}
+        # The reviewers approve any exception: they stand in for a lone admin.
+        if not recipients:
             recipients = list_group_usernames(
                 PLATFORM_ADMIN_GROUP
             ) | list_group_usernames(AUDITOR_GROUP)
             link = "/security"
-        else:
-            recipients = notifications.project_recipients(
-                row.project, ProjectRole.ADMIN
-            )
-            link = f"/security?project={row.project}&tab=ignored"
         notifications.notify_users(
             {r for r in recipients if "@" not in r} - {row.author},
             kind="approval_request",
@@ -709,7 +716,7 @@ def _notify_approvers(row: SecurityException, critical: bool) -> None:
             project=row.project,
             app=row.app,
         )
-    except Exception:  # pylint: disable=broad-except
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("Exception approval notice failed", exc_info=True)
 
 
@@ -783,8 +790,11 @@ async def pending_exceptions(
         for project in {r.project for r in rows}
     }
     reads = [
-        _exception_read(e, findings[e.project].get(e.fingerprint))
+        _exception_read(e, finding)
         for e in rows
+        # Approving an exception on a fixed finding is moot.
+        if (finding := findings[e.project].get(e.fingerprint)) is None
+        or finding.resolved_at is None
     ]
     pending = [r for r in reads if r.pending_approval]
     return sorted(pending, key=lambda r: (not r.critical, r.created_at))
