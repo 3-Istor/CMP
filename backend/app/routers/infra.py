@@ -105,7 +105,8 @@ async def get_deployments_health(
     if not is_cnp_admin(token_payload):
         # Sequential: the Session is not thread-safe.
         visible = set()
-        for project in {row.project_id for row in rows}:
+        # A project-less app is refused to non-admins, as the single endpoint does.
+        for project in {row.project_id for row in rows if row.project_id}:
             if await _can_read(db, token_payload, project):
                 visible.add(project)
         rows = [row for row in rows if row.project_id in visible]

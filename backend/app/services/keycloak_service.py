@@ -393,22 +393,17 @@ _LISTING_TTL = 15
 _listing_cache: dict[str, tuple[list[dict], float]] = {}
 
 
-def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
+def fetch_user_projects_live(user_id: str) -> list[dict]:
     """
-    Query the Keycloak Admin API to retrieve the group membership of a user
-    and convert it to a list of project dicts.
+    Query the Keycloak Admin API for the user's group membership and convert
+    it to a list of project dicts, sorted by name, never cached.
 
     Args:
         user_id: Keycloak user UUID (the ``sub`` claim).
 
     Returns:
-        List of project dicts, sorted by name:
         ``[{"name": "sandbox", "role": "admin"}, ...]``
     """
-    cached = _listing_cache.get(user_id)
-    if cached and cached[1] > time.monotonic():
-        return [dict(p) for p in cached[0]]
-
     logger.debug("Fetching groups from Keycloak for user_id: %s", user_id)
 
     groups = _fetch_user_groups(user_id)
@@ -417,14 +412,26 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
     projects = _project_roles_from_groups(groups)
     logger.debug("Extracted %d projects: %s", len(projects), list(projects))
 
-    listing = [
+    return [
         {"name": name, "role": role.value}
         for name, role in sorted(projects.items())
     ]
+
+
+def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
+    """
+    Like :func:`fetch_user_projects_live`, cached for ``_LISTING_TTL`` seconds.
+    For listings only: gates and authorization must use the live variant.
+    """
+    cached = _listing_cache.get(user_id)
+    if cached and cached[1] > time.monotonic():
+        return [dict(p) for p in cached[0]]
+
+    listing = fetch_user_projects_live(user_id)
     # An empty list may be a swallowed Keycloak outage: never cache it.
     if listing:
         _listing_cache[user_id] = (listing, time.monotonic() + _LISTING_TTL)
-    return listing
+    return [dict(p) for p in listing]
 
 
 def get_user_project_role(

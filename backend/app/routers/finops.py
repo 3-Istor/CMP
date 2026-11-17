@@ -111,9 +111,9 @@ def _username(token: dict) -> str:
 
 def _user_project_names(token: dict) -> list[str]:
     """
-    Projects the caller belongs to, resolved in real time via the Keycloak
-    Admin API, the same mechanism the projects/apps routers use. This avoids
-    relying on the JWT ``groups`` claim, which is not populated in this setup.
+    Projects the caller belongs to, resolved via the Keycloak Admin API
+    (listing cached for a few seconds), the same mechanism the projects/apps
+    routers use. This avoids relying on the JWT ``groups`` claim, which is not populated in this setup.
 
     Includes projects where the caller is only a guest: guests are allowed to
     read costs.

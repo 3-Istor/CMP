@@ -68,6 +68,7 @@ from app.services.keycloak_service import (
     ProjectGroupMissingError,
     add_user_to_project,
     fetch_user_projects_from_keycloak,
+    fetch_user_projects_live,
     get_current_user,
     get_user_id_from_token,
     list_project_members,
@@ -115,7 +116,7 @@ def _administers_any_project(db: Session, token_payload: dict) -> bool:
 
     if any(
         entry["role"] == ProjectRole.ADMIN.value
-        for entry in fetch_user_projects_from_keycloak(user_id)
+        for entry in fetch_user_projects_live(user_id)
     ):
         return True
 
@@ -209,8 +210,9 @@ def list_projects(
     """
     Return the list of projects the authenticated user belongs to.
 
-    Membership comes from Keycloak group membership, fetched fresh from the
-    Admin API rather than read off the JWT, which carries stale claims:
+    Membership comes from Keycloak group membership, fetched from the
+    Admin API (cached for a few seconds) rather than read off the JWT, which
+    carries stale claims:
       ``project-<name>-<admins|members|guests>``
 
     Projects the user owns are merged in on top, with role ``"owner"``. They

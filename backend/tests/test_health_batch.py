@@ -1,4 +1,4 @@
-import time
+import threading
 from unittest import mock
 
 import pytest
@@ -133,17 +133,28 @@ def test_batch_omits_an_app_whose_read_fails(client, setup):
 
 
 def test_batch_reads_apps_concurrently(client, setup):
-    def slow(deployment, now):
-        time.sleep(0.2)
+    barrier = threading.Barrier(3, timeout=5)
+
+    def read(deployment, now):
+        barrier.wait()  # sequential reads would never meet: broken, omitted
         return _health(deployment, now)
 
-    setup(admin=True, read=slow)
-    start = time.monotonic()
-    client.get(URL)
-    elapsed = time.monotonic() - start
+    setup(admin=True, read=read)
 
-    # 3 apps x 0.2 s sequentially would be 0.6 s.
-    assert elapsed < 0.5
+    assert sorted(client.get(URL).json()) == ["1", "2", "3"]
+
+
+def test_batch_omits_project_less_apps_for_non_admins(client, setup):
+    factory_db = next(client.app.dependency_overrides[get_db]())
+    factory_db.add(_row(6, project=None))
+    factory_db.commit()
+    url = "/api/infra/deployments/health?ids=1&ids=6"
+
+    setup(admin=False)
+    assert sorted(client.get(url).json()) == ["1"]
+
+    setup(admin=True)
+    assert sorted(client.get(url).json()) == ["1", "6"]
 
 
 def test_batch_with_no_ids_is_empty(client, setup):

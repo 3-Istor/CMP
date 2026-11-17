@@ -73,3 +73,40 @@ def test_role_lookup_is_never_cached():
         kc.get_user_project_role("u1", "demo")
 
     assert f.call_count == 2
+
+
+def test_mutating_a_returned_listing_does_not_alter_the_cache():
+    with mock.patch.object(kc, "_fetch_user_groups", return_value=GROUPS):
+        first = kc.fetch_user_projects_from_keycloak("u1")
+        first[0]["role"] = "admin"
+        second = kc.fetch_user_projects_from_keycloak("u1")
+        second[0]["role"] = "owner"
+        third = kc.fetch_user_projects_from_keycloak("u1")
+
+    assert third == [{"name": "demo", "role": "member"}]
+
+
+def test_live_listing_bypasses_the_cache():
+    with mock.patch.object(kc, "_fetch_user_groups", return_value=GROUPS) as f:
+        kc.fetch_user_projects_from_keycloak("u1")
+        kc.fetch_user_projects_live("u1")
+
+    assert f.call_count == 2
+
+
+def test_administers_any_project_gate_reads_live_not_cached():
+    from app.routers import projects
+
+    db = mock.Mock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    token = {"sub": "u1", "preferred_username": "bob"}
+    with mock.patch.object(
+        kc,
+        "_fetch_user_groups",
+        return_value=[{"name": "project-demo-admins"}],
+    ):
+        kc.fetch_user_projects_from_keycloak("u1")  # primes admin
+    with mock.patch.object(
+        kc, "_fetch_user_groups", return_value=GROUPS
+    ):  # demoted since
+        assert projects._administers_any_project(db, token) is False
