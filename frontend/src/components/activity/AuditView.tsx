@@ -198,7 +198,7 @@ function EventRow({
       {event.notable && (
         <Badge
           variant="outline"
-          className="shrink-0 border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+          className="shrink-0 border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-300"
         >
           {t("audit.notable")}
         </Badge>
