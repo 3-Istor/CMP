@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -14,6 +15,39 @@ export interface PageTab {
   exact?: boolean;
 }
 
+export interface Crumb {
+  label: string;
+  href?: string;
+}
+
+// Last crumb is the current page; earlier ones need an href.
+export function Breadcrumbs({ items }: { items: Crumb[] }) {
+  const t = useTranslations("apps.nav");
+  return (
+    <nav aria-label={t("breadcrumb")} className="mb-1.5 text-xs">
+      <ol className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+        {items.map((c, i) => {
+          const last = i === items.length - 1;
+          return (
+            <li key={i} className="flex items-center gap-1.5">
+              {i > 0 && <span aria-hidden>/</span>}
+              {c.href && !last ? (
+                <Link href={c.href} className="hover:text-foreground hover:underline">
+                  {c.label}
+                </Link>
+              ) : (
+                <span aria-current={last ? "page" : undefined} className={cn(last && "text-foreground")}>
+                  {c.label}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
 export function PageHeader({
   title,
   description,
@@ -21,6 +55,7 @@ export function PageHeader({
   actions,
   tabs,
   tabsLabel,
+  breadcrumbs,
   children,
 }: {
   title: React.ReactNode;
@@ -29,12 +64,14 @@ export function PageHeader({
   actions?: React.ReactNode;
   tabs?: PageTab[];
   tabsLabel?: string;
+  breadcrumbs?: Crumb[];
   children?: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "";
   return (
     <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className={cn(PAGE_WIDTH, "pt-5", tabs ? "pb-0" : "pb-4")}>
+        {breadcrumbs && <Breadcrumbs items={breadcrumbs} />}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             {Icon && (

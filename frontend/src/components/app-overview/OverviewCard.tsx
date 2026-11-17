@@ -3,6 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotConnected } from "@/components/clusters/NotConnected";
+import { isNotConnected } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Lock } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -52,6 +54,8 @@ export function OverviewCard({
     );
   } else if (loading && !hasData) {
     body = <Skeleton className={skeletonClassName} />;
+  } else if (error && !hasData && isNotConnected(error)) {
+    body = <NotConnected cloud={isNotConnected(error)!.cloud} />;
   } else if (error && !hasData) {
     body = (
       <div

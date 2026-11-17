@@ -363,7 +363,7 @@ export function CostTimeline({
             {RESOURCES.map((r) => (
               <Area
                 key={r}
-                type="monotone"
+                type="linear"
                 // A precomputed [low, high] range, not stackId: Recharts stacks a
                 // missing value as 0, which drew a cliff after the last real day.
                 dataKey={(row: StackedRow) => row.stack?.[r]}
@@ -378,7 +378,7 @@ export function CostTimeline({
             ))}
             {hasForecast && (
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="band"
                 name={t("timeline.forecastRange")}
                 stroke="none"
@@ -390,7 +390,7 @@ export function CostTimeline({
             )}
             {hasForecast && (
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="forecast"
                 name={t("timeline.forecast")}
                 stroke={FORECAST_COLOR}

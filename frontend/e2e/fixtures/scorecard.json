@@ -1,0 +1,6 @@
+{"score":62,"max":100,"grade":"C","criteria":[
+{"key":"security","points":8,"max":20,"reasons":["critical_findings","high_findings"],"actions":["fix_critical","fix_high","run_scan"]},
+{"key":"cost","points":12,"max":20,"reasons":["open_recommendations"],"actions":["apply_recommendations"]},
+{"key":"reliability","points":15,"max":20,"reasons":["asleep"],"actions":["fix_health"]},
+{"key":"documentation","points":10,"max":20,"reasons":["readme_short"],"actions":["expand_readme"]},
+{"key":"owner","points":17,"max":20,"reasons":[],"actions":[]}]}

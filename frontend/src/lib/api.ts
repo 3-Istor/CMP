@@ -878,9 +878,10 @@ function activityQuery(
   if (f.app) params.set("app", f.app);
   if (f.include_reads) params.set("include_reads", "true");
   if (f.notable_only) params.set("notable_only", "true");
-  const until = f.until ? new Date(f.until) : new Date();
-  params.set("until", until.toISOString());
-  const since = new Date(until.getTime() - (f.days ?? 7) * 86_400_000);
+  // The cursor keeps the server's own timestamp: a Date would cut it to ms and lose ties.
+  params.set("until", f.until ?? new Date().toISOString());
+  if (f.before_id) params.set("before_id", f.before_id);
+  const since = new Date(Date.now() - (f.days ?? 7) * 86_400_000);
   params.set("since", since.toISOString());
   return params.toString();
 }
@@ -916,7 +917,8 @@ export async function downloadActivity(
 ) {
   const token = await getAccessToken();
   const res = await fetch(
-    `${BASE}/activity/export?${activityQuery(project, filters)}&format=${format}`,
+    // The export covers the whole filter, never the current page.
+    `${BASE}/activity/export?${activityQuery(project, { ...filters, until: null, before_id: null })}&format=${format}`,
     {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       credentials: "include",

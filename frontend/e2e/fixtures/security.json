@@ -1,0 +1,140 @@
+{
+ "summary": {
+  "project": "demo",
+  "app": "demo-app",
+  "view": "developer",
+  "score": 62,
+  "grade": "C",
+  "actions": 3,
+  "core": 1,
+  "excepted": 0,
+  "segments": [
+   {
+    "category": "leaks",
+    "label": "leaks",
+    "worst": "core",
+    "counts": {
+     "core": 1
+    },
+    "points_lost": 1
+   },
+   {
+    "category": "dependencies",
+    "label": "dependencies",
+    "worst": "important",
+    "counts": {
+     "important": 1
+    },
+    "points_lost": 1
+   },
+   {
+    "category": "container",
+    "label": "container",
+    "worst": "recommended",
+    "counts": {
+     "recommended": 1
+    },
+    "points_lost": 1
+   },
+   {
+    "category": "access",
+    "label": "access",
+    "worst": null,
+    "counts": {},
+    "points_lost": 0
+   },
+   {
+    "category": "data",
+    "label": "data",
+    "worst": null,
+    "counts": {},
+    "points_lost": 0
+   },
+   {
+    "category": "journal",
+    "label": "journal",
+    "worst": null,
+    "counts": {},
+    "points_lost": 0
+   }
+  ],
+  "apps": [],
+  "scans": [],
+  "guarantees": []
+ },
+ "findings": [
+  {
+   "fingerprint": "a",
+   "app": "demo-app",
+   "category": "leaks",
+   "tier": "core",
+   "audience": "developer",
+   "rule": "r",
+   "title": "Secret in repository",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": null,
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  },
+  {
+   "fingerprint": "b",
+   "app": "demo-app",
+   "category": "dependencies",
+   "tier": "important",
+   "audience": "developer",
+   "rule": "r",
+   "title": "Vulnerable dependency",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": null,
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  },
+  {
+   "fingerprint": "c",
+   "app": "demo-app",
+   "category": "container",
+   "tier": "recommended",
+   "audience": "developer",
+   "rule": "r",
+   "title": "Image runs as root",
+   "detail": "d",
+   "fix": "f",
+   "location": "l",
+   "link": null,
+   "raw": "",
+   "i18n": null,
+   "sources": [
+    "ci"
+   ],
+   "first_seen": "2026-11-01T00:00:00Z",
+   "last_seen": "2026-11-16T00:00:00Z",
+   "resolved_at": null,
+   "exception": null
+  }
+ ],
+ "trend": [],
+ "exceptions": [],
+ "me": {
+  "role": "admin",
+  "cnp_admin": false,
+  "username": "demo"
+ }
+}

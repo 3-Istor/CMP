@@ -2,6 +2,7 @@
 
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { HealthBadge } from "@/components/projects/DeploymentHealth";
+import { DeletingBadge } from "@/components/projects/DeletingBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppHealth } from "@/lib/hooks";
 import { appUrlOf, cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ function AppState({ app }: { app: Deployment }) {
   const t = useTranslations("appPage.deploymentStatus");
   const live = app.provider_type === "kubernetes" && app.status === "running";
   const { health, loading } = useAppHealth(live ? app.id : null, 60_000);
+  if (app.status === "deleting") return <DeletingBadge />;
   if (!live) {
     return (
       <span

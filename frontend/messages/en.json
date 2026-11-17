@@ -35,7 +35,6 @@
     "links": {
       "label": "Links and help",
       "status": "Platform status",
-      "roadmap": "Roadmap",
       "docs": "Documentation",
       "adminGroup": "Admins only",
       "adminOnly": "{count, plural, one {# link reserved for admins} other {# links reserved for admins}}"
@@ -47,8 +46,7 @@
       "system": "System"
     },
     "profile": {
-      "myProfile": "My profile",
-      "accountSettings": "Account settings",
+      "account": "Account",
       "language": "Language",
       "logout": "Sign out",
       "roleAdmin": "Platform admin",
@@ -114,7 +112,8 @@
       "creatingTitle": "This project is still being created",
       "deletingTitle": "This project is being deleted",
       "createFailedTitle": "This project could not be created",
-      "deleteFailedTitle": "This project could not be deleted"
+      "deleteFailedTitle": "This project could not be deleted",
+      "appsDeleting": "{count, plural, one {# app deleting} other {# apps deleting}}"
     },
     "create": {
       "title": "Create a new project",
@@ -199,7 +198,6 @@
     "nav": {
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
-      "applications": "Applications",
       "app": "Overview",
       "release": "Release",
       "environments": "Environments",
@@ -399,9 +397,9 @@
       "platform": "Fixed share per application of the platform's shared services"
     },
     "dataFreshness": {
-      "real": "actual",
-      "simulated": "simulated",
-      "estimated": "estimated",
+      "real": "Actual",
+      "simulated": "Simulated",
+      "estimated": "Estimated",
       "estimateNote": "Part of the cost relies on a provisional price.",
       "updated": "updated {age}",
       "finalUntil": "final until {date}"
@@ -772,7 +770,8 @@
       "grade": "Grade",
       "appActions": "Actions",
       "appMandatory": "Mandatory",
-      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project."
+      "journalSoon": "The journal arrives in phase 2: deployments, secret reads, logins and denied flows, filtered to the project.",
+      "clearTier": "Clear {tier} filter"
     },
     "score": {
       "nothingToDo": "Nothing to do",
@@ -1079,6 +1078,7 @@
       }
     },
     "audit": {
+      "summaryError": "Summary unavailable",
       "kpi": {
         "actions": "Actions · {days} d",
         "people": "Active people",
@@ -1113,7 +1113,10 @@
         "refused": "refused"
       },
       "empty": "No events match these filters.",
-      "loadMore": "Load more",
+      "noMore": "No more events",
+      "newer": "Newer",
+      "older": "Older",
+      "page": "Page {page} · {size} events per page",
       "detail": {
         "title": "Event details",
         "close": "Close",
@@ -1327,7 +1330,7 @@
   "account": {
     "page": {
       "back": "Back to dashboard",
-      "title": "Account settings",
+      "title": "Account",
       "subtitle": "Manage your profile and preferences",
       "loading": "Loading profile…",
       "loadFailed": "Could not load your profile",
@@ -1406,6 +1409,7 @@
     "searchProjects": "Search a project...",
     "noProject": "No project found.",
     "back": "Back to the platform",
+    "platform": "Platform",
     "projects": "Projects",
     "newProject": "New project",
     "overview": "Overview",
@@ -1509,24 +1513,17 @@
     },
     "liveStats": "apps created through AI assistants this month, by {assistants, plural, one {# connected assistant} other {# connected assistants}}. Live figure.",
     "assistant": {
-      "asks": [
-        "Put a page online with the agenda of our next team event.",
-        "Give me a one-screen status of my projects this week.",
-        "Why is my app slow? Read its logs and tell me before changing anything."
-      ],
       "since": {
         "minutes": "{count} min ago",
         "hours": "{count} h ago",
         "days": "{count, plural, one {# day} other {# days}} ago"
       },
-      "copyHint": "Copy, then paste it in your assistant",
       "title": "Your AI assistant",
       "connectedText": "{count, plural, one {# app created} other {# apps created}} through an assistant · last action {since}",
       "emptyText": "Ask Claude, ChatGPT or Codex to create and release apps for you, with your rights.",
       "connectAnother": "Connect another",
       "connectOne": "Connect an assistant",
-      "waitingApproval": "{count} waiting for your approval",
-      "tryAsking": "Try asking:"
+      "waitingApproval": "{count} waiting for your approval"
     },
     "clients": {
       "claudeAi": {
@@ -1915,7 +1912,8 @@
       "unavailable": "The cluster does not allow this action right now",
       "asleep": "Wake the application before restarting it",
       "busy": "An operation is running on the application",
-      "protected": "Deletion protection is on"
+      "protected": "Deletion protection is on",
+      "imported": "Remove it from Settings"
     },
     "toasts": {
       "sleeping": "{name} is going to sleep",
@@ -2578,7 +2576,23 @@
         "slo": {
           "title": "SLO",
           "description": "Availability and latency targets of the app in prod."
+        },
+        "danger": {
+          "title": "Danger zone",
+          "description": "Actions that cannot be undone."
         }
+      },
+      "danger": {
+        "title": "Delete this app",
+        "hint": "Removes the app, its repo and its data.",
+        "delete": "Delete app",
+        "importTitle": "Remove this import",
+        "importHint": "Removes the import with all its apps, their repo link and data.",
+        "removeImport": "Remove import",
+        "noPermission": "You cannot remove imports",
+        "importFailed": "Could not load the import.",
+        "importMissing": "This app's import was not found",
+        "retry": "Retry"
       }
     }
   },
@@ -2681,7 +2695,10 @@
     "markAllRead": "Mark all as read",
     "empty": "No notifications yet.",
     "error": "Could not load notifications.",
-    "loadMore": "Load more",
+    "noMore": "No more notifications",
+    "newer": "Newer",
+    "older": "Older",
+    "page": "Page {page}",
     "unread": "Unread",
     "titles": {
       "deployment_succeeded": "{app} was deployed",
@@ -2807,6 +2824,10 @@
       "fix_restarts": "Check the logs",
       "add_readme": "Add a README",
       "expand_readme": "Expand the README"
+    },
+    "tooltips": {
+      "reliability": "Health now, −5 if restarting",
+      "documentation": "README at repo root"
     }
   },
   "projectSettings": {
@@ -2892,12 +2913,7 @@
       "costsForecast": "forecast {amount} at month end",
       "platform": "Platform",
       "nodesValue": "{up} / {total} nodes",
-      "cloudsHint": "{count, plural, =0 {public clouds off} one {# public cloud on} other {# public clouds on}}"
-    },
-    "infra": {
-      "title": "Infrastructure",
-      "unavailable": "Infrastructure state unavailable.",
-      "states": {
+      "cloud": {
         "up": "up",
         "down": "down",
         "starting": "starting",

@@ -776,6 +776,7 @@ export interface ActivityFilters {
   app?: string | null;
   days?: number;
   until?: string | null;
+  before_id?: string | null;
   include_reads?: boolean;
   notable_only?: boolean;
 }

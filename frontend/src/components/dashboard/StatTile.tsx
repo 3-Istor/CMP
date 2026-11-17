@@ -10,6 +10,7 @@ export function StatTile({
   hint,
   tone = "default",
   loading = false,
+  title,
 }: {
   href: string;
   icon: LucideIcon;
@@ -18,10 +19,12 @@ export function StatTile({
   hint?: React.ReactNode;
   tone?: "default" | "ok" | "warn" | "bad";
   loading?: boolean;
+  title?: string;
 }) {
   return (
     <Link
       href={href}
+      title={title}
       className="group rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-ring"
     >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">

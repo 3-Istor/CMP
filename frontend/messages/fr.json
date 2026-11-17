@@ -35,7 +35,6 @@
     "links": {
       "label": "Liens et aide",
       "status": "Statut de la plateforme",
-      "roadmap": "Roadmap",
       "docs": "Documentation",
       "adminGroup": "Réservé aux admins",
       "adminOnly": "{count, plural, one {# lien réservé aux admins} other {# liens réservés aux admins}}"
@@ -47,8 +46,7 @@
       "system": "Système"
     },
     "profile": {
-      "myProfile": "Mon profil",
-      "accountSettings": "Paramètres du compte",
+      "account": "Compte",
       "language": "Langue",
       "logout": "Se déconnecter",
       "roleAdmin": "Admin plateforme",
@@ -114,7 +112,8 @@
       "creatingTitle": "Ce projet est en cours de création",
       "deletingTitle": "Ce projet est en cours de suppression",
       "createFailedTitle": "Ce projet n'a pas pu être créé",
-      "deleteFailedTitle": "Ce projet n'a pas pu être supprimé"
+      "deleteFailedTitle": "Ce projet n'a pas pu être supprimé",
+      "appsDeleting": "{count, plural, one {# app en suppression} other {# apps en suppression}}"
     },
     "create": {
       "title": "Créer un nouveau projet",
@@ -199,7 +198,6 @@
     "nav": {
       "label": "Sections de l'application",
       "breadcrumb": "Fil d'Ariane",
-      "applications": "Applications",
       "app": "Vue d'ensemble",
       "release": "Release",
       "environments": "Environnements",
@@ -399,9 +397,9 @@
       "platform": "Part fixe par app des services communs de la plateforme"
     },
     "dataFreshness": {
-      "real": "réel",
-      "simulated": "simulé",
-      "estimated": "estimé",
+      "real": "Réel",
+      "simulated": "Simulé",
+      "estimated": "Estimé",
       "estimateNote": "Une partie des coûts repose sur un prix provisoire.",
       "updated": "màj {age}",
       "finalUntil": "définitif jusqu'au {date}"
@@ -772,7 +770,8 @@
       "grade": "Note",
       "appActions": "Actions",
       "appMandatory": "Obligatoires",
-      "journalSoon": "Le journal arrive avec la phase 2 : déploiements, lectures de secrets, connexions et flux refusés, filtrés sur le projet."
+      "journalSoon": "Le journal arrive avec la phase 2 : déploiements, lectures de secrets, connexions et flux refusés, filtrés sur le projet.",
+      "clearTier": "Retirer le filtre {tier}"
     },
     "score": {
       "nothingToDo": "Rien à faire",
@@ -1079,6 +1078,7 @@
       }
     },
     "audit": {
+      "summaryError": "Synthèse indisponible",
       "kpi": {
         "actions": "Actions · {days} j",
         "people": "Personnes actives",
@@ -1113,7 +1113,10 @@
         "refused": "refusé"
       },
       "empty": "Aucun événement pour ces filtres.",
-      "loadMore": "Charger plus",
+      "noMore": "Plus d'événements",
+      "newer": "Plus récent",
+      "older": "Plus ancien",
+      "page": "Page {page} · {size} événements par page",
       "detail": {
         "title": "Détail de l'événement",
         "close": "Fermer",
@@ -1327,7 +1330,7 @@
   "account": {
     "page": {
       "back": "Retour au tableau de bord",
-      "title": "Paramètres du compte",
+      "title": "Compte",
       "subtitle": "Gérez votre profil et vos préférences",
       "loading": "Chargement du profil…",
       "loadFailed": "Impossible de charger votre profil",
@@ -1406,6 +1409,7 @@
     "searchProjects": "Rechercher un projet...",
     "noProject": "Aucun projet trouvé.",
     "back": "Retour à la plateforme",
+    "platform": "Plateforme",
     "projects": "Projets",
     "newProject": "Nouveau projet",
     "overview": "Vue d'ensemble",
@@ -1509,24 +1513,17 @@
     },
     "liveStats": "apps créées via des assistants IA ce mois-ci, par {assistants, plural, one {# assistant connecté} other {# assistants connectés}}. Chiffre en direct.",
     "assistant": {
-      "asks": [
-        "Mettez en ligne une page avec le programme de notre prochain événement d'équipe.",
-        "Donnez-moi un état de mes projets, en une page, pour cette semaine.",
-        "Pourquoi mon app est-elle lente ? Lisez ses logs et dites-le-moi avant de rien modifier."
-      ],
       "since": {
         "minutes": "il y a {count} min",
         "hours": "il y a {count} h",
         "days": "il y a {count, plural, one {# jour} other {# jours}}"
       },
-      "copyHint": "Copier, puis coller dans votre assistant",
       "title": "Votre assistant IA",
       "connectedText": "{count, plural, one {# app créée} other {# apps créées}} via un assistant · dernière action {since}",
       "emptyText": "Demandez à Claude, ChatGPT ou Codex de créer et publier des applications pour vous, avec vos droits.",
       "connectAnother": "Connecter un autre assistant",
       "connectOne": "Connecter un assistant",
-      "waitingApproval": "{count} en attente de votre approbation",
-      "tryAsking": "Essayez :"
+      "waitingApproval": "{count} en attente de votre approbation"
     },
     "clients": {
       "claudeAi": {
@@ -1915,7 +1912,8 @@
       "unavailable": "Le cluster n'autorise pas cette action pour l'instant",
       "asleep": "Réveillez l'application avant de la redémarrer",
       "busy": "Opération en cours sur l'application",
-      "protected": "La protection contre la suppression est activée"
+      "protected": "La protection contre la suppression est activée",
+      "imported": "À retirer depuis les réglages"
     },
     "toasts": {
       "sleeping": "{name} est en cours de mise en veille",
@@ -2578,7 +2576,23 @@
         "slo": {
           "title": "SLO",
           "description": "Objectifs de disponibilité et de latence de l'app en prod."
+        },
+        "danger": {
+          "title": "Zone de danger",
+          "description": "Actions irréversibles."
         }
+      },
+      "danger": {
+        "title": "Supprimer cette app",
+        "hint": "Supprime l'app, son dépôt et ses données.",
+        "delete": "Supprimer l'app",
+        "importTitle": "Retirer cet import",
+        "importHint": "Retire l'import avec toutes ses apps, le lien du dépôt et les données.",
+        "removeImport": "Retirer l'import",
+        "noPermission": "Vous ne pouvez pas retirer d'imports",
+        "importFailed": "Impossible de charger l'import.",
+        "importMissing": "L'import de cette app est introuvable",
+        "retry": "Réessayer"
       }
     }
   },
@@ -2681,7 +2695,10 @@
     "markAllRead": "Tout marquer comme lu",
     "empty": "Aucune notification pour le moment.",
     "error": "Impossible de charger les notifications.",
-    "loadMore": "Charger plus",
+    "noMore": "Plus de notifications",
+    "newer": "Plus récent",
+    "older": "Plus ancien",
+    "page": "Page {page}",
     "unread": "Non lue",
     "titles": {
       "deployment_succeeded": "{app} a été déployée",
@@ -2807,6 +2824,10 @@
       "fix_restarts": "Consulter les logs",
       "add_readme": "Ajouter un README",
       "expand_readme": "Étoffer le README"
+    },
+    "tooltips": {
+      "reliability": "Santé actuelle, −5 si redémarrages",
+      "documentation": "README à la racine du dépôt"
     }
   },
   "projectSettings": {
@@ -2892,12 +2913,7 @@
       "costsForecast": "prévision {amount} en fin de mois",
       "platform": "Plateforme",
       "nodesValue": "{up} / {total} nœuds",
-      "cloudsHint": "{count, plural, =0 {clouds publics éteints} one {# cloud public allumé} other {# clouds publics allumés}}"
-    },
-    "infra": {
-      "title": "Infrastructure",
-      "unavailable": "État de l'infrastructure indisponible.",
-      "states": {
+      "cloud": {
         "up": "en ligne",
         "down": "éteint",
         "starting": "démarrage",

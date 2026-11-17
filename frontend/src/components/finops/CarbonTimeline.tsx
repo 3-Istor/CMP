@@ -111,7 +111,7 @@ export function CarbonTimeline({ data }: { data: FinopsCarbon["timeline"] }) {
             />
             <Line
               yAxisId="intensity"
-              type="monotone"
+              type="linear"
               dataKey="g_per_kwh"
               name={series[1].name}
               stroke={series[1].color}

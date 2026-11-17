@@ -5,6 +5,7 @@ import { useAppContext } from "@/components/projects/AppContext";
 import { AppSection } from "@/components/projects/AppFrame";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { DeploymentHistory } from "@/components/release/DeploymentHistory";
+import { NewReleaseButton } from "@/components/release/NewReleaseDialog";
 import { ReleaseTab } from "@/components/release/ReleaseTab";
 import { useTranslations } from "next-intl";
 
@@ -40,6 +41,11 @@ export default function AppDeliveryPage() {
       allowed={can("app.viewLogs") || (isKubernetes && can("release.view"))}
     >
       <div className="space-y-10">
+        {isKubernetes && can("release.operate") && (
+          <div className="flex justify-end">
+            <NewReleaseButton deploymentId={appId} />
+          </div>
+        )}
         {isKubernetes && can("release.view") && (
           <>
             <Section title={t("pipeline")} description={t("pipelineHint")}>

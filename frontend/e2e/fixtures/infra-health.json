@@ -1,4 +1,11 @@
 {
-  "openstack_hypervisors": [],
-  "clusters": []
+  "openstack_hypervisors": [
+    { "name": "hv1", "state": "up", "status": "enabled", "ip": "10.0.0.11" },
+    { "name": "hv2", "state": "up", "status": "enabled", "ip": "10.0.0.12" },
+    { "name": "hv3", "state": "up", "status": "enabled", "ip": "10.0.0.13" }
+  ],
+  "clusters": [
+    { "cloud": "aws", "state": "up" },
+    { "cloud": "gcp", "state": "up" }
+  ]
 }

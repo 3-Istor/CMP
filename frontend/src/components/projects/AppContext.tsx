@@ -2,6 +2,7 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDeployment } from "@/lib/api";
+import { useProjectContext } from "@/components/projects/ProjectContext";
 import { useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import { useTranslations } from "next-intl";
@@ -51,6 +52,7 @@ export function AppProvider({
 }) {
   const router = useRouter();
   const t = useTranslations("apps.context");
+  const { refreshApps } = useProjectContext();
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -88,13 +90,21 @@ export function AppProvider({
     return () => clearTimeout(timer);
   }, [current?.status, current?.name, projectName, router, t]);
 
+  // A GET that raced the backend's DELETING commit may leave a stale list row.
+  const status = current?.status;
+  useEffect(() => {
+    if (status === "deleting" || status === "deleted") void refreshApps();
+  }, [status, refreshApps]);
+
   const markDeleting = useCallback(() => {
     setDeployment((prev) =>
       prev
         ? { ...prev, status: "deleting", step_message: t("destroying") }
         : prev,
     );
-  }, [t]);
+    // Lists read the project's apps: refresh them so no stale "Running" stays.
+    void refreshApps();
+  }, [t, refreshApps]);
 
   const value = useMemo(
     () =>

@@ -7,6 +7,7 @@ import { AppIcon } from "@/components/app-icon/AppIcon";
 import { intlLocale } from "@/components/finops/format";
 
 import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
+import { DeletingBadge } from "@/components/projects/DeletingBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -76,11 +77,11 @@ export function AppCard({ app, projectName }: Props) {
   return (
     <Link
       href={`/projects/${projectName}/apps/${app.id}`}
-      className="group block"
+      className="group block min-w-0"
     >
       <Card className="h-full transition-shadow group-hover:shadow-md group-hover:border-primary/30">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-2">
+        <CardHeader className="grid-cols-[minmax(0,1fr)] pb-2">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <AppIcon
                 appId={app.id}
@@ -102,17 +103,21 @@ export function AppCard({ app, projectName }: Props) {
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <ScoreBadge card={card} />
-              <Badge
-                variant={STATUS_VARIANT[app.status]}
-                className={cn(
-                  "capitalize gap-1",
-                  app.status === "running" &&
-                    "border-green-600/30 bg-green-500/10 text-green-700 dark:text-green-400",
-                )}
-              >
-                <StatusIcon status={app.status} />
-                {t(`status.${app.status}`)}
-              </Badge>
+              {app.status === "deleting" ? (
+                <DeletingBadge />
+              ) : (
+                <Badge
+                  variant={STATUS_VARIANT[app.status]}
+                  className={cn(
+                    "capitalize gap-1",
+                    app.status === "running" &&
+                      "border-green-600/30 bg-green-500/10 text-green-700 dark:text-green-400",
+                  )}
+                >
+                  <StatusIcon status={app.status} />
+                  {t(`status.${app.status}`)}
+                </Badge>
+              )}
               <FavoriteToggle kind="app" id={app.id} />
             </div>
           </div>

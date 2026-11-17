@@ -43,7 +43,10 @@ export function ScoreCard({
         {(data?.criteria ?? []).map((criterion) => (
           <li key={criterion.key} className="space-y-1 py-2 first:pt-0 last:pb-0">
             <div className="flex items-baseline justify-between gap-4 text-sm">
-              <span className="font-medium">
+              <span
+                className="font-medium"
+                title={t.has(`tooltips.${criterion.key}`) ? t(`tooltips.${criterion.key}`) : undefined}
+              >
                 {t(`criteria.${criterion.key}`)}
               </span>
               <span className="font-mono tabular-nums">

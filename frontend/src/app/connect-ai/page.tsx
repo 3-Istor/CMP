@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { ArrowLeft, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
+import { ShieldCheck, Sparkles, UserCheck } from "lucide-react";
 
 import { ClientInstructions } from "@/components/agents/ClientInstructions";
 import { InstallButtons } from "@/components/agents/InstallButtons";
 import { Mascot } from "@/components/agents/Mascot";
-import { Logo } from "@/components/brand/Logo";
+import { PublicTopBar } from "./PublicTopBar";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("agents.meta");
@@ -32,20 +31,7 @@ export default async function ConnectAiPage() {
   const t = await getTranslations("agents.connectAi");
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/60">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-3">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <Logo className="h-7 w-7" />
-            <span className="font-heading font-semibold text-foreground">
-              CNP
-            </span>
-          </Link>
-        </div>
-      </header>
+      <PublicTopBar />
 
       <main className="mx-auto max-w-5xl px-6 py-12">
         <section className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">

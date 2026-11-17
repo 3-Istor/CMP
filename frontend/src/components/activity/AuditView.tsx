@@ -16,7 +16,7 @@ import type {
 } from "@/types";
 import { AlertTriangle, Download, Loader2, RefreshCw, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -40,6 +40,10 @@ import {
 import { FilterBar } from "./FilterBar";
 import { HeatmapCard, LoginsCard } from "./InsightCards";
 import { NativeSelect } from "./NativeSelect";
+
+const PAGE_SIZE = 100;
+
+type Cursor = { until: string | null; before_id: string | null };
 
 const TOOLTIP_STYLE = {
   borderRadius: 8,
@@ -317,28 +321,49 @@ export function AuditView({
   });
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
-  const [unavailable, setUnavailable] = useState<ActivitySource[]>([]);
   const [selected, setSelected] = useState<ActivityEvent | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [summaryError, setSummaryError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [more, setMore] = useState(true);
+  // Cursors of the pages before this one; page N has N - 1 of them.
+  const [back, setBack] = useState<Cursor[]>([]);
   const t = useTranslations("activity");
   const locale = useLocale();
 
-  const set = (patch: Partial<ActivityFilters>) =>
-    setFilters((f) => ({ ...f, ...patch, until: null }));
+  const set = (patch: Partial<ActivityFilters>) => {
+    setBack([]);
+    setFilters((f) => ({ ...f, ...patch, until: null, before_id: null }));
+  };
+
+  const [feedUnavailable, setFeedUnavailable] = useState<ActivitySource[]>([]);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  // The summary does not depend on the page; Refresh bumps reloadKey.
+  useEffect(() => {
+    let cancelled = false;
+    getActivitySummary(project, Math.min(filters.days ?? 7, 30))
+      .then((s) => {
+        if (cancelled) return;
+        setSummary(s);
+        setSummaryError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setSummaryError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, filters.days, reloadKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, feed] = await Promise.all([
-        getActivitySummary(project, Math.min(filters.days ?? 7, 30)),
-        getActivity(project, filters),
-      ]);
-      setSummary(s);
+      const feed = await getActivity(project, filters);
       setEvents(feed.events);
-      setUnavailable([...new Set([...s.unavailable, ...feed.unavailable])]);
-      setMore(feed.events.length >= 100);
+      setFeedUnavailable(feed.unavailable);
+      setMore(feed.events.length >= PAGE_SIZE);
       setError(null);
     } catch (e) {
       setError(e);
@@ -351,20 +376,25 @@ export function AuditView({
     load();
   }, [load]);
 
-  const loadMore = async () => {
-    if (!events?.length) return;
-    setLoading(true);
-    try {
-      const last = events[events.length - 1];
-      const feed = await getActivity(project, { ...filters, until: last.time });
-      const seen = new Set(events.map((e) => e.id));
-      setEvents([...events, ...feed.events.filter((e) => !seen.has(e.id))]);
-      setMore(feed.events.length >= 100);
-    } catch (e) {
-      setError(e);
-    } finally {
-      setLoading(false);
-    }
+  const unavailable = useMemo(
+    () => [...new Set([...(summary?.unavailable ?? []), ...feedUnavailable])],
+    [summary, feedUnavailable],
+  );
+
+  const older = () => {
+    const last = events?.[events.length - 1];
+    if (!last) return;
+    topRef.current?.scrollIntoView();
+    setBack((b) => [...b, { until: filters.until ?? null, before_id: filters.before_id ?? null }]);
+    setFilters((f) => ({ ...f, until: last.time, before_id: last.id }));
+  };
+
+  const newer = () => {
+    const prev = back[back.length - 1];
+    if (!prev) return;
+    topRef.current?.scrollIntoView();
+    setBack(back.slice(0, -1));
+    setFilters((f) => ({ ...f, ...prev }));
   };
 
   const actors = useMemo(() => {
@@ -422,11 +452,17 @@ export function AuditView({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20" />
-          ))}
-        </div>
+        summaryError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {t("audit.summaryError")}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-20" />
+            ))}
+          </div>
+        )
       )}
 
       <Card>
@@ -436,7 +472,7 @@ export function AuditView({
         <CardContent>
           {summary ? (
             <ActivityChart t={t} locale={locale} summary={summary} />
-          ) : (
+          ) : summaryError ? null : (
             <Skeleton className="h-48" />
           )}
         </CardContent>
@@ -553,7 +589,10 @@ export function AuditView({
             <Button
               variant="ghost"
               size="sm"
-              onClick={load}
+              onClick={() => {
+                setReloadKey((k) => k + 1);
+                load();
+              }}
               disabled={loading}
               title={t("common.refresh")}
             >
@@ -591,11 +630,12 @@ export function AuditView({
 
       <div className={cn("grid gap-4", selected && "lg:grid-cols-[1fr_22rem]")}>
         <div className="space-y-2">
+          <div ref={topRef} className="scroll-mt-4" />
           {events === null ? (
             [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)
           ) : events.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              {t("audit.empty")}
+              {back.length > 0 ? t("audit.noMore") : t("audit.empty")}
             </p>
           ) : (
             events.map((e) => (
@@ -607,16 +647,19 @@ export function AuditView({
               />
             ))
           )}
-          {events && events.length > 0 && more && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={loadMore}
-              disabled={loading}
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {t("audit.loadMore")}
-            </Button>
+          {events && (events.length > 0 || back.length > 0) && (
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <Button variant="outline" onClick={newer} disabled={loading || back.length === 0}>
+                {t("audit.newer")}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {loading && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
+                {t("audit.page", { page: back.length + 1, size: PAGE_SIZE })}
+              </span>
+              <Button variant="outline" onClick={older} disabled={loading || !more}>
+                {t("audit.older")}
+              </Button>
+            </div>
           )}
         </div>
         {selected && (
