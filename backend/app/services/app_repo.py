@@ -1,11 +1,14 @@
 """
 The GitHub repository an app's Day-2 tools may read and write.
 
-``github_repo_url`` is derived from the app name, not read back from GitHub, so
-a row only names the repository Terraform created for it once its apply went
-through: the repository resource fails on a name that already exists. Rows that
-never got there (failed, deleted, still deploying) are refused, as are URLs
-outside the platform org or not named after the app.
+For template apps, ``github_repo_url`` is derived from the app name, not read
+back from GitHub, so a row only names the repository Terraform created for it
+once its apply went through: the repository resource fails on a name that
+already exists. Rows that never got there (failed, deleted, still deploying)
+are refused, as are URLs outside the platform org or not named after the app.
+
+Imported apps (``import-*`` templates) name the customer's repository the
+import reads from: they are never bound, whatever the URL.
 """
 
 from app.core.config import settings
@@ -40,6 +43,9 @@ _BOUND_STATUSES = frozenset(
 )
 
 
+IMPORTED = "The app was imported: the platform does not manage its repository."
+
+
 class RepoNotBound(ValueError):
     """The app has no repository its tools may touch."""
 
@@ -59,10 +65,7 @@ def bound_repo(
     # An imported app's URL is the customer's repository, even when named
     # after the app: Day-2 tools must never write there.
     if template_id.startswith("import-"):
-        raise RepoNotBound(
-            "The app was imported: the platform does not manage its "
-            "repository."
-        )
+        raise RepoNotBound(IMPORTED)
     status = str(getattr(status, "value", status)).lower()
     if status not in _BOUND_STATUSES:
         raise RepoNotBound(

@@ -20,6 +20,7 @@ from app.models.environment import (
     VerificationRun,
 )
 from app.models.project import TargetCloud
+from app.routers import deployments as deployments_router
 from app.routers import environments as router
 from app.services.clusters import state
 from app.services.environments import (
@@ -738,6 +739,23 @@ class TestEnvironmentsApi:
 
         assert response.status_code == 409
         assert "AWS cluster is down" in response.json()["detail"]
+
+    def test_an_imported_app_cannot_turn_staging_on(self, client, db):
+        db.query(AppEnvironment).delete()
+        db.get(Deployment, 7).template_id = "import-service"
+        db.commit()
+
+        with mock.patch.object(
+            deployments_router, "assert_project_role", lambda *a: None
+        ), mock.patch.object(
+            router.activation, "_spawn", lambda coroutine: coroutine.close()
+        ):
+            response = client("dev").post(
+                "/api/deployments/7/environments/staging", json={}
+            )
+
+        assert response.status_code == 409
+        assert db.query(AppEnvironment).count() == 0
 
     def test_a_member_cannot_change_the_promotion_policy(self, client):
         response = client("dev").put(

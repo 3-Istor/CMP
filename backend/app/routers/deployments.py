@@ -475,7 +475,7 @@ def _get_kubernetes_deployment_or_404(
     """
     Fetch a Kubernetes deployment the caller may touch, raising
     appropriate HTTP errors if it doesn't exist, they lack the role, it is not
-    Kubernetes-type, or it has no GitHub repo linked.
+    Kubernetes-type, imported, or it has no GitHub repo linked.
     """
     deployment = _get_app_or_404(db, token, deployment_id, minimum)
 
@@ -484,6 +484,11 @@ def _get_kubernetes_deployment_or_404(
             status_code=400,
             detail="Day-2 config operations are only available for Kubernetes deployments.",
         )
+
+    # Imported rows carry the customer's repository URL: refused before any
+    # side effect (staging, promotions, config writes).
+    if deployment.template_id.startswith("import-"):
+        raise HTTPException(status_code=409, detail=app_repo.IMPORTED)
 
     if not deployment.github_repo_url:
         raise HTTPException(
