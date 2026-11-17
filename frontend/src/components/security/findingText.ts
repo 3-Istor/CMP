@@ -11,7 +11,10 @@ type Field = "title" | "detail" | "fix" | "location";
  */
 export function useFindingText() {
   const t = useTranslations("securityFindings");
-  return (finding: SecurityFinding, field: Field): string => {
+  return (
+    finding: Pick<SecurityFinding, "i18n"> & Partial<Record<Field, string | null>>,
+    field: Field,
+  ): string => {
     const entry = finding.i18n?.[field];
     if (entry && t.has(entry.key)) return t(entry.key, entry.params);
     return finding[field] ?? "";

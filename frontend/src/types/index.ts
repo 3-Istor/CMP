@@ -587,9 +587,13 @@ export type SecurityView = "developer" | "platform";
 
 export interface SecurityException {
   id: number;
+  project: string;
   app: string | null;
   fingerprint: string;
   rule: string;
+  title?: string | null;
+  i18n?: SecurityFinding["i18n"];
+  expired?: boolean;
   kind: "vulnerability" | "secret" | "other";
   status: "not_affected" | "false_positive" | "accepted_risk" | "revoked";
   justification: string | null;
@@ -617,6 +621,7 @@ export interface SecurityFinding {
   fix: string;
   location: string;
   link: string | null;
+  fix_pr?: string | null;
   raw: string;
   i18n?: Partial<
     Record<
@@ -802,7 +807,7 @@ export interface LogFilters {
   pod?: string | null;
   container?: string | null;
   search?: string | null;
-  level?: "error" | "warn" | null;
+  level?: "error" | "warn" | "info" | "debug" | null;
   since?: string | null;
   until?: string | null;
   limit?: number;

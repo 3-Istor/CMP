@@ -175,13 +175,14 @@ def exception_applies(
 
 
 def active_exceptions(
-    db: Session, project: str
+    db: Session, project: str, today: date
 ) -> dict[str, SecurityException]:
     rows = (
         db.query(SecurityException)
         .filter(
             SecurityException.project == project,
             SecurityException.revoked_at.is_(None),
+            SecurityException.expires_on >= today,
         )
         .order_by(SecurityException.created_at)
         .all()
@@ -208,7 +209,7 @@ def merged_findings(
     for row in query:
         groups[row.fingerprint].append(row)
 
-    exceptions = active_exceptions(db, project)
+    exceptions = active_exceptions(db, project, today)
     merged = []
     for rows in groups.values():
         lead = max(rows, key=lambda r: TIER_RANK[Tier(r.tier)])
