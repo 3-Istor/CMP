@@ -384,6 +384,7 @@ def test_restart_resumes_catalog_runs_and_fails_the_others(session_factory):
         app = read_app(session_factory, status.value)
         assert app.status == DeploymentStatus.PENDING
         assert app.step_message == "Resuming after a CMP restart."
+        assert app.resumed is True
         ids.append(app.id)
     assert resumed == ids
     for name in ("imported", "removing"):
@@ -391,6 +392,19 @@ def test_restart_resumes_catalog_runs_and_fails_the_others(session_factory):
         assert app.status == DeploymentStatus.FAILED
         assert "restart" in app.step_message
     assert read_app(session_factory, "up").status == DeploymentStatus.RUNNING
+
+
+def test_a_run_interrupted_after_its_resume_fails(session_factory):
+    add_app(session_factory, "again", DeploymentStatus.DEPLOYING)
+    with session_factory() as db:
+        db.query(Deployment).filter_by(name="again").one().resumed = True
+        db.commit()
+
+    assert project_status.fail_interrupted_runs() == []
+
+    app = read_app(session_factory, "again")
+    assert app.status == DeploymentStatus.FAILED
+    assert "restart" in app.step_message
 
 
 def test_bootstrap_commands_release_a_lock_left_by_a_dead_pod(tmp_path):

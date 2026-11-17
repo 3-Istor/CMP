@@ -1,7 +1,16 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    Integer,
+    String,
+    Text,
+    false,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -37,6 +46,11 @@ class Deployment(Base):
     )
     step_message: Mapped[str] = mapped_column(
         String(255), default="Initializing..."
+    )
+
+    # Set when a restart resumed the run; a second interruption fails it.
+    resumed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
     )
 
     # ── Provider Discriminator ────────────────────────────────────────────

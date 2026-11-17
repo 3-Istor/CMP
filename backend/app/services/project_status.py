@@ -112,9 +112,15 @@ def fail_interrupted_runs() -> list[int]:
                 # The import run resumes these itself.
                 app.status = DeploymentStatus.FAILED
                 app.step_message = "Deployment interrupted by a CMP restart."
+            elif app.resumed:
+                app.status = DeploymentStatus.FAILED
+                app.step_message = (
+                    "Deployment interrupted again by a CMP restart."
+                )
             else:
                 app.status = DeploymentStatus.PENDING
                 app.step_message = RESUME_MESSAGE
+                app.resumed = True
                 resumed.append(app.id)
         db.commit()
     return resumed
