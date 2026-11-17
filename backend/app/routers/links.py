@@ -79,4 +79,11 @@ async def get_app_links(
         role = assert_project_role(
             db, token, deployment.project_id, ProjectRole.GUEST
         ).role
-    return await run_in_threadpool(links.app_links, deployment, role)
+    try:
+        org = await grafana.org_id(deployment.project_id or "")
+    except Exception:  # pylint: disable=broad-exception-caught
+        # No org yet or Grafana unreachable: the link is left out.
+        org = None
+    return await run_in_threadpool(
+        links.app_links, deployment, role, None, org
+    )

@@ -1819,6 +1819,8 @@
   "links": {
     "argocd_project": "Argo CD",
     "argocd_component": "Argo CD",
+    "argocd_app": "Argo CD · tout",
+    "grafana_app": "Tableau Grafana",
     "status": "Statut",
     "offhours": "Mise en veille",
     "vault": "Vault",

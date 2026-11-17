@@ -441,6 +441,31 @@ def test_capabilities_say_what_is_configured(make):
     }
 
 
+def test_capabilities_link_the_app_dashboard(make):
+    client = make("member")
+
+    with mock.patch.object(
+        router.alerts_grafana, "org_id", mock.AsyncMock(return_value=7)
+    ):
+        body = _get(client, SHOP, "").json()
+
+    assert body["grafana_url"] == (
+        "https://grafana.3istor.com/d/cnp-app-signals"
+        "?orgId=7&var-app=web&var-namespace=shop-web"
+    )
+
+
+def test_capabilities_fall_back_to_grafana_without_an_org(make):
+    client = make("member")
+
+    with mock.patch.object(
+        router.alerts_grafana, "org_id", mock.AsyncMock(side_effect=OSError)
+    ):
+        body = _get(client, SHOP, "").json()
+
+    assert body["grafana_url"] == router.GRAFANA_BASE_URL
+
+
 def test_a_store_that_does_not_answer_is_a_502(make, fake):
     fake.answer = lambda r: httpx.Response(500)
     client = make("member")

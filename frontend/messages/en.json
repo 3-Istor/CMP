@@ -1819,6 +1819,8 @@
   "links": {
     "argocd_project": "Argo CD",
     "argocd_component": "Argo CD",
+    "argocd_app": "Argo CD · all",
+    "grafana_app": "Grafana dashboard",
     "status": "Status",
     "offhours": "Sleep schedule",
     "vault": "Vault",

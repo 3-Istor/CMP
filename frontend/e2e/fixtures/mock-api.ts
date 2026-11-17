@@ -17,6 +17,7 @@ import platformStatus from "./platform-status.json";
 import preferences from "./preferences.json";
 import projectApps from "./project-apps.json";
 import projectLinks from "./project-links.json";
+import appLinks from "./app-links.json";
 import projects from "./projects.json";
 import scorecard from "./scorecard.json";
 import security from "./security.json";
@@ -34,6 +35,7 @@ const ROUTES: Record<string, unknown> = {
   "/projects/": projects,
   "/projects/demo/apps": projectApps,
   "/projects/demo/links": projectLinks,
+  "/deployments/1/links": appLinks,
   "/deployments/": projectApps,
   "/deployments/1": projectApps[0],
   "/infra/health": infraHealth,

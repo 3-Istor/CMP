@@ -452,7 +452,9 @@ class TestAppLinks:
         body = client.get("/api/deployments/2/links").json()
 
         assert {link["id"] for link in body} == {
+            "argocd_app",
             "argocd_component",
+            "grafana_app",
             "github_repo",
             "github_actions",
         }
@@ -488,11 +490,41 @@ class TestAppLinks:
             for link in body
         )
 
-    def test_no_app_level_grafana_link_is_emitted(
+    def test_app_grafana_link_opens_the_app_dashboard(
         self, session_factory, keycloak, kube
     ):
         client = _client(session_factory, "admin")
 
+        link = _by_id(client.get("/api/deployments/1/links").json())[
+            "grafana_app"
+        ]
+
+        assert (link["url"], link["requires"]) == (
+            "https://grafana.3istor.com/d/cnp-app-signals"
+            "?orgId=5&var-app=web&var-namespace=shop-web",
+            "grafana_member",
+        )
+
+    def test_app_grafana_link_is_absent_when_the_org_does_not_exist(
+        self, session_factory, keycloak, kube, grafana_org
+    ):
+        grafana_org.side_effect = RuntimeError("no org")
+        client = _client(session_factory, "admin")
+
         body = client.get("/api/deployments/1/links").json()
 
-        assert not [link for link in body if "grafana" in link["id"]]
+        assert "grafana_app" not in _by_id(body)
+
+    def test_argocd_app_lists_the_applications_of_the_app(
+        self, session_factory, keycloak, kube
+    ):
+        client = _client(session_factory, "admin")
+
+        link = _by_id(client.get("/api/deployments/1/links").json())[
+            "argocd_app"
+        ]
+
+        assert link["url"] == (
+            "https://argocd.3istor.com/applications?proj=shop"
+            "&labels=cnp.3istor.com%2Fapp%3Dweb"
+        )

@@ -25,7 +25,9 @@ from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, ProviderType
 from app.routers.deployments import _get_app_or_404
 from app.routers.observability import SloRead, slo_read
+from app.services import alerts_grafana
 from app.services import app_overview as overview
+from app.services import links
 from app.services.authz import assert_project_role, is_cnp_admin, is_finops
 from app.services.grafana_service import GRAFANA_BASE_URL
 from app.services.keycloak_service import get_current_user
@@ -279,15 +281,24 @@ class AppCosts(BaseModel):
 
 
 @router.get("/{deployment_id}/observability", response_model=Capabilities)
-def get_capabilities(
+async def get_capabilities(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> Capabilities:
     """Which tabs have a store behind them."""
-    _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id)
+    try:
+        org = await alerts_grafana.org_id(scope.project)
+    except Exception:  # pylint: disable=broad-exception-caught
+        # No org yet or Grafana unreachable: link the Grafana home.
+        org = None
     return Capabilities(
         **stores.capabilities(),
         silence_max_hours=settings.OBS_SILENCE_MAX_HOURS,
-        grafana_url=GRAFANA_BASE_URL,
+        grafana_url=(
+            GRAFANA_BASE_URL
+            if org is None
+            else links.grafana_app_url(org, scope.app, scope.namespace)
+        ),
     )
 
 

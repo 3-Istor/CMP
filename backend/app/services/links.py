@@ -18,6 +18,7 @@ from app.services import app_security_data as security_data
 from app.services.environments import layout
 from app.services.grafana_service import GRAFANA_BASE_URL
 from app.services.kube_client import KubeUnavailableError, kube_list
+from app.services.observability.grafana_project import APP_DASHBOARD_UID
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,13 @@ def vault_app_url(project: str, app: str) -> str:
 
 def argocd_application_url(name: str) -> str:
     return f"{ARGOCD_URL}/applications/argocd/{name}?resource="
+
+
+def grafana_app_url(org: int, app: str, namespace: str) -> str:
+    return (
+        f"{GRAFANA_BASE_URL}/d/{APP_DASHBOARD_UID}?orgId={org}"
+        f"&var-app={quote(app)}&var-namespace={quote(namespace)}"
+    )
 
 
 def repo_url(github_repo_url: str) -> str:
@@ -122,12 +130,42 @@ def _repo_links(deployment: Deployment) -> list[Link]:
 
 
 def app_links(
-    deployment: Deployment, role: ProjectRole, names: list[str] | None = None
+    deployment: Deployment,
+    role: ProjectRole,
+    names: list[str] | None = None,
+    grafana_org: int | None = None,
 ) -> list[Link]:
     project = deployment.project_id or ""
     names = application_names(deployment) if names is None else names
     prefix = f"{project}-{deployment.name}-"
+    label = quote(f"cnp.3istor.com/app={deployment.name}", safe="")
     result = [
+        Link(
+            id="argocd_app",
+            label_key="links.argocd_app",
+            url=f"{ARGOCD_URL}/applications?proj={project}&labels={label}",
+            group="view",
+            min_role=ProjectRole.MEMBER,
+            app=deployment.name,
+        )
+    ]
+    if grafana_org is not None:
+        result.append(
+            Link(
+                id="grafana_app",
+                label_key="links.grafana_app",
+                url=grafana_app_url(
+                    grafana_org,
+                    deployment.name,
+                    layout.namespace(project, deployment.name, "prod"),
+                ),
+                group="view",
+                min_role=ProjectRole.MEMBER,
+                requires="grafana_member",
+                app=deployment.name,
+            )
+        )
+    result.extend(
         Link(
             id="argocd_component",
             label_key="links.argocd_component",
@@ -138,7 +176,7 @@ def app_links(
             app=deployment.name,
         )
         for name in names
-    ]
+    )
     result.append(
         Link(
             id="vault",
