@@ -57,7 +57,7 @@ export function PendingApprovals({ username }: { username: string }) {
                 <tr>
                   <th className="pb-2 pr-3 font-medium">{t("approvals.project")}</th>
                   <th className="pb-2 pr-3 font-medium">{t("approvals.finding")}</th>
-                  <th className="pb-2 pr-3 font-medium">{t("approvals.by")}</th>
+                  <th className="hidden pb-2 pr-3 font-medium sm:table-cell">{t("approvals.by")}</th>
                   <th className="pb-2" />
                 </tr>
               </thead>
@@ -79,9 +79,9 @@ export function PendingApprovals({ username }: { username: string }) {
                         · {t(`exceptionStatus.${e.status}`)}
                       </span>
                     </td>
-                    <td className="py-2 pr-3">{e.author}</td>
+                    <td className="hidden py-2 pr-3 sm:table-cell">{e.author}</td>
                     <td className="py-2">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
                         {e.author !== username && (
                           <Button
                             size="sm"

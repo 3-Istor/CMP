@@ -166,7 +166,7 @@ export function ExceptionsList({
                       {t("exceptions.approve")}
                     </Button>
                   )}
-                {(e.author === username || canAdmin || canReview) && (
+                {!e.expired && (e.author === username || canAdmin || canReview) && (
                   <Button
                     size="sm"
                     variant="outline"

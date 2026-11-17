@@ -3008,7 +3008,7 @@
       },
       "DS-0026": {
         "title": "Pas de HEALTHCHECK",
-        "fix": "Ajoute un `HEALTHCHECK` au Dockerfile."
+        "fix": "Ajouter un `HEALTHCHECK` au Dockerfile."
       }
     },
     "location": {
@@ -3024,7 +3024,7 @@
       "backup-disabled": {
         "title": "Base sans sauvegarde",
         "detail": "Une suppression ou une erreur serait définitive.",
-        "fix": "Active la sauvegarde dans Données › Sauvegardes."
+        "fix": "Activer la sauvegarde dans Données › Sauvegardes."
       },
       "backup-failing": {
         "title": "Sauvegarde activée mais en échec",
@@ -3062,7 +3062,7 @@
     "workflowMissing": {
       "title": "Workflow de sécurité absent du repo",
       "detail": "Plus aucun scan des secrets ni des dépendances ne tourne.",
-      "fix": "Restaure .github/workflows/security.yml depuis le modèle."
+      "fix": "Restaurer .github/workflows/security.yml depuis le modèle."
     },
     "lockedDrift": {
       "title": "Réglage imposé par l'admin modifié dans le repo",
