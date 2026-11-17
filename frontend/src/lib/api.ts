@@ -147,9 +147,10 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
 // sidebar and the page both load projects/deployments on mount).
 const _inflight = new Map<string, Promise<unknown>>();
 
-// Recent GET answers, stamped with the time their request STARTED so a poller
-// whose interval is I sees age == I at its next tick and refetches.
+// Recent GET answers, stamped with the time their request STARTED: a poller
+// reads again when the answer it holds reaches its interval (hooks.ts pollDue).
 const _answers = new Map<string, { at: number; data: unknown }>();
+const _stamps = new WeakMap<object, number>();
 let _mutatedAt = 0;
 
 /** The last stored answer for a path, whatever its age (initial hook state). */
@@ -161,6 +162,18 @@ export function forgetAnswer(path: string) {
   _answers.delete(path);
 }
 
+/** When the request behind a cached GET answer started, if it was one. */
+export function answerStamp(data: unknown): number | undefined {
+  return typeof data === "object" && data !== null ? _stamps.get(data) : undefined;
+}
+
+/** A mutation may change any list: the next read of every answer refetches. */
+function markAnswersStale() {
+  for (const answer of _answers.values()) answer.at = -Infinity;
+  _inflight.clear();
+  _mutatedAt = Date.now();
+}
+
 /** GET served from the last answer when younger than maxAgeMs, else fetched. */
 export function cachedGet<T>(path: string, maxAgeMs: number): Promise<T> {
   const hit = _answers.get(path);
@@ -169,9 +182,12 @@ export function cachedGet<T>(path: string, maxAgeMs: number): Promise<T> {
   }
   const startedAt = Date.now();
   return request<T>(path).then((data) => {
+    // A joiner of an in-flight request gets the same object: keep the first stamp.
+    if (answerStamp(data) !== undefined) return data;
     // Skip an answer older than a stored one, or from before a mutation.
     if (startedAt >= _mutatedAt && startedAt >= (_answers.get(path)?.at ?? 0)) {
       _answers.set(path, { at: startedAt, data });
+      if (typeof data === "object" && data !== null) _stamps.set(data, startedAt);
     }
     return data;
   });
@@ -181,10 +197,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
   if (method !== "GET" || options?.body) {
     const result = await doRequest<T>(path, options);
-    // A mutation may change any list: drop every shared answer.
-    _answers.clear();
-    _inflight.clear();
-    _mutatedAt = Date.now();
+    markAnswersStale();
     return result;
   }
 
@@ -451,9 +464,12 @@ export const createProject = (
     body: JSON.stringify({ project_name, target_cloud }),
   });
 
+export const projectAppsPath = (project_name: string) =>
+  `/projects/${project_name}/apps`;
+
 export const getProjectApps = (project_name: string, maxAgeMs = 0) =>
   cachedGet<import("@/types").Deployment[]>(
-    `/projects/${project_name}/apps`,
+    projectAppsPath(project_name),
     maxAgeMs,
   );
 
@@ -1484,6 +1500,7 @@ export async function uploadAppIcon(
     body: form,
   });
   if (!res.ok) throw new ApiError(res.status, await res.text());
+  markAnswersStale();
   return res.json();
 }
 

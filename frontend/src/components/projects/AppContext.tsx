@@ -1,7 +1,7 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { getDeployment } from "@/lib/api";
+import { cachedAnswer, getDeployment, projectAppsPath } from "@/lib/api";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
@@ -52,10 +52,14 @@ export function AppProvider({
 }) {
   const router = useRouter();
   const t = useTranslations("apps.context");
-  const { apps, refreshApps } = useProjectContext();
-  // The project's list row shows the page at once; getDeployment still refreshes it.
+  const { refreshApps } = useProjectContext();
+  // The project's list row (kept fresh by the sidebar) shows the page at once;
+  // getDeployment still refreshes it.
   const [deployment, setDeployment] = useState<Deployment | null>(
-    () => apps.find((a) => a.id === appId) ?? null,
+    () =>
+      cachedAnswer<Deployment[]>(projectAppsPath(projectName))?.find(
+        (a) => a.id === appId,
+      ) ?? null,
   );
   const [loading, setLoading] = useState(!deployment);
 

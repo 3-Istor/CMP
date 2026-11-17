@@ -41,6 +41,7 @@ const ROUTES: Record<string, unknown> = {
   "/infra/deployments/1/health": appHealth,
   "/infra/deployments/health": { "1": appHealth },
   "/finops/summary": finopsOverview.summary,
+  "/security/overview": [],
   "/activity/platform": platformStatus,
   "/finops/overview": finopsOverview,
   "/finops/meta": finopsMeta,

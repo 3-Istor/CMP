@@ -3,6 +3,7 @@
 import type { Deployment, Project } from "@/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    answerStamp,
     cachedAnswer,
     forgetAnswer,
     getAppsHealth,
@@ -15,6 +16,27 @@ import { can, canAsPlatform, type Capability } from "./permissions";
 import { usePlatformRoles } from "./usePlatformRoles";
 
 const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
+
+/**
+ * Run `read` now, then again whenever the answer in hand reaches `intervalMs`
+ * of age; reads reuse a newer answer another poller fetched meanwhile, so the
+ * shown data is never older than the interval. Returns the stop function.
+ */
+function pollDue(read: () => Promise<unknown>, intervalMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  const run = async () => {
+    const data = await read();
+    if (stopped || intervalMs <= 0) return;
+    const at = answerStamp(data) ?? Date.now();
+    timer = setTimeout(run, Math.max(0, at + intervalMs - Date.now()));
+  };
+  void run();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+}
 
 /** Poll a single deployment until it reaches a terminal state. */
 export function useDeploymentPolling(
@@ -90,27 +112,24 @@ export function useDeploymentsList(activeMs = 5000, idleMs = activeMs) {
     try {
       const data = await getDeployments(maxAgeMs);
       setDeployments(data);
+      return data;
     } catch {
       // Backend offline - silently keep existing state
     } finally {
       setLoading(false);
     }
   }, []);
-  const refresh = useCallback(() => load(0), [load]);
+  const refresh = useCallback(async () => {
+    await load(0);
+  }, [load]);
 
   const hasActive = deployments.some((d) =>
     ACTIVE_DEPLOYMENT_STATUSES.has(d.status),
   );
   const intervalMs = hasActive ? activeMs : idleMs;
 
-  useEffect(() => {
-    const tick = () => load(intervalMs);
-    tick();
-    // Don't poll if interval is 0 or negative (manual refresh only)
-    if (intervalMs <= 0) return;
-    const timer = setInterval(tick, intervalMs);
-    return () => clearInterval(timer);
-  }, [load, intervalMs]);
+  // An interval of 0 or less reads once (manual refresh only).
+  useEffect(() => pollDue(() => load(intervalMs), intervalMs), [load, intervalMs]);
 
   return { deployments, loading, refresh };
 }
@@ -162,6 +181,7 @@ export function useAppHealth(deploymentId: number | null, intervalMs = 5000) {
         const data = await getAppHealth(deploymentId, maxAgeMs);
         setHealth(data);
         setError(null);
+        return data;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch health");
       } finally {
@@ -170,53 +190,48 @@ export function useAppHealth(deploymentId: number | null, intervalMs = 5000) {
     },
     [deploymentId],
   );
-  const refresh = useCallback(() => load(0), [load]);
+  const refresh = useCallback(async () => {
+    await load(0);
+  }, [load]);
 
   useEffect(() => {
     if (!deploymentId) {
       setLoading(false);
       return;
     }
-    const tick = () => load(intervalMs);
-    tick();
-    if (intervalMs <= 0) return;
-    const timer = setInterval(tick, intervalMs);
-    return () => clearInterval(timer);
+    return pollDue(() => load(intervalMs), intervalMs);
   }, [load, intervalMs, deploymentId]);
 
   return { health, loading, error, refresh };
 }
 
 /** Health of several apps in one polled call; no request when `ids` is empty. */
-export function useAppsHealth(ids: number[], intervalMs = 60_000) {
+export function useAppsHealth(ids: number[], intervalMs: number) {
   const [health, setHealth] = useState<
     Record<string, import("@/types").AppHealthResponse>
   >({});
-  const [loading, setLoading] = useState(ids.length > 0);
   const key = ids.join(",");
+  // Loading until the first answer for this set of ids, like one row's hook.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!key) {
-      setLoading(false);
-      return;
-    }
+    if (!key) return;
     const wanted = key.split(",").map(Number);
-    const tick = async () => {
+    const read = async () => {
       try {
-        setHealth(await getAppsHealth(wanted, intervalMs));
+        const data = await getAppsHealth(wanted, intervalMs);
+        setHealth(data);
+        return data;
       } catch {
         // Badges fall back to "unknown", like a failed single-app call.
       } finally {
-        setLoading(false);
+        setLoadedKey(key);
       }
     };
-    void tick();
-    if (intervalMs <= 0) return;
-    const timer = setInterval(tick, intervalMs);
-    return () => clearInterval(timer);
+    return pollDue(read, intervalMs);
   }, [key, intervalMs]);
 
-  return { health, loading };
+  return { health, loading: key !== "" && loadedKey !== key };
 }
 
 // ── Projects cache ──────────────────────────────────────────────────────────
@@ -260,6 +275,7 @@ export function useProjects(intervalMs = 0) {
       setProjects(data);
       setError(null);
       initialLoadDone.current = true;
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch projects");
     } finally {
@@ -269,13 +285,16 @@ export function useProjects(intervalMs = 0) {
 
   // Bypasses the cache: callers reach for refresh() precisely because they
   // just changed something.
-  const refresh = useCallback(() => load(0), [load]);
+  const refresh = useCallback(async () => {
+    await load(0);
+  }, [load]);
 
   useEffect(() => {
-    void load(PROJECTS_TTL_MS);
-    if (intervalMs <= 0) return;
-    const timer = setInterval(() => load(intervalMs), intervalMs);
-    return () => clearInterval(timer);
+    if (intervalMs <= 0) {
+      void load(PROJECTS_TTL_MS);
+      return;
+    }
+    return pollDue(() => load(Math.min(PROJECTS_TTL_MS, intervalMs)), intervalMs);
   }, [load, intervalMs]);
 
   return { projects, loading, error, refresh };
@@ -341,6 +360,7 @@ export function useProjectApps(projectName: string | null, pollMs = 0) {
         setApps(data);
         setError(null);
         initialLoadDone.current = true;
+        return data;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch apps");
       } finally {
@@ -349,7 +369,9 @@ export function useProjectApps(projectName: string | null, pollMs = 0) {
     },
     [projectName],
   );
-  const refresh = useCallback(() => load(0), [load]);
+  const refresh = useCallback(async () => {
+    await load(0);
+  }, [load]);
 
   useEffect(() => {
     if (!projectName) {
@@ -357,10 +379,7 @@ export function useProjectApps(projectName: string | null, pollMs = 0) {
       return;
     }
     initialLoadDone.current = false; // reset on projectName change
-    void load(pollMs);
-    if (pollMs <= 0) return;
-    const timer = setInterval(() => load(pollMs), pollMs);
-    return () => clearInterval(timer);
+    return pollDue(() => load(pollMs), pollMs);
   }, [load, projectName, pollMs]);
 
   return { apps, loading, error, refresh };
@@ -661,17 +680,17 @@ export function useSecurityOverview(intervalMs = 120000) {
   >([]);
 
   useEffect(() => {
-    const tick = async () => {
+    const read = async () => {
       try {
         const { getSecurityOverview } = await import("./api");
-        setOverview(await getSecurityOverview(intervalMs));
+        const data = await getSecurityOverview(intervalMs);
+        setOverview(data);
+        return data;
       } catch {
         // Badges are a convenience: the security page reports its own errors.
       }
     };
-    void tick();
-    const timer = setInterval(tick, intervalMs);
-    return () => clearInterval(timer);
+    return pollDue(read, intervalMs);
   }, [intervalMs]);
 
   return overview;
