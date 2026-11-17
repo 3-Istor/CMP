@@ -637,6 +637,29 @@ def test_an_import_deploy_invalidates_the_cached_topology(client, world):
     assert world.record_reads == 2
 
 
+def test_concurrent_fresh_reads_share_one_build(monkeypatch):
+    builds = []
+
+    async def slow_build(_db, project):
+        builds.append(project)
+        await asyncio.sleep(0.01)
+        return {"project": project}
+
+    monkeypatch.setattr(topology, "build", slow_build)
+
+    async def three_refreshes():
+        return await asyncio.gather(
+            *(
+                topology.cached_build(None, "storm", fresh=True)
+                for _ in range(3)
+            )
+        )
+
+    results = asyncio.run(three_refreshes())
+
+    assert (builds, results) == (["storm"], [{"project": "storm"}] * 3)
+
+
 def test_a_build_overlapping_an_invalidation_is_not_cached():
     generation = topology_cache.generation("p")
     topology_cache.invalidate("p")

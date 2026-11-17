@@ -411,6 +411,19 @@ async def cached_build(db: Session, project: str, fresh: bool = False) -> dict:
     cached = None if fresh else topology_cache.get(project)
     if cached is not None:
         return cached
+    # One build per project at a time: concurrent reads and refreshes share it.
+    task = _BUILDS.get(project)
+    if task is None:
+        task = asyncio.ensure_future(_build_and_cache(db, project))
+        _BUILDS[project] = task
+        task.add_done_callback(lambda _: _BUILDS.pop(project, None))
+    return await asyncio.shield(task)
+
+
+_BUILDS: dict[str, asyncio.Future] = {}
+
+
+async def _build_and_cache(db: Session, project: str) -> dict:
     generation = topology_cache.generation(project)
     topology = await build(db, project)
     topology_cache.put(project, topology, generation)
