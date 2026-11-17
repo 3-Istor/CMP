@@ -113,9 +113,26 @@
       "deletingTitle": "Ce projet est en cours de suppression",
       "createFailedTitle": "Ce projet n'a pas pu être créé",
       "deleteFailedTitle": "Ce projet n'a pas pu être supprimé",
-      "appsDeleting": "{count, plural, one {# app en suppression} other {# apps en suppression}}"
+      "appsDeleting": "{count, plural, one {# app en suppression} other {# apps en suppression}}",
+      "healthy": "Saine",
+      "down": "{count} en panne",
+      "pending": "{count} en attente",
+      "apps": "{count, plural, one {# app} other {# apps}}",
+      "healthyCount": "{count, plural, one {# saine} other {# saines}}",
+      "security": "Sécurité {grade}",
+      "alerts": "{count, plural, one {# alerte} other {# alertes}}"
     },
     "create": {
+      "source": "Partir de",
+      "sourceEmpty": "Projet vide",
+      "sourceRepo": "Depuis un dépôt",
+      "repo": "Dépôt",
+      "repoNone": "Aucun dépôt",
+      "repoLink": "Lier GitHub",
+      "repoOff": "Désactivé",
+      "waiting": "Création du projet…",
+      "repoFailed": "Les dépôts n'ont pas pu être chargés",
+      "failed": "Le projet n'a pas pu être créé",
       "title": "Créer un nouveau projet",
       "name": "Nom du projet",
       "namePlaceholder": "mon-equipe",
@@ -185,6 +202,14 @@
     }
   },
   "apps": {
+    "env": {
+      "prod": "Prod",
+      "staging": "Staging",
+      "openApp": "Ouvrir l'app",
+      "newTab": "s'ouvre dans un nouvel onglet",
+      "openAppLabel": "Ouvrir l'app :",
+      "stagingOf": "{app} · staging"
+    },
     "nav": {
       "label": "Sections de l'application",
       "breadcrumb": "Fil d'Ariane",
@@ -1844,6 +1869,8 @@
   "links": {
     "argocd_project": "Argo CD",
     "argocd_component": "Argo CD",
+    "argocd_app": "Argo CD · tout",
+    "grafana_app": "Tableau Grafana",
     "status": "Statut",
     "offhours": "Mise en veille",
     "vault": "Vault",
@@ -1917,7 +1944,6 @@
       "admin": "Admin"
     },
     "toolsEmpty": "Aucun outil disponible",
-    "openApp": "Ouvrir l'application",
     "more": "Plus d'actions",
     "refresh": "Actualiser",
     "refreshed": "Données actualisées",
@@ -2924,8 +2950,7 @@
       "project": "Projet",
       "state": "État",
       "url": "Adresse",
-      "empty": "Aucune application pour l'instant.",
-      "openApp": "Ouvrir {name}, nouvel onglet"
+      "empty": "Aucune application pour l'instant."
     },
     "stats": {
       "apps": "Applications",

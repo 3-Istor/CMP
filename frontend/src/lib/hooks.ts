@@ -1,11 +1,12 @@
 "use client";
 
-import type { Deployment, Project } from "@/types";
+import type { Deployment, Project, ProjectHealth } from "@/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     getDeployments,
     getProjectApps,
     getProjects,
+    getProjectsHealth,
 } from "./api";
 import { can, canAsPlatform, type Capability } from "./permissions";
 import { usePlatformRoles } from "./usePlatformRoles";
@@ -567,6 +568,30 @@ export function useProjectMembers(projectName: string | null) {
   }, [refresh, projectName]);
 
   return { members, guestsSupported, loading, error, refresh };
+}
+
+/** Health of every visible project by name; the home polls every 30 s, so does this. */
+export function useProjectsHealth(intervalMs = 30_000) {
+  const [health, setHealth] = useState<Record<string, ProjectHealth>>({});
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      getProjectsHealth()
+        .then((list) => {
+          if (alive) setHealth(Object.fromEntries(list.map((h) => [h.project, h])));
+        })
+        // Cards are a convenience: a failed refresh keeps the last value.
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, intervalMs);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [intervalMs]);
+
+  return health;
 }
 
 /** Security grade of every visible project, for badges. Polls slowly. */

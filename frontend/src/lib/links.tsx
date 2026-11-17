@@ -18,6 +18,8 @@ import { Github } from "@/components/icons/Github";
 const ICONS: Record<string, ComponentType<{ className?: string }>> = {
   argocd_project: FileCode,
   argocd_component: FileCode,
+  argocd_app: FileCode,
+  grafana_app: BarChart3,
   status: Activity,
   offhours: AlarmClock,
   vault: Vault,

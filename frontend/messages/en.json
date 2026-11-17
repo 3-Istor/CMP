@@ -113,9 +113,26 @@
       "deletingTitle": "This project is being deleted",
       "createFailedTitle": "This project could not be created",
       "deleteFailedTitle": "This project could not be deleted",
-      "appsDeleting": "{count, plural, one {# app deleting} other {# apps deleting}}"
+      "appsDeleting": "{count, plural, one {# app deleting} other {# apps deleting}}",
+      "healthy": "Healthy",
+      "down": "{count} down",
+      "pending": "{count} pending",
+      "apps": "{count, plural, one {# app} other {# apps}}",
+      "healthyCount": "{count} healthy",
+      "security": "Security {grade}",
+      "alerts": "{count, plural, one {# alert} other {# alerts}}"
     },
     "create": {
+      "source": "Start from",
+      "sourceEmpty": "Empty project",
+      "sourceRepo": "From a repository",
+      "repo": "Repository",
+      "repoNone": "No repository",
+      "repoLink": "Link GitHub",
+      "repoOff": "Off",
+      "waiting": "Creating the project…",
+      "repoFailed": "Repositories could not be loaded",
+      "failed": "The project could not be created",
       "title": "Create a new project",
       "name": "Project name",
       "namePlaceholder": "my-team",
@@ -185,6 +202,14 @@
     }
   },
   "apps": {
+    "env": {
+      "prod": "Prod",
+      "staging": "Staging",
+      "openApp": "Open app",
+      "newTab": "opens in a new tab",
+      "openAppLabel": "Open app:",
+      "stagingOf": "{app} · staging"
+    },
     "nav": {
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
@@ -1844,6 +1869,8 @@
   "links": {
     "argocd_project": "Argo CD",
     "argocd_component": "Argo CD",
+    "argocd_app": "Argo CD · all",
+    "grafana_app": "Grafana dashboard",
     "status": "Status",
     "offhours": "Sleep schedule",
     "vault": "Vault",
@@ -1917,7 +1944,6 @@
       "admin": "Admin"
     },
     "toolsEmpty": "No tools available",
-    "openApp": "Open application",
     "more": "More actions",
     "refresh": "Refresh",
     "refreshed": "Data refreshed",
@@ -2924,8 +2950,7 @@
       "project": "Project",
       "state": "State",
       "url": "Address",
-      "empty": "No application yet.",
-      "openApp": "Open {name}, new tab"
+      "empty": "No application yet."
     },
     "stats": {
       "apps": "Applications",

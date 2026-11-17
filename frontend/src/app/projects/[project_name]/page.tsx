@@ -9,6 +9,7 @@ import { ImportsList } from "@/components/imports/ImportsList";
 import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { OpenAppMenu } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
@@ -178,6 +179,7 @@ export default function ProjectPage() {
               <Badge variant="outline" className="font-mono text-xs">
                 {t("appCount", { count: apps.length })}
               </Badge>
+              <OpenAppMenu apps={apps} />
               {canViewObservability && <ToolsMenu links={links} />}
               {canImport && (
                 <Link

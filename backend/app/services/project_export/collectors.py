@@ -267,8 +267,15 @@ async def collect_repos(
     """
     org_prefix = f"https://github.com/{settings.GITHUB_ORG}/".lower()
     listing = []
+    # An imported repository was reached with its importer's own GitHub
+    # access: it is neither copied nor listed.
     urls = sorted(
-        {a["github_repo_url"] for a in apps if a.get("github_repo_url")}
+        {
+            a["github_repo_url"]
+            for a in apps
+            if a.get("github_repo_url")
+            and not (a.get("template_id") or "").startswith("import-")
+        }
     )
     owned = [
         url

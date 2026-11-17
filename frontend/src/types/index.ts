@@ -25,6 +25,7 @@ export interface Deployment {
   status: DeploymentStatus;
   step_message: string;
   terraform_outputs: string | null; // JSON string
+  staging_url?: string | null;
   resource_count: number | null;
   created_at: string;
   updated_at: string;
@@ -41,6 +42,17 @@ export interface Deployment {
 }
 
 // ── Projects (Phase 4) ────────────────────────────────────────────────────────
+
+/** Apps and Argo CD health of a project; null when Argo or Alertmanager is unreadable. */
+export interface ProjectHealth {
+  project: string;
+  apps: number;
+  healthy: number;
+  down: number;
+  health: string | null;
+  sync: string | null;
+  alerts: number | null;
+}
 
 /**
  * A user's role on one project, strongest first.

@@ -6,6 +6,7 @@ import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { intlLocale } from "@/components/finops/format";
 
+import { EnvLinks } from "@/components/projects/EnvLinks";
 import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { DeletingBadge } from "@/components/projects/DeletingBadge";
 import { Badge } from "@/components/ui/badge";
@@ -142,9 +143,14 @@ export function AppCard({ app, projectName }: Props) {
             </div>
           )}
 
-          {app.status === "running" && appUrlOf(app.terraform_outputs) && (
-            <p className="truncate text-xs text-primary">
-              {appUrlOf(app.terraform_outputs)!.replace(/^https:\/\//, "")}
+          {app.status === "running" &&
+            (appUrlOf(app.terraform_outputs) || app.staging_url) && (
+            <p className="flex items-center gap-3 text-xs">
+              <EnvLinks
+                prod={appUrlOf(app.terraform_outputs)}
+                staging={app.staging_url}
+                inLink
+              />
             </p>
           )}
           {app.status === "failed" && app.step_message && (

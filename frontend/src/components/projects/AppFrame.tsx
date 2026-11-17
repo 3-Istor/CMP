@@ -17,6 +17,7 @@ import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
 import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { MenuText } from "@/components/projects/MenuText";
+import { EnvLinks } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,9 +51,7 @@ import { cn, appUrlOf } from "@/lib/utils";
 import type { Deployment, ProjectLink } from "@/types";
 import {
   Check,
-  ExternalLink,
   FileCode,
-  Globe,
   Image as ImageIcon,
   MoreHorizontal,
   Moon,
@@ -347,18 +346,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   <FavoriteToggle kind="app" id={current.id} />
                 </div>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                  {isKubernetes && canViewLogs && appUrl && (
-                    <a
-                      href={appUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
-                      aria-label={`${ta("openApp")}, ${ta("externalLink")}`}
-                    >
-                      <Globe className="h-3 w-3" aria-hidden />
-                      {appUrl.replace(/^https?:\/\//, "")}
-                      <ExternalLink className="h-3 w-3" aria-hidden />
-                    </a>
+                  {isKubernetes && canViewLogs && (
+                    <EnvLinks prod={appUrl} staging={live ? current.staging_url : null} />
                   )}
                   {isKubernetes && canViewLogs && urlSoon && (
                     <span>{tFrame("urlSoon")}</span>

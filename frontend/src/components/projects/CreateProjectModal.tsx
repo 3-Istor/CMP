@@ -12,11 +12,21 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DOCS_URL } from "@/components/layout/shellData";
-import { createProject, getGlobalHealth } from "@/lib/api";
+import {
+    ApiError,
+    createProject,
+    getGlobalHealth,
+    getMyImportableRepos,
+    getProjects,
+} from "@/lib/api";
+import { clearProjectsCache } from "@/lib/hooks";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
-import type { ClusterStatus, TargetCloud } from "@/types";
+import type { ClusterStatus, ImportableRepo, TargetCloud } from "@/types";
+import { isProjectFailed } from "@/types";
 import { Check, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -28,6 +38,8 @@ type Provider = "auto" | "aws" | "gcp";
 const PUBLIC_CLOUDS: Exclude<TargetCloud, "onprem">[] = ["aws", "gcp"];
 // Best non-up state to show on a disabled card.
 const STATE_ORDER: ClusterState[] = ["checking", "starting", "down", "unknown"];
+// Same cadence as useProjectsLive while a bootstrap runs.
+const WAIT_POLL_MS = 3000;
 
 interface Props {
     open: boolean;
@@ -67,6 +79,14 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const router = useRouter();
+    const [source, setSource] = useState<"empty" | "repo">("empty");
+    // null: not loaded yet; "off": import is disabled on this platform.
+    const [repos, setRepos] = useState<ImportableRepo[] | "off" | null>(null);
+    const [repo, setRepo] = useState("");
+    // The project being created, while the dialog waits to open its import.
+    const [waiting, setWaiting] = useState<string | null>(null);
+    const [step, setStep] = useState<string | null>(null);
 
     // Reset on open
     useEffect(() => {
@@ -75,6 +95,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
             setChoice("onprem");
             setProvider("auto");
             setError(null);
+            setSource("empty");
+            setWaiting(null);
+            setStep(null);
             setClusterStates({ aws: "checking", gcp: "checking" });
             getGlobalHealth()
                 .then((health) =>
@@ -88,6 +111,58 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [open]);
+
+    const chooseRepo = () => {
+        setSource("repo");
+        if (repos !== null) return;
+        getMyImportableRepos()
+            .then((list) => {
+                setRepos(list);
+                setRepo(list[0]?.full_name ?? "");
+            })
+            .catch((err) => {
+                setSource("empty");
+                if (err instanceof ApiError && err.status === 404) {
+                    setRepos("off");
+                } else {
+                    // Left unloaded: the next click tries again.
+                    toast.error(t("repoFailed"));
+                }
+            });
+    };
+
+    // Parents pass an inline onClose: a ref keeps their re-renders from restarting the poll.
+    const onCloseRef = useRef(onClose);
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    });
+
+    // Poll until the bootstrap ends, then open the import of the chosen repository.
+    useEffect(() => {
+        if (!open || !waiting) return;
+        const timer = setInterval(async () => {
+            try {
+                const project = (await getProjects()).find((p) => p.name === waiting);
+                if (!project) return;
+                setStep(project.step_message);
+                if (project.status === "active") {
+                    clearInterval(timer);
+                    clearProjectsCache();
+                    onCloseRef.current();
+                    router.push(
+                        `/projects/${encodeURIComponent(waiting)}/import?repo=${encodeURIComponent(repo)}`,
+                    );
+                } else if (isProjectFailed(project)) {
+                    clearInterval(timer);
+                    setWaiting(null);
+                    setError(project.step_message || t("failed"));
+                }
+            } catch {
+                // A missed poll is retried on the next tick.
+            }
+        }, WAIT_POLL_MS);
+        return () => clearInterval(timer);
+    }, [open, waiting, repo, router, t]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -116,7 +191,11 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                 { duration: 6000 },
             );
             onCreated(trimmed);
-            onClose();
+            if (source === "repo") {
+                setWaiting(trimmed);
+            } else {
+                onClose();
+            }
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             setError(msg);
@@ -133,7 +212,76 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                     <DialogTitle>{t("title")}</DialogTitle>
                 </DialogHeader>
 
+                {waiting ? (
+                    <div role="status" className="space-y-2 py-6 text-center">
+                        <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" aria-hidden />
+                        <p className="text-sm font-medium">{t("waiting")}</p>
+                        {step && <p className="text-xs text-muted-foreground">{step}</p>}
+                    </div>
+                ) : (
                 <form onSubmit={handleSubmit} className="space-y-4 py-2">
+                    <div className="space-y-2">
+                        <Label>{t("source")}</Label>
+                        <div role="radiogroup" aria-label={t("source")} className="grid grid-cols-2 gap-2">
+                            {(["empty", "repo"] as const).map((value) => {
+                                const off = value === "repo" && repos === "off";
+                                return (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={source === value}
+                                        disabled={loading || off}
+                                        onClick={() => (value === "repo" ? chooseRepo() : setSource("empty"))}
+                                        className={`flex items-center justify-between gap-2 rounded-lg border p-3 text-left text-sm font-medium transition-colors ${
+                                            source === value ? "border-primary bg-primary/5" : "border-input hover:bg-muted/40"
+                                        } ${off ? "cursor-not-allowed opacity-50 hover:bg-transparent" : "cursor-pointer"}`}
+                                    >
+                                        {t(value === "empty" ? "sourceEmpty" : "sourceRepo")}
+                                        {source === value ? (
+                                            <Check className="h-3.5 w-3.5 text-primary" aria-hidden />
+                                        ) : off ? (
+                                            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                                                {t("repoOff")}
+                                            </Badge>
+                                        ) : null}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {source === "repo" &&
+                            (repos === null ? (
+                                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                                    {t("repo")}
+                                </p>
+                            ) : repos !== "off" && repos.length > 0 ? (
+                                <div className="space-y-1">
+                                    <Label htmlFor="project-repo">{t("repo")}</Label>
+                                    <select
+                                        id="project-repo"
+                                        value={repo}
+                                        onChange={(e) => setRepo(e.target.value)}
+                                        disabled={loading}
+                                        className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 font-mono text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground"
+                                    >
+                                        {repos.map((r) => (
+                                            <option key={r.full_name} value={r.full_name}>
+                                                {r.full_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-muted-foreground">
+                                    {t("repoNone")} ·{" "}
+                                    <Link href="/account" className="text-primary hover:underline" onClick={onClose}>
+                                        {t("repoLink")}
+                                    </Link>
+                                </p>
+                            ))}
+                    </div>
+
                     <div className="space-y-2">
                         <Label htmlFor="project-name">
                             {t("name")} <span className="text-destructive">*</span>
@@ -268,7 +416,10 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         >
                             {tc("cancel")}
                         </Button>
-                        <Button type="submit" disabled={loading || name.trim().length < 2}>
+                        <Button
+                            type="submit"
+                            disabled={loading || name.trim().length < 2 || (source === "repo" && !repo)}
+                        >
                             {loading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -280,6 +431,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                         </Button>
                     </DialogFooter>
                 </form>
+                )}
             </DialogContent>
         </Dialog>
     );

@@ -62,6 +62,24 @@ def public_url(
     return f"https://{hostname}/" if hostname else None
 
 
+def staging_urls(db: Session, deployment_ids: list[int]) -> dict[int, str]:
+    """The URL of each app whose staging environment is ready."""
+    rows = (
+        db.query(AppEnvironment)
+        .filter(
+            AppEnvironment.deployment_id.in_(deployment_ids),
+            AppEnvironment.name == "staging",
+            AppEnvironment.state == "ready",
+        )
+        .all()
+    )
+    return {
+        row.deployment_id: f"https://{row.hostname}/"
+        for row in rows
+        if row.hostname
+    }
+
+
 def active_run(
     db: Session, deployment_id: int, environment: str, suite: str
 ) -> VerificationRun | None:

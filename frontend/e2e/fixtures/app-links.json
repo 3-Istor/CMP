@@ -1,0 +1,24 @@
+[
+  {
+    "id": "argocd_app",
+    "label_key": "links.argocd_app",
+    "url": "https://argocd.example.invalid/applications?proj=demo&labels=cnp.3istor.com%2Fapp%3Ddemo-app",
+    "external": true,
+    "group": "view",
+    "min_role": "member",
+    "requires": null,
+    "component": null,
+    "app": "demo-app"
+  },
+  {
+    "id": "grafana_app",
+    "label_key": "links.grafana_app",
+    "url": "https://grafana.3istor.com/d/cnp-app-signals?orgId=1&var-app=demo-app&var-namespace=demo-demo-app",
+    "external": true,
+    "group": "view",
+    "min_role": "member",
+    "requires": "grafana_member",
+    "component": null,
+    "app": "demo-app"
+  }
+]

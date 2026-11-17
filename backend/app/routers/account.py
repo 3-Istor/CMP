@@ -32,6 +32,9 @@ from app.schemas.account import (
 )
 from app.services import github_account
 from app.services.authz import is_cnp_admin, platform_roles
+from app.services.github_service import GitHubAppError
+from app.services.imports import access
+from app.services.imports.service import ImportRefused, ensure_enabled
 from app.services.keycloak_service import _get_admin_token, get_current_user
 
 logger = logging.getLogger(__name__)
@@ -408,6 +411,28 @@ async def github_connection_status(
         return await github_account.connection_status(db, token_payload)
     except github_account.LinkError as exc:
         raise _link_error(exc) from exc
+
+
+@router.get("/github/repos")
+async def my_importable_repos(
+    token_payload: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    The repositories the caller could import, for a project not created yet:
+    the same list a project they own would show them.
+    """
+    try:
+        ensure_enabled()
+    except ImportRefused as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail=str(exc)
+        ) from exc
+    try:
+        repos = await access.importable_repositories(db, token_payload)
+    except GitHubAppError as exc:
+        raise HTTPException(502, f"GitHub could not be read: {exc}") from exc
+    return {"repositories": [r.public() for r in repos]}
 
 
 @router.post("/github/oauth/start")

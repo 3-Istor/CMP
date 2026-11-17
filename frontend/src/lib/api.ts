@@ -394,6 +394,9 @@ export async function startGitHubLink(
 export const getProjects = () =>
   request<import("@/types").Project[]>("/projects/");
 
+export const getProjectsHealth = () =>
+  request<import("@/types").ProjectHealth[]>("/projects/health");
+
 export const createProject = (
   project_name: string,
   target_cloud: import("@/types").TargetCloud | "public" = "onprem",
@@ -1544,6 +1547,12 @@ export const unlinkApps = (
 };
 
 // Repository import (CNP-241)
+/** The caller's importable repositories, before any project exists. */
+export const getMyImportableRepos = () =>
+  request<{ repositories: import("@/types").ImportableRepo[] }>(
+    "/account/github/repos",
+  ).then((r) => r.repositories);
+
 export const getImportableRepos = (project: string) =>
   request<{ repositories: import("@/types").ImportableRepo[] }>(
     `${projectPath(project)}/import/repos`,

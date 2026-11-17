@@ -54,7 +54,10 @@ def target_cloud(deployment: Deployment) -> str:
 def repo_of(deployment: Deployment) -> str:
     try:
         return app_repo.bound_repo(
-            deployment.github_repo_url, deployment.name, deployment.status
+            deployment.github_repo_url,
+            deployment.name,
+            deployment.status,
+            deployment.template_id,
         )
     except app_repo.RepoNotBound as exc:
         raise GitOpsError(str(exc)) from exc

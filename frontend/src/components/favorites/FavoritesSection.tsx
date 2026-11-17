@@ -5,12 +5,15 @@ import { AppCard } from "@/components/projects/AppCard";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { countDeleting } from "@/components/projects/ProjectsGrid";
 import { useFavorites } from "@/lib/favorites";
+import { useProjectsHealth, useSecurityOverview } from "@/lib/hooks";
 import { useTranslations } from "next-intl";
 
 export function FavoritesSection({ onRetried }: { onRetried: () => void }) {
   const t = useTranslations("favorites");
   const favorites = useFavorites();
   const { projects, apps } = useVisibleWork(0);
+  const health = useProjectsHealth();
+  const security = useSecurityOverview();
 
   const favProjects = projects.filter((p) =>
     favorites.projects.includes(p.name),
@@ -33,6 +36,8 @@ export function FavoritesSection({ onRetried }: { onRetried: () => void }) {
             project={p}
             onRetried={onRetried}
             deletingApps={countDeleting(apps, p.name)}
+            health={health[p.name]}
+            grade={security.find((s) => s.project === p.name)?.grade}
           />
         ))}
         {favApps.map(({ app, projectName }) => (
