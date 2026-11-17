@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 PUBLIC_CLOUDS = (TargetCloud.AWS, TargetCloud.GCP)
 APPS_PATH = "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications"
 APP_PATH = APPS_PATH + "/wireguard-{}"
+PLATFORM_PATH = APPS_PATH + "/platform-{}"
 CACHE_TTL = 60
 GUARD_RETRIES = 4  # unknown is re-read every GUARD_DELAY s, ~20 s in all
 GUARD_DELAY = 5
@@ -31,6 +32,8 @@ GUARD_DELAY = 5
 _HEALTH = {"Healthy": "up", "Progressing": "starting"}
 _cache: dict[TargetCloud, str] = {}
 _cached_at: float | None = None
+# Clouds that came up and still wait for their resync (until platform-<cloud> is ready).
+_pending_resync: set[TargetCloud] = set()
 _refresh_task: asyncio.Task | None = None
 
 
@@ -119,6 +122,17 @@ def resync(cloud: TargetCloud) -> list[str]:
     return synced
 
 
+def platform_ready(cloud: TargetCloud) -> bool:
+    """platform-<cloud> Synced and Healthy; a cluster without that Application counts as ready."""
+    app = kube_get(PLATFORM_PATH.format(cloud.value))
+    if app is None:
+        return True
+    status = app.get("status") or {}
+    return (status.get("sync") or {}).get("status") == "Synced" and (
+        status.get("health") or {}
+    ).get("status") == "Healthy"
+
+
 async def _refresh() -> None:
     global _cache, _cached_at
     before = _cache
@@ -127,12 +141,21 @@ async def _refresh() -> None:
     }
     _cached_at = time.monotonic()
     for cloud in PUBLIC_CLOUDS:
-        if _cache[cloud] != "up" or before.get(cloud) == "up":
+        if _cache[cloud] != "up":
+            _pending_resync.discard(cloud)
+            continue
+        if before.get(cloud) != "up":
+            _pending_resync.add(cloud)
+        if cloud not in _pending_resync:
             continue
         try:
+            # Apps synced before the platform's CRDs exist fail and stay failed.
+            if not await run_in_threadpool(platform_ready, cloud):
+                continue
             names = await run_in_threadpool(resync, cloud)
+            _pending_resync.discard(cloud)
             logger.info("%s is up, resynced %s", cloud.value, names)
-        except KubeUnavailableError as exc:
+        except (KubeUnavailableError, ValueError) as exc:
             logger.warning("%s is up, resync failed: %s", cloud.value, exc)
 
 
