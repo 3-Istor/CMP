@@ -39,6 +39,8 @@ const ROUTES: Record<string, unknown> = {
   "/infra/health": infraHealth,
   // Health badges only render with a health answer; without it axe never checks their colours.
   "/infra/deployments/1/health": appHealth,
+  "/infra/deployments/health": { "1": appHealth },
+  "/finops/summary": finopsOverview.summary,
   "/activity/platform": platformStatus,
   "/finops/overview": finopsOverview,
   "/finops/meta": finopsMeta,

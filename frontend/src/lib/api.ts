@@ -147,10 +147,45 @@ async function doRequest<T>(path: string, options?: RequestInit): Promise<T> {
 // sidebar and the page both load projects/deployments on mount).
 const _inflight = new Map<string, Promise<unknown>>();
 
+// Recent GET answers, stamped with the time their request STARTED so a poller
+// whose interval is I sees age == I at its next tick and refetches.
+const _answers = new Map<string, { at: number; data: unknown }>();
+let _mutatedAt = 0;
+
+/** The last stored answer for a path, whatever its age (initial hook state). */
+export function cachedAnswer<T>(path: string): T | undefined {
+  return _answers.get(path)?.data as T | undefined;
+}
+
+export function forgetAnswer(path: string) {
+  _answers.delete(path);
+}
+
+/** GET served from the last answer when younger than maxAgeMs, else fetched. */
+export function cachedGet<T>(path: string, maxAgeMs: number): Promise<T> {
+  const hit = _answers.get(path);
+  if (maxAgeMs > 0 && hit && Date.now() - hit.at < maxAgeMs) {
+    return Promise.resolve(hit.data as T);
+  }
+  const startedAt = Date.now();
+  return request<T>(path).then((data) => {
+    // Skip an answer older than a stored one, or from before a mutation.
+    if (startedAt >= _mutatedAt && startedAt >= (_answers.get(path)?.at ?? 0)) {
+      _answers.set(path, { at: startedAt, data });
+    }
+    return data;
+  });
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
   if (method !== "GET" || options?.body) {
-    return doRequest<T>(path, options);
+    const result = await doRequest<T>(path, options);
+    // A mutation may change any list: drop every shared answer.
+    _answers.clear();
+    _inflight.clear();
+    _mutatedAt = Date.now();
+    return result;
   }
 
   const existing = _inflight.get(path);
@@ -163,7 +198,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   // rejected promise (which surfaces as an unhandledRejection). The original
   // `promise` is returned to the caller, which handles its own errors.
   const cleanup = () => {
-    _inflight.delete(path);
+    // A mutation may have cleared the map and a newer request taken the slot.
+    if (_inflight.get(path) === promise) _inflight.delete(path);
   };
   promise.then(cleanup, cleanup);
   return promise;
@@ -187,8 +223,11 @@ function securityQuery(params: Record<string, string | undefined | null>) {
   return query.toString();
 }
 
-export const getSecurityOverview = () =>
-  request<import("@/types").SecurityProjectOverview[]>("/security/overview");
+export const getSecurityOverview = (maxAgeMs = 0) =>
+  cachedGet<import("@/types").SecurityProjectOverview[]>(
+    "/security/overview",
+    maxAgeMs,
+  );
 
 export const getSecuritySummary = (
   project: string,
@@ -265,7 +304,8 @@ export const revokeSecurityException = (id: number) =>
     method: "DELETE",
   });
 
-export const getDeployments = () => request<Deployment[]>("/deployments/");
+export const getDeployments = (maxAgeMs = 0) =>
+  cachedGet<Deployment[]>("/deployments/", maxAgeMs);
 
 export const getDeployment = (id: number) =>
   request<Deployment>(`/deployments/${id}`);
@@ -313,9 +353,20 @@ export const getDeploymentOutputs = (id: number) =>
 export const getGlobalHealth = () =>
   request<import("@/types").GlobalHealthResponse>("/infra/health");
 
-export const getAppHealth = (deploymentId: number) =>
-  request<import("@/types").AppHealthResponse>(
+export const getAppHealth = (deploymentId: number, maxAgeMs = 0) =>
+  cachedGet<import("@/types").AppHealthResponse>(
     `/infra/deployments/${deploymentId}/health`,
+    maxAgeMs,
+  );
+
+/** Health of several Kubernetes apps in one call, keyed by deployment id. */
+export const getAppsHealth = (ids: number[], maxAgeMs = 0) =>
+  cachedGet<Record<string, import("@/types").AppHealthResponse>>(
+    `/infra/deployments/health?${[...ids]
+      .sort((a, b) => a - b)
+      .map((id) => `ids=${id}`)
+      .join("&")}`,
+    maxAgeMs,
   );
 
 export const getAppMetrics = (deploymentId: number, window = "24h") =>
@@ -388,8 +439,8 @@ export async function startGitHubLink(
 }
 
 // Projects (Phase 4)
-export const getProjects = () =>
-  request<import("@/types").Project[]>("/projects/");
+export const getProjects = (maxAgeMs = 0) =>
+  cachedGet<import("@/types").Project[]>("/projects/", maxAgeMs);
 
 export const createProject = (
   project_name: string,
@@ -400,8 +451,11 @@ export const createProject = (
     body: JSON.stringify({ project_name, target_cloud }),
   });
 
-export const getProjectApps = (project_name: string) =>
-  request<import("@/types").Deployment[]>(`/projects/${project_name}/apps`);
+export const getProjectApps = (project_name: string, maxAgeMs = 0) =>
+  cachedGet<import("@/types").Deployment[]>(
+    `/projects/${project_name}/apps`,
+    maxAgeMs,
+  );
 
 export const searchKeycloakUsers = (q: string) =>
   request<import("@/types").KeycloakUserResult[]>(
@@ -579,6 +633,9 @@ export const getFinopsOverview = (opts: {
   request<import("@/types").FinopsOverview>(
     `/finops/overview${finopsQuery(opts)}`,
   );
+
+export const getFinopsSummary = () =>
+  request<import("@/types").FinopsOverview["summary"]>("/finops/summary");
 
 export const getFinopsSavings = (opts: { project?: string; period?: string } = {}) =>
   request<import("@/types").FinopsSavings>(

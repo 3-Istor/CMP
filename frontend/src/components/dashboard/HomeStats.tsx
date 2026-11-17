@@ -1,7 +1,9 @@
 "use client";
 
 import { formatEUR, intlLocale } from "@/components/finops/format";
-import { useFinopsOverview, useSecurityOverview } from "@/lib/hooks";
+import { getFinopsSummary } from "@/lib/api";
+import { useSecurityOverview } from "@/lib/hooks";
+import { useCardData } from "@/lib/useCardData";
 import type { Deployment, GlobalHealthResponse } from "@/types";
 import { Boxes, Cloud, Shield, Wallet } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -19,7 +21,7 @@ export function HomeStats({
   const t = useTranslations("overview.stats");
   const locale = intlLocale(useLocale());
   const security = useSecurityOverview();
-  const { data: finops, loading: finopsLoading } = useFinopsOverview();
+  const { data: finops, loading: finopsLoading } = useCardData("finops-summary", getFinopsSummary);
 
   const running = apps.filter((a) => a.status === "running").length;
   const failed = apps.filter((a) => a.status === "failed").length;
@@ -55,11 +57,11 @@ export function HomeStats({
         icon={Wallet}
         label={t("costs")}
         loading={finopsLoading && !finops}
-        value={formatEUR(finops?.summary.month_to_date_eur ?? 0, "EUR", locale)}
+        value={formatEUR(finops?.month_to_date_eur ?? 0, "EUR", locale)}
         hint={
           finops
             ? t("costsForecast", {
-                amount: formatEUR(finops.summary.projected_month_eur, "EUR", locale),
+                amount: formatEUR(finops.projected_month_eur, "EUR", locale),
               })
             : undefined
         }

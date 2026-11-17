@@ -52,9 +52,12 @@ export function AppProvider({
 }) {
   const router = useRouter();
   const t = useTranslations("apps.context");
-  const { refreshApps } = useProjectContext();
-  const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { apps, refreshApps } = useProjectContext();
+  // The project's list row shows the page at once; getDeployment still refreshes it.
+  const [deployment, setDeployment] = useState<Deployment | null>(
+    () => apps.find((a) => a.id === appId) ?? null,
+  );
+  const [loading, setLoading] = useState(!deployment);
 
   const isActive = deployment ? ACTIVE_STATUSES.has(deployment.status) : false;
   const polled = useDeploymentPolling(isActive ? appId : null);
