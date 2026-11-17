@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cachedAnswer, getDeployment, projectAppsPath } from "@/lib/api";
 import { APPS_REFRESH_MS } from "@/components/layout/ProjectNav";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { pollDue } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -76,11 +77,16 @@ export function AppProvider({
         : 0;
   useEffect(() => {
     if (!pollMs) return;
-    const timer = setInterval(() => {
-      // A failed poll keeps the last answer; the next one retries.
-      getDeployment(appId).then(setDeployment, () => {});
-    }, pollMs);
-    return () => clearInterval(timer);
+    // Reuses an answer younger than pollMs; a failed poll keeps the last one.
+    const read = () =>
+      getDeployment(appId, pollMs).then(
+        (d) => {
+          setDeployment(d);
+          return d;
+        },
+        () => undefined,
+      );
+    return pollDue(read, pollMs);
   }, [appId, pollMs]);
 
   const fetchDeployment = useCallback(async () => {

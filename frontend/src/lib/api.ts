@@ -325,8 +325,8 @@ export const revokeSecurityException = (id: number) =>
 export const getDeployments = (maxAgeMs = 0) =>
   cachedGet<Deployment[]>("/deployments/", maxAgeMs);
 
-export const getDeployment = (id: number) =>
-  request<Deployment>(`/deployments/${id}`);
+export const getDeployment = (id: number, maxAgeMs = 0) =>
+  cachedGet<Deployment>(`/deployments/${id}`, maxAgeMs);
 
 export const createDeployment = (payload: {
   name: string;
