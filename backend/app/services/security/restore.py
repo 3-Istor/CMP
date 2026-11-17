@@ -92,6 +92,20 @@ def restore_patch(values: dict, target: RestoreTarget) -> dict:
     }
 
 
+def latest_patch(values: dict, source_server: str) -> dict:
+    """Recover the next generation from the archive, all WAL replayed."""
+    return {
+        "db": {
+            "restore": {
+                "generation": current_generation(values) + 1,
+                "sourceServer": source_server,
+                "backupID": "",
+                "targetTime": "",
+            }
+        }
+    }
+
+
 def commit_label(target: RestoreTarget) -> str:
     label = f"restore database {target.server} from backup {target.backup_id}"
     if target.target_time:

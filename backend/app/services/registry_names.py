@@ -151,6 +151,7 @@ def _is_reserved_vault_role(role: str) -> bool:
 def project_names(project: str) -> list[DerivedName]:
     return [
         ("namespace", f"{project}-system", "the project system namespace"),
+        ("namespace", f"{project}-backups", "the project backups namespace"),
         ("appproject", project, "the project AppProject"),
         ("appproject", f"{project}-platform", "the platform AppProject"),
         ("application", f"{project}-appproject", "the appproject Application"),

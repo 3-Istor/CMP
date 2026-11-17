@@ -25,6 +25,8 @@ import projects from "./projects.json";
 import projectsHealth from "./projects-health.json";
 import scorecard from "./scorecard.json";
 import security from "./security.json";
+import securityData from "./security-data.json";
+import securityDatabases from "./security-databases.json";
 import session from "./session.json";
 import topology from "./topology.json";
 
@@ -44,6 +46,9 @@ const ROUTES: Record<string, unknown> = {
   "/deployments/1/links": appLinks,
   "/deployments/": projectApps,
   "/deployments/1": projectApps[0],
+  "/deployments/1/security-data": securityData,
+  "/security/databases": securityDatabases,
+  "/security/backups": [],
   "/infra/health": infraHealth,
   // Health badges only render with a health answer; without it axe never checks their colours.
   "/infra/deployments/1/health": appHealth,

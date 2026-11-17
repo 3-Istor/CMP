@@ -35,7 +35,7 @@ from app.services.authz import (
     reads_platform_security,
 )
 from app.services.catalog_service import get_template_by_id
-from app.services.clusters.state import ensure_cluster_up
+from app.services.clusters.state import ensure_cluster_up, project_cloud
 from app.services.deletion_protection import assert_deletable
 from app.services.environments import runs
 from app.services.github_service import (
@@ -940,7 +940,9 @@ async def update_security_data(
             )
         _deep_merge(
             patches.setdefault(database_file, {}),
-            security_data.backup_patch(payload.backup),
+            security_data.backup_patch(
+                payload.backup, project_cloud(db, deployment.project_id)
+            ),
         )
         labels.setdefault(database_file, []).extend(backup_labels)
 

@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.project import Project, TargetCloud
 from app.routers import deployments as deployments_router
 from app.services import app_security_data as sd
 from app.services import keycloak_service
@@ -419,3 +420,28 @@ def test_app_type_comes_from_the_terraform_outputs():
 
 def test_app_type_defaults_to_static_without_outputs():
     assert sd.app_type_of("{}", None) == "static"
+
+
+def test_put_backup_on_cloud_project_uses_vault_bucket(
+    client_factory, session_factory
+):
+    client, repo, deployment_id = client_factory(
+        FULLSTACK_FILES, "admin", "fullstack"
+    )
+    with session_factory() as db:
+        db.add(
+            Project(
+                project_name="demo",
+                owner_username="o",
+                target_cloud=TargetCloud.AWS,
+            )
+        )
+        db.commit()
+
+    response = client.put(
+        f"/api/deployments/{deployment_id}/security-data",
+        json={"backup": {"enabled": True}},
+    )
+
+    assert response.status_code == 200
+    assert "bucket: vault" in repo.files["deploy/values-backend.yaml"]

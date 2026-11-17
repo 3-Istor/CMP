@@ -26,6 +26,7 @@ import {
     previewSecurityData,
     updateSecurityData,
 } from "@/lib/api";
+import { useProjects } from "@/lib/hooks";
 import type { ExposurePreset, SecurityData } from "@/types";
 import { Loader2, RefreshCw, Save, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -34,6 +35,7 @@ import { toast } from "sonner";
 
 interface Props {
     deploymentId: number;
+    project: string;
 }
 
 const RETENTION_PATTERN = /^[1-9][0-9]*[dwm]$/;
@@ -49,9 +51,12 @@ const renderCode = (chunks: React.ReactNode) => (
     <span className="font-mono">{chunks}</span>
 );
 
-export function SecurityDataPanel({ deploymentId }: Props) {
+export function SecurityDataPanel({ deploymentId, project }: Props) {
     const t = useTranslations("apps.data");
     const tc = useTranslations("common");
+    // Cloud backups are deleted with the app: nothing to keep.
+    const { projects } = useProjects();
+    const onCloud = (projects.find((p) => p.name === project)?.target_cloud ?? "onprem") !== "onprem";
     const [remote, setRemote] = useState<SecurityData | null>(null);
     const [exposure, setExposure] = useState<ExposurePreset | null>(null);
     const [backupEnabled, setBackupEnabled] = useState(false);
@@ -262,26 +267,28 @@ export function SecurityDataPanel({ deploymentId }: Props) {
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <Label
-                                            htmlFor="backup-keep"
-                                            className="text-sm"
-                                        >
-                                            {t("backupKeep")}
-                                        </Label>
-                                        <Switch
-                                            id="backup-keep"
-                                            checked={keepAfterDelete}
-                                            onCheckedChange={setKeepAfterDelete}
-                                        />
+                                {!onCloud && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <Label
+                                                htmlFor="backup-keep"
+                                                className="text-sm"
+                                            >
+                                                {t("backupKeep")}
+                                            </Label>
+                                            <Switch
+                                                id="backup-keep"
+                                                checked={keepAfterDelete}
+                                                onCheckedChange={setKeepAfterDelete}
+                                            />
+                                        </div>
+                                        {!keepAfterDelete && (
+                                            <p className="text-xs text-destructive">
+                                                {t("backupKeepOff")}
+                                            </p>
+                                        )}
                                     </div>
-                                    {!keepAfterDelete && (
-                                        <p className="text-xs text-destructive">
-                                            {t("backupKeepOff")}
-                                        </p>
-                                    )}
-                                </div>
+                                )}
 
                                 <div className="space-y-1.5">
                                     <Label htmlFor="backup-retention" className="text-sm">

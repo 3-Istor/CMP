@@ -166,6 +166,20 @@ APP_CASES = [
         [record("foo")],
         ["hostname 'status-foo.3istor.com'", "the status hostname"],
     ),
+    (
+        "app namespace equals another project's backups namespace",
+        "my",
+        app("foo-backups"),
+        [record("my"), record("my-foo")],
+        ["namespace 'my-foo-backups'", "project 'my-foo'"],
+    ),
+    (
+        "app named backups collides with the project's own backups namespace",
+        "shop",
+        app("backups"),
+        [record("shop")],
+        ["namespace 'shop-backups'", "the project backups namespace"],
+    ),
 ]
 
 

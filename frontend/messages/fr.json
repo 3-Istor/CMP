@@ -922,7 +922,11 @@
       "when": "Quand",
       "status": "État",
       "manual": "manuelle",
-      "restore": "Restaurer"
+      "restore": "Restaurer",
+      "restoreLatest": "Restaurer le dernier état",
+      "restoreLatestTitle": "Restaurer le dernier état",
+      "restoreLatestDescription": "La base actuelle est remplacée par son dernier état, dernière sauvegarde plus WAL archivés. L'app redémarre.",
+      "emptyStateCloud": "Aucune sauvegarde sur ce cluster. « Restaurer le dernier état » utilise l'archive conservée on-prem."
     },
     "restore": {
       "title": "Restaurer la base {database}",

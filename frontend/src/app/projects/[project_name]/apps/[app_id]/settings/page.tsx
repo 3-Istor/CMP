@@ -301,7 +301,7 @@ export default function AppSettingsPage() {
             <AppIconPanel />
             {isRunning && (
               <div id="security-data" className="scroll-mt-40">
-                <SecurityDataPanel deploymentId={appId} />
+                <SecurityDataPanel deploymentId={appId} project={projectName} />
               </div>
             )}
           </SettingsSection>
