@@ -178,13 +178,16 @@ def list_deployments(
     rows = with_staging(db, query.all())
     if is_cnp_admin(token):
         return rows
-    # The auditor lists every app but reads outputs only where it is a member.
+    # The auditor lists every app but reads outputs and URLs only where it is
+    # a member.
     own = set(_user_project_names(db, token))
     return [
         (
             row
             if row.project_id in own
-            else row.model_copy(update={"terraform_outputs": None})
+            else row.model_copy(
+                update={"terraform_outputs": None, "staging_url": None}
+            )
         )
         for row in rows
     ]

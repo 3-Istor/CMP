@@ -1,12 +1,13 @@
 import asyncio
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from unittest import mock
 
 import pytest
 from fastapi import HTTPException
 
 from app.models.deployment import Deployment, DeploymentStatus
+from app.models.environment import AppEnvironment
 from app.models.security import SecurityException
 from app.routers import activity, deployments, security
 from app.services import keycloak_service
@@ -160,6 +161,22 @@ class TestDeploymentListing:
         assert [(d.name, d.terraform_outputs) for d in listed] == [
             ("shop-db", None)
         ]
+
+    def test_auditor_reads_no_staging_url_outside_its_projects(self, apps):
+        with apps() as db:
+            db.add(
+                AppEnvironment(
+                    deployment_id=db.query(Deployment).one().id,
+                    name="staging",
+                    state="ready",
+                    hostname="shop-db-shop-staging.3istor.com",
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+            db.commit()
+            listed = deployments.list_deployments(AUDITOR, db)
+
+        assert [d.staging_url for d in listed] == [None]
 
     def test_finops_sees_no_app_outside_its_projects(self, apps):
         with apps() as db:
