@@ -112,7 +112,10 @@ def _archiving(target: BackupTarget, cloud: TargetCloud) -> bool:
 async def _enable_backup_before(deployment: Deployment) -> None:
     """Commit migrations.backupBefore: true when the file says false."""
     repo = app_repo.bound_repo(
-        deployment.github_repo_url, deployment.name, deployment.status
+        deployment.github_repo_url,
+        deployment.name,
+        deployment.status,
+        deployment.template_id,
     )
     app_type = security_data.app_type_of(
         deployment.app_config, deployment.terraform_outputs

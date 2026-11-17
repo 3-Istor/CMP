@@ -27,8 +27,6 @@ import scorecard from "./scorecard.json";
 import security from "./security.json";
 import securityData from "./security-data.json";
 import securityDatabases from "./security-databases.json";
-import securityRole from "./security-role.json";
-import securitySummary from "./security-summary.json";
 import session from "./session.json";
 import topology from "./topology.json";
 
@@ -49,11 +47,6 @@ const ROUTES: Record<string, unknown> = {
   "/deployments/": projectApps,
   "/deployments/1": projectApps[0],
   "/deployments/1/security-data": securityData,
-  "/security/summary": securitySummary,
-  "/security/findings": [],
-  "/security/trend": [],
-  "/security/exceptions": [],
-  "/security/me": securityRole,
   "/security/databases": securityDatabases,
   "/security/backups": [],
   "/infra/health": infraHealth,
@@ -181,7 +174,6 @@ export const VARIANTS: Record<string, Record<string, Override>> = {
 };
 
 export async function installMockApi(page: Page, overrides: Record<string, Override> = {}): Promise<void> {
-  const routes = { ...ROUTES, ...overrides };
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -205,6 +197,6 @@ export async function installMockApi(page: Page, overrides: Record<string, Overr
       return;
     }
 
-    await route.fulfill({ json: routes[apiPath] });
+    await route.fulfill({ json: ROUTES[apiPath] });
   });
 }
