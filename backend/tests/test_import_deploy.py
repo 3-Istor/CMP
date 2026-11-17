@@ -881,3 +881,55 @@ def test_deploy_refuses_to_overwrite_a_service_of_another_repository(world):
     with Session() as db:
         run = db.get(ImportRun, run_id)
     assert "imported from another repository" in run.report["error"]
+
+
+def test_cleanup_marks_each_app_deleted_once_its_namespace_is_deleted(
+    world, monkeypatch
+):
+    Session, _ = world
+    _deploy(_published_run(Session))
+    with Session() as db:
+        source = db.query(ImportSource).one()
+        rows = {
+            s.app_name: s.deployment_id
+            for s in source.services
+            if s.deployment_id and s.kind == "service"
+        }
+        project, source_id = source.project_name, source.id
+        for deployment_id in rows.values():  # as remove() leaves them
+            db.get(Deployment, deployment_id).status = (
+                DeploymentStatus.DELETING
+            )
+        db.commit()
+    first, second = sorted(rows)[:2]
+    seen = {}
+    polls = {second: 0}
+
+    def kube_get(path):
+        if f"-{first}-app" in path:
+            return None
+        polls[second] += 1
+        if polls[second] < 3:
+            return {}
+        with Session() as db:
+            seen["first"] = db.get(Deployment, rows[first]).status
+            seen["second"] = db.get(Deployment, rows[second]).status
+        return None
+
+    monkeypatch.setattr(deploy.kube_client, "kube_get", kube_get)
+    monkeypatch.setattr(deploy.kube_client, "kube_delete", lambda path: None)
+
+    asyncio.run(
+        deploy._cleanup_namespaces(project, [first, second], source_id)
+    )
+
+    # The first app is done while the second still waits on Argo CD.
+    assert seen == {
+        "first": DeploymentStatus.DELETED,
+        "second": DeploymentStatus.DELETING,
+    }
+    with Session() as db:
+        assert {
+            db.get(Deployment, rows[a]).status for a in (first, second)
+        } == {DeploymentStatus.DELETED}
+        assert db.query(ImportSource).count() == 0

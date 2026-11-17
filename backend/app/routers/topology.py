@@ -36,11 +36,11 @@ class LinkRequest(BaseModel):
 
 
 @router.get("/{project_name}/topology")
-async def get_topology(ctx: RequireGuest, db: DbSession):
+async def get_topology(ctx: RequireGuest, db: DbSession, fresh: bool = False):
     if ctx.role is ProjectRole.GUEST and not is_auditor(ctx.token):
         raise HTTPException(403, "Guests do not see the project topology")
     try:
-        return await topology.cached_build(db, ctx.project_name)
+        return await topology.cached_build(db, ctx.project_name, fresh)
     except RegistryError as exc:
         raise HTTPException(502, str(exc)) from exc
 

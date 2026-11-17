@@ -47,6 +47,7 @@ from app.services.github_service import (
 from app.services.imports.service import imported_app_names
 from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
+    fetch_user_projects_live,
     get_current_user,
     get_project_role,
     get_user_id_from_token,
@@ -81,10 +82,12 @@ _FULLSTACK_COMPONENTS = ["frontend", "backend"]
 # ``assert_project_role`` takes.
 
 
-def _user_project_names(db: Session, token: dict) -> list[str]:
+def _user_project_names(
+    db: Session, token: dict, live: bool = False
+) -> list[str]:
     """
     Every project the caller can see: their Keycloak group memberships plus
-    anything they own.
+    anything they own. Listings read the cached memberships, *live* checks not.
 
     Owned projects are included separately because ownership lives in the
     database, not in a group, the same reason ``GET /api/projects/`` merges
@@ -93,7 +96,10 @@ def _user_project_names(db: Session, token: dict) -> list[str]:
     user_id = get_user_id_from_token(token)
     username = token.get("preferred_username") or user_id
 
-    names = {p["name"] for p in fetch_user_projects_from_keycloak(user_id)}
+    fetch = (
+        fetch_user_projects_live if live else fetch_user_projects_from_keycloak
+    )
+    names = {p["name"] for p in fetch(user_id)}
 
     if username:
         names.update(
@@ -346,7 +352,8 @@ async def get_deployment_outputs(
     if (
         is_auditor(token)
         and not is_cnp_admin(token)
-        and deployment.project_id not in set(_user_project_names(db, token))
+        and deployment.project_id
+        not in set(_user_project_names(db, token, live=True))
     ):
         return {}
 

@@ -111,9 +111,9 @@ def _username(token: dict) -> str:
 
 def _user_project_names(token: dict) -> list[str]:
     """
-    Projects the caller belongs to, resolved in real time via the Keycloak
-    Admin API, the same mechanism the projects/apps routers use. This avoids
-    relying on the JWT ``groups`` claim, which is not populated in this setup.
+    Projects the caller belongs to, resolved via the Keycloak Admin API
+    (listing cached for a few seconds), the same mechanism the projects/apps
+    routers use. This avoids relying on the JWT ``groups`` claim, which is not populated in this setup.
 
     Includes projects where the caller is only a guest: guests are allowed to
     read costs.
@@ -343,6 +343,26 @@ def get_overview(
         savings_ytd=_savings_ytd(db, token, project),
         forecast=forecast,
     )
+
+
+@router.get("/summary", response_model=CostSummary)
+def get_summary(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """The overview's ``summary`` (all projects, all clouds) without the rest."""
+    deployments = _load_deployments(db, token, None)
+    provider = get_cost_provider()
+    apps = _cost_specs(provider, deployments, token, None)
+
+    summary_dict = provider.summary(apps)
+    summary_dict["breakdown"] = Breakdown(**summary_dict["breakdown"])
+    summary = CostSummary(**summary_dict)
+    if settings.FINOPS_PROVIDER == "real":
+        summary.projected_month_eur = forecast_for_apps(
+            provider, apps, budget_eur=_budget_amount(None)
+        )["projected_eur"]
+    return summary
 
 
 @router.get("/forecast", response_model=CostForecast)

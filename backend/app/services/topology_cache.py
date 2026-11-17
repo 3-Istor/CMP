@@ -1,5 +1,5 @@
 """
-The last topology built per project, for a few seconds (CNP-242).
+The last topology built per project, for a short while.
 
 Every member with the map open polls it: one build reads the registry,
 Argo CD, every app namespace and VictoriaMetrics. The writers that change
@@ -9,7 +9,9 @@ the map (links, import deploys and removals) invalidate it. Kept apart from
 
 import time
 
-TTL_SECONDS = 20.0
+# 1.5 x the map's 30 s poll (POLL_MS in TopologyView.tsx): every other poll
+# is served from here; the Refresh button asks for a fresh build.
+TTL_SECONDS = 45.0
 
 _entries: dict[str, tuple[float, dict]] = {}
 _generations: dict[str, int] = {}

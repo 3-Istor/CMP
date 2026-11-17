@@ -49,6 +49,8 @@ const ROUTES: Record<string, unknown> = {
   "/infra/deployments/1/health": appHealth,
   "/activity": activity.feed,
   "/activity/summary": activity.summary,
+  "/infra/deployments/health": { "1": appHealth },
+  "/finops/summary": finopsOverview.summary,
   "/activity/platform": platformStatus,
   "/activity/logs": logs.activity,
   "/activity/logs/targets": logs.targets,

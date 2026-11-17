@@ -150,14 +150,19 @@ def roles():
         mock.patch.object(
             deployments_router,
             "fetch_user_projects_from_keycloak",
-            side_effect=lambda user: [
-                {"name": p, "role": r}
-                for (u, p), r in ROLES.items()
-                if u == user
-            ],
+            side_effect=_memberships,
+        ),
+        mock.patch.object(
+            deployments_router,
+            "fetch_user_projects_live",
+            side_effect=_memberships,
         ),
     ):
         yield
+
+
+def _memberships(user):
+    return [{"name": p, "role": r} for (u, p), r in ROLES.items() if u == user]
 
 
 def _user(sub: str) -> dict:

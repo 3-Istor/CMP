@@ -420,7 +420,7 @@ def run_deletion(deployment_id: int) -> None:
                 DeploymentStatus.DELETING,
                 "Initializing Terraform...",
             )
-            executor.init()
+            executor.init(reuse_lock=True)
             logger.info("Terraform initialized successfully")
 
             # Destroy resources
