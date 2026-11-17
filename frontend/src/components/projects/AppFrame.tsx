@@ -163,8 +163,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const urlSoon =
     Boolean(outputsUrl) &&
     !live &&
+    !healthLoading &&
     (current.status === "deploying" || current.status === "running");
   const stage = stageOf(current);
+  // Healthy is the common case: no "Created on" flash before the first answer.
+  const deployedLabel =
+    live || (current.status === "running" && healthLoading);
   const scoreCard = useScorecards(
     [current.id],
     canViewLogs && hasScorecard(current),
@@ -363,7 +367,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                     <span className="font-mono">{current.k8s_namespace}</span>
                   )}
                   <span>
-                    {tFrame(live ? "deployedOn" : "createdOn", {
+                    {tFrame(deployedLabel ? "deployedOn" : "createdOn", {
                       date: new Date(current.created_at).toLocaleDateString(
                         locale,
                         { day: "numeric", month: "short", year: "numeric" },

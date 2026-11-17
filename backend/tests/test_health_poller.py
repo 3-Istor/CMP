@@ -128,3 +128,20 @@ def test_a_health_error_does_not_stop_the_others(factory, notify):
 
     assert read(factory, "first").status == DeploymentStatus.FAILED
     assert read(factory, "second").status == DeploymentStatus.RUNNING
+
+
+def test_a_status_changed_during_the_health_read_is_kept(factory, notify):
+    add(factory)
+
+    async def delete_meanwhile(_deployment):
+        with factory() as db:
+            db.query(Deployment).filter_by(name="web").one().status = (
+                DeploymentStatus.DELETING
+            )
+            db.commit()
+        return SimpleNamespace(status="healthy")
+
+    recover(mock.AsyncMock(side_effect=delete_meanwhile))
+
+    assert read(factory).status == DeploymentStatus.DELETING
+    notify.assert_not_called()

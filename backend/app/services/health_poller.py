@@ -148,11 +148,26 @@ async def recover_failed_apps() -> None:
                 health = await get_kubernetes_app_health(deployment)
                 if health.status != "healthy":
                     continue
-                deployment.status = DeploymentStatus.RUNNING
-                deployment.step_message = (
-                    "Running - recovered after a failed deployment"
+                # Only if still failed: a delete may have started meanwhile.
+                updated = (
+                    db.query(Deployment)
+                    .filter(
+                        Deployment.id == deployment.id,
+                        Deployment.status == DeploymentStatus.FAILED,
+                    )
+                    .update(
+                        {
+                            Deployment.status: DeploymentStatus.RUNNING,
+                            Deployment.step_message: (
+                                "Running - recovered after a failed deployment"
+                            ),
+                        },
+                        synchronize_session=False,
+                    )
                 )
                 db.commit()
+                if not updated:
+                    continue
                 logger.info("%s is healthy again: running", deployment.name)
                 await _notify_health(deployment, "app_recovered")
             # One app must not stop the others.
