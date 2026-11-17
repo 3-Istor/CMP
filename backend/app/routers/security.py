@@ -12,7 +12,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -23,6 +23,7 @@ from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
 from app.services import app_repo
+from app.services.audit import note
 from app.services.authz import (
     is_auditor,
     is_cnp_admin,
@@ -608,6 +609,7 @@ async def _sync_exceptions_file(
 async def create_exception(
     fingerprint: str,
     payload: rules.ExceptionRequest,
+    request: Request,
     token: CurrentUser,
     db: Session = Depends(get_db),
 ) -> ExceptionRead:
@@ -650,6 +652,7 @@ async def create_exception(
     )
     db.add(row)
     db.commit()
+    note(request, app=finding.app, exception_id=row.id)
     row.commit_sha = await _sync_exceptions_file(
         db, payload.project, finding.app, author
     )

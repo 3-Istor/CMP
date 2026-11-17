@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.audit import ActivityRecord, AuditEvent
 from app.models.deployment import Deployment
+from app.models.security import SecurityException
 from app.services import notifications
 from app.services.keycloak_service import decode_platform_token
 
@@ -490,6 +491,16 @@ def _deployment(deployment_id: Any) -> tuple[str | None, str | None]:
         return (row.project_id, row.name) if row else (None, None)
 
 
+def _exception(exception_id: Any) -> tuple[str | None, str | None]:
+    try:
+        key = int(exception_id)
+    except (TypeError, ValueError):
+        return None, None
+    with SessionLocal() as db:
+        row = db.get(SecurityException, key)
+        return (row.project, row.app) if row else (None, None)
+
+
 def _store(event: AuditEvent) -> None:
     with SessionLocal() as db:
         db.add(event)
@@ -580,12 +591,22 @@ async def _record(
         or request.query_params.get("project")
     )
     app = noted.pop("app", None) or fields.get("app")
-    if "deployment_id" in params:
+    # A recommendation id starts with its app's id.
+    deployment_id = params.get("deployment_id") or (
+        params["rec_id"].split(":", 1)[0] if "rec_id" in params else None
+    )
+    if deployment_id is not None:
         dep_project, dep_name = await run_in_threadpool(
-            _deployment, params["deployment_id"]
+            _deployment, deployment_id
         )
         project = project or dep_project
         app = app or dep_name
+    if "exception_id" in params:
+        exc_project, exc_app = await run_in_threadpool(
+            _exception, params["exception_id"]
+        )
+        project = project or exc_project
+        app = app or exc_app
     if action == "app.create":
         app = app or fields.get("name")
 
