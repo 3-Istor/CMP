@@ -147,8 +147,7 @@ def _get_boto3_client(service: str):
 # ── Global Infrastructure Health ───────────────────────────────────────────
 
 
-# 1.5 x the home's useGlobalHealth(30_000) poll (frontend/src/app/page.tsx).
-HYPERVISORS_TTL = 45
+HYPERVISORS_TTL = 15
 _hypervisors_cache: tuple[float, list] | None = (
     None  # (monotonic time, hypervisors)
 )

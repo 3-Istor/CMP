@@ -2,6 +2,7 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { cachedAnswer, getDeployment, projectAppsPath } from "@/lib/api";
+import { APPS_REFRESH_MS } from "@/components/layout/ProjectNav";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { useDeploymentPolling } from "@/lib/hooks";
 import type { Deployment } from "@/types";
@@ -53,13 +54,14 @@ export function AppProvider({
   const router = useRouter();
   const t = useTranslations("apps.context");
   const { refreshApps } = useProjectContext();
-  // The project's list row (kept fresh by the sidebar) shows the page at once;
+  // A list row the sidebar fetched within its own poll shows the page at once;
   // getDeployment still refreshes it.
   const [deployment, setDeployment] = useState<Deployment | null>(
     () =>
-      cachedAnswer<Deployment[]>(projectAppsPath(projectName))?.find(
-        (a) => a.id === appId,
-      ) ?? null,
+      cachedAnswer<Deployment[]>(
+        projectAppsPath(projectName),
+        APPS_REFRESH_MS,
+      )?.find((a) => a.id === appId) ?? null,
   );
   const [loading, setLoading] = useState(!deployment);
 

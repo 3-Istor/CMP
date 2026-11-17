@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -675,16 +676,20 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
     )
 
 
-def _mark_deleted(source_id: str, app: str) -> None:
-    """Mark the deployment row of one app of the import deleted."""
-    with SessionLocal() as db:
-        source = db.get(ImportSource, source_id)
-        for service in source.services if source else []:
-            if service.deployment_id and service.app_name == app:
-                row = db.get(Deployment, service.deployment_id)
-                if row is not None:
-                    row.status = DeploymentStatus.DELETED
-        db.commit()
+def _mark_deleted(project: str, source_id: str, app: str) -> None:
+    """Mark one app of the import deleted; the end of the cleanup retries."""
+    try:
+        with SessionLocal() as db:
+            source = db.get(ImportSource, source_id)
+            for service in source.services if source else []:
+                if service.deployment_id and service.app_name == app:
+                    row = db.get(Deployment, service.deployment_id)
+                    if row is not None:
+                        row.status = DeploymentStatus.DELETED
+            db.commit()
+    except SQLAlchemyError as exc:
+        logger.warning("Could not mark %s deleted yet: %s", app, exc)
+    topology_cache.invalidate(project)
 
 
 async def _cleanup_namespaces(
@@ -713,7 +718,7 @@ async def _cleanup_namespaces(
                         f"/api/v1/namespaces/{project}-{app}",
                     )
                     pending.remove(app)
-                    _mark_deleted(source_id, app)
+                    _mark_deleted(project, source_id, app)
             except kube_client.KubeUnavailableError as exc:
                 logger.warning("Namespace cleanup of %s: %s", app, exc)
         if pending:

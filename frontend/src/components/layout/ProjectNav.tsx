@@ -16,7 +16,7 @@ import {
 } from "./projectSections";
 
 const MAX_LISTED_APPS = 8;
-const APPS_REFRESH_MS = 8000;
+export const APPS_REFRESH_MS = 8000;
 
 const STATUS_DOT: Record<Deployment["status"], string> = {
   running: "bg-green-500",

@@ -599,6 +599,14 @@ def test_topology_is_served_from_cache_within_its_ttl(client, world):
     assert world.record_reads == 1
 
 
+def test_a_fresh_read_rebuilds_the_cached_topology(client, world):
+    client.get("/api/projects/shop/topology")
+    client.get("/api/projects/shop/topology?fresh=true")
+    client.get("/api/projects/shop/topology")
+
+    assert world.record_reads == 2
+
+
 def test_a_new_link_invalidates_the_cached_topology(client, world):
     client.get("/api/projects/shop/topology")
 

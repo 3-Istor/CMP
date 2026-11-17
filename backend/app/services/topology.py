@@ -56,10 +56,8 @@ HEALTH_ORDER = (
 )
 SYNC_ORDER = ("synced", "unknown", "outofsync")
 METRIC_PRESENT_TTL_SECONDS = 300.0
-KUBE_CONCURRENCY = 4
-# Every OffhoursSchedule of a project, in one list: infra-templates labels them
-# project=<name>, and the CMP's ClusterRole (Argo's admin secret on EKS/GKE)
-# lists them cluster-wide.
+# Labelled project=<name> by infra-templates; listed cluster-wide by the CMP's
+# ClusterRole on-prem, by Argo CD's admin secret on EKS/GKE.
 ALL_SCHEDULES_PATH = "/apis/guard.3istor.com/v1alpha1/offhoursschedules"
 
 # {cloud: (expires at, metric present)}
@@ -408,9 +406,9 @@ def _declared(
     return edges
 
 
-async def cached_build(db: Session, project: str) -> dict:
-    """:func:`build`, kept for ``topology_cache.TTL_SECONDS``."""
-    cached = topology_cache.get(project)
+async def cached_build(db: Session, project: str, fresh: bool = False) -> dict:
+    """:func:`build`, kept for ``topology_cache.TTL_SECONDS``; *fresh* rebuilds."""
+    cached = None if fresh else topology_cache.get(project)
     if cached is not None:
         return cached
     generation = topology_cache.generation(project)
@@ -443,8 +441,7 @@ async def build(db: Session, project: str) -> dict:
         if project_row and project_row.target_cloud
         else TargetCloud.ONPREM
     )
-    # The cluster reads need no app name: they run while the registry, then
-    # VictoriaMetrics, are read.
+    # Cluster reads need no app name: they overlap the registry and VM reads.
     cluster = asyncio.ensure_future(_cluster_state(project, cloud))
     try:
         record = await read_record_cached(project)

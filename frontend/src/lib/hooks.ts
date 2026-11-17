@@ -17,11 +17,8 @@ import { usePlatformRoles } from "./usePlatformRoles";
 
 const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
 
-/**
- * Run `read` now, then again whenever the answer in hand reaches `intervalMs`
- * of age; reads reuse a newer answer another poller fetched meanwhile, so the
- * shown data is never older than the interval. Returns the stop function.
- */
+/** Run `read` now, then whenever its answer reaches `intervalMs` of age (a newer
+ * answer another poller fetched is reused): shown data never outlives the interval. */
 function pollDue(read: () => Promise<unknown>, intervalMs: number) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
@@ -210,35 +207,39 @@ export function useAppsHealth(ids: number[], intervalMs: number) {
   const [health, setHealth] = useState<
     Record<string, import("@/types").AppHealthResponse>
   >({});
-  const key = ids.join(",");
+  const key = [...ids].sort((a, b) => a - b).join(",");
   // Loading until the first answer for this set of ids, like one row's hook.
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!key) return;
+    let live = true;
     const wanted = key.split(",").map(Number);
     const read = async () => {
       try {
         const data = await getAppsHealth(wanted, intervalMs);
-        setHealth(data);
+        // An app missing from the answer keeps its last health, like one row's hook.
+        if (live) setHealth((prev) => ({ ...prev, ...data }));
         return data;
       } catch {
         // Badges fall back to "unknown", like a failed single-app call.
       } finally {
-        setLoadedKey(key);
+        if (live) setLoadedKey(key);
       }
     };
-    return pollDue(read, intervalMs);
+    const stop = pollDue(read, intervalMs);
+    return () => {
+      live = false;
+      stop();
+    };
   }, [key, intervalMs]);
 
   return { health, loading: key !== "" && loadedKey !== key };
 }
 
 // ── Projects cache ──────────────────────────────────────────────────────────
-// The project list is read for permissions as well as for display, so the
-// sidebar, the project page and the app page all want it at once; each read
-// costs the backend a Keycloak Admin round-trip, so mounts reuse the shared
-// answer from lib/api.ts for this long.
+// Read for permissions and display by many components at once: mounts reuse
+// the shared answer (lib/api.ts) for this long.
 const PROJECTS_TTL_MS = 15_000;
 const PROJECTS_PATH = "/projects/";
 

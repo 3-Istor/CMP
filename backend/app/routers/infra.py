@@ -27,9 +27,11 @@ from app.services.monitoring_service import (
     ClusterStatus,
     GlobalHealthResponse,
 )
-from app.services.topology import KUBE_CONCURRENCY
 
 logger = logging.getLogger(__name__)
+
+# Concurrent app health reads of one batch call.
+KUBE_CONCURRENCY = 4
 
 router = APIRouter(
     prefix="/infra",

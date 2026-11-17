@@ -153,9 +153,11 @@ const _answers = new Map<string, { at: number; data: unknown }>();
 const _stamps = new WeakMap<object, number>();
 let _mutatedAt = 0;
 
-/** The last stored answer for a path, whatever its age (initial hook state). */
-export function cachedAnswer<T>(path: string): T | undefined {
-  return _answers.get(path)?.data as T | undefined;
+/** The last stored answer for a path (initial hook state), younger than maxAgeMs if given. */
+export function cachedAnswer<T>(path: string, maxAgeMs?: number): T | undefined {
+  const hit = _answers.get(path);
+  if (!hit || (maxAgeMs !== undefined && Date.now() - hit.at >= maxAgeMs)) return undefined;
+  return hit.data as T;
 }
 
 export function forgetAnswer(path: string) {
@@ -185,7 +187,7 @@ export function cachedGet<T>(path: string, maxAgeMs: number): Promise<T> {
     // A joiner of an in-flight request gets the same object: keep the first stamp.
     if (answerStamp(data) !== undefined) return data;
     // Skip an answer older than a stored one, or from before a mutation.
-    if (startedAt >= _mutatedAt && startedAt >= (_answers.get(path)?.at ?? 0)) {
+    if (startedAt > _mutatedAt && startedAt >= (_answers.get(path)?.at ?? 0)) {
       _answers.set(path, { at: startedAt, data });
       if (typeof data === "object" && data !== null) _stamps.set(data, startedAt);
     }
@@ -521,6 +523,7 @@ export const removeProjectMember = async (
   );
 
   if (!res.ok) throw new ApiError(res.status, await res.text());
+  markAnswersStale();
   return Promise.resolve();
 };
 
@@ -601,7 +604,7 @@ export const uploadProfilePicture = async (file: File) => {
     const err = await res.text();
     throw new ApiError(res.status, err);
   }
-
+  markAnswersStale();
   return res.json() as Promise<import("@/types").PictureUploadResponse>;
 };
 
@@ -1589,8 +1592,10 @@ export const decideAccess = (
 const projectPath = (project: string) =>
   `/projects/${encodeURIComponent(project)}`;
 
-export const getTopology = (project: string) =>
-  request<import("@/types").Topology>(`${projectPath(project)}/topology`);
+export const getTopology = (project: string, fresh = false) =>
+  request<import("@/types").Topology>(
+    `${projectPath(project)}/topology${fresh ? "?fresh=true" : ""}`,
+  );
 
 export const linkApps = (
   project: string,

@@ -420,9 +420,8 @@ provider "openstack" {{
         """
         Initialize Terraform in the working directory.
 
-        *reuse_lock* (destroys) keeps the lock file the last init wrote, so
-        providers come from the plugin cache instead of the registry; a lock
-        stale against the template's constraints falls back to a full init.
+        *reuse_lock* (destroys) keeps the last lock: providers come from the
+        plugin cache; a lock stale against the template falls back to -upgrade.
         """
         logger.info("Initializing Terraform for %s", self.deployment_name)
         if reuse_lock:
