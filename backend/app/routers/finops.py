@@ -297,11 +297,12 @@ def get_overview(
     period: str = "30d",
     granularity: str = "daily",
     cloud: str | None = Query(default=None, description="onprem|aws|gcp"),
+    app: int | None = None,
 ):
     """Top KPIs + budget + app list + timeline for the Overview dashboard."""
-    deployments = _load_deployments(db, token, project)
+    deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
-    all_apps = _cost_specs(provider, deployments, token, project)
+    all_apps = _cost_specs(provider, deployments, token, project, app)
     by_cloud = provider.by_cloud(all_apps)
     # Applications run on-prem; no application-scoped cost exists on a public
     # cloud yet, so filtering on one leaves nothing to list.
@@ -318,9 +319,10 @@ def get_overview(
     ]
     app_rows = [AppCostRow(**r) for r in provider.app_rows(apps)]
 
-    budget = _project_budget(db, project)
+    # A project budget against one app's spend would read as unused budget.
+    budget = _project_budget(db, project) if app is None else None
     budget_read = (
-        _budget_read(budget, summary.month_to_date_eur) if project else None
+        _budget_read(budget, summary.month_to_date_eur) if budget else None
     )
 
     forecast = None
@@ -917,8 +919,9 @@ def get_recommendations(
     token: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
     project: str | None = None,
+    app: int | None = None,
 ):
-    deployments = _load_deployments(db, token, project)
+    deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
     apps = provider.specs(deployments)
     recs = provider.recommendations(apps)

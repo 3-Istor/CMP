@@ -7,6 +7,7 @@ import accessReviews from "./access-reviews.json";
 import appHealth from "./app-health.json";
 import finopsMeta from "./finops-meta.json";
 import finopsOverview from "./finops-overview.json";
+import finopsRecommendations from "./finops-recommendations.json";
 import githubStatus from "./github-status.json";
 import importRepos from "./import-repos.json";
 import importRun from "./import-run.json";
@@ -42,6 +43,7 @@ const ROUTES: Record<string, unknown> = {
   "/activity/platform": platformStatus,
   "/finops/overview": finopsOverview,
   "/finops/meta": finopsMeta,
+  "/finops/recommendations": finopsRecommendations,
   "/deployments/1/scorecard": scorecard,
   "/security/summary": security.summary,
   "/security/findings": security.findings,

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "1:rightsizing",
+    "app_id": 1,
+    "app_name": "demo-app",
+    "project_id": "demo",
+    "rec_type": "rightsizing",
+    "title": "Ajuster les requests CPU / RAM",
+    "justification": "Sur 14d, le CPU au p95 est à 20% et la mémoire au p99 à 25% des requests.",
+    "current": { "cpu_cores": 0.5, "ram_gb": 1.0 },
+    "recommended": { "cpu_cores": 0.13, "ram_gb": 0.3 },
+    "monthly_saving_eur": 18.4,
+    "confidence": 86,
+    "effort": "medium",
+    "status": "pending",
+    "can_apply": true
+  },
+  {
+    "id": "1:inactivity",
+    "app_id": 1,
+    "app_name": "demo-app",
+    "project_id": "demo",
+    "rec_type": "inactivity",
+    "title": "Mettre en hibernation (inactivité)",
+    "justification": "Aucun trafic réseau entrant significatif depuis 7 jours.",
+    "current": { "cpu_cores": 0.5, "status": "running" },
+    "recommended": { "replicas": 0, "status": "hibernated" },
+    "monthly_saving_eur": 9.1,
+    "confidence": 80,
+    "effort": "low",
+    "status": "ignored",
+    "can_apply": true
+  }
+]
