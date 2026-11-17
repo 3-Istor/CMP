@@ -283,9 +283,13 @@ def get_capabilities(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> Capabilities:
     """Which tabs have a store behind them."""
-    _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id)
+    caps = stores.capabilities()
+    # Fluent Bit ships only the on-prem cluster's logs to VictoriaLogs;
+    # a cloud app's logs are in Loki.
+    caps["logs"] = caps["logs"] and scope.cloud == "onprem"
     return Capabilities(
-        **stores.capabilities(),
+        **caps,
         silence_max_hours=settings.OBS_SILENCE_MAX_HOURS,
         grafana_url=GRAFANA_BASE_URL,
     )

@@ -441,6 +441,23 @@ def test_capabilities_say_what_is_configured(make):
     }
 
 
+def test_logs_capability_is_off_for_a_cloud_app(make, factory):
+    with factory() as db:
+        db.get(Deployment, SHOP).app_config = '{"target_cloud": "aws"}'
+        db.commit()
+    client = make("member")
+
+    body = _get(client, SHOP, "").json()
+
+    assert (body["logs"], body["metrics"]) == (False, True)
+
+
+def test_logs_capability_is_on_for_an_onprem_app(make):
+    client = make("member")
+
+    assert _get(client, SHOP, "").json()["logs"] is True
+
+
 def test_a_store_that_does_not_answer_is_a_502(make, fake):
     fake.answer = lambda r: httpx.Response(500)
     client = make("member")

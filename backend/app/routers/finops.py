@@ -297,11 +297,12 @@ def get_overview(
     period: str = "30d",
     granularity: str = "daily",
     cloud: str | None = Query(default=None, description="onprem|aws|gcp"),
+    app: int | None = None,
 ):
     """Top KPIs + budget + app list + timeline for the Overview dashboard."""
-    deployments = _load_deployments(db, token, project)
+    deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
-    all_apps = _cost_specs(provider, deployments, token, project)
+    all_apps = _cost_specs(provider, deployments, token, project, app)
     by_cloud = provider.by_cloud(all_apps)
     # Applications run on-prem; no application-scoped cost exists on a public
     # cloud yet, so filtering on one leaves nothing to list.
@@ -318,9 +319,10 @@ def get_overview(
     ]
     app_rows = [AppCostRow(**r) for r in provider.app_rows(apps)]
 
-    budget = _project_budget(db, project)
+    # A project budget against one app's spend would read as unused budget.
+    budget = _project_budget(db, project) if app is None else None
     budget_read = (
-        _budget_read(budget, summary.month_to_date_eur) if project else None
+        _budget_read(budget, summary.month_to_date_eur) if budget else None
     )
 
     forecast = None
@@ -917,8 +919,9 @@ def get_recommendations(
     token: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
     project: str | None = None,
+    app: int | None = None,
 ):
-    deployments = _load_deployments(db, token, project)
+    deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
     apps = provider.specs(deployments)
     recs = provider.recommendations(apps)
@@ -1180,40 +1183,41 @@ async def _apply_patch_to_gitops(
     deployment: Deployment, patch: dict
 ) -> str | None:
     """
-    Deep-merge ``patch`` into the app's ``deploy/values.yaml`` and commit.
+    Deep-merge ``patch`` into the app's values file and commit.
     Mirrors ``update_deployment_config`` but is triggered by a recommendation.
     """
     from io import StringIO
 
     from app.routers.deployments import (
-        _CONFIG_FILE_PATH,
+        _app_type_of,
         _deep_merge,
         _extract_repo_full_name,
         _get_github_token_for_deployment,
+        _load_values_file,
         _yaml,
     )
-    from app.services.github_service import (
-        GitHubAppError,
-        get_file_content,
-        put_file_content,
-    )
+    from app.services.app_security_data import SINGLE_VALUES_FILE
+    from app.services.github_service import GitHubAppError, put_file_content
 
+    if _app_type_of(deployment) == "fullstack":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "A fullstack app has one values file per component: change "
+                "its resources in the app settings."
+            ),
+        )
     try:
         token = await _get_github_token_for_deployment(deployment)
         repo = _extract_repo_full_name(deployment)
-        raw_content, sha = await get_file_content(
-            installation_token=token,
-            repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
-        )
-        parsed = _yaml.load(raw_content)
+        parsed, sha = await _load_values_file(token, repo, SINGLE_VALUES_FILE)
         _deep_merge(parsed, patch)
         out = StringIO()
         _yaml.dump(parsed, out)
         result = await put_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=SINGLE_VALUES_FILE,
             content=out.getvalue(),
             message="chore(finops): apply cost optimisation recommendation",
             sha=sha,

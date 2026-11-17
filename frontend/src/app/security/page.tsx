@@ -1,5 +1,6 @@
 "use client";
 
+import { PendingApprovals } from "@/components/security/PendingApprovals";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { getSecurityOverview, getSecurityRole } from "@/lib/api";
 import { useProjectApps, useProjects } from "@/lib/hooks";
@@ -21,6 +22,7 @@ function SecurityInner() {
   const { projects } = useProjects();
   const [overview, setOverview] = useState<SecurityProjectOverview[]>([]);
   const [isCnpAdmin, setIsCnpAdmin] = useState(false);
+  const [username, setUsername] = useState("");
 
   const project = searchParams.get("project") ?? projects[0]?.name ?? "";
   const app = searchParams.get("app");
@@ -30,7 +32,10 @@ function SecurityInner() {
   useEffect(() => {
     if (!project) return;
     getSecurityRole(project)
-      .then((r) => setIsCnpAdmin(r.cnp_admin || r.auditor === true))
+      .then((r) => {
+        setIsCnpAdmin(r.cnp_admin || r.auditor === true);
+        setUsername(r.username);
+      })
       .catch(() => setIsCnpAdmin(false));
   }, [project]);
 
@@ -55,6 +60,7 @@ function SecurityInner() {
 
   return (
     <div className="space-y-6">
+      {isCnpAdmin && <PendingApprovals username={username} />}
       <div className="flex flex-wrap items-center gap-2">
         <select
           aria-label={tc("project")}

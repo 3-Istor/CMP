@@ -288,6 +288,7 @@ export function useFinopsOverview(
   period = "30d",
   granularity = "daily",
   cloud?: string,
+  app?: number,
 ) {
   const [data, setData] = useState<import("@/types").FinopsOverview | null>(
     null,
@@ -305,6 +306,7 @@ export function useFinopsOverview(
         period,
         granularity,
         cloud,
+        app,
       });
       setData(res);
       setError(null);
@@ -314,7 +316,7 @@ export function useFinopsOverview(
     } finally {
       setLoading(false);
     }
-  }, [project, period, granularity, cloud]);
+  }, [project, period, granularity, cloud, app]);
 
   useEffect(() => {
     refresh();

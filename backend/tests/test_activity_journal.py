@@ -1,17 +1,26 @@
+import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.audit import AuditEvent
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.security import SecurityException
 from app.routers import activity as activity_router
 from app.routers import deployments as deployments_router
+from app.routers import finops as finops_router
+from app.routers import security as security_router
 from app.services import audit, authz, keycloak_service
+from app.services.finops.recommendations import Recommendation
 from app.services.keycloak_service import get_current_user
+from app.services.security.model import Category, Tier
 from tests.test_app_security_data import (  # noqa: F401
     BACKEND_YAML,
     FRONTEND_YAML,
@@ -353,3 +362,209 @@ def test_platform_admin_sees_every_project(build, session_factory):
 
 def test_export_neutralises_spreadsheet_formulas():
     assert activity_router._csv_cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+
+
+def test_activity_events_carry_the_app_id_of_live_apps_only(
+    build, session_factory
+):
+    client, shop_id = build(STATIC_FILES, "member")
+    with session_factory() as db:
+        db.add(
+            Deployment(
+                name="gone",
+                template_id="k3s-gitops-app",
+                provider_type=ProviderType.KUBERNETES,
+                project_id="demo",
+                status=DeploymentStatus.DELETED,
+            )
+        )
+        db.commit()
+    seed(
+        session_factory,
+        [
+            ("demo", "shop", "alice", "app.sleep"),
+            ("demo", "gone", "bob", "app.delete"),
+            ("demo", None, "bob", "project.member.add"),
+        ],
+    )
+
+    events = client.get("/api/activity?project=demo&source=cmp").json()[
+        "events"
+    ]
+
+    assert {e["app"]: e["app_id"] for e in events} == {
+        "shop": shop_id,
+        "gone": None,
+        None: None,
+    }
+
+
+def test_activity_feed_states_its_retention(build):
+    client, _ = build(STATIC_FILES, "member")
+
+    body = client.get("/api/activity?project=demo&source=cmp").json()
+
+    assert body["retention_days"] == settings.AUDIT_RETENTION_DAYS
+
+
+def test_recommendation_actions_are_journaled_in_their_project(
+    build, session_factory, monkeypatch
+):
+    _, shop_id = build(STATIC_FILES, "admin")
+    rec = Recommendation(
+        id=f"{shop_id}:rightsizing",
+        app_id=shop_id,
+        app_name="shop",
+        project_id="demo",
+        rec_type="rightsizing",
+        title="t",
+        justification="j",
+        current={},
+        recommended={},
+        monthly_saving_eur=1.0,
+        confidence=80,
+        effort="medium",
+    )
+    provider = mock.Mock()
+    provider.recommendations.return_value = [rec]
+    monkeypatch.setattr(finops_router, "get_cost_provider", lambda: provider)
+    monkeypatch.setattr(
+        finops_router, "_require_project_role", lambda *a: None
+    )
+    app = FastAPI()
+    app.add_middleware(audit.AuditMiddleware)
+    app.include_router(finops_router.router, prefix="/api")
+
+    def override_db():
+        with session_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "u"}
+    client = TestClient(app, headers={"Authorization": "Bearer t"})
+
+    response = client.post(
+        f"/api/finops/recommendations/{shop_id}:rightsizing/ignore"
+    )
+
+    assert response.status_code == 200
+    [event] = journal(session_factory)
+    assert (event.action, event.project, event.app) == (
+        "finops.recommendation.ignore",
+        "demo",
+        "shop",
+    )
+
+
+def _exception_row(session_factory) -> int:
+    with session_factory() as db:
+        row = SecurityException(
+            project="demo",
+            app="shop",
+            fingerprint="f" * 32,
+            rule="leak",
+            kind="leak",
+            status="false_positive",
+            statement="s",
+            expires_on=date(2027, 1, 1),
+            author="bob",
+        )
+        db.add(row)
+        db.commit()
+        return row.id
+
+
+def _record(action: str, params: dict, query: bytes = b"") -> None:
+    request = Request(
+        {"type": "http", "headers": [], "query_string": query, "client": None}
+    )
+    asyncio.run(
+        audit._record(  # pylint: disable=protected-access
+            request, action, params, b"", 200
+        )
+    )
+
+
+def test_exception_events_are_journaled_in_their_project(
+    build, session_factory
+):
+    build(STATIC_FILES, "admin")
+    exception_id = _exception_row(session_factory)
+
+    _record("security.exception.revoke", {"exception_id": str(exception_id)})
+
+    [event] = journal(session_factory)
+    assert (event.project, event.app, event.target) == (
+        "demo",
+        "shop",
+        str(exception_id),
+    )
+
+
+def test_exception_approval_stays_in_its_project_whatever_the_query(
+    build, session_factory
+):
+    build(STATIC_FILES, "admin")
+    exception_id = _exception_row(session_factory)
+
+    _record(
+        "security.exception.approve",
+        {"exception_id": str(exception_id)},
+        b"project=elsewhere",
+    )
+
+    [event] = journal(session_factory)
+    assert (event.project, event.app) == ("demo", "shop")
+
+
+def test_exception_creation_records_its_id(
+    build, session_factory, monkeypatch
+):
+    build(STATIC_FILES, "admin")
+    finding = SimpleNamespace(
+        fingerprint="a" * 32,
+        app="shop",
+        category=Category.LEAKS,
+        sources=["gitleaks"],
+        rule="generic-api-key",
+        tier=Tier.CORE,
+        title="Generic API key",
+        i18n=None,
+    )
+    monkeypatch.setattr(security_router, "_require_member", mock.AsyncMock())
+    monkeypatch.setattr(
+        security_router.store, "merged_findings", lambda *a, **k: [finding]
+    )
+    monkeypatch.setattr(
+        security_router.store, "active_exceptions", lambda *a: set()
+    )
+    monkeypatch.setattr(
+        security_router,
+        "_sync_exceptions_file",
+        mock.AsyncMock(return_value=None),
+    )
+    app = FastAPI()
+    app.add_middleware(audit.AuditMiddleware)
+    app.include_router(security_router.router, prefix="/api")
+
+    def override_db():
+        with session_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "u"}
+    client = TestClient(app, headers={"Authorization": "Bearer t"})
+
+    response = client.post(
+        f"/api/security/findings/{'a' * 32}/exception",
+        json={
+            "project": "demo",
+            "status": "false_positive",
+            "statement": "A test key, never deployed.",
+        },
+    )
+
+    assert response.status_code == 201
+    [event] = journal(session_factory)
+    assert event.project == "demo" and event.app == "shop"
+    assert json.loads(event.details)["exception_id"] == response.json()["id"]

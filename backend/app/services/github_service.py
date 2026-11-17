@@ -762,6 +762,38 @@ async def list_workflow_runs(
     return runs if isinstance(runs, list) else []
 
 
+async def list_open_pulls(
+    installation_token: str, repo_full_name: str
+) -> list[dict]:
+    """
+    The open pull requests of *repo_full_name*.
+
+    ponytail: first 100 open PRs, page when a repo exceeds that.
+
+    Raises:
+        GitHubAppError: On HTTP errors.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{GITHUB_API_BASE}/repos/{repo_full_name}/pulls",
+                headers=_api_headers(installation_token),
+                params={"state": "open", "per_page": LIST_PAGE_SIZE},
+                timeout=15.0,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to list the pull requests of '{repo_full_name}': {exc}"
+        ) from exc
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to list the pull requests of '{repo_full_name}': "
+            f"{_github_error_message(response)}"
+        )
+    pulls = response.json()
+    return pulls if isinstance(pulls, list) else []
+
+
 async def get_workflow_run(
     installation_token: str, repo_full_name: str, workflow_run_id: str
 ) -> dict | None:
