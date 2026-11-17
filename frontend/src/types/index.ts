@@ -621,6 +621,7 @@ export interface SecurityFinding {
   fix: string;
   location: string;
   link: string | null;
+  fix_pr?: string | null;
   raw: string;
   i18n?: Partial<
     Record<

@@ -792,6 +792,7 @@
     "finding": {
       "pending": "Ignored by {author}. Awaiting a project admin.",
       "pendingCore": "Ignored by {author}. Awaiting a platform admin or security auditor.",
+      "upgradePr": "Open upgrade PR",
       "viewRun": "View run",
       "backupNow": "Back up now",
       "seenBy": "Seen by {sources} since {date}"
@@ -815,6 +816,15 @@
         "accepted_risk": "The flaw affects us, we will fix it later. Expires within 90 days at most.",
         "revoked": "The secret was changed and the old one no longer works. Removing it from the history is not enough."
       }
+    },
+    "approvals": {
+      "title": "Pending approvals",
+      "empty": "Nothing to approve.",
+      "project": "Project",
+      "finding": "Finding",
+      "by": "By",
+      "reject": "Reject",
+      "rejected": "Exception rejected"
     },
     "exceptions": {
       "empty": "No ignored alert.",
@@ -2721,6 +2731,7 @@
       "cost_anomaly": "Cost anomaly on {app}",
       "member_added": "You are now {role, select, admin {administrator} guest {guest} other {member}} of {project}",
       "approval_request": "{user} needs your approval: {summary}",
+      "security_exception_pending": "{user} asks to ignore an alert in {app}",
       "unknown": "New notification",
       "access_requested": "{user} asks for {elevation}, your approval is needed",
       "access_approved": "{by} approved your {elevation} access",

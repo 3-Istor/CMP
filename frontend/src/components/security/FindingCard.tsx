@@ -96,6 +96,17 @@ export function FindingCard({
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
+          {finding.fix_pr && (
+            <a
+              href={finding.fix_pr}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-[0.8rem] font-medium hover:bg-accent"
+            >
+              {t("finding.upgradePr")}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
           {BACKUP_NOW_RULES.has(finding.rule) && canAdmin && (
             <Button size="sm" variant="outline" onClick={backupNow} disabled={busy}>
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

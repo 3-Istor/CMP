@@ -47,6 +47,7 @@ const ROUTES: Record<string, unknown> = {
   "/security/findings": security.findings,
   "/security/trend": security.trend,
   "/security/exceptions": security.exceptions,
+  "/security/exceptions/pending": security.pending,
   "/security/me": security.me,
   "/account/github": githubStatus,
   "/projects/demo/topology": topology,

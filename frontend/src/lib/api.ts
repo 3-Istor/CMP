@@ -229,6 +229,9 @@ export const getSecurityRole = (project: string) =>
     `/security/me?${securityQuery({ project })}`,
   );
 
+export const getPendingSecurityExceptions = () =>
+  request<import("@/types").SecurityException[]>("/security/exceptions/pending");
+
 export const requestSecurityScan = (
   project: string,
   app: string,

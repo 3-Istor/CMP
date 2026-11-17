@@ -792,6 +792,7 @@
     "finding": {
       "pending": "Ignorée par {author}. En attente d'un admin du projet.",
       "pendingCore": "Ignorée par {author}. En attente d'un admin plateforme ou d'un auditeur sécurité.",
+      "upgradePr": "Ouvrir la PR de mise à jour",
       "viewRun": "Voir le run",
       "backupNow": "Sauvegarder maintenant",
       "seenBy": "Vu par {sources} depuis le {date}"
@@ -815,6 +816,15 @@
         "accepted_risk": "La faille nous concerne, on corrigera plus tard. Expire dans 90 jours au plus.",
         "revoked": "Le secret a été changé et l'ancien ne fonctionne plus. Le retirer de l'historique ne suffit pas."
       }
+    },
+    "approvals": {
+      "title": "Approbations en attente",
+      "empty": "Rien à valider.",
+      "project": "Projet",
+      "finding": "Alerte",
+      "by": "Par",
+      "reject": "Rejeter",
+      "rejected": "Exception rejetée"
     },
     "exceptions": {
       "empty": "Aucune alerte ignorée.",
@@ -2721,6 +2731,7 @@
       "cost_anomaly": "Anomalie de coût sur {app}",
       "member_added": "Vous êtes désormais {role, select, admin {administrateur} guest {invité} other {membre}} de {project}",
       "approval_request": "{user} attend votre approbation : {summary}",
+      "security_exception_pending": "{user} demande d'ignorer une alerte dans {app}",
       "unknown": "Nouvelle notification",
       "access_requested": "{user} demande {elevation}, votre validation est attendue",
       "access_approved": "{by} a approuvé votre accès {elevation}",
