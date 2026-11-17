@@ -416,16 +416,30 @@ provider "openstack" {{
             base_url,
         )
 
-    def init(self) -> None:
-        """Initialize Terraform in the working directory."""
+    def init(self, reuse_lock: bool = False) -> None:
+        """
+        Initialize Terraform in the working directory.
+
+        *reuse_lock* (destroys) keeps the lock file the last init wrote, so
+        providers come from the plugin cache instead of the registry; a lock
+        stale against the template's constraints falls back to a full init.
+        """
         logger.info("Initializing Terraform for %s", self.deployment_name)
+        if reuse_lock:
+            try:
+                self._init(upgrade=False)
+                return
+            except RuntimeError as exc:
+                logger.info("Init with the existing lock failed: %s", exc)
 
         # Delete stale lock file to prevent provider version conflicts
         lock_file = self.working_dir / ".terraform.lock.hcl"
         if lock_file.exists():
             logger.info("Removing stale lock file: %s", lock_file)
             lock_file.unlink()
+        self._init(upgrade=True)
 
+    def _init(self, upgrade: bool) -> None:
         # Create provider override file before init
         self._create_provider_override()
 
@@ -434,7 +448,7 @@ provider "openstack" {{
             "init",
             "-no-color",
             "-reconfigure",
-            "-upgrade",
+            *(["-upgrade"] if upgrade else []),
             "-input=false",
         ]
         backend_config = self._get_backend_config()

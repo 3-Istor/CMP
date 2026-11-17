@@ -675,10 +675,25 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
     )
 
 
+def _mark_deleted(source_id: str, app: str) -> None:
+    """Mark the deployment row of one app of the import deleted."""
+    with SessionLocal() as db:
+        source = db.get(ImportSource, source_id)
+        for service in source.services if source else []:
+            if service.deployment_id and service.app_name == app:
+                row = db.get(Deployment, service.deployment_id)
+                if row is not None:
+                    row.status = DeploymentStatus.DELETED
+        db.commit()
+
+
 async def _cleanup_namespaces(
     project: str, apps: list[str], source_id: str
 ) -> None:
-    """Delete each namespace once Argo CD dropped its Application."""
+    """
+    Delete each namespace once Argo CD dropped its Application, and mark that
+    app deleted right away rather than when the last one is gone.
+    """
     deadline = asyncio.get_running_loop().time() + 600
     pending = list(apps)
     while pending and asyncio.get_running_loop().time() < deadline:
@@ -698,10 +713,11 @@ async def _cleanup_namespaces(
                         f"/api/v1/namespaces/{project}-{app}",
                     )
                     pending.remove(app)
+                    _mark_deleted(source_id, app)
             except kube_client.KubeUnavailableError as exc:
                 logger.warning("Namespace cleanup of %s: %s", app, exc)
         if pending:
-            await asyncio.sleep(10)
+            await asyncio.sleep(POLL_SECONDS)
     with SessionLocal() as db:
         source = db.get(ImportSource, source_id)
         for service in source.services if source else []:

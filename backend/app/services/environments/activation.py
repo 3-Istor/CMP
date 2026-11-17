@@ -440,7 +440,7 @@ def destroy_with_app(db: Session, deployment: Deployment) -> None:
     if row is None:
         return
     executor = _executor(deployment)
-    executor.init()
+    executor.init(reuse_lock=True)
     executor.destroy(_variables(deployment))
     db.delete(row)
     db.commit()
