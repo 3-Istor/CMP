@@ -62,10 +62,24 @@ export const unmockedRequests = new Set<string>();
 type Override = { status?: number; json: unknown };
 
 const app = projectApps[0];
+const publicApps = [
+  app,
+  {
+    ...app,
+    id: 2,
+    name: "shop-api",
+    terraform_outputs: '{"app_url":"https://shop-api-demo.3istor.com","hostname":"shop-api-demo.3istor.com"}',
+    staging_url: null,
+  },
+];
 const notConnected: Override = { status: 503, json: { detail: "cluster_not_connected", cloud: "aws" } };
 
 // Named answers layered over ROUTES. A key ending in "*" is a prefix; exact keys win.
 export const VARIANTS: Record<string, Record<string, Override>> = {
+  publicapps: {
+    "/projects/demo/apps": { json: publicApps },
+    "/deployments/": { json: publicApps },
+  },
   deleting: {
     "/projects/demo/apps": { json: [{ ...app, status: "deleting", step_message: "Destroying resources" }] },
     "/deployments/": { json: [{ ...app, status: "deleting", step_message: "Destroying resources" }] },

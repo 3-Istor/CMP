@@ -195,6 +195,12 @@
     }
   },
   "apps": {
+    "env": {
+      "prod": "Prod",
+      "staging": "Staging",
+      "openApp": "Open app",
+      "newTab": "opens in a new tab"
+    },
     "nav": {
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
@@ -1894,7 +1900,6 @@
       "admin": "Admin"
     },
     "toolsEmpty": "No tools available",
-    "openApp": "Open application",
     "more": "More actions",
     "refresh": "Refresh",
     "refreshed": "Data refreshed",
@@ -2900,8 +2905,7 @@
       "project": "Project",
       "state": "State",
       "url": "Address",
-      "empty": "No application yet.",
-      "openApp": "Open {name}, new tab"
+      "empty": "No application yet."
     },
     "stats": {
       "apps": "Applications",

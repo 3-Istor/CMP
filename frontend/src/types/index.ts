@@ -25,6 +25,7 @@ export interface Deployment {
   status: DeploymentStatus;
   step_message: string;
   terraform_outputs: string | null; // JSON string
+  staging_url?: string | null;
   resource_count: number | null;
   created_at: string;
   updated_at: string;
