@@ -38,7 +38,6 @@ router = APIRouter(prefix="/activity", tags=["Activity"])
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 ALL_SOURCES = ("cmp", "deployment", "kubernetes", "vault", "keycloak")
-MAX_ROUNDS = 20  # bounds the over-fetch when a filter drops most rows
 PARIS = ZoneInfo("Europe/Paris")
 _LABEL_VALUE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
@@ -188,6 +187,9 @@ class RowFilter(NamedTuple):
     app: str | None = None
     actor: str | None = None
     action: str | None = None
+    notable: bool = False
+    # A member sees kubernetes/vault events only when they are the actor.
+    me: frozenset[str] | None = None
 
 
 # ── Collection ───────────────────────────────────────────────────────────────
@@ -249,6 +251,8 @@ def _cmp_rows(
         stmt = stmt.where(AuditEvent.actor == scope.actor)
     if scope.action:
         stmt = stmt.where(AuditEvent.action.startswith(scope.action))
+    if scope.notable:
+        stmt = stmt.where(AuditEvent.action.in_(NOTABLE))
     stmt = stmt.order_by(
         AuditEvent.created_at.desc(), AuditEvent.id.desc()
     ).limit(limit)
@@ -321,6 +325,15 @@ def _collected_rows(
         stmt = stmt.where(ActivityRecord.actor == scope.actor)
     if scope.action:
         stmt = stmt.where(ActivityRecord.action.startswith(scope.action))
+    if scope.notable:
+        stmt = stmt.where(ActivityRecord.notable.is_(True))
+    if scope.me is not None:
+        stmt = stmt.where(
+            or_(
+                ActivityRecord.source.not_in(("kubernetes", "vault")),
+                ActivityRecord.actor.in_(scope.me),
+            )
+        )
     if not include_reads:
         stmt = stmt.where(ActivityRecord.is_read.is_(False))
     stmt = stmt.order_by(
@@ -441,38 +454,22 @@ async def list_activity(
     role = await _role(token, project)
     start, end = _window(since, until)
     wanted = _sources(source)
-    scope = RowFilter(app, actor, action)
-    kept: list[ActivityEvent] = []
-    unavailable: list[str] = []
-    # Filters that SQL cannot express drop rows after the per-source limit,
-    # so read further back until a page is full or the sources run dry.
-    for _ in range(MAX_ROUNDS):
-        events, unavailable = await _collect(
-            db,
-            project,
-            wanted,
-            start,
-            end,
-            limit,
-            include_reads,
-            scope,
-            before_id,
-        )
-        # The journal and the collected table are each cut at ``limit``;
-        # nothing is certain below the highest oldest row of a full one.
-        groups = (
-            [e for e in events if e.source == "cmp"],
-            [e for e in events if e.source != "cmp"],
-        )
-        lows = [min(map(_key, g)) for g in groups if len(g) >= limit]
-        floor = max(lows) if lows else None
-        if floor is not None:
-            events = [e for e in events if _key(e) >= floor]
-        kept += _filter(events, role, token, actor, action, app, notable_only)
-        if floor is None or len(kept) >= limit:
-            break
-        end, before_id = floor[0], floor[1]
-    kept.sort(key=_key, reverse=True)
+    me = None
+    if role == "member":
+        wanted -= {"keycloak"}
+        me = frozenset(_identities(token))
+    events, unavailable = await _collect(
+        db,
+        project,
+        wanted,
+        start,
+        end,
+        limit,
+        include_reads,
+        RowFilter(app, actor, action, notable_only, me),
+        before_id,
+    )
+    kept = _filter(events, role, token, actor, action, app, notable_only)
     return ActivityFeed(events=kept[:limit], unavailable=unavailable)
 
 

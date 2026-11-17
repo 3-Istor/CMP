@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -17,7 +17,11 @@ class AuditEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), index=True
+        DateTime(timezone=True),
+        # Not server_default: CURRENT_TIMESTAMP drops the fraction, which breaks
+        # the page cursor's text comparison on SQLite.
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
     )
     actor: Mapped[str] = mapped_column(String(255), index=True)
     action: Mapped[str] = mapped_column(String(64), index=True)
