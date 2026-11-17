@@ -358,6 +358,21 @@ def test_admin_overview_lists_the_uncovered_row_and_totals_the_cluster(api):
     assert body["summary"]["month_to_date_eur"] == 39.0
 
 
+@pytest.mark.parametrize("provider", ["real", "simulated"])
+@pytest.mark.parametrize("who", [ADMIN, MEMBER])
+def test_summary_equals_the_overview_summary(api, monkeypatch, provider, who):
+    if provider == "simulated":
+        monkeypatch.setattr(settings, "FINOPS_PROVIDER", provider)
+        monkeypatch.setattr(
+            router, "get_cost_provider", provider_module.SimulatedCostProvider
+        )
+    client = api(who)
+
+    summary = client.get("/api/finops/summary").json()
+
+    assert summary == client.get("/api/finops/overview").json()["summary"]
+
+
 def test_resource_filter_accepts_platform(api):
     points = api(MEMBER).get("/api/finops/timeline?resource=platform").json()
 

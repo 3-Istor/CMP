@@ -343,6 +343,26 @@ def get_overview(
     )
 
 
+@router.get("/summary", response_model=CostSummary)
+def get_summary(
+    token: Annotated[dict, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """The overview's ``summary`` (all projects, all clouds) without the rest."""
+    deployments = _load_deployments(db, token, None)
+    provider = get_cost_provider()
+    apps = _cost_specs(provider, deployments, token, None)
+
+    summary_dict = provider.summary(apps)
+    summary_dict["breakdown"] = Breakdown(**summary_dict["breakdown"])
+    summary = CostSummary(**summary_dict)
+    if settings.FINOPS_PROVIDER == "real":
+        summary.projected_month_eur = forecast_for_apps(
+            provider, apps, budget_eur=_budget_amount(None)
+        )["projected_eur"]
+    return summary
+
+
 @router.get("/forecast", response_model=CostForecast)
 def get_forecast(
     token: Annotated[dict, Depends(get_current_user)],

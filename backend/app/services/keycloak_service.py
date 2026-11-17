@@ -387,6 +387,12 @@ def _project_roles_from_groups(groups: list[dict]) -> dict[str, ProjectRole]:
     return projects
 
 
+# Same as the front PROJECTS_TTL_MS (frontend/src/lib/hooks.ts): the staleness
+# the project list already accepts. Listing path only, authorization stays live.
+_LISTING_TTL = 15
+_listing_cache: dict[str, tuple[list[dict], float]] = {}
+
+
 def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
     """
     Query the Keycloak Admin API to retrieve the group membership of a user
@@ -399,6 +405,10 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
         List of project dicts, sorted by name:
         ``[{"name": "sandbox", "role": "admin"}, ...]``
     """
+    cached = _listing_cache.get(user_id)
+    if cached and cached[1] > time.monotonic():
+        return [dict(p) for p in cached[0]]
+
     logger.debug("Fetching groups from Keycloak for user_id: %s", user_id)
 
     groups = _fetch_user_groups(user_id)
@@ -407,10 +417,14 @@ def fetch_user_projects_from_keycloak(user_id: str) -> list[dict]:
     projects = _project_roles_from_groups(groups)
     logger.debug("Extracted %d projects: %s", len(projects), list(projects))
 
-    return [
+    listing = [
         {"name": name, "role": role.value}
         for name, role in sorted(projects.items())
     ]
+    # An empty list may be a swallowed Keycloak outage: never cache it.
+    if listing:
+        _listing_cache[user_id] = (listing, time.monotonic() + _LISTING_TTL)
+    return listing
 
 
 def get_user_project_role(
@@ -492,6 +506,7 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
         timeout=10,
     )
     response.raise_for_status()
+    _listing_cache.clear()
 
     logger.info(
         "Added user '%s' to group '%s' (role: %s)", username, group_name, role
@@ -526,37 +541,47 @@ def remove_user_from_project(username: str, project_name: str) -> None:
 
     user_id = user["id"]
 
-    # Remove from every role group (if they exist)
-    for suffix in ALL_GROUP_SUFFIXES:
-        group_name = f"project-{project_name}-{suffix}"
-        group = _find_group_by_name(group_name, admin_token)
+    try:
+        # Remove from every role group (if they exist)
+        for suffix in ALL_GROUP_SUFFIXES:
+            group_name = f"project-{project_name}-{suffix}"
+            group = _find_group_by_name(group_name, admin_token)
 
-        if not group:
-            logger.debug("Group '%s' not found, skipping", group_name)
-            continue
+            if not group:
+                logger.debug("Group '%s' not found, skipping", group_name)
+                continue
 
-        group_id = group["id"]
+            group_id = group["id"]
 
-        # Check if user is in this group first
-        if not _check_user_in_group_realtime(user_id, group_id, admin_token):
-            logger.debug(
-                "User '%s' not in group '%s', skipping", username, group_name
+            # Check if user is in this group first
+            if not _check_user_in_group_realtime(
+                user_id, group_id, admin_token
+            ):
+                logger.debug(
+                    "User '%s' not in group '%s', skipping",
+                    username,
+                    group_name,
+                )
+                continue
+
+            # Remove user from group
+            url = (
+                f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+                f"/users/{user_id}/groups/{group_id}"
             )
-            continue
+            response = requests.delete(
+                url,
+                headers={"Authorization": f"Bearer {admin_token}"},
+                timeout=10,
+            )
+            response.raise_for_status()
 
-        # Remove user from group
-        url = (
-            f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
-            f"/users/{user_id}/groups/{group_id}"
-        )
-        response = requests.delete(
-            url,
-            headers={"Authorization": f"Bearer {admin_token}"},
-            timeout=10,
-        )
-        response.raise_for_status()
-
-        logger.info("Removed user '%s' from group '%s'", username, group_name)
+            logger.info(
+                "Removed user '%s' from group '%s'", username, group_name
+            )
+    finally:
+        # Also on a partial failure: some groups may already be gone.
+        _listing_cache.clear()
 
 
 def project_guests_supported(project_name: str) -> bool:
