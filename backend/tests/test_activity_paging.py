@@ -101,13 +101,16 @@ def walk(client, **extra) -> list[str]:
     }
     seen = []
     page = client.get("/api/activity", params=params).json()["events"]
-    while page:
+    for _ in range(20):
+        if not page:
+            break
         seen += [e["id"] for e in page]
         last = page[-1]
         page = client.get(
             "/api/activity",
             params={**params, "until": last["time"], "before_id": last["id"]},
         ).json()["events"]
+    assert not page, "paging did not finish"
     return seen
 
 
@@ -174,3 +177,16 @@ def test_activity_paging_with_notable_filter_and_ties(client, session_factory):
     seen = walk(client, notable_only=True)
 
     assert sorted(seen) == ["n1", "n2", "n3"]
+
+
+@pytest.mark.parametrize("bad", ["cmp-٣", "cmp-" + "9" * 40, "cmp-", "cmp-1x"])
+def test_activity_before_id_malformed_cmp_cursor_is_422(client, bad):
+    r = client.get("/api/activity", params={"before_id": bad})
+
+    assert r.status_code == 422
+
+
+def test_activity_before_id_overlong_is_422(client):
+    r = client.get("/api/activity", params={"before_id": "x" * 300})
+
+    assert r.status_code == 422

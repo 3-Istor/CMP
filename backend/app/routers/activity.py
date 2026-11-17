@@ -441,7 +441,7 @@ async def list_activity(
     app: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
-    before_id: str | None = None,
+    before_id: Annotated[str | None, Query(max_length=128)] = None,
     include_reads: bool = False,
     notable_only: bool = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
@@ -451,6 +451,10 @@ async def list_activity(
     Newest first. Page by passing the last event's time and id as ``until``
     and ``before_id`` (``until`` alone skips events sharing that time).
     """
+    # Ascii digits only, 12 max: wider ids would overflow the integer compare.
+    if before_id and before_id.startswith("cmp-"):
+        if not re.fullmatch(r"cmp-[0-9]{1,12}", before_id):
+            raise HTTPException(status_code=422, detail="Invalid before_id")
     role = await _role(token, project)
     start, end = _window(since, until)
     wanted = _sources(source)
