@@ -18,12 +18,15 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
 from app.models.security import SecurityException, SecurityScan
 from app.routers.finops import _user_project_names
-from app.services import app_repo
+from app.services import app_repo, notifications
 from app.services.authz import (
+    AUDITOR_GROUP,
+    PLATFORM_ADMIN_GROUP,
     is_auditor,
     is_cnp_admin,
     project_role_or_none,
@@ -40,7 +43,11 @@ from app.services.github_service import (
     get_org_installation_token,
     put_file_content,
 )
-from app.services.keycloak_service import get_current_user, get_project_role
+from app.services.keycloak_service import (
+    get_current_user,
+    get_project_role,
+    list_group_usernames,
+)
 from app.services.kube_client import (
     KubeUnavailableError,
     kube_delete_collection,
@@ -119,6 +126,7 @@ def _app_deployment(db: Session, project: str, app: str) -> Deployment:
 
 class ExceptionRead(BaseModel):
     id: int
+    project: str
     app: str | None
     fingerprint: str
     rule: str
@@ -136,6 +144,10 @@ class ExceptionRead(BaseModel):
     pending_approval: bool = False
     # A core finding is a fixable critical: only the auditor accepts it.
     critical: bool = False
+    expired: bool = False
+    title: str | None = None
+    # Only {"title": {key, params}} of the finding.
+    i18n: dict | None = None
 
 
 class FindingRead(BaseModel):
@@ -229,12 +241,21 @@ class ProjectOverview(BaseModel):
     core: int
 
 
-def _exception_read(e: SecurityException, tier: Tier | None) -> ExceptionRead:
-    pending = e.approved_at is None and (
-        tier is Tier.CORE or e.status == rules.Status.ACCEPTED_RISK.value
+def _exception_read(
+    e: SecurityException, finding: store.Merged | None
+) -> ExceptionRead:
+    critical = finding is not None and finding.tier is Tier.CORE
+    pending = e.revoked_at is None and (
+        (critical and not e.approved_by_reviewer)
+        or (
+            e.status == rules.Status.ACCEPTED_RISK.value
+            and e.approved_at is None
+        )
     )
+    i18n = json.loads(finding.i18n) if finding and finding.i18n else {}
     return ExceptionRead(
         id=e.id,
+        project=e.project,
         app=e.app,
         fingerprint=e.fingerprint,
         rule=e.rule,
@@ -250,7 +271,10 @@ def _exception_read(e: SecurityException, tier: Tier | None) -> ExceptionRead:
         revoked_by=e.revoked_by,
         revoked_at=e.revoked_at,
         pending_approval=pending,
-        critical=tier is Tier.CORE,
+        critical=critical,
+        expired=e.expires_on < utcnow().date(),
+        title=finding.title if finding else None,
+        i18n={"title": i18n["title"]} if "title" in i18n else None,
     )
 
 
@@ -276,7 +300,7 @@ def _finding_read(
         first_seen=m.first_seen,
         last_seen=m.last_seen,
         resolved_at=m.resolved_at,
-        exception=_exception_read(exception, m.tier) if exception else None,
+        exception=_exception_read(exception, m) if exception else None,
     )
 
 
@@ -455,7 +479,8 @@ async def get_findings(
     items.sort(key=lambda m: (-store.TIER_RANK[m.tier], m.app or "", m.title))
 
     pending = {
-        e.fingerprint: e for e in store.active_exceptions(db, project).values()
+        e.fingerprint: e
+        for e in store.active_exceptions(db, project, today).values()
     }
     return [_finding_read(m, pending) for m in items]
 
@@ -623,7 +648,7 @@ async def create_exception(
     )
     if finding is None:
         raise HTTPException(status_code=404, detail="Finding not found")
-    if fingerprint in store.active_exceptions(db, payload.project):
+    if fingerprint in store.active_exceptions(db, payload.project, today):
         raise HTTPException(
             status_code=409, detail="Cette alerte est déjà ignorée."
         )
@@ -654,7 +679,36 @@ async def create_exception(
         db, payload.project, finding.app, author
     )
     db.commit()
-    return _exception_read(row, finding.tier)
+    read = _exception_read(row, finding)
+    if read.pending_approval:
+        await run_in_threadpool(_notify_approvers, row, read.critical)
+    return read
+
+
+def _notify_approvers(row: SecurityException, critical: bool) -> None:
+    """Tell whoever can approve; never fails the creation."""
+    try:
+        if critical:
+            recipients = list_group_usernames(
+                PLATFORM_ADMIN_GROUP
+            ) | list_group_usernames(AUDITOR_GROUP)
+            link = "/security"
+        else:
+            recipients = notifications.project_recipients(
+                row.project, ProjectRole.ADMIN
+            )
+            link = f"/security?project={row.project}&tab=ignored"
+        notifications.notify_users(
+            {r for r in recipients if "@" not in r} - {row.author},
+            kind="approval_request",
+            title_key="security_exception_pending",
+            params={"user": row.author, "app": row.app or row.project},
+            link=link,
+            project=row.project,
+            app=row.app,
+        )
+    except Exception:  # pylint: disable=broad-except
+        logger.warning("Exception approval notice failed", exc_info=True)
 
 
 def _exception_tier(db: Session, row: SecurityException) -> Tier | None:
@@ -687,16 +741,51 @@ async def list_exceptions(
         query = query.filter_by(app=app)
     if not include_revoked:
         query = query.filter(SecurityException.revoked_at.is_(None))
-    tiers = {
-        m.fingerprint: m.tier
+    findings = {
+        m.fingerprint: m
         for m in store.merged_findings(
             db, project, utcnow().date(), app, include_resolved=True
         )
     }
     return [
-        _exception_read(e, tiers.get(e.fingerprint))
+        _exception_read(e, findings.get(e.fingerprint))
         for e in query.order_by(SecurityException.created_at.desc())
     ]
+
+
+@router.get("/exceptions/pending", response_model=list[ExceptionRead])
+async def pending_exceptions(
+    token: CurrentUser, db: Session = Depends(get_db)
+) -> list[ExceptionRead]:
+    """Every project's exceptions waiting for a reviewer, critical first."""
+    if not reads_platform_security(token):
+        raise HTTPException(
+            status_code=403, detail="Reserved to platform admins and auditors."
+        )
+    today = utcnow().date()
+    rows = (
+        db.query(SecurityException)
+        .filter(
+            SecurityException.revoked_at.is_(None),
+            SecurityException.expires_on >= today,
+        )
+        .all()
+    )
+    findings = {
+        project: {
+            m.fingerprint: m
+            for m in store.merged_findings(
+                db, project, today, include_resolved=True
+            )
+        }
+        for project in {r.project for r in rows}
+    }
+    reads = [
+        _exception_read(e, findings[e.project].get(e.fingerprint))
+        for e in rows
+    ]
+    pending = [r for r in reads if r.pending_approval]
+    return sorted(pending, key=lambda r: (not r.critical, r.created_at))
 
 
 @router.post(
@@ -745,7 +834,12 @@ async def revoke_exception(
 ) -> ExceptionRead:
     """Reactivate the alert."""
     row = _exception_or_404(db, exception_id)
-    await _require_member(token, row.project, "developer", write=True)
+    if is_cnp_admin(token) or is_auditor(token):
+        pass
+    elif row.author == _username(token):
+        await _require_member(token, row.project, "developer", write=True)
+    else:
+        await _require_admin(token, row.project)
     if row.revoked_at is None:
         row.revoked_by, row.revoked_at = _username(token), utcnow()
         db.commit()

@@ -398,3 +398,14 @@ def test_policy_round_trips_through_the_registry_record():
 
     # Assert
     assert settings.policy_from_record(record) == policy
+
+
+def test_an_expired_exception_no_longer_blocks_a_new_one(db):
+    # Arrange
+    _exception(db, expires=TODAY - timedelta(days=1))
+
+    # Act
+    active = store.active_exceptions(db, "shop", TODAY)
+
+    # Assert
+    assert active == {}
