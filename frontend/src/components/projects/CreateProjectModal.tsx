@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -12,7 +11,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DOCS_URL } from "@/components/layout/shellData";
 import { createProject, getGlobalHealth } from "@/lib/api";
+import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import type { ClusterStatus, TargetCloud } from "@/types";
 import { Check, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -21,7 +22,12 @@ import { toast } from "sonner";
 
 type ClusterState = ClusterStatus["state"] | "checking";
 
-const CLOUDS: TargetCloud[] = ["onprem", "aws", "gcp"];
+type Choice = "onprem" | "public";
+type Provider = "auto" | "aws" | "gcp";
+
+const PUBLIC_CLOUDS: Exclude<TargetCloud, "onprem">[] = ["aws", "gcp"];
+// Best non-up state to show on a disabled card.
+const STATE_ORDER: ClusterState[] = ["checking", "starting", "down", "unknown"];
 
 interface Props {
     open: boolean;
@@ -42,15 +48,22 @@ function validateName(name: string): NameError | null {
 export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     const t = useTranslations("projects.create");
     const tc = useTranslations("common");
+    const tNav = useTranslations("projectNav");
     const [name, setName] = useState("");
-    const [targetCloud, setTargetCloud] = useState<TargetCloud>("onprem");
+    const [choice, setChoice] = useState<Choice>("onprem");
+    const [provider, setProvider] = useState<Provider>("auto");
+    const isAdmin = usePlatformAdmin();
     // A public cloud is offered only while its cluster is up: the backend
     // refuses the others, since nothing would reconcile the project there.
     const [clusterStates, setClusterStates] = useState<
         Partial<Record<TargetCloud, ClusterState>>
     >({});
-    const stateOf = (cloud: TargetCloud): ClusterState | "up" =>
-        cloud === "onprem" ? "up" : (clusterStates[cloud] ?? "checking");
+    const stateOf = (cloud: Exclude<TargetCloud, "onprem">): ClusterState =>
+        clusterStates[cloud] ?? "checking";
+    const publicUp = PUBLIC_CLOUDS.some((c) => stateOf(c) === "up");
+    const publicState = STATE_ORDER.find((st) =>
+        PUBLIC_CLOUDS.some((c) => stateOf(c) === st),
+    ) ?? "unknown";
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +72,8 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     useEffect(() => {
         if (open) {
             setName("");
-            setTargetCloud("onprem");
+            setChoice("onprem");
+            setProvider("auto");
             setError(null);
             setClusterStates({ aws: "checking", gcp: "checking" });
             getGlobalHealth()
@@ -87,11 +101,17 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         setLoading(true);
         setError(null);
         try {
-            await createProject(trimmed, targetCloud);
+            const target =
+                choice === "onprem"
+                    ? "onprem"
+                    : isAdmin && provider !== "auto"
+                      ? provider
+                      : "public";
+            const created = await createProject(trimmed, target);
             toast.success(
                 t("toasts.created", {
                     name: trimmed,
-                    cloud: t(`clouds.${targetCloud}.label`),
+                    cloud: tNav(`cloud.${created.target_cloud}`),
                 }),
                 { duration: 6000 },
             );
@@ -108,10 +128,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
 
     return (
         <Dialog open={open} onOpenChange={(v) => !loading && !v && onClose()}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
                 <DialogHeader>
                     <DialogTitle>{t("title")}</DialogTitle>
-                    <DialogDescription>{t("description")}</DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4 py-2">
@@ -149,96 +168,98 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                     </div>
 
                     <div className="space-y-2">
-                        <Label>
-                            {t("cloud")} <span className="text-destructive">*</span>
-                        </Label>
+                        <div className="flex items-center justify-between">
+                            <Label>{t("whereItRuns")}</Label>
+                            <a
+                                href={`${DOCS_URL}06-multicloud/08-placement-cloud-public/`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                            >
+                                {t("compare")}
+                            </a>
+                        </div>
                         <div
                             role="radiogroup"
-                            aria-label={t("cloud")}
-                            className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+                            aria-label={t("whereItRuns")}
+                            className="grid grid-cols-2 gap-2"
                         >
-                            {CLOUDS.map((value) => {
-                                const state = stateOf(value);
-                                const cloud = { value, available: state === "up" };
-                                const selected = targetCloud === cloud.value;
+                            {(["onprem", "public"] as const).map((value) => {
+                                const available = value === "onprem" || publicUp;
+                                const selected = choice === value;
                                 return (
                                     <button
-                                        key={cloud.value}
+                                        key={value}
                                         type="button"
                                         role="radio"
                                         aria-checked={selected}
-                                        disabled={loading || !cloud.available}
-                                        onClick={() => setTargetCloud(cloud.value)}
-                                        className={`relative flex flex-col gap-1.5 rounded-lg border p-3 text-left text-xs transition-colors ${
+                                        disabled={loading || !available}
+                                        onClick={() => setChoice(value)}
+                                        className={`relative flex flex-col gap-1 rounded-lg border p-3 text-left text-xs transition-colors ${
                                             selected
                                                 ? "border-primary bg-primary/5"
                                                 : "border-input hover:bg-muted/40"
                                         } ${
-                                            !cloud.available
+                                            !available
                                                 ? "cursor-not-allowed opacity-50 hover:bg-transparent"
                                                 : "cursor-pointer"
                                         }`}
                                     >
                                         <div className="flex items-center justify-between gap-1">
                                             <span className="font-medium text-foreground">
-                                                {t(`clouds.${cloud.value}.label`)}
+                                                {t(`clouds.${value}.label`)}
                                             </span>
                                             {selected ? (
                                                 <Check className="h-3.5 w-3.5 text-primary" />
-                                            ) : !cloud.available ? (
+                                            ) : !available ? (
                                                 <Badge
                                                     variant="secondary"
                                                     className="text-[10px] px-1.5 py-0"
                                                 >
-                                                    {t(`clusterState.${state}`)}
+                                                    {t(`clusterState.${publicState}`)}
                                                 </Badge>
                                             ) : null}
                                         </div>
-                                        <ul className="space-y-0.5 text-muted-foreground">
-                                            {(["advantage1", "advantage2", "advantage3"] as const).map((key) => (
-                                                <li key={key}>{t(`clouds.${cloud.value}.${key}`)}</li>
-                                            ))}
-                                        </ul>
+                                        <span className="text-muted-foreground">
+                                            {t(`clouds.${value}.hint`)}
+                                        </span>
                                     </button>
                                 );
                             })}
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            {t.rich("cloudNote", {
-                                strong: (chunks) => <span className="text-foreground">{chunks}</span>,
-                            })}
-                        </p>
-                    </div>
-
-                    <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-                        <div className="font-medium text-foreground mb-1.5">
-                            {t("preview.title")}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                            {t.rich("preview.keycloak", {
-                                name: name || "…",
-                                code: (chunks) => <span className="font-mono">{chunks}</span>,
-                            })}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
-                            {t("preview.vault")}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                            {t.rich("preview.argocd", {
-                                cloud: targetCloud,
-                                code: (chunks) => <span className="font-mono">{chunks}</span>,
-                            })}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary/25" />
-                            {t.rich("preview.registry", {
-                                name: name || "…",
-                                code: (chunks) => <span className="font-mono">{chunks}</span>,
-                            })}
-                        </div>
+                        {isAdmin && choice === "public" && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">
+                                    {t("provider")}
+                                </span>
+                                <div
+                                    role="radiogroup"
+                                    aria-label={t("provider")}
+                                    className="flex gap-1"
+                                >
+                                    {(["auto", ...PUBLIC_CLOUDS] as const).map((value) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={provider === value}
+                                            aria-label={
+                                                value === "auto" ? t("auto") : t(`clouds.${value}.label`)
+                                            }
+                                            disabled={loading || (value !== "auto" && stateOf(value) !== "up")}
+                                            onClick={() => setProvider(value)}
+                                            className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                provider === value
+                                                    ? "border-primary bg-primary/5 text-foreground"
+                                                    : "border-input text-muted-foreground hover:bg-muted/40"
+                                            }`}
+                                        >
+                                            {value === "auto" ? t("auto") : t(`clouds.${value}.label`)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <DialogFooter>

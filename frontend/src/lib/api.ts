@@ -393,7 +393,7 @@ export const getProjects = () =>
 
 export const createProject = (
   project_name: string,
-  target_cloud: import("@/types").TargetCloud = "onprem",
+  target_cloud: import("@/types").TargetCloud | "public" = "onprem",
 ) =>
   request<import("@/types").ProjectCreateResponse>("/projects/", {
     method: "POST",

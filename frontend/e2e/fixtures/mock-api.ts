@@ -64,6 +64,7 @@ const notConnected: Override = { status: 503, json: { detail: "cluster_not_conne
 
 // Named answers layered over ROUTES. A key ending in "*" is a prefix; exact keys win.
 export const VARIANTS: Record<string, Record<string, Override>> = {
+  aws: { "/projects/": { json: [{ ...projects[0], target_cloud: "aws" }] } },
   deleting: {
     "/projects/demo/apps": { json: [{ ...app, status: "deleting", step_message: "Destroying resources" }] },
     "/deployments/": { json: [{ ...app, status: "deleting", step_message: "Destroying resources" }] },
