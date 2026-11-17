@@ -57,6 +57,7 @@ const ROUTES: Record<string, unknown> = {
   "/projects/demo/topology": topology,
   "/projects/demo/imports": imports,
   "/projects/demo/import/repos": importRepos,
+  "/account/github/repos": importRepos,
   "/projects/demo/imports/runs/r1": importRun,
 };
 
@@ -79,6 +80,7 @@ const notConnected: Override = { status: 503, json: { detail: "cluster_not_conne
 
 // Named answers layered over ROUTES. A key ending in "*" is a prefix; exact keys win.
 export const VARIANTS: Record<string, Record<string, Override>> = {
+  norepos: { "/account/github/repos": { json: { repositories: [] } } },
   // One project with an app down and firing alerts, one whose Argo CD and Alertmanager are unreadable.
   healthdown: {
     "/projects/": { json: [projects[0], { ...projects[0], name: "shop", role: "member" }] },

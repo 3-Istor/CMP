@@ -123,6 +123,14 @@
       "alerts": "{count, plural, one {# alert} other {# alerts}}"
     },
     "create": {
+      "source": "Start from",
+      "sourceEmpty": "Empty project",
+      "sourceRepo": "From a repository",
+      "repo": "Repository",
+      "repoNone": "No repository",
+      "repoLink": "Link GitHub",
+      "repoOff": "Off",
+      "waiting": "Creating the project…",
       "title": "Create a new project",
       "description": "A project groups your Kubernetes applications under a shared Keycloak team, Vault policy and ArgoCD AppProject. Bootstrap runs in the background and takes about 30 seconds.",
       "name": "Project name",

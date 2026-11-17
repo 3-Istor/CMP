@@ -71,10 +71,26 @@ export function ImportWizard() {
   const params = useSearchParams();
   const runId = params.get("run");
   // A new run is a new wizard: nothing of the previous one carries over.
-  return <WizardForRun key={runId ?? "new"} runId={runId} draftId={params.get("draft")} />;
+  return (
+    <WizardForRun
+      key={runId ?? "new"}
+      runId={runId}
+      draftId={params.get("draft")}
+      initialRepo={params.get("repo") ?? undefined}
+    />
+  );
 }
 
-function WizardForRun({ runId, draftId }: { runId: string | null; draftId: string | null }) {
+function WizardForRun({
+  runId,
+  draftId,
+  initialRepo,
+}: {
+  runId: string | null;
+  draftId: string | null;
+  // Set when a project was just created from a repository.
+  initialRepo?: string;
+}) {
   const t = useTranslations("imports");
   const router = useRouter();
   const pathname = usePathname();
@@ -258,7 +274,7 @@ function WizardForRun({ runId, draftId }: { runId: string | null; draftId: strin
       {loading ? (
         <Skeleton className="h-64 w-full rounded-xl" />
       ) : step === "repo" ? (
-        <RepoStep projectName={projectName} onStart={start} />
+        <RepoStep projectName={projectName} initialRepo={initialRepo} onStart={start} />
       ) : step === "analysis" && run ? (
         <AnalysisStep run={run} repo={source?.repo_full_name ?? null} onRetry={reanalyze} onRestart={() => go(null)} />
       ) : step === "review" && run && plan ? (

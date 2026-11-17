@@ -123,6 +123,14 @@
       "alerts": "{count, plural, one {# alerte} other {# alertes}}"
     },
     "create": {
+      "source": "Partir de",
+      "sourceEmpty": "Projet vide",
+      "sourceRepo": "Depuis un dépôt",
+      "repo": "Dépôt",
+      "repoNone": "Aucun dépôt",
+      "repoLink": "Lier GitHub",
+      "repoOff": "Désactivé",
+      "waiting": "Création du projet…",
       "title": "Créer un nouveau projet",
       "description": "Un projet regroupe vos applications Kubernetes au sein d'une équipe Keycloak, d'une politique Vault et d'un AppProject ArgoCD communs. Le bootstrap s'exécute en arrière-plan et prend environ 30 secondes.",
       "name": "Nom du projet",
