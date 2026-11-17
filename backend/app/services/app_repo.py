@@ -52,8 +52,17 @@ def repo_url_for(app_name: str) -> str:
     return f"https://github.com/{settings.GITHUB_ORG}/{app_name}"
 
 
-def bound_repo(github_repo_url: str | None, app_name: str, status) -> str:
+def bound_repo(
+    github_repo_url: str | None, app_name: str, status, template_id: str
+) -> str:
     """``owner/name`` of the app's own repository, or RepoNotBound."""
+    # An imported app's URL is the customer's repository, even when named
+    # after the app: Day-2 tools must never write there.
+    if template_id.startswith("import-"):
+        raise RepoNotBound(
+            "The app was imported: the platform does not manage its "
+            "repository."
+        )
     status = str(getattr(status, "value", status)).lower()
     if status not in _BOUND_STATUSES:
         raise RepoNotBound(

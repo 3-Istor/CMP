@@ -274,7 +274,10 @@ def _app_summary(app: dict) -> dict:
 
 async def _repo_token(app: dict) -> tuple[str, str]:
     repo = app_repo.bound_repo(
-        app.get("github_repo_url"), app["name"], app["status"]
+        app.get("github_repo_url"),
+        app["name"],
+        app["status"],
+        app["template_id"],
     )
     token = await get_org_installation_token()
     return token, repo

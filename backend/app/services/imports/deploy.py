@@ -145,6 +145,55 @@ async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
         )
 
 
+def import_fields(project: str, service: ImportService) -> dict:
+    """The repository and public URL an imported app row shows."""
+    host = generate.hostname(project, service.app_name)
+    return {
+        "github_repo_url": (
+            f"https://github.com/{service.source.repo_full_name}"
+            if service.kind == "service"
+            else None
+        ),
+        "terraform_outputs": (
+            json.dumps({"app_url": f"https://{host}", "hostname": host})
+            if service.spec.get("public")
+            else None
+        ),
+    }
+
+
+def backfill_import_rows() -> None:
+    """
+    Give import rows created before ``import_fields`` existed their
+    repository and URL. Idempotent: only empty columns are filled.
+    """
+    db = SessionLocal()
+    try:
+        pairs = (
+            db.query(Deployment, ImportService)
+            .join(ImportService, ImportService.deployment_id == Deployment.id)
+            .filter(
+                Deployment.template_id.in_(TEMPLATE_KIND.values()),
+                Deployment.status != DeploymentStatus.DELETED,
+            )
+            .all()
+        )
+        updated = 0
+        for row, service in pairs:
+            fields = import_fields(service.source.project_name, service)
+            for key, value in fields.items():
+                if value and not getattr(row, key):
+                    setattr(row, key, value)
+                    updated += 1
+        if updated:
+            db.commit()
+            logger.info("Backfilled %d field(s) of imported apps", updated)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning("Import rows backfill skipped: %s", exc)
+    finally:
+        db.close()
+
+
 def _upsert_deployment(
     db: Session, project: str, service: ImportService
 ) -> Deployment:
@@ -173,6 +222,8 @@ def _upsert_deployment(
     else:
         row.status = DeploymentStatus.DEPLOYING
         row.step_message = "Waiting for Argo CD"
+    for key, value in import_fields(project, service).items():
+        setattr(row, key, value)
     return row
 
 

@@ -1031,7 +1031,9 @@ async def apply_recommendation(
         )
 
     commit_sha: str | None = None
-    if deployment.github_repo_url:
+    if deployment.github_repo_url and not deployment.template_id.startswith(
+        "import-"
+    ):
         commit_sha = await _apply_patch_to_gitops(deployment, rec.patch)
 
     _upsert_state(db, rec, _username(token), "applied")

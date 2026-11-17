@@ -260,6 +260,10 @@ async def lifespan(app: FastAPI):
     from app.services.terraform_orchestrator import backfill_gitops_repo_urls
 
     backfill_gitops_repo_urls()
+    if settings.IMPORT_ENABLED:
+        from app.services.imports.deploy import backfill_import_rows
+
+        backfill_import_rows()
 
     # Before anything can start a new Terraform run.
     fail_interrupted_runs()

@@ -29,6 +29,7 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole, rank
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, ProjectStatus, TargetCloud
+from app.routers.deployments import with_staging
 from app.schemas.deployment import DeploymentRead
 from app.schemas.project import (
     AddMemberRequest,
@@ -561,13 +562,14 @@ async def list_project_apps(
         ctx.role.value,
     )
 
-    return (
+    return with_staging(
+        db,
         db.query(Deployment)
         .filter(
             Deployment.project_id == ctx.project_name,
             Deployment.status != DeploymentStatus.DELETED,
         )
-        .all()
+        .all(),
     )
 
 

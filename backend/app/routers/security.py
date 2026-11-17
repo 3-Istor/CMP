@@ -495,7 +495,10 @@ class ScanRequest(BaseModel):
 async def _github_token(deployment: Deployment) -> tuple[str, str]:
     try:
         repo = app_repo.bound_repo(
-            deployment.github_repo_url, deployment.name, deployment.status
+            deployment.github_repo_url,
+            deployment.name,
+            deployment.status,
+            deployment.template_id,
         )
     except app_repo.RepoNotBound as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
