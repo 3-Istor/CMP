@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const POLL_INTERVAL_MS = 30_000;
 const PAGE_SIZE = 20;
@@ -112,6 +112,7 @@ export function NotificationCenter({
   const [hasMore, setHasMore] = useState(false);
   // Cursors of the pages before this one (undefined = first page).
   const [back, setBack] = useState<(number | undefined)[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState<number | undefined>();
 
   useEffect(() => {
@@ -144,12 +145,14 @@ export function NotificationCenter({
     const last = items[items.length - 1];
     if (!last) return;
     setLoading(true);
+    listRef.current?.scrollTo({ top: 0 });
     setBack((b) => [...b, cursor]);
     setCursor(last.id);
   };
 
   const newer = () => {
     setLoading(true);
+    listRef.current?.scrollTo({ top: 0 });
     setCursor(back[back.length - 1]);
     setBack(back.slice(0, -1));
   };
@@ -233,14 +236,16 @@ export function NotificationCenter({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto" aria-busy={loading}>
+          <div ref={listRef} className="flex-1 overflow-y-auto" aria-busy={loading}>
             {failed && (
               <p role="alert" className="p-4 text-sm text-red-600 dark:text-red-400">
                 {t("error")}
               </p>
             )}
             {!failed && !loading && items.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">{t("empty")}</p>
+              <p className="p-4 text-sm text-muted-foreground">
+                {back.length > 0 ? t("noMore") : t("empty")}
+              </p>
             )}
             <ul className="divide-y">
               {items.map((item) => (

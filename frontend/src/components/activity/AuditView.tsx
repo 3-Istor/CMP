@@ -16,7 +16,7 @@ import type {
 } from "@/types";
 import { AlertTriangle, Download, Loader2, RefreshCw, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -321,7 +321,6 @@ export function AuditView({
   });
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
-  const [unavailable, setUnavailable] = useState<ActivitySource[]>([]);
   const [selected, setSelected] = useState<ActivityEvent | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
@@ -336,16 +335,30 @@ export function AuditView({
     setFilters((f) => ({ ...f, ...patch, until: null, before_id: null }));
   };
 
+  const [feedUnavailable, setFeedUnavailable] = useState<ActivitySource[]>([]);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  // The summary does not depend on the page.
+  useEffect(() => {
+    let cancelled = false;
+    getActivitySummary(project, Math.min(filters.days ?? 7, 30))
+      .then((s) => {
+        if (!cancelled) setSummary(s);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project, filters.days]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, feed] = await Promise.all([
-        getActivitySummary(project, Math.min(filters.days ?? 7, 30)),
-        getActivity(project, filters),
-      ]);
-      setSummary(s);
+      const feed = await getActivity(project, filters);
       setEvents(feed.events);
-      setUnavailable([...new Set([...s.unavailable, ...feed.unavailable])]);
+      setFeedUnavailable(feed.unavailable);
       setMore(feed.events.length >= PAGE_SIZE);
       setError(null);
     } catch (e) {
@@ -359,9 +372,15 @@ export function AuditView({
     load();
   }, [load]);
 
+  const unavailable = useMemo(
+    () => [...new Set([...(summary?.unavailable ?? []), ...feedUnavailable])],
+    [summary, feedUnavailable],
+  );
+
   const older = () => {
     const last = events?.[events.length - 1];
     if (!last) return;
+    topRef.current?.scrollIntoView();
     setBack((b) => [...b, { until: filters.until ?? null, before_id: filters.before_id ?? null }]);
     setFilters((f) => ({ ...f, until: last.time, before_id: last.id }));
   };
@@ -369,6 +388,7 @@ export function AuditView({
   const newer = () => {
     const prev = back[back.length - 1];
     if (!prev) return;
+    topRef.current?.scrollIntoView();
     setBack(back.slice(0, -1));
     setFilters((f) => ({ ...f, ...prev }));
   };
@@ -597,11 +617,12 @@ export function AuditView({
 
       <div className={cn("grid gap-4", selected && "lg:grid-cols-[1fr_22rem]")}>
         <div className="space-y-2">
+          <div ref={topRef} className="scroll-mt-4" />
           {events === null ? (
             [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)
           ) : events.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              {t("audit.empty")}
+              {back.length > 0 ? t("audit.noMore") : t("audit.empty")}
             </p>
           ) : (
             events.map((e) => (

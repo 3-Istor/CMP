@@ -917,7 +917,8 @@ export async function downloadActivity(
 ) {
   const token = await getAccessToken();
   const res = await fetch(
-    `${BASE}/activity/export?${activityQuery(project, filters)}&format=${format}`,
+    // The export covers the whole filter, never the current page.
+    `${BASE}/activity/export?${activityQuery(project, { ...filters, until: null, before_id: null })}&format=${format}`,
     {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       credentials: "include",
