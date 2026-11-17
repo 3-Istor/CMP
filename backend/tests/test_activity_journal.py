@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -15,9 +16,11 @@ from app.models.security import SecurityException
 from app.routers import activity as activity_router
 from app.routers import deployments as deployments_router
 from app.routers import finops as finops_router
+from app.routers import security as security_router
 from app.services import audit, authz, keycloak_service
 from app.services.finops.recommendations import Recommendation
 from app.services.keycloak_service import get_current_user
+from app.services.security.model import Category, Tier
 from tests.test_app_security_data import (  # noqa: F401
     BACKEND_YAML,
     FRONTEND_YAML,
@@ -453,10 +456,7 @@ def test_recommendation_actions_are_journaled_in_their_project(
     )
 
 
-def test_exception_events_are_journaled_in_their_project(
-    build, session_factory
-):
-    build(STATIC_FILES, "admin")
+def _exception_row(session_factory) -> int:
     with session_factory() as db:
         row = SecurityException(
             project="demo",
@@ -471,20 +471,27 @@ def test_exception_events_are_journaled_in_their_project(
         )
         db.add(row)
         db.commit()
-        exception_id = row.id
-    request = Request(
-        {"type": "http", "headers": [], "query_string": b"", "client": None}
-    )
+        return row.id
 
+
+def _record(action: str, params: dict, query: bytes = b"") -> None:
+    request = Request(
+        {"type": "http", "headers": [], "query_string": query, "client": None}
+    )
     asyncio.run(
         audit._record(  # pylint: disable=protected-access
-            request,
-            "security.exception.revoke",
-            {"exception_id": str(exception_id)},
-            b"",
-            200,
+            request, action, params, b"", 200
         )
     )
+
+
+def test_exception_events_are_journaled_in_their_project(
+    build, session_factory
+):
+    build(STATIC_FILES, "admin")
+    exception_id = _exception_row(session_factory)
+
+    _record("security.exception.revoke", {"exception_id": str(exception_id)})
 
     [event] = journal(session_factory)
     assert (event.project, event.app, event.target) == (
@@ -492,3 +499,70 @@ def test_exception_events_are_journaled_in_their_project(
         "shop",
         str(exception_id),
     )
+
+
+def test_exception_approval_stays_in_its_project_whatever_the_query(
+    build, session_factory
+):
+    build(STATIC_FILES, "admin")
+    exception_id = _exception_row(session_factory)
+
+    _record(
+        "security.exception.approve",
+        {"exception_id": str(exception_id)},
+        b"project=elsewhere",
+    )
+
+    [event] = journal(session_factory)
+    assert (event.project, event.app) == ("demo", "shop")
+
+
+def test_exception_creation_records_its_id(
+    build, session_factory, monkeypatch
+):
+    build(STATIC_FILES, "admin")
+    finding = SimpleNamespace(
+        fingerprint="a" * 32,
+        app="shop",
+        category=Category.LEAKS,
+        sources=["gitleaks"],
+        rule="generic-api-key",
+        tier=Tier.CORE,
+    )
+    monkeypatch.setattr(security_router, "_require_member", mock.AsyncMock())
+    monkeypatch.setattr(
+        security_router.store, "merged_findings", lambda *a, **k: [finding]
+    )
+    monkeypatch.setattr(
+        security_router.store, "active_exceptions", lambda *a: set()
+    )
+    monkeypatch.setattr(
+        security_router,
+        "_sync_exceptions_file",
+        mock.AsyncMock(return_value=None),
+    )
+    app = FastAPI()
+    app.add_middleware(audit.AuditMiddleware)
+    app.include_router(security_router.router, prefix="/api")
+
+    def override_db():
+        with session_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "u"}
+    client = TestClient(app, headers={"Authorization": "Bearer t"})
+
+    response = client.post(
+        f"/api/security/findings/{'a' * 32}/exception",
+        json={
+            "project": "demo",
+            "status": "false_positive",
+            "statement": "A test key, never deployed.",
+        },
+    )
+
+    assert response.status_code == 201
+    [event] = journal(session_factory)
+    assert event.project == "demo" and event.app == "shop"
+    assert json.loads(event.details)["exception_id"] == response.json()["id"]

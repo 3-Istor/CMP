@@ -582,31 +582,31 @@ async def _record(
     fields = _body_fields(raw)
     noted = dict(getattr(request.state, "audit", {}))
 
+    # What the route noted, then what the acted-on id belongs to, and only
+    # then what the client sent: a spoofed ?project= must not move the event.
+    id_project = id_app = None
+    # A recommendation id starts with its app's id.
+    deployment_id = params.get("deployment_id") or (
+        params["rec_id"].split(":", 1)[0] if "rec_id" in params else None
+    )
+    if deployment_id is not None:
+        id_project, id_app = await run_in_threadpool(
+            _deployment, deployment_id
+        )
+    elif "exception_id" in params:
+        id_project, id_app = await run_in_threadpool(
+            _exception, params["exception_id"]
+        )
     project = (
         noted.pop("project", None)
+        or id_project
         or params.get("project_name")
         or fields.get("project")
         or fields.get("project_id")
         or fields.get("project_name")
         or request.query_params.get("project")
     )
-    app = noted.pop("app", None) or fields.get("app")
-    # A recommendation id starts with its app's id.
-    deployment_id = params.get("deployment_id") or (
-        params["rec_id"].split(":", 1)[0] if "rec_id" in params else None
-    )
-    if deployment_id is not None:
-        dep_project, dep_name = await run_in_threadpool(
-            _deployment, deployment_id
-        )
-        project = project or dep_project
-        app = app or dep_name
-    if "exception_id" in params:
-        exc_project, exc_app = await run_in_threadpool(
-            _exception, params["exception_id"]
-        )
-        project = project or exc_project
-        app = app or exc_app
+    app = noted.pop("app", None) or id_app or fields.get("app")
     if action == "app.create":
         app = app or fields.get("name")
 

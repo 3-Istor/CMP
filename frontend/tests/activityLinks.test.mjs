@@ -34,6 +34,7 @@ test("an event opens the page of the object it concerns", () => {
     [event("access_review.start", { project: null, details: { campaign_id: 7 } }), "/access-reviews?campaign=7"],
     [event("access_review.close", { project: null, target: "campaign:8" }), "/access-reviews?campaign=8"],
     [event("access_review.decide", { target: "bob" }), "/access-reviews"],
+    [event("access_review.start", { details: { campaign_id: "1&x=2" } }), "/access-reviews?campaign=1%26x%3D2"],
     [event("access.request", { project: null }), "/access"],
     [event("deployment.sync", { app: "shop", app_id: 3 }), "/projects/demo/apps/3/delivery"],
     [event("app.config.update", { app: "shop", app_id: 3 }), "/projects/demo/apps/3/settings"],

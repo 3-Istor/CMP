@@ -276,7 +276,9 @@ export function objectHref(e: ActivityEvent): string | null {
   if (a.startsWith("access_review.")) {
     const id =
       e.details.campaign_id ?? e.target.match(/^campaign:(\d+)$/)?.[1];
-    return id ? `/access-reviews?campaign=${id}` : "/access-reviews";
+    return id
+      ? `/access-reviews?campaign=${encodeURIComponent(String(id))}`
+      : "/access-reviews";
   }
   if (a.startsWith("access.")) return "/access";
   if (a === "app.delete" || a === "project.delete") return null;
