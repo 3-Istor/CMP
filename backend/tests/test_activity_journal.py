@@ -1,15 +1,17 @@
+import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest import mock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.audit import AuditEvent
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.security import SecurityException
 from app.routers import activity as activity_router
 from app.routers import deployments as deployments_router
 from app.routers import finops as finops_router
@@ -448,4 +450,45 @@ def test_recommendation_actions_are_journaled_in_their_project(
         "finops.recommendation.ignore",
         "demo",
         "shop",
+    )
+
+
+def test_exception_events_are_journaled_in_their_project(
+    build, session_factory
+):
+    build(STATIC_FILES, "admin")
+    with session_factory() as db:
+        row = SecurityException(
+            project="demo",
+            app="shop",
+            fingerprint="f" * 32,
+            rule="leak",
+            kind="leak",
+            status="false_positive",
+            statement="s",
+            expires_on=date(2027, 1, 1),
+            author="bob",
+        )
+        db.add(row)
+        db.commit()
+        exception_id = row.id
+    request = Request(
+        {"type": "http", "headers": [], "query_string": b"", "client": None}
+    )
+
+    asyncio.run(
+        audit._record(  # pylint: disable=protected-access
+            request,
+            "security.exception.revoke",
+            {"exception_id": str(exception_id)},
+            b"",
+            200,
+        )
+    )
+
+    [event] = journal(session_factory)
+    assert (event.project, event.app, event.target) == (
+        "demo",
+        "shop",
+        str(exception_id),
     )
