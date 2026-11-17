@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.database import Base
 from app.models.finops import CostLineItem
 from app.routers import finops as router
+from app.services.environments.observe import CONTAINER
 from app.services.finops import engine
 from app.services.finops import provider as provider_module
 from app.services.finops import recommendations_real as recs
@@ -234,12 +235,44 @@ def _usage(
     network=5e9,
     replicas=4,
     cpu_request=4.0,
+    deployments=1,
+    app=None,
 ):
     ns = "qcm-api"
+    # Per pod, app container only: request, limit, p95 CPU, p99 memory (GiB).
+    a = {
+        "cpu_request": cpu_request,
+        "ram_request": 4,
+        "cpu_limit": None,
+        "ram_limit": None,
+        "cpu_p95": cpu_p95,
+        "ram_p99": 3.5,
+    }
+    a.update(app or {})
+    gib = 2**30
+
+    def pod(kind, resource, value):
+        needle = f'resource_{kind}{{namespace=~"{ns}",container="{CONTAINER}",resource="{resource}"'
+        return (needle, {} if value is None else {ns: value})
+
     return [
+        pod("requests", "cpu", a["cpu_request"]),
+        pod(
+            "requests",
+            "memory",
+            None if a["ram_request"] is None else a["ram_request"] * gib,
+        ),
+        pod("limits", "cpu", a["cpu_limit"]),
+        pod(
+            "limits",
+            "memory",
+            None if a["ram_limit"] is None else a["ram_limit"] * gib,
+        ),
+        ("quantile_over_time(0.95, max by", {ns: a["cpu_p95"]}),
+        ("quantile_over_time(0.99, max by", {ns: a["ram_p99"] * gib}),
         ('resource="cpu"', {ns: cpu_request}),
         ('resource="memory"', {ns: 4 * 2**30}),
-        ("count by", {ns: 1}),
+        ("count by", {ns: deployments}),
         ("kube_deployment_spec_replicas", {ns: replicas}),
         ("quantile_over_time(0.95", {ns: cpu_p95}),
         ("quantile_over_time(0.99", {ns: 3.5 * 2**30}),
@@ -270,6 +303,51 @@ def test_recommends_rightsizing_for_single_replica_with_oversized_requests(
 
     assert result[0].id == "1:rightsizing"
     assert result[0].recommended["cpu_cores"] == 0.52
+
+
+_PER_POD = {
+    "cpu_request": 0.5,
+    "ram_request": 1,
+    "cpu_limit": 1,
+    "ram_limit": 2,
+    "cpu_p95": 0.1,
+    "ram_p99": 0.25,
+}
+
+
+def test_rightsizing_patch_sets_requests_and_limits_per_pod(monkeypatch):
+    _vm(monkeypatch, _usage(replicas=1, app=_PER_POD))
+
+    rec = recs.recommendations_for_apps([_app()], REF)[0]
+
+    assert rec.id == "1:rightsizing"
+    assert rec.patch == {
+        "resources": {
+            "requests": {"cpu": "130m", "memory": "307Mi"},
+            "limits": {"cpu": "260m", "memory": "614Mi"},
+        }
+    }
+    assert rec.current == {"cpu_cores": 0.5, "ram_gb": 1.0}
+
+
+def test_rightsizing_has_no_patch_when_the_namespace_runs_several_deployments(
+    monkeypatch,
+):
+    _vm(monkeypatch, _usage(replicas=1, deployments=2, app=_PER_POD))
+
+    rec = recs.recommendations_for_apps([_app()], REF)[0]
+
+    assert rec.id == "1:rightsizing"
+    assert rec.patch is None
+
+
+def test_rightsizing_omits_a_limit_the_pod_does_not_set(monkeypatch):
+    app = {**_PER_POD, "cpu_limit": None, "ram_limit": None}
+    _vm(monkeypatch, _usage(replicas=1, app=app))
+
+    rec = recs.recommendations_for_apps([_app()], REF)[0]
+
+    assert list(rec.patch["resources"]) == ["requests"]
 
 
 def test_recommends_hibernation_when_namespace_received_no_traffic(

@@ -43,6 +43,13 @@ class Recommendation:
     patch: dict | None = field(default=None)
 
 
+def k8s_resources(cpu_cores: float, ram_gib: float) -> dict[str, str]:
+    return {
+        "cpu": f"{round(cpu_cores * 1000)}m",
+        "memory": f"{round(ram_gib * 1024)}Mi",
+    }
+
+
 def _avg_usage(app_id: int, resource: str, ref: date) -> float:
     total = 0.0
     for offset in range(_ANALYSIS_WINDOW_DAYS):
@@ -143,12 +150,12 @@ def recommendations_for_app(
                         max(cpu_peak, ram_peak), _RIGHTSIZE_PEAK_THRESHOLD
                     ),
                     effort="medium",
+                    # requests == limits: a limit alone under the request
+                    # makes the pod spec invalid.
                     patch={
                         "resources": {
-                            "limits": {
-                                "cpu": new_cpu,
-                                "memory": f"{new_ram}Gi",
-                            }
+                            "requests": k8s_resources(new_cpu, new_ram),
+                            "limits": k8s_resources(new_cpu, new_ram),
                         }
                     },
                 )

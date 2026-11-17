@@ -1180,13 +1180,14 @@ async def _apply_patch_to_gitops(
     deployment: Deployment, patch: dict
 ) -> str | None:
     """
-    Deep-merge ``patch`` into the app's ``deploy/values.yaml`` and commit.
+    Deep-merge ``patch`` into the app's values file and commit.
     Mirrors ``update_deployment_config`` but is triggered by a recommendation.
     """
     from io import StringIO
 
     from app.routers.deployments import (
-        _CONFIG_FILE_PATH,
+        _app_type_of,
+        _config_file_for,
         _deep_merge,
         _extract_repo_full_name,
         _get_github_token_for_deployment,
@@ -1198,13 +1199,14 @@ async def _apply_patch_to_gitops(
         put_file_content,
     )
 
+    file_path = _config_file_for(_app_type_of(deployment), None)
     try:
         token = await _get_github_token_for_deployment(deployment)
         repo = _extract_repo_full_name(deployment)
         raw_content, sha = await get_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
         )
         parsed = _yaml.load(raw_content)
         _deep_merge(parsed, patch)
@@ -1213,7 +1215,7 @@ async def _apply_patch_to_gitops(
         result = await put_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=_CONFIG_FILE_PATH,
+            file_path=file_path,
             content=out.getvalue(),
             message="chore(finops): apply cost optimisation recommendation",
             sha=sha,
