@@ -528,6 +528,8 @@ def test_exception_creation_records_its_id(
         sources=["gitleaks"],
         rule="generic-api-key",
         tier=Tier.CORE,
+        title="Generic API key",
+        i18n=None,
     )
     monkeypatch.setattr(security_router, "_require_member", mock.AsyncMock())
     monkeypatch.setattr(
