@@ -52,6 +52,7 @@ const ROUTES: Record<string, unknown> = {
   "/security/findings": security.findings,
   "/security/trend": security.trend,
   "/security/exceptions": security.exceptions,
+  "/security/exceptions/pending": security.pending,
   "/security/me": security.me,
   "/account/github": githubStatus,
   "/projects/demo/topology": topology,
@@ -106,6 +107,8 @@ export const VARIANTS: Record<string, Record<string, Override>> = {
     "/deployments/1/observability/logs": { json: logs.obs },
     "/deployments/1/observability/logs/top-errors": { json: logs.topErrors },
   },
+  reviewer: { "/security/me": { json: { role: "guest", cnp_admin: false, auditor: true, username: "aud" } } },
+  securitymember: { "/security/me": { json: { role: "member", cnp_admin: false, username: "demo" } } },
   notconnected: {
     "/deployments/1/*": notConnected,
     "/deployments/1/observability": {

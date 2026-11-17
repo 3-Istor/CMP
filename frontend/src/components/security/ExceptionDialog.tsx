@@ -174,7 +174,11 @@ export function ExceptionDialog({
 
           {needsApproval && (
             <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-              {t("exception.approvalNeeded")}
+              {t(
+                finding.tier === "core"
+                  ? "exception.approvalNeededCore"
+                  : "exception.approvalNeeded",
+              )}
             </p>
           )}
         </div>
