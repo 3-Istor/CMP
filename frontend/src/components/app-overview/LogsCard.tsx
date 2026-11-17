@@ -9,11 +9,13 @@ import { useTranslations } from "next-intl";
 export function LogsCard({
   project,
   namespace,
+  appId,
   base,
   allowed,
 }: {
   project: string;
   namespace: string;
+  appId: number;
   base: string;
   allowed: boolean;
 }) {
@@ -26,7 +28,7 @@ export function LogsCard({
         <OpenDashboardButton href={`${base}/logs`} label={t("open")} />
       </CardHeader>
       <CardContent>
-        <LogsView project={project} namespace={namespace} compact />
+        <LogsView project={project} namespace={namespace} appId={appId} compact />
       </CardContent>
     </Card>
   );
