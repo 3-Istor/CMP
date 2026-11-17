@@ -239,9 +239,6 @@
       "deleted": "« {name} » a été supprimée",
       "destroying": "Destruction des ressources…"
     },
-    "costs": {
-      "projectLevel": "Les coûts sont suivis au niveau du projet."
-    },
     "config": {
       "title": "Configuration d'infrastructure",
       "reload": "Recharger la configuration depuis GitHub",
@@ -634,6 +631,10 @@
       "idle": "Capacité inoccupée",
       "chartCovered": "Recouvert",
       "chartUncovered": "Non couvert"
+    },
+    "appPanel": {
+      "projectCosts": "Coûts du projet",
+      "recommendations": "Recommandations"
     },
     "projectPanel": {
       "openDashboard": "Ouvrir le dashboard FinOps"
@@ -1136,9 +1137,11 @@
       "newer": "Plus récent",
       "older": "Plus ancien",
       "page": "Page {page} · {size} événements par page",
+      "retention": "Les événements sont gardés {days} jours.",
       "detail": {
         "title": "Détail de l'événement",
         "close": "Fermer",
+        "open": "Ouvrir",
         "who": "Qui",
         "what": "Quoi",
         "source": "Source",

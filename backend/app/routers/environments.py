@@ -11,7 +11,7 @@ import asyncio
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import Field, field_validator
 from sqlalchemy.orm import Session
@@ -32,6 +32,7 @@ from app.routers.deployments import (
 )
 from app.schemas.release import _Camel
 from app.services import project_registry
+from app.services.audit import note
 from app.services.authz import is_cnp_admin
 from app.services.clusters.state import ensure_cluster_up, project_cloud
 from app.services.environments import (
@@ -498,6 +499,7 @@ async def start_run(
     deployment_id: int,
     environment: Environment,
     payload: RunRequest,
+    request: Request,
     token: CurrentUser,
     db: Session = Depends(get_db),
 ):
@@ -525,6 +527,7 @@ async def start_run(
         raise HTTPException(
             status_code=503, detail=f"Cluster unreachable: {exc}"
         ) from exc
+    note(request, run_id=run.id)
     return run
 
 
@@ -640,6 +643,7 @@ def _promotion(
 async def start_promotion(
     deployment_id: int,
     payload: PromotionRequest,
+    request: Request,
     token: CurrentUser,
     db: Session = Depends(get_db),
 ):
@@ -686,6 +690,7 @@ async def start_promotion(
         raise HTTPException(
             status_code=503, detail=f"Cluster unreachable: {exc}"
         ) from exc
+    note(request, promotion_id=item.id)
     return item
 
 

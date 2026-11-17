@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import access from "./access.json";
+import activity from "./activity.json";
 import agentsSummary from "./agents-summary.json";
 import accessReview1 from "./access-review-1.json";
 import accessReviewMine from "./access-review-mine.json";
@@ -7,6 +8,7 @@ import accessReviews from "./access-reviews.json";
 import appHealth from "./app-health.json";
 import finopsMeta from "./finops-meta.json";
 import finopsOverview from "./finops-overview.json";
+import finopsRecommendations from "./finops-recommendations.json";
 import githubStatus from "./github-status.json";
 import importRepos from "./import-repos.json";
 import importRun from "./import-run.json";
@@ -40,6 +42,8 @@ const ROUTES: Record<string, unknown> = {
   "/infra/health": infraHealth,
   // Health badges only render with a health answer; without it axe never checks their colours.
   "/infra/deployments/1/health": appHealth,
+  "/activity": activity.feed,
+  "/activity/summary": activity.summary,
   "/activity/platform": platformStatus,
   "/activity/logs": logs.activity,
   "/activity/logs/targets": logs.targets,
@@ -47,6 +51,7 @@ const ROUTES: Record<string, unknown> = {
   "/activity/network": [],
   "/finops/overview": finopsOverview,
   "/finops/meta": finopsMeta,
+  "/finops/recommendations": finopsRecommendations,
   "/deployments/1/scorecard": scorecard,
   "/security/summary": security.summary,
   "/security/findings": security.findings,

@@ -578,6 +578,7 @@ export const getFinopsOverview = (opts: {
   period?: string;
   granularity?: string;
   cloud?: string;
+  app?: number;
 } = {}) =>
   request<import("@/types").FinopsOverview>(
     `/finops/overview${finopsQuery(opts)}`,
@@ -715,9 +716,9 @@ export const getFinopsApps = (project?: string) =>
     `/finops/apps${finopsQuery({ project })}`,
   );
 
-export const getRecommendations = (project?: string) =>
+export const getRecommendations = (project?: string, app?: number) =>
   request<import("@/types").Recommendation[]>(
-    `/finops/recommendations${finopsQuery({ project })}`,
+    `/finops/recommendations${finopsQuery({ project, app })}`,
   );
 
 export const applyRecommendation = (recId: string) =>

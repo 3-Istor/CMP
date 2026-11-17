@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from unittest import mock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.models.security import SecurityException
 from app.routers import security
@@ -230,7 +230,11 @@ def _create(factory, status, tier, fp="f1"):
         statement="never called in our code",
     )
     with factory() as db, _role("member"), _sync():
-        asyncio.run(security.create_exception(fp, payload, DEV, db))
+        asyncio.run(
+            security.create_exception(
+                fp, payload, Request({"type": "http"}), DEV, db
+            )
+        )
 
 
 def test_a_core_exception_notifies_platform_admins_and_auditors(

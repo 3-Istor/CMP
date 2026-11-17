@@ -12,6 +12,7 @@ choice, persisted in the DB, keeps matching the recomputed recommendation.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
@@ -39,8 +40,25 @@ class Recommendation:
     monthly_saving_eur: float
     confidence: int  # 0..100
     effort: str  # low | medium | high
-    # k8s patch to apply to deploy/values.yaml (None → cannot auto-apply)
+    # k8s patch merged into the app's values file (None → cannot auto-apply)
     patch: dict | None = field(default=None)
+
+
+# Hibernation is not applied by commit: the chart renders
+# `replicaCount | default 1`, so 0 would keep one pod running.
+SLEEP_HINT = "« Sleep now » dans le menu de l'app."
+
+
+def k8s_resources(
+    cpu_cores: float | None, ram_gib: float | None
+) -> dict[str, str]:
+    """Kubernetes quantities; memory rounds up so it never lands under."""
+    out = {}
+    if cpu_cores:
+        out["cpu"] = f"{round(cpu_cores * 1000)}m"
+    if ram_gib:
+        out["memory"] = f"{math.ceil(ram_gib * 1024)}Mi"
+    return out
 
 
 def _avg_usage(app_id: int, resource: str, ref: date) -> float:
@@ -143,12 +161,12 @@ def recommendations_for_app(
                         max(cpu_peak, ram_peak), _RIGHTSIZE_PEAK_THRESHOLD
                     ),
                     effort="medium",
+                    # requests == limits: a limit alone under the request
+                    # makes the pod spec invalid.
                     patch={
                         "resources": {
-                            "limits": {
-                                "cpu": new_cpu,
-                                "memory": f"{new_ram}Gi",
-                            }
+                            "requests": k8s_resources(new_cpu, new_ram),
+                            "limits": k8s_resources(new_cpu, new_ram),
                         }
                     },
                 )
@@ -164,13 +182,14 @@ def recommendations_for_app(
                 project_id=app.project_id,
                 rec_type="inactivity",
                 title="Mettre en hibernation (inactivité)",
-                justification="Aucun trafic réseau significatif depuis 7 jours.",
+                justification=(
+                    f"Aucun trafic réseau significatif depuis 7 jours. {SLEEP_HINT}"
+                ),
                 current={"replicas": q.replicas, "status": "running"},
                 recommended={"replicas": 0, "status": "hibernated"},
                 monthly_saving_eur=_saving(app, replace(q, replicas=0), ref),
                 confidence=80,
                 effort="low",
-                patch={"replicaCount": 0},
             )
         )
 

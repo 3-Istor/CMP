@@ -16,6 +16,7 @@ import type {
 } from "@/types";
 import { AlertTriangle, Download, Loader2, RefreshCw, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
@@ -31,6 +32,7 @@ import {
   ACTION_GROUPS,
   describe,
   errorMessage,
+  objectHref,
   SOURCE_META,
   SOURCE_ORDER,
   sourceLabel,
@@ -196,7 +198,7 @@ function EventRow({
       {event.notable && (
         <Badge
           variant="outline"
-          className="shrink-0 border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+          className="shrink-0 border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-300"
         >
           {t("audit.notable")}
         </Badge>
@@ -233,6 +235,7 @@ function EventDetail({
   const locale = useLocale();
   const [raw, setRaw] = useState(false);
   const d = event.details;
+  const href = objectHref(event);
   return (
     <Card className="lg:sticky lg:top-4">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -278,6 +281,11 @@ function EventDetail({
           </Field>
         )}
         <div className="flex flex-col gap-1 border-t pt-3 text-sm">
+          {href && (
+            <Link href={href} className="text-primary hover:underline">
+              {t("audit.detail.open")}
+            </Link>
+          )}
           <button
             type="button"
             className="text-left text-primary hover:underline"
@@ -338,6 +346,7 @@ export function AuditView({
   };
 
   const [feedUnavailable, setFeedUnavailable] = useState<ActivitySource[]>([]);
+  const [retentionDays, setRetentionDays] = useState<number | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
   // The summary does not depend on the page; Refresh bumps reloadKey.
@@ -363,6 +372,7 @@ export function AuditView({
       const feed = await getActivity(project, filters);
       setEvents(feed.events);
       setFeedUnavailable(feed.unavailable);
+      setRetentionDays(feed.retention_days);
       setMore(feed.events.length >= PAGE_SIZE);
       setError(null);
     } catch (e) {
@@ -660,6 +670,11 @@ export function AuditView({
                 {t("audit.older")}
               </Button>
             </div>
+          )}
+          {retentionDays != null && (
+            <p className="pt-2 text-center text-xs text-muted-foreground">
+              {t("audit.retention", { days: retentionDays })}
+            </p>
           )}
         </div>
         {selected && (
