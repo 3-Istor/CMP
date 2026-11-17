@@ -3,64 +3,12 @@
 import type { Deployment, Project } from "@/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    getDeployment,
     getDeployments,
     getProjectApps,
     getProjects,
 } from "./api";
 import { can, canAsPlatform, type Capability } from "./permissions";
 import { usePlatformRoles } from "./usePlatformRoles";
-
-const TERMINAL_STATUSES = new Set(["running", "failed", "deleted"]);
-
-/** Poll a single deployment until it reaches a terminal state. */
-export function useDeploymentPolling(
-  id: number | null,
-  intervalMs = 3000,
-): Deployment | null {
-  const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const terminalReachedRef = useRef<number | null>(null);
-
-  const stop = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-  }, []);
-
-  useEffect(() => {
-    if (!id) return;
-
-    const poll = async () => {
-      try {
-        const d = await getDeployment(id);
-        setDeployment(d);
-
-        // When reaching terminal status, continue polling for 5 more cycles
-        // to ensure UI updates with final state (outputs, health, etc.)
-        if (TERMINAL_STATUSES.has(d.status)) {
-          if (terminalReachedRef.current === null) {
-            terminalReachedRef.current = 5;
-          } else {
-            terminalReachedRef.current--;
-            if (terminalReachedRef.current <= 0) {
-              stop();
-            }
-          }
-        }
-      } catch {
-        stop();
-      }
-    };
-
-    poll();
-    timerRef.current = setInterval(poll, intervalMs);
-    return () => {
-      stop();
-      terminalReachedRef.current = null;
-    };
-  }, [id, intervalMs, stop]);
-
-  return deployment;
-}
 
 const ACTIVE_DEPLOYMENT_STATUSES = new Set([
   "pending",
@@ -340,6 +288,7 @@ export function useFinopsOverview(
   period = "30d",
   granularity = "daily",
   cloud?: string,
+  app?: number,
 ) {
   const [data, setData] = useState<import("@/types").FinopsOverview | null>(
     null,
@@ -357,6 +306,7 @@ export function useFinopsOverview(
         period,
         granularity,
         cloud,
+        app,
       });
       setData(res);
       setError(null);
@@ -366,7 +316,7 @@ export function useFinopsOverview(
     } finally {
       setLoading(false);
     }
-  }, [project, period, granularity, cloud]);
+  }, [project, period, granularity, cloud, app]);
 
   useEffect(() => {
     refresh();

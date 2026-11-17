@@ -27,6 +27,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.audit import ActivityCursor, ActivityRecord, AuditEvent
+from app.models.deployment import Deployment, DeploymentStatus
 from app.services import activity_sources as sources
 from app.services.audit import NOTABLE
 from app.services.authz import is_auditor, is_cnp_admin, require_project_member
@@ -56,12 +57,15 @@ class ActivityEvent(BaseModel):
     status_code: int | None
     source_ip: str | None
     details: dict[str, Any]
+    # The live app the event concerns, so the feed can link to it.
+    app_id: int | None = None
 
 
 class ActivityFeed(BaseModel):
     events: list[ActivityEvent]
     # Sources that could not be read; the feed shows the others.
     unavailable: list[str]
+    retention_days: int
 
 
 class DayCount(BaseModel):
@@ -474,7 +478,31 @@ async def list_activity(
         before_id,
     )
     kept = _filter(events, role, token, actor, action, app, notable_only)
-    return ActivityFeed(events=kept[:limit], unavailable=unavailable)
+    return ActivityFeed(
+        events=_with_app_ids(db, kept[:limit]),
+        unavailable=unavailable,
+        retention_days=settings.AUDIT_RETENTION_DAYS,
+    )
+
+
+def _with_app_ids(
+    db: Session, events: list[ActivityEvent]
+) -> list[ActivityEvent]:
+    """Each event gets its app's id; a deleted app gets none."""
+    names = {(e.project, e.app) for e in events if e.project and e.app}
+    if not names:
+        return events
+    rows = db.execute(
+        select(Deployment.project_id, Deployment.name, Deployment.id).where(
+            Deployment.project_id.in_({p for p, _ in names}),
+            Deployment.name.in_({a for _, a in names}),
+            Deployment.status != DeploymentStatus.DELETED,
+        )
+    )
+    ids = {(project, name): app_id for project, name, app_id in rows}
+    for event in events:
+        event.app_id = ids.get((event.project, event.app))
+    return events
 
 
 @router.get("/summary", response_model=ActivitySummary)

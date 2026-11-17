@@ -23,9 +23,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.database import SessionLocal
 from app.services import metrics_isolation
+from app.services.environments.observe import CONTAINER
 from app.services.finops.engine import AppSpec
 from app.services.finops.ingest import fx, inputs
-from app.services.finops.recommendations import Recommendation
+from app.services.finops.recommendations import (
+    SLEEP_HINT,
+    Recommendation,
+    k8s_resources,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +76,10 @@ def _fetch(
     ns = f'namespace=~"{"|".join(namespaces)}"'
     pods = f'{ns},container!="",container!="POD"'
     requests = "kube_pod_container_resource_requests"
+    limits = "kube_pod_container_resource_limits"
+    # The namespace also runs databases, tunnels and migration jobs: only the
+    # app container is rightsized, per pod.
+    app = f'{ns},container="{CONTAINER}"'
     data = {
         "cpu_request": _instant(
             f'sum by (namespace) ({requests}{{{ns},resource="cpu"}})',
@@ -78,6 +87,39 @@ def _fetch(
         ),
         "ram_request": _instant(
             f'sum by (namespace) ({requests}{{{ns},resource="memory"}})',
+            cluster,
+        ),
+        "app_cpu_request": _instant(
+            f'avg by (namespace) ({requests}{{{app},resource="cpu"}})',
+            cluster,
+        ),
+        "app_ram_request": _instant(
+            f'avg by (namespace) ({requests}{{{app},resource="memory"}})',
+            cluster,
+        ),
+        "app_cpu_limit": _instant(
+            f'avg by (namespace) ({limits}{{{app},resource="cpu"}})',
+            cluster,
+        ),
+        "app_ram_limit": _instant(
+            f'avg by (namespace) ({limits}{{{app},resource="memory"}})',
+            cluster,
+        ),
+        "app_cpu_p95": _instant(
+            "quantile_over_time(0.95, max by (namespace) "
+            f"(rate(container_cpu_usage_seconds_total{{{app}}}[5m]))"
+            f"[{WINDOW}:30m])",
+            cluster,
+        ),
+        "app_ram_p99": _instant(
+            "quantile_over_time(0.99, max by (namespace) "
+            f"(container_memory_working_set_bytes{{{app}}})"
+            f"[{WINDOW}:30m])",
+            cluster,
+        ),
+        "app_ram_peak": _instant(
+            "max by (namespace) (max_over_time("
+            f"container_memory_working_set_bytes{{{app}}}[{WINDOW}]))",
             cluster,
         ),
         "replicas": _instant(
@@ -248,6 +290,8 @@ def _advice(
         "project_id": app.project_id,
     }
 
+    # One Deployment means one values file the patch can safely land in.
+    single_deployment = data["deployments"].get(namespace, 0) == 1
     network = data["network_bytes"].get(namespace)
     if network is not None and network < INACTIVITY_MAX_BYTES and history >= 7:
         return [
@@ -256,7 +300,8 @@ def _advice(
                 rec_type="inactivity",
                 title="Mettre en hibernation (inactivité)",
                 justification=(
-                    "Aucun trafic réseau entrant significatif depuis 7 jours."
+                    "Aucun trafic réseau entrant significatif depuis 7 jours. "
+                    + SLEEP_HINT
                 ),
                 current={"cpu_cores": round(cpu_req, 2), "status": "running"},
                 recommended={"replicas": 0, "status": "hibernated"},
@@ -265,20 +310,16 @@ def _advice(
                 ),
                 confidence=_confidence(80, history),
                 effort="low",
-                patch={"replicaCount": 0},
                 **common,
             )
         ]
 
     cpu_p95 = data["cpu_p95"].get(namespace)
-    ram_p99 = data["ram_p99"].get(namespace, 0.0) / 2**30
     if cpu_p95 is None or cpu_req <= 0:
         return []
 
     replicas = int(data["replicas"].get(namespace, 0))
-    single_deployment = data["deployments"].get(namespace, 0) == 1
     cpu_ratio = cpu_p95 / cpu_req
-    ram_ratio = ram_p99 / ram_req if ram_req > 0 else 1.0
 
     if single_deployment and replicas > 1 and cpu_ratio < OVERSIZED_RATIO:
         per_replica_cpu = cpu_req / replicas
@@ -312,22 +353,41 @@ def _advice(
                 )
             ]
 
+    pod_cpu = data["app_cpu_request"].get(namespace, 0.0)
+    pod_ram = data["app_ram_request"].get(namespace, 0.0) / 2**30
+    pod_cpu_p95 = data["app_cpu_p95"].get(namespace)
+    pod_ram_p99 = data["app_ram_p99"].get(namespace)
+    if pod_cpu <= 0 or pod_ram <= 0 or None in (pod_cpu_p95, pod_ram_p99):
+        return []
+    pod_ram_p99 /= 2**30
+    cpu_ratio = pod_cpu_p95 / pod_cpu
+    ram_ratio = pod_ram_p99 / pod_ram
     if cpu_ratio >= OVERSIZED_RATIO and ram_ratio >= OVERSIZED_RATIO:
         return []
-    new_cpu = cpu_req
-    new_ram = ram_req
+    new_cpu = pod_cpu
+    new_ram = pod_ram
     if cpu_ratio < OVERSIZED_RATIO:
-        new_cpu = max(0.05, round(cpu_p95 * CPU_HEADROOM, 2))
+        new_cpu = max(0.05, round(pod_cpu_p95 * CPU_HEADROOM, 2))
     if ram_ratio < OVERSIZED_RATIO:
-        new_ram = max(0.05, round(ram_p99 * RAM_HEADROOM, 2))
+        new_ram = max(0.05, pod_ram_p99 * RAM_HEADROOM)
+    pods = max(1, replicas)
     saving = round(
         pricing.monthly_eur(
-            max(0.0, cpu_req - new_cpu), max(0.0, ram_req - new_ram)
+            max(0.0, pod_cpu - new_cpu) * pods,
+            max(0.0, pod_ram - new_ram) * pods,
         ),
         2,
     )
     if saving <= 0:
         return []
+    patch = None
+    # A shorter window would size the memory limit from a partial peak.
+    if single_deployment and history >= FULL_HISTORY_DAYS:
+        patch = {
+            "resources": _resources(
+                namespace, data, pod_cpu, pod_ram, new_cpu, new_ram
+            )
+        }
     return [
         Recommendation(
             id=f"{app.id}:rightsizing",
@@ -338,16 +398,46 @@ def _advice(
                 f"et la mémoire au p99 à {ram_ratio * 100:.0f}% des requests."
             ),
             current={
-                "cpu_cores": round(cpu_req, 2),
-                "ram_gb": round(ram_req, 2),
+                "cpu_cores": round(pod_cpu, 2),
+                "ram_gb": round(pod_ram, 2),
             },
-            recommended={"cpu_cores": new_cpu, "ram_gb": new_ram},
+            recommended={"cpu_cores": new_cpu, "ram_gb": round(new_ram, 2)},
             monthly_saving_eur=saving,
             confidence=_confidence(
                 _base_confidence(min(cpu_ratio, ram_ratio)), history
             ),
             effort="medium",
-            patch=None,
+            patch=patch,
             **common,
         )
     ]
+
+
+def _resources(
+    namespace: str,
+    data: dict[str, dict[str, float]],
+    pod_cpu: float,
+    pod_ram: float,
+    new_cpu: float,
+    new_ram: float,
+) -> dict:
+    """
+    Requests and limits of the app container. A limit keeps its ratio to the
+    request (never below 1); memory also covers the 14-day peak, since the
+    static template sets its limit equal to the request.
+    """
+    cpu_limit = data["app_cpu_limit"].get(namespace)
+    ram_limit = data["app_ram_limit"].get(namespace)
+    peak = data["app_ram_peak"].get(namespace, 0.0) / 2**30
+    resources = {"requests": k8s_resources(new_cpu, new_ram)}
+    limits = k8s_resources(
+        cpu_limit and new_cpu * max(1.0, cpu_limit / pod_cpu),
+        ram_limit
+        and max(
+            new_ram * max(1.0, ram_limit / 2**30 / pod_ram),
+            peak * RAM_HEADROOM,
+        ),
+    )
+    if limits:
+        resources["limits"] = limits
+    return resources

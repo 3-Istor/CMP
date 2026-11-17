@@ -22,6 +22,7 @@ const PAGES = [
   "/projects/demo/apps/1/logs",
   "/projects/demo/apps/1/delivery",
   "/projects/demo/apps/1/settings",
+  "/projects/demo/apps/1/costs",
 ];
 const THEMES = ["light", "dark"] as const;
 const VIEWPORT_WIDTHS = [1280, 400];

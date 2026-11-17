@@ -10,8 +10,9 @@ import logging
 from typing import Dict
 
 from app.core.database import SessionLocal
-from app.models.deployment import Deployment, DeploymentStatus
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.services import discord_service, monitoring_service, notifications
+from app.services.app_health import get_kubernetes_app_health
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,66 @@ async def check_app_health() -> None:
         db.close()
 
 
+async def recover_failed_apps() -> None:
+    """Mark running the failed apps whose apply finished and that are healthy.
+
+    Catalog Kubernetes apps only: imports keep their own run, and a failed
+    deletion ("Deletion ...") stays visible until it is deleted again.
+    """
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(Deployment)
+            .filter(
+                Deployment.status == DeploymentStatus.FAILED,
+                Deployment.provider_type == ProviderType.KUBERNETES,
+                Deployment.terraform_outputs.isnot(None),
+                ~Deployment.template_id.startswith("import-"),
+                Deployment.step_message.startswith("Deployment"),
+            )
+            .order_by(Deployment.id)
+            .all()
+        )
+        for deployment in rows:
+            try:
+                health = await get_kubernetes_app_health(deployment)
+                if health.status != "healthy":
+                    continue
+                # Only if still failed: a delete may have started meanwhile.
+                updated = (
+                    db.query(Deployment)
+                    .filter(
+                        Deployment.id == deployment.id,
+                        Deployment.status == DeploymentStatus.FAILED,
+                    )
+                    .update(
+                        {
+                            Deployment.status: DeploymentStatus.RUNNING,
+                            Deployment.step_message: (
+                                "Running - recovered after a failed deployment"
+                            ),
+                        },
+                        synchronize_session=False,
+                    )
+                )
+                db.commit()
+                if not updated:
+                    continue
+                logger.info("%s is healthy again: running", deployment.name)
+                await _notify_health(deployment, "app_recovered")
+            # One app must not stop the others.
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                logger.error(
+                    "Error recovering %s: %s",
+                    deployment.name,
+                    exc,
+                    exc_info=True,
+                )
+    finally:
+        db.close()
+
+
 async def check_infra_health() -> None:
     """
     Check global infrastructure health (hypervisors).
@@ -164,6 +225,7 @@ async def health_poller_loop() -> None:
             # Run both checks concurrently
             await asyncio.gather(
                 check_app_health(),
+                recover_failed_apps(),
                 check_infra_health(),
                 return_exceptions=True,
             )
