@@ -55,12 +55,18 @@ def seams():
         )
 
 
-def create(db, name="test-p", cloud="onprem", user="alice", tasks=None):
+def create(
+    db, name="test-p", cloud="onprem", user="alice", tasks=None, groups=()
+):
     return asyncio.run(
         projects_router.create_project(
             ProjectCreate(project_name=name, target_cloud=cloud),
             BackgroundTasks() if tasks is None else tasks,
-            {"sub": f"id-{user}", "preferred_username": user},
+            {
+                "sub": f"id-{user}",
+                "preferred_username": user,
+                "groups": list(groups),
+            },
             db,
         )
     )
@@ -253,12 +259,65 @@ def test_public_project_is_refused_when_no_public_cloud_is_up(db, seams):
     seams.publish.assert_not_called()
 
 
-@pytest.mark.parametrize("cloud", ["onprem", "aws", "gcp"])
-def test_explicit_cloud_is_kept_when_its_cluster_is_up(db, seams, cloud):
+def test_onprem_project_is_kept_for_a_member(db, seams):
+    created = create(db, cloud="onprem")
+
+    assert created.target_cloud == TargetCloud.ONPREM
+
+
+@pytest.mark.parametrize("cloud", ["aws", "gcp"])
+def test_a_member_cannot_choose_aws_or_gcp(db, seams, cloud):
+    with (
+        mock.patch.object(projects_router, "fresh_state") as states,
+        mock.patch.object(cluster_state, "fresh_state") as gate,
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            create(db, cloud=cloud)
+
+    assert excinfo.value.status_code == 403
+    gate.assert_not_called()
+    seams.publish.assert_not_called()
+    states.assert_not_called()
+
+
+@pytest.mark.parametrize("cloud", ["aws", "gcp"])
+def test_a_platform_admin_can_choose_an_up_cloud(db, seams, cloud):
     with _states(aws="up", gcp="up"):
-        created = create(db, cloud=cloud)
+        created = create(db, cloud=cloud, groups=["/infra"])
 
     assert created.target_cloud == TargetCloud(cloud)
+
+
+@pytest.mark.parametrize(
+    ("aws", "gcp", "expected"),
+    [("up", "down", "aws"), ("starting", "up", "gcp")],
+)
+def test_public_project_lands_on_the_only_up_cloud(
+    db, seams, aws, gcp, expected
+):
+    with _states(aws=aws, gcp=gcp):
+        created = create(db, cloud="public")
+
+    assert created.target_cloud == TargetCloud(expected)
+
+
+def test_a_member_retrying_a_cloud_project_keeps_its_cloud(db, seams):
+    seed(db, owner="alice", cloud=TargetCloud.AWS)
+
+    with (
+        group_role("admin"),
+        _states(aws="up", gcp="up"),
+        mock.patch.object(
+            projects_router, "run_project_bootstrap", return_value=True
+        ),
+        mock.patch.object(projects_router, "add_user_to_project"),
+        mock.patch.object(
+            projects_router, "sync_project_org", new=mock.AsyncMock()
+        ),
+    ):
+        create(db, cloud="aws")
+
+    assert seams.publish.await_args.kwargs["target_cloud"] == TargetCloud.AWS
 
 
 def test_onprem_project_does_not_read_cluster_states(db, seams):
@@ -274,7 +333,7 @@ def test_explicit_cloud_is_refused_when_its_cluster_is_not_up(
 ):
     with _states(aws=state, gcp="up"):
         with pytest.raises(HTTPException) as excinfo:
-            create(db, cloud="aws")
+            create(db, cloud="aws", groups=["/infra"])
 
     assert excinfo.value.status_code == 409
     seams.publish.assert_not_called()

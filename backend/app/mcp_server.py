@@ -622,12 +622,13 @@ async def create_project(
         ),
     ] = "sandbox",
     cloud: Annotated[
-        Literal["onprem", "aws", "gcp", "public"],
+        Literal["onprem", "public", "aws", "gcp"],
         Field(
             description="Where its apps run, for good: changing it later "
-            "means re-creating the project. aws and gcp only while that "
-            "cloud is up (see clouds in whoami). public: an up public cloud "
-            "picked by the platform."
+            "means re-creating the project. onprem: the 3istor datacenter. "
+            "public: AWS or GCP, picked by the platform among the clouds "
+            "that are up (see clouds in whoami). aws and gcp: platform "
+            "admins only, while that cloud is up."
         ),
     ] = "onprem",
     user_confirmed: bool = False,
