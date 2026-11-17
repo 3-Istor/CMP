@@ -307,11 +307,13 @@ export function TopErrors({
       title={t("title")}
       description={t("description")}
       actions={
-        actions ?? (
+        // With a picker it already sits on the logs page: no link to itself.
+        actions ??
+        (!onPick && (
           <Link href={`${base}/logs`} className="text-sm text-primary hover:underline">
             {t("seeAll")}
           </Link>
-        )
+        ))
       }
     >
       <CardState card={card} signal="logs" height="h-28">

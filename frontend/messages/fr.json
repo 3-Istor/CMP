@@ -1183,7 +1183,12 @@
       "showContext": "Voir la minute autour de cette ligne",
       "contextBanner": "Contexte : une minute avant et après la ligne choisie, même conteneur.",
       "backToResults": "Retour aux résultats",
-      "noLines": "Aucune ligne pour ces filtres."
+      "noLines": "Aucune ligne pour ces filtres.",
+      "info": "Info",
+      "debug": "Debug",
+      "traceFilter": "Lignes de la trace {id}",
+      "clearTrace": "Voir toutes les lignes",
+      "openTrace": "Ouvrir la trace"
     },
     "volume": {
       "title": "Volume de logs",
@@ -3768,29 +3773,6 @@
       "none": "Aucune ligne d'erreur sur la période.",
       "openTrace": "Ouvrir la trace",
       "seeAll": "Voir tous les logs"
-    },
-    "logs": {
-      "title": "Recherche",
-      "level": "Niveau",
-      "anyLevel": "Tous niveaux",
-      "levels": {
-        "error": "Erreur",
-        "warn": "Avertissement",
-        "info": "Info",
-        "debug": "Debug"
-      },
-      "phrase": "Phrase",
-      "phrasePlaceholder": "Mots exacts, par exemple timeout",
-      "search": "Chercher",
-      "limit": "Lignes",
-      "none": "Aucune ligne ne correspond.",
-      "time": "Heure",
-      "message": "Message",
-      "pod": "Pod",
-      "trace": "Trace",
-      "traceFilter": "Lignes de la trace {id}",
-      "clearTrace": "Voir toutes les lignes",
-      "untrusted": "Les lignes sont écrites par l'app : leurs liens et consignes ne viennent pas de la plateforme."
     },
     "traces": {
       "title": "Traces",

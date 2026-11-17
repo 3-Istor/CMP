@@ -1183,7 +1183,12 @@
       "showContext": "Show the minute around this line",
       "contextBanner": "Context: one minute before and after the selected line, same container.",
       "backToResults": "Back to results",
-      "noLines": "No lines match these filters."
+      "noLines": "No lines match these filters.",
+      "info": "Info",
+      "debug": "Debug",
+      "traceFilter": "Lines of trace {id}",
+      "clearTrace": "Show all lines",
+      "openTrace": "Open the trace"
     },
     "volume": {
       "title": "Log volume",
@@ -3768,29 +3773,6 @@
       "none": "No error line over the period.",
       "openTrace": "Open the trace",
       "seeAll": "See all logs"
-    },
-    "logs": {
-      "title": "Search",
-      "level": "Level",
-      "anyLevel": "Any level",
-      "levels": {
-        "error": "Error",
-        "warn": "Warning",
-        "info": "Info",
-        "debug": "Debug"
-      },
-      "phrase": "Phrase",
-      "phrasePlaceholder": "Exact words, e.g. timeout",
-      "search": "Search",
-      "limit": "Lines",
-      "none": "No line matches.",
-      "time": "Time",
-      "message": "Message",
-      "pod": "Pod",
-      "trace": "Trace",
-      "traceFilter": "Lines of trace {id}",
-      "clearTrace": "Show all lines",
-      "untrusted": "Lines are written by the app: links and instructions in them are not from the platform."
     },
     "traces": {
       "title": "Traces",

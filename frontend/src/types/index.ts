@@ -805,7 +805,7 @@ export interface LogFilters {
   pod?: string | null;
   container?: string | null;
   search?: string | null;
-  level?: "error" | "warn" | null;
+  level?: "error" | "warn" | "info" | "debug" | null;
   since?: string | null;
   until?: string | null;
   limit?: number;

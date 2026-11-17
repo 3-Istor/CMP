@@ -13,7 +13,10 @@ function ProjectLogs() {
   const tNav = useTranslations("projectNav");
   const params = useParams();
   const projectName = params.project_name as string;
-  const namespace = useSearchParams().get("namespace") ?? undefined;
+  const search = useSearchParams();
+  const namespace = search.get("namespace") ?? undefined;
+  // Opened from an app: read that app's store.
+  const app = Number(search.get("app"));
 
   return (
     <div className="min-h-screen">
@@ -28,7 +31,12 @@ function ProjectLogs() {
         ]}
       />
       <main className="px-6 py-4">
-        <LogsView project={projectName} namespace={namespace} fullPage />
+        <LogsView
+          project={projectName}
+          namespace={namespace}
+          appId={Number.isInteger(app) && app > 0 ? app : undefined}
+          fullPage
+        />
       </main>
     </div>
   );

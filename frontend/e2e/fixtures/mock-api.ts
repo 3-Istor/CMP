@@ -12,6 +12,7 @@ import importRepos from "./import-repos.json";
 import importRun from "./import-run.json";
 import imports from "./imports.json";
 import infraHealth from "./infra-health.json";
+import logs from "./logs.json";
 import me from "./me.json";
 import platformStatus from "./platform-status.json";
 import preferences from "./preferences.json";
@@ -40,6 +41,10 @@ const ROUTES: Record<string, unknown> = {
   // Health badges only render with a health answer; without it axe never checks their colours.
   "/infra/deployments/1/health": appHealth,
   "/activity/platform": platformStatus,
+  "/activity/logs": logs.activity,
+  "/activity/logs/targets": logs.targets,
+  "/activity/logs/volume": { step_seconds: 60, series: [] },
+  "/activity/network": [],
   "/finops/overview": finopsOverview,
   "/finops/meta": finopsMeta,
   "/deployments/1/scorecard": scorecard,
@@ -95,6 +100,13 @@ export const VARIANTS: Record<string, Record<string, Override>> = {
   },
   protected: { "/projects/demo/deletion-protection": { json: { enabled: true } } },
   member: { "/projects/": { json: [{ ...projects[0], role: "member" }] } },
+  obslogs: {
+    "/deployments/1/observability": {
+      json: { metrics: false, logs: true, traces: true, alerts: false, slo: false, silence_max_hours: 24, grafana_url: "" },
+    },
+    "/deployments/1/observability/logs": { json: logs.obs },
+    "/deployments/1/observability/logs/top-errors": { json: logs.topErrors },
+  },
   reviewer: { "/security/me": { json: { role: "guest", cnp_admin: false, auditor: true, username: "aud" } } },
   securitymember: { "/security/me": { json: { role: "member", cnp_admin: false, username: "demo" } } },
   notconnected: {
