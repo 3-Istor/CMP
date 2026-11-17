@@ -83,6 +83,7 @@ export default function AppOverviewPage() {
       <LogsCard
         project={projectName}
         namespace={current.k8s_namespace ?? `${projectName}-${current.name}`}
+        appId={appId}
         base={base}
         allowed={canViewLogs}
       />
