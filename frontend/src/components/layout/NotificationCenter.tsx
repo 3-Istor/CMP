@@ -115,13 +115,19 @@ export function NotificationCenter({
   const listRef = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState<number | undefined>();
 
-  useEffect(() => {
-    if (!open) {
-      // Reopening starts on the first page.
+  // Reopening starts on the first page, without the old items.
+  const changeOpen = (next: boolean) => {
+    if (!next) {
       setCursor(undefined);
       setBack([]);
-      return;
+      setItems([]);
+      setLoading(true);
     }
+    setOpen(next);
+  };
+
+  useEffect(() => {
+    if (!open) return;
     let cancelled = false;
     getNotifications({ limit: PAGE_SIZE, before: cursor })
       .then((page) => {
@@ -217,7 +223,7 @@ export function NotificationCenter({
         )}
       </button>
 
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={changeOpen}>
         <SheetContent side="right" className="w-96">
           <div className="flex items-start justify-between gap-2 border-b p-4">
             <div className="min-w-0">
@@ -254,7 +260,7 @@ export function NotificationCenter({
                   item={item}
                   onOpen={() => {
                     void markRead(item);
-                    setOpen(false);
+                    changeOpen(false);
                     onNavigate?.();
                   }}
                 />

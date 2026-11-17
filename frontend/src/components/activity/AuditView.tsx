@@ -323,6 +323,8 @@ export function AuditView({
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
   const [selected, setSelected] = useState<ActivityEvent | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [summaryError, setSummaryError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [more, setMore] = useState(true);
   // Cursors of the pages before this one; page N has N - 1 of them.
@@ -338,20 +340,22 @@ export function AuditView({
   const [feedUnavailable, setFeedUnavailable] = useState<ActivitySource[]>([]);
   const topRef = useRef<HTMLDivElement>(null);
 
-  // The summary does not depend on the page.
+  // The summary does not depend on the page; Refresh bumps reloadKey.
   useEffect(() => {
     let cancelled = false;
     getActivitySummary(project, Math.min(filters.days ?? 7, 30))
       .then((s) => {
-        if (!cancelled) setSummary(s);
+        if (cancelled) return;
+        setSummary(s);
+        setSummaryError(false);
       })
-      .catch((e) => {
-        if (!cancelled) setError(e);
+      .catch(() => {
+        if (!cancelled) setSummaryError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [project, filters.days]);
+  }, [project, filters.days, reloadKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -448,11 +452,17 @@ export function AuditView({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20" />
-          ))}
-        </div>
+        summaryError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {t("audit.summaryError")}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-20" />
+            ))}
+          </div>
+        )
       )}
 
       <Card>
@@ -462,7 +472,7 @@ export function AuditView({
         <CardContent>
           {summary ? (
             <ActivityChart t={t} locale={locale} summary={summary} />
-          ) : (
+          ) : summaryError ? null : (
             <Skeleton className="h-48" />
           )}
         </CardContent>
@@ -579,7 +589,10 @@ export function AuditView({
             <Button
               variant="ghost"
               size="sm"
-              onClick={load}
+              onClick={() => {
+                setReloadKey((k) => k + 1);
+                load();
+              }}
               disabled={loading}
               title={t("common.refresh")}
             >

@@ -198,7 +198,6 @@
     "nav": {
       "label": "Application sections",
       "breadcrumb": "Breadcrumb",
-      "applications": "Applications",
       "app": "Overview",
       "release": "Release",
       "environments": "Environments",
@@ -400,7 +399,7 @@
     "dataFreshness": {
       "real": "Actual",
       "simulated": "Simulated",
-      "estimated": "estimated",
+      "estimated": "Estimated",
       "estimateNote": "Part of the cost relies on a provisional price.",
       "updated": "updated {age}",
       "finalUntil": "final until {date}"
@@ -1079,6 +1078,7 @@
       }
     },
     "audit": {
+      "summaryError": "Summary unavailable",
       "kpi": {
         "actions": "Actions · {days} d",
         "people": "Active people",
@@ -1912,7 +1912,8 @@
       "unavailable": "The cluster does not allow this action right now",
       "asleep": "Wake the application before restarting it",
       "busy": "An operation is running on the application",
-      "protected": "Deletion protection is on"
+      "protected": "Deletion protection is on",
+      "imported": "Remove it from Settings"
     },
     "toasts": {
       "sleeping": "{name} is going to sleep",
@@ -2912,8 +2913,12 @@
       "costsForecast": "forecast {amount} at month end",
       "platform": "Platform",
       "nodesValue": "{up} / {total} nodes",
-      "cloudUp": "up",
-      "cloudDown": "down"
+      "cloud": {
+        "up": "up",
+        "down": "down",
+        "starting": "starting",
+        "unknown": "unknown"
+      }
     }
   },
   "securityFindings": {

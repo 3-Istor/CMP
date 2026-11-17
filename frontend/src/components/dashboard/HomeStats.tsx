@@ -28,7 +28,7 @@ export function HomeStats({
   const nodes = health?.openstack_hypervisors ?? [];
   const nodesUp = nodes.filter((n) => n.state === "up").length;
   const clouds = (health?.clusters ?? [])
-    .map((c) => `${c.cloud.toUpperCase()} ${t(c.state === "up" ? "cloudUp" : "cloudDown")}`)
+    .map((c) => `${c.cloud.toUpperCase()} ${t(`cloud.${c.state}`)}`)
     .join(" · ");
 
   return (
@@ -71,7 +71,7 @@ export function HomeStats({
         loading={!health}
         value={nodes.length > 0 ? t("nodesValue", { up: nodesUp, total: nodes.length }) : "-"}
         hint={clouds}
-        title={nodes.map((n) => `${n.name} ${n.state}`).join("\n")}
+        title={nodes.map((n) => `${n.name} ${t(`cloud.${n.state === "up" ? "up" : "down"}`)}`).join("\n")}
         tone={nodes.length > 0 && nodesUp < nodes.length ? "warn" : "default"}
       />
     </div>

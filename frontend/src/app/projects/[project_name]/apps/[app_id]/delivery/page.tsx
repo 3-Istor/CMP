@@ -61,7 +61,6 @@ export default function AppDeliveryPage() {
                 projectName={projectName}
                 showSettings={false}
                 showHistory={false}
-                showNewRelease={false}
               />
             </Section>
           </>

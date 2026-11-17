@@ -114,6 +114,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const canViewObservability = can("app.viewObservability");
 
   const isKubernetes = current.provider_type === "kubernetes";
+  const imported = current.template_id.startsWith("import-");
   const obsCaps = useObsCapabilities(
     appId,
     isKubernetes && canViewObservability,
@@ -480,6 +481,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                           className="gap-2 text-destructive hover:text-destructive focus:text-destructive"
                           disabled={
                             protectedOn ||
+                            imported ||
                             ["deleting", "deleted"].includes(current.status)
                           }
                           onClick={() => setConfirming("delete")}
@@ -487,7 +489,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                           <Trash2 className="h-4 w-4" aria-hidden />
                           <MenuText
                             label={ta("deleteApp")}
-                            reason={protectedOn ? ta("reasons.protected") : null}
+                            reason={
+                              protectedOn
+                                ? ta("reasons.protected")
+                                : imported
+                                  ? ta("reasons.imported")
+                                  : null
+                            }
                           />
                         </DropdownMenuItem>
                       </>

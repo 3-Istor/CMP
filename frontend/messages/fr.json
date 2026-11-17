@@ -198,7 +198,6 @@
     "nav": {
       "label": "Sections de l'application",
       "breadcrumb": "Fil d'Ariane",
-      "applications": "Applications",
       "app": "Vue d'ensemble",
       "release": "Release",
       "environments": "Environnements",
@@ -398,9 +397,9 @@
       "platform": "Part fixe par app des services communs de la plateforme"
     },
     "dataFreshness": {
-      "real": "réel",
-      "simulated": "simulé",
-      "estimated": "estimé",
+      "real": "Réel",
+      "simulated": "Simulé",
+      "estimated": "Estimé",
       "estimateNote": "Une partie des coûts repose sur un prix provisoire.",
       "updated": "màj {age}",
       "finalUntil": "définitif jusqu'au {date}"
@@ -1079,6 +1078,7 @@
       }
     },
     "audit": {
+      "summaryError": "Synthèse indisponible",
       "kpi": {
         "actions": "Actions · {days} j",
         "people": "Personnes actives",
@@ -1912,7 +1912,8 @@
       "unavailable": "Le cluster n'autorise pas cette action pour l'instant",
       "asleep": "Réveillez l'application avant de la redémarrer",
       "busy": "Opération en cours sur l'application",
-      "protected": "La protection contre la suppression est activée"
+      "protected": "La protection contre la suppression est activée",
+      "imported": "À retirer depuis les réglages"
     },
     "toasts": {
       "sleeping": "{name} est en cours de mise en veille",
@@ -2912,8 +2913,12 @@
       "costsForecast": "prévision {amount} en fin de mois",
       "platform": "Plateforme",
       "nodesValue": "{up} / {total} nœuds",
-      "cloudUp": "en ligne",
-      "cloudDown": "éteint"
+      "cloud": {
+        "up": "en ligne",
+        "down": "éteint",
+        "starting": "démarrage",
+        "unknown": "inconnu"
+      }
     }
   },
   "securityFindings": {
