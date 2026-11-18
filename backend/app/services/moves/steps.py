@@ -8,6 +8,7 @@ namespaces once the target is healthy; the rest are registry commits.
 """
 
 import inspect
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -16,10 +17,11 @@ from starlette.concurrency import run_in_threadpool
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, TargetCloud
 from app.models.project_move import ACTIVE, STEP_NAMES, ProjectMove
-from app.services import project_registry
+from app.services import project_registry, vault_client
 from app.services.audit import record_system_event
 from app.services.clusters.state import PUBLIC_CLOUDS, fresh_state
-from app.services.environments.layout import SUFFIX
+from app.services.deletion_protection import still_labelled
+from app.services.environments import layout
 from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
@@ -29,13 +31,17 @@ from app.services.kube_client import (
     kube_list,
     kube_merge_patch,
 )
-from app.services.notifications import notify_project
+from app.services.moves import active_move
+from app.services.notifications import notify_project, notify_users
 from app.services.security import restore as restores
 from app.services.security import restore_commit
+
+logger = logging.getLogger(__name__)
 
 ARGOCD = "/apis/argoproj.io/v1alpha1/namespaces/argocd"
 NAMESPACES = "/api/v1/namespaces"
 CNPG = "/apis/postgresql.cnpg.io/v1/namespaces/{}"
+VAULT_SECRETS = "/apis/ricoberger.de/v1alpha1/namespaces/{}/vaultsecrets"
 LABEL = "cnp.3istor.com/project"
 WORKLOADS = (
     "/apis/apps/v1/namespaces/{}/deployments",
@@ -67,16 +73,7 @@ def _named(steps: list[dict], name: str) -> dict:
     return next(s for s in steps if s["name"] == name)
 
 
-def active_move(db: Session, project: str) -> ProjectMove | None:
-    return (
-        db.query(ProjectMove)
-        .filter(ProjectMove.project == project)
-        .filter(ProjectMove.status.in_(ACTIVE))
-        .first()
-    )
-
-
-def start_checks(
+async def start_checks(
     db: Session, project: Project, confirm_data_loss: bool
 ) -> str:
     """The cloud *project* would move to; MoveRefused if it cannot move now."""
@@ -94,24 +91,50 @@ def start_checks(
             raise MoveRefused(
                 409, f"The {cloud.value.upper()} cluster is {state}."
             )
+    # The admission policy refuses to delete protected source namespaces.
+    try:
+        protected = await project_registry.is_deletion_protected(
+            project.project_name
+        ) or await run_in_threadpool(
+            still_labelled, project.project_name, source
+        )
+    except project_registry.RegistryError as exc:
+        raise MoveRefused(
+            502, f"Could not check deletion protection: {exc}"
+        ) from exc
+    if protected:
+        raise MoveRefused(
+            409, "Turn deletion protection off to move this project."
+        )
     if not confirm_data_loss:
-        # Imported apps keep their data outside CNPG: nothing copies it.
-        imported = [
-            name
-            for (name,) in db.query(Deployment.name)
-            .filter(
-                Deployment.project_id == project.project_name,
-                Deployment.template_id.in_(IMPORTED),
-                Deployment.status != DeploymentStatus.DELETED,
-            )
-            .distinct()
-            .order_by(Deployment.name)
-        ]
-        if imported:
-            raise MoveRefused(
-                409, f"Data in {', '.join(imported)} will be lost."
-            )
+        lost = await data_loss(db, project)
+        if lost:
+            raise MoveRefused(409, f"Data in {', '.join(lost)} will be lost.")
     return target.value
+
+
+async def data_loss(db: Session, project: Project) -> list[str]:
+    """Apps whose data starts empty on the target: nothing copies it."""
+    # Imported apps keep their data outside CNPG.
+    imported = [
+        name
+        for (name,) in db.query(Deployment.name)
+        .filter(
+            Deployment.project_id == project.project_name,
+            Deployment.template_id.in_(IMPORTED),
+            Deployment.status != DeploymentStatus.DELETED,
+        )
+        .distinct()
+    ]
+    try:
+        unrestored = await run_in_threadpool(
+            _unrestored,
+            project.project_name,
+            TargetCloud(project.target_cloud),
+        )
+    except (ClusterNotConnectedError, KubeUnavailableError) as exc:
+        raise MoveRefused(503, f"Could not read the databases: {exc}") from exc
+    return sorted({*imported, *unrestored})
 
 
 def new_move(
@@ -132,7 +155,7 @@ def new_move(
             }
             for name in STEP_NAMES
         ],
-        restores=[],
+        restores=None,
         actor=actor,
         created_at=_now(),
     )
@@ -164,21 +187,41 @@ def _app_namespaces(project: str, cloud: TargetCloud) -> list[str]:
     ]
 
 
+def _clusters(project: str, cloud: TargetCloud) -> list[tuple[str, dict]]:
+    """(namespace, CNPG Cluster) of every database of the project's apps."""
+    return [
+        (ns, cluster)
+        for ns in _app_namespaces(project, cloud)
+        for cluster in kube_list(f"{CNPG.format(ns)}/clusters", cloud=cloud)
+    ]
+
+
 def _databases(project: str, cloud: TargetCloud) -> list[tuple[str, str]]:
     """(namespace, cluster) of every database with backups enabled."""
     return [
         (ns, cluster["metadata"]["name"])
-        for ns in _app_namespaces(project, cloud)
-        for cluster in kube_list(f"{CNPG.format(ns)}/clusters", cloud=cloud)
+        for ns, cluster in _clusters(project, cloud)
         if restores.database_read(cluster).backups_enabled
     ]
 
 
 def _app_env(project: str, namespace: str) -> tuple[str, str]:
     app = namespace.removeprefix(f"{project}-")
-    if app.endswith(SUFFIX["staging"]):
-        return app.removesuffix(SUFFIX["staging"]), "staging"
+    if app.endswith(layout.SUFFIX["staging"]):
+        return app.removesuffix(layout.SUFFIX["staging"]), "staging"
     return app, "prod"
+
+
+def _unrestored(project: str, cloud: TargetCloud) -> list[str]:
+    """Apps with a database no restore covers: no backups, or staging."""
+    lost = set()
+    for ns, cluster in _clusters(project, cloud):
+        app, env = _app_env(project, ns)
+        if env != "prod":
+            lost.add(f"{app} ({env})")
+        elif not restores.database_read(cluster).backups_enabled:
+            lost.add(app)
+    return sorted(lost)
 
 
 def _deployment(db: Session, project: str, app: str) -> Deployment:
@@ -197,6 +240,135 @@ def _deployment(db: Session, project: str, app: str) -> Deployment:
     return row
 
 
+def _project_apps(project: str) -> list[dict]:
+    """The project's Applications on a public cloud (on-prem ones stay)."""
+    return [
+        app
+        for app in kube_list(
+            f"{ARGOCD}/applications", {"labelSelector": f"{LABEL}={project}"}
+        )
+        if _destination(app) in PUBLIC
+    ]
+
+
+def _destination(app: dict) -> str | None:
+    return ((app.get("spec") or {}).get("destination") or {}).get("name")
+
+
+def _ready_on(app: dict, cloud: str) -> bool:
+    status = app.get("status") or {}
+    sync = status.get("sync") or {}
+    # Until Argo CD compares against the new cloud, its status is the source's.
+    compared = (sync.get("comparedTo") or {}).get("destination") or {}
+    return (
+        _destination(app) == cloud
+        and compared.get("name") == cloud
+        and sync.get("status") == "Synced"
+        and (status.get("health") or {}).get("status") == "Healthy"
+    )
+
+
+# ── Checks before the source stops ──────────────────────────────────────────
+
+
+def _source_problems(move: ProjectMove) -> list[str]:
+    """What would break the move once the source is stopped, read live."""
+    problems = []
+    unhealthy = [
+        app["metadata"]["name"]
+        for app in _project_apps(move.project)
+        if _destination(app) == move.source and not _ready_on(app, move.source)
+    ]
+    if unhealthy:
+        problems.append(
+            f"Not synced and healthy on {move.source}: {', '.join(unhealthy)}"
+        )
+    # Without archiving, the final backup and the restore would miss WAL.
+    stuck = [
+        cluster["metadata"]["name"]
+        for _, cluster in _clusters(move.project, TargetCloud(move.source))
+        if restores.database_read(cluster).backups_enabled
+        and not any(
+            c.get("type") == "ContinuousArchiving"
+            and c.get("status") == "True"
+            for c in (cluster.get("status") or {}).get("conditions") or []
+        )
+    ]
+    if stuck:
+        problems.append(f"Not archiving its WAL: {', '.join(stuck)}")
+    return problems
+
+
+def _vault_roles(move: ProjectMove) -> list[str]:
+    """The Vault roles the project's secrets are synced with on the source."""
+    cloud = TargetCloud(move.source)
+    return sorted(
+        {
+            role
+            for ns in _namespaces(move.project, cloud)
+            for secret in kube_list(
+                VAULT_SECRETS.format(ns["metadata"]["name"]), cloud=cloud
+            )
+            if (role := (secret.get("spec") or {}).get("vaultRole"))
+        }
+    )
+
+
+async def _precheck(move: ProjectMove) -> None:
+    problems = await run_in_threadpool(_source_problems, move)
+    mount = f"kubernetes-{move.target}"
+    missing = [
+        role
+        for role in await run_in_threadpool(_vault_roles, move)
+        if not await vault_client.app_role_exists(mount, role)
+    ]
+    if missing:
+        problems.append(
+            f"Missing on Vault {mount}: {', '.join(missing)} "
+            "(apply the project's Terraform again)"
+        )
+    if problems:
+        raise StepFailed("; ".join(problems))
+
+
+async def _restores(db: Session, move: ProjectMove) -> list[dict]:
+    """Per backed-up prod database: its next generation, from the source."""
+    clusters: dict[str, list[str]] = {}
+    found = await run_in_threadpool(
+        _databases, move.project, TargetCloud(move.source)
+    )
+    for ns, cluster in found:
+        clusters.setdefault(ns, []).append(cluster)
+    out = []
+    for ns, names in clusters.items():
+        app, env = _app_env(move.project, ns)
+        # Restores land in the values file prod and staging share.
+        if env != "prod":
+            continue
+        values = await restore_commit.read_values(
+            _deployment(db, move.project, app)
+        )
+        server = restores.current_cluster(values, names)
+        if server is None:
+            raise StepFailed(f"Cannot tell which database of {app} is current")
+        out.append(
+            {
+                "app": app,
+                "env": env,
+                "generation": restores.current_generation(values) + 1,
+                "sourceServer": server,
+            }
+        )
+    return out
+
+
+async def _ensure_restores(db: Session, move: ProjectMove) -> None:
+    if move.restores is None:
+        # Saved before any commit: a retry reuses them, one generation bump.
+        move.restores = await _restores(db, move)
+        db.commit()
+
+
 # ── Steps: True when done, False while waiting (with a detail) ──────────────
 
 
@@ -213,7 +385,7 @@ def _appprojects_waiting(move: ProjectMove) -> list[str]:
     return waiting
 
 
-async def prepare(_db, move: ProjectMove, step: dict, _steps) -> bool:
+async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
     if step["status"] == "pending":
         await project_registry.set_move(
             move.project,
@@ -225,17 +397,27 @@ async def prepare(_db, move: ProjectMove, step: dict, _steps) -> bool:
             },
         )
     waiting = await run_in_threadpool(_appprojects_waiting, move)
-    step["detail"] = (
-        f"Waiting for {', '.join(waiting)} to allow {move.target}"
-        if waiting
-        else None
-    )
-    return not waiting
+    if waiting:
+        step["detail"] = (
+            f"Waiting for {', '.join(waiting)} to allow {move.target}"
+        )
+        return False
+    # Last step a cancel can undo: refuse here what would strand the move.
+    await _precheck(move)
+    await _ensure_restores(db, move)
+    step["detail"] = None
+    return True
+
+
+def _replicated(pod: dict) -> bool:
+    """A pod of a Deployment or Rollout (CNPG and Job pods are not)."""
+    owners = pod["metadata"].get("ownerReferences") or []
+    return any(o.get("kind") == "ReplicaSet" for o in owners)
 
 
 def stop_source(_db, move: ProjectMove, step: dict, _steps) -> bool:
     cloud = TargetCloud(move.source)
-    running = []
+    left = []
     for ns in _app_namespaces(move.project, cloud):
         for collection in WORKLOADS:
             path = collection.format(ns)
@@ -248,12 +430,14 @@ def stop_source(_db, move: ProjectMove, step: dict, _steps) -> bool:
                         {"spec": {"replicas": 0}},
                         cloud=cloud,
                     )
-                if (item.get("status") or {}).get("readyReplicas"):
-                    running.append(name)
-    step["detail"] = (
-        f"Waiting for {', '.join(running)} to stop" if running else None
-    )
-    return not running
+        # Stopped once the pods are gone: a terminating one may still write.
+        left += [
+            pod["metadata"]["name"]
+            for pod in kube_list(f"{NAMESPACES}/{ns}/pods", cloud=cloud)
+            if _replicated(pod)
+        ]
+    step["detail"] = f"Waiting for {', '.join(left)} to stop" if left else None
+    return not left
 
 
 def final_backup(_db, move: ProjectMove, step: dict, _steps) -> bool:
@@ -272,44 +456,13 @@ def final_backup(_db, move: ProjectMove, step: dict, _steps) -> bool:
                 f"Backup {name} failed: {status.get('error') or 'no reason'}"
             )
         if status.get("phase") != "completed":
-            waiting.append(name)
+            waiting.append(f"{name} ({status.get('phase') or 'pending'})")
     step["detail"] = f"Waiting for {', '.join(waiting)}" if waiting else None
     return not waiting
 
 
-async def _restores(db: Session, move: ProjectMove) -> list[dict]:
-    """Per backed-up database: its next generation, from the source cluster."""
-    clusters: dict[str, list[str]] = {}
-    found = await run_in_threadpool(
-        _databases, move.project, TargetCloud(move.source)
-    )
-    for ns, cluster in found:
-        clusters.setdefault(ns, []).append(cluster)
-    out = []
-    for ns, names in clusters.items():
-        app, env = _app_env(move.project, ns)
-        values = await restore_commit.read_values(
-            _deployment(db, move.project, app)
-        )
-        server = restores.current_cluster(values, names)
-        if server is None:
-            raise StepFailed(f"Cannot tell which database of {app} is current")
-        out.append(
-            {
-                "app": app,
-                "env": env,
-                "generation": restores.current_generation(values) + 1,
-                "sourceServer": server,
-            }
-        )
-    return out
-
-
 async def switch(db: Session, move: ProjectMove, _step, _steps) -> bool:
-    if not move.restores:
-        # Saved before the commit: a retry reuses them, one generation bump.
-        move.restores = await _restores(db, move)
-        db.commit()
+    await _ensure_restores(db, move)
     await project_registry.switch_cloud(
         move.project,
         {
@@ -331,34 +484,9 @@ async def switch(db: Session, move: ProjectMove, _step, _steps) -> bool:
     return True
 
 
-def _destination(app: dict) -> str | None:
-    return ((app.get("spec") or {}).get("destination") or {}).get("name")
-
-
-def _ready_on(app: dict, cloud: str) -> bool:
-    status = app.get("status") or {}
-    sync = status.get("sync") or {}
-    # Until Argo CD compares against the new cloud, its status is the source's.
-    compared = (sync.get("comparedTo") or {}).get("destination") or {}
-    return (
-        _destination(app) == cloud
-        and compared.get("name") == cloud
-        and sync.get("status") == "Synced"
-        and (status.get("health") or {}).get("status") == "Healthy"
-    )
-
-
 def _target_waiting(move: ProjectMove) -> str | None:
     """What the target still waits for, read live; None once it is healthy."""
-    # The project's on-prem Applications (AppProjects, image updaters) stay.
-    apps = [
-        app
-        for app in kube_list(
-            f"{ARGOCD}/applications",
-            {"labelSelector": f"{LABEL}={move.project}"},
-        )
-        if _destination(app) in PUBLIC
-    ]
+    apps = _project_apps(move.project)
     if not any(_destination(app) == move.target for app in apps):
         return f"Waiting for the apps to run on {move.target}"
     waiting = [
@@ -374,10 +502,39 @@ def wait_target(_db, move: ProjectMove, step: dict, _steps) -> bool:
     return step["detail"] is None
 
 
-async def persist_restores(
-    db: Session, move: ProjectMove, _step, _steps
+async def _deployed(
+    db: Session, move: ProjectMove, app: str, sha: str
 ) -> bool:
-    for restore in move.restores:
+    """Whether Argo CD renders the backend of *app* from *sha* or later."""
+    name = layout.application(move.project, app, "backend", "prod")
+    found = await run_in_threadpool(kube_get, f"{ARGOCD}/applications/{name}")
+    sync = ((found or {}).get("status") or {}).get("sync") or {}
+    revisions = sync.get("revisions") or [sync.get("revision")]
+    if sha in revisions:
+        return True
+    sources = ((found or {}).get("spec") or {}).get("sources") or []
+    values = next(
+        (
+            rev
+            for source, rev in zip(sources, revisions)
+            if source.get("ref") == "values"
+        ),
+        None,
+    )
+    # Another commit may have landed on top of ours since.
+    return bool(values) and await restore_commit.includes(
+        _deployment(db, move.project, app), values, sha
+    )
+
+
+async def persist_restores(
+    db: Session, move: ProjectMove, step: dict, _steps
+) -> bool:
+    # Kept on the step, so a retry or a wait never commits twice.
+    commits = step.setdefault("commits", {})
+    for restore in move.restores or []:
+        if restore["app"] in commits:
+            continue
         # Exact values, so the app repository says what runs on the target.
         patch = {
             "db": {
@@ -389,13 +546,25 @@ async def persist_restores(
                 }
             }
         }
-        await restore_commit.commit_values_patch(
+        commits[restore["app"]] = await restore_commit.commit_values_patch(
             _deployment(db, move.project, restore["app"]),
             f"move to {move.target}",
             lambda _values, patch=patch: patch,
             move.actor,
         )
-    return True
+    # Until Argo CD renders the commit, dropping status.move would render the
+    # old generation and prune the restored database.
+    waiting = [
+        layout.application(move.project, app, "backend", "prod")
+        for app, sha in commits.items()
+        if not await _deployed(db, move, app, sha)
+    ]
+    step["detail"] = (
+        f"Waiting for {', '.join(waiting)} to deploy the restore"
+        if waiting
+        else None
+    )
+    return not waiting
 
 
 def cleanup_source(_db, move: ProjectMove, step: dict, steps) -> bool:
@@ -417,28 +586,37 @@ def cleanup_source(_db, move: ProjectMove, step: dict, steps) -> bool:
     return not names
 
 
+def _params(move: ProjectMove) -> dict:
+    return {"project": move.project, "cloud": move.target.upper()}
+
+
 async def finish(_db, move: ProjectMove, _step, steps) -> bool:
     await project_registry.set_move(move.project, None)
     cutover = datetime.fromisoformat(
         _named(steps, "wait_target")["finished_at"]
     ) - datetime.fromisoformat(_named(steps, "stop_source")["started_at"])
-    record_system_event(
-        "project.move",
-        move.project,
-        {
-            "source": move.source,
-            "target": move.target,
-            "cutover_seconds": cutover.total_seconds(),
-        },
-        project=move.project,
-    )
-    await run_in_threadpool(
-        notify_project,
-        move.project,
-        kind="move",
-        title_key="moveDone",
-        params={"target": move.target},
-    )
+    try:
+        record_system_event(
+            "project.move.done",
+            move.project,
+            {
+                "source": move.source,
+                "target": move.target,
+                "cutover_seconds": cutover.total_seconds(),
+            },
+            project=move.project,
+        )
+        await run_in_threadpool(
+            notify_project,
+            move.project,
+            kind="move",
+            title_key="move_done",
+            params=_params(move),
+            link=f"/projects/{move.project}/settings",
+        )
+    except Exception:  # pylint: disable=broad-exception-caught
+        # The project has moved: a lost event or notice must not undo that.
+        logger.exception("move %s: event or notification lost", move.id)
     return True
 
 
@@ -463,6 +641,37 @@ def _save(db: Session, move: ProjectMove, steps: list[dict]) -> None:
     db.commit()
 
 
+def _refused(exc: Exception) -> bool:
+    """A cluster that answered no: waiting would not change its mind."""
+    status = getattr(exc, "status", None) or 0
+    # 408 and 429 are an API server shedding load: a wait, like a 5xx.
+    return 400 <= status < 500 and status not in (408, 429)
+
+
+async def _fail(
+    db: Session, move: ProjectMove, steps: list[dict], step: dict, detail: str
+) -> ProjectMove:
+    step.update(status="failed", detail=detail, finished_at=_now().isoformat())
+    move.status = "failed"
+    move.detail = f"{step['name']}: {detail}"
+    _save(db, move, steps)
+    owner = (
+        db.query(Project.owner_username)
+        .filter(Project.project_name == move.project)
+        .scalar()
+    )
+    await run_in_threadpool(
+        notify_users,
+        [owner, move.actor],
+        kind="move",
+        title_key="move_failed",
+        params=_params(move),
+        link=f"/projects/{move.project}/settings",
+        project=move.project,
+    )
+    return move
+
+
 async def advance(db: Session, move: ProjectMove) -> ProjectMove:
     """
     Take a running move as far as it goes now. Safe to call often: each step
@@ -482,18 +691,14 @@ async def advance(db: Session, move: ProjectMove) -> ProjectMove:
             else:
                 done = await run_in_threadpool(run, db, move, step, steps)
         except (ClusterNotConnectedError, KubeUnavailableError) as exc:
+            if _refused(exc):
+                return await _fail(db, move, steps, step, str(exc))
             # A cluster out of reach is a wait, not a failure.
             step["detail"] = str(exc)
             done = False
         except Exception as exc:  # pylint: disable=broad-exception-caught
             detail = str(getattr(exc, "detail", None) or exc)
-            step.update(
-                status="failed", detail=detail, finished_at=_now().isoformat()
-            )
-            move.status = "failed"
-            move.detail = f"{step['name']}: {detail}"
-            _save(db, move, steps)
-            return move
+            return await _fail(db, move, steps, step, detail)
         if not done:
             step["status"] = "running"
             _save(db, move, steps)

@@ -33,8 +33,9 @@ class ProjectMove(Base):
     status: Mapped[str] = mapped_column(String(24), default="running")
     # [{"name", "status", "detail", "started_at", "finished_at"}]
     steps: Mapped[list] = mapped_column(JSON, default=list)
-    # Computed once at "switch", so a resume never bumps the generation twice.
-    restores: Mapped[list] = mapped_column(JSON, default=list)
+    # Computed once in "prepare" (None until then), so a resume never bumps
+    # the generation twice.
+    restores: Mapped[list | None] = mapped_column(JSON)
     actor: Mapped[str] = mapped_column(String(255))
     detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -11,6 +11,7 @@ from app.routers.deployments import _deep_merge, _yaml
 from app.routers.security import _github_token
 from app.services import app_security_data as security_data
 from app.services.github_service import (
+    compare_commits,
     get_default_branch,
     get_file_content,
     put_file_content,
@@ -83,3 +84,10 @@ async def commit_values_patch(
         token, repo, path, _dump(values), message(label, actor), sha, branch
     )
     return (result.get("commit") or {}).get("sha", "")
+
+
+async def includes(deployment: Deployment, revision: str, sha: str) -> bool:
+    """Whether *revision* of the app repository is *sha* or comes after it."""
+    token, repo = await _github_token(deployment)
+    status = await compare_commits(token, repo, sha, revision)
+    return status in ("ahead", "identical")

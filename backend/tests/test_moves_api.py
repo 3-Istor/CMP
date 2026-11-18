@@ -65,6 +65,13 @@ def env():
             side_effect=lambda user, _project: ROLES.get(user),
         ),
         mock.patch.object(steps, "fresh_state", return_value="up"),
+        mock.patch.object(
+            steps.project_registry,
+            "is_deletion_protected",
+            new=mock.AsyncMock(return_value=False),
+        ),
+        mock.patch.object(steps, "still_labelled", return_value=False),
+        mock.patch.object(steps, "_unrestored", return_value=[]),
     ):
         yield TestClient(app), current, session
     session.close()
@@ -95,6 +102,28 @@ class TestStart:
         current["token"] = _token("admin", cnp_agent={})
 
         assert _start(http).status_code == 403
+
+    @pytest.mark.parametrize(
+        "path", ["/move", "/moves/1/retry", "/moves/1/cancel"]
+    )
+    def test_an_assistant_is_refused_even_without_step_up(self, env, path):
+        http, current, _ = env
+        current["token"] = _token("admin", cnp_agent={"client": "claude"})
+
+        with mock.patch.object(settings, "STEP_UP_ENABLED", False):
+            response = http.post(f"/api/projects/alpha{path}", json={})
+
+        assert response.status_code == 403
+
+    def test_the_data_that_starts_empty_is_listed(self, env):
+        http, _, _ = env
+
+        with mock.patch.object(
+            steps, "_unrestored", return_value=["shop (staging)"]
+        ):
+            response = http.get("/api/projects/alpha/moves/data-loss")
+
+        assert response.json() == ["shop (staging)"]
 
     def test_admin_starts_one_move_and_a_second_is_refused(self, env):
         http, _, db = env

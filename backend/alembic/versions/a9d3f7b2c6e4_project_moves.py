@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("reason", sa.String(32), nullable=False),
         sa.Column("status", sa.String(24), nullable=False),
         sa.Column("steps", sa.JSON(), nullable=False),
-        sa.Column("restores", sa.JSON(), nullable=False),
+        sa.Column("restores", sa.JSON(), nullable=True),
         sa.Column("actor", sa.String(255), nullable=False),
         sa.Column("detail", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

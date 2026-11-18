@@ -39,6 +39,19 @@ def _refused(exc: steps.MoveRefused) -> HTTPException:
     return HTTPException(exc.status_code, exc.detail)
 
 
+def _person(token: dict) -> None:
+    """A move is a person's decision, step-up enabled or not."""
+    if token.get("cnp_agent"):
+        raise HTTPException(403, "Assistants cannot move a project.")
+
+
+def _project(db: Session, name: str) -> Project:
+    project = db.query(Project).filter_by(project_name=name).first()
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    return project
+
+
 def _get(db: Session, project: str, move_id: int) -> ProjectMove:
     move = db.get(ProjectMove, move_id)
     if move is None or move.project != project:
@@ -50,19 +63,29 @@ def _get(db: Session, project: str, move_id: int) -> ProjectMove:
 async def start_move(
     body: MoveStart, ctx: RequireAdmin, db: Session = Depends(get_db)
 ) -> ProjectMove:
+    _person(ctx.token)
     assert_step_up(ctx.token)
-    project = (
-        db.query(Project).filter_by(project_name=ctx.project_name).first()
-    )
-    if project is None:
-        raise HTTPException(404, "Project not found")
+    project = _project(db, ctx.project_name)
     # Checks and insert under one lock: two clicks cannot both pass.
     async with project_lock(ctx.project_name):
         try:
-            target = steps.start_checks(db, project, body.confirm_data_loss)
+            target = await steps.start_checks(
+                db, project, body.confirm_data_loss
+            )
         except steps.MoveRefused as exc:
             raise _refused(exc) from exc
         return steps.new_move(db, project, target, ctx.username)
+
+
+@router.get("/moves/data-loss", response_model=list[str])
+async def move_data_loss(
+    ctx: RequireAdmin, db: Session = Depends(get_db)
+) -> list[str]:
+    """The apps whose data would start empty on the other cloud."""
+    try:
+        return await steps.data_loss(db, _project(db, ctx.project_name))
+    except steps.MoveRefused as exc:
+        raise _refused(exc) from exc
 
 
 @router.get("/moves/current", response_model=MoveRead | None)
@@ -89,6 +112,7 @@ def list_moves(
 async def retry_move(
     move_id: int, ctx: RequireAdmin, db: Session = Depends(get_db)
 ) -> ProjectMove:
+    _person(ctx.token)
     assert_step_up(ctx.token)
     async with project_lock(ctx.project_name):
         move = _get(db, ctx.project_name, move_id)
@@ -102,6 +126,7 @@ async def retry_move(
 async def cancel_move(
     move_id: int, ctx: RequireAdmin, db: Session = Depends(get_db)
 ) -> ProjectMove:
+    _person(ctx.token)
     assert_step_up(ctx.token)
     async with project_lock(ctx.project_name):
         move = _get(db, ctx.project_name, move_id)
