@@ -59,6 +59,7 @@ EXPORTED_TABLES: dict[str, TableSpec] = {
     "promotion_policies": TableSpec(_by_deployment),
     "verification_runs": TableSpec(_by_deployment),
     "promotions": TableSpec(_by_deployment),
+    "project_moves": TableSpec(_by("project")),
     "release_events": TableSpec(_by_deployment),
     "audit_events": TableSpec(_by("project")),
     "activity_events": TableSpec(_by("project")),
