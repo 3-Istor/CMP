@@ -89,10 +89,11 @@ def test_vault_roles_are_matched_to_their_app(name, orphan):
 @pytest.mark.parametrize(
     "name,orphan",
     [
-        ("shop-api-policy", False),
+        ("project-shop-app-api-policy", False),
         ("project-shop-dev-policy", False),
         ("project-shop-api-staging-policy", False),
-        ("shop-old-policy", True),
+        ("project-shop-app-old-policy", True),
+        ("project-shop-unknown-policy", False),
         ("project-gone-read-policy", True),
         ("cmp-backend", False),
     ],
@@ -140,7 +141,7 @@ def platform(monkeypatch):
         "namespaces": [_namespace("shop-api", "shop")],
         "kv": ["api", "system/discord"],
         "roles": ["shop-api-role", "project-shop-system-role"],
-        "policies": ["shop-api-policy", "project-shop-dev-policy"],
+        "policies": ["project-shop-app-api-policy", "project-shop-dev-policy"],
         "states": ["cnp/projects/shop/api/terraform.tfstate"],
     }
     monkeypatch.setattr(

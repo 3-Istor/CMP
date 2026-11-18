@@ -20,7 +20,7 @@ puis désinscription du registre, puis suppression des états Terraform).
 | Fichiers `deploy/values*.yaml`, `.github/workflows/security.yml`, secret Actions `DISCORD_WEBHOOK_URL` | Terraform | Partent avec le repo | Oui |
 | Client OIDC Keycloak `<app>` et ses scopes | Terraform `keycloak_openid_client.app_client` | `terraform destroy` | Oui |
 | Secrets Vault `project-<p>/<app>` et `project-<p>/<app>/registry` | Terraform `vault_kv_secret_v2` (`delete_all_versions`) | `terraform destroy` | Oui |
-| Politique Vault `<p>-<app>-policy` (CNP-297) et rôle `<p>-<app>-role` sur le montage du cloud | Terraform | `terraform destroy` | Oui |
+| Politique Vault `project-<p>-app-<app>-policy` (CNP-297, app-templates#58) et rôle `<p>-<app>-role` sur le montage du cloud | Terraform | `terraform destroy` | Oui |
 | CNAME Cloudflare `<app>-<p>` | Terraform `cloudflare_dns_record.app_cname` | `terraform destroy` | Oui |
 | Images GHCR `<app>` ou `<app>/frontend`, `<app>/backend` | CI du repo de l'app | Provisioner de destruction `null_resource.delete_ghcr_packages` | Oui, mais un refus de GitHub (401, 403) n'échoue pas : l'image reste sans bruit. Non contrôlé |
 | Staging : client Keycloak, secrets `<app>/staging`, politique `project-<p>-<app>-staging-policy`, rôle `<p>-<app>-staging-role`, CNAME | Module `staging` (`environments/activation.py`) | `destroy_with_app`, avant le destroy de l'app | Oui |

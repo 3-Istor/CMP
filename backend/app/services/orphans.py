@@ -172,15 +172,25 @@ def check_kv(alive: Alive, project: str, paths: list[str]) -> list[Orphan]:
 
 def _vault_owner(name: str, suffix: str, projects: set[str]):
     """(project, app or None) a role or policy named by the CNP layouts
-    belongs to, None when it is not one of ours."""
-    project_level = re.fullmatch(rf"project-(.+)-(\w+)-{suffix}", name)
-    if project_level and project_level.group(2) in PROJECT_POLICIES:
-        return project_level.group(1), None
-    staging = re.fullmatch(rf"(?:project-)?(.+)-staging-{suffix}", name)
-    base = staging.group(1) if staging else None
-    if base is None and name.endswith(f"-{suffix}"):
-        base = name[: -len(suffix) - 1]
-    return None if base is None else _split(base, projects)
+    belongs to, None when it is not one of ours. Layouts: <p>-<app>-role,
+    <p>-<app>-staging-role, project-<p>-system-role,
+    project-<p>-(dev|read|system)-policy, project-<p>-app-<app>-policy,
+    project-<p>-<app>-staging-policy."""
+    if not name.endswith(f"-{suffix}"):
+        return None
+    base = name[: -len(suffix) - 1]
+    scoped = base.startswith("project-")
+    split = _split(base.removeprefix("project-") if scoped else base, projects)
+    if split is None:
+        return None
+    project, rest = split
+    if scoped and rest in PROJECT_POLICIES:
+        return project, None
+    if rest.endswith("-staging"):
+        return project, rest.removesuffix("-staging")
+    if scoped and rest.startswith("app-"):
+        return project, rest.removeprefix("app-")
+    return None if scoped else (project, rest)
 
 
 def check_vault_names(
