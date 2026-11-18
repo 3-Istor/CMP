@@ -335,14 +335,21 @@ def _destination(app: dict) -> str | None:
     return ((app.get("spec") or {}).get("destination") or {}).get("name")
 
 
-def _ready(app: dict) -> bool:
+def _ready_on(app: dict, cloud: str) -> bool:
     status = app.get("status") or {}
-    return (status.get("sync") or {}).get("status") == "Synced" and (
-        status.get("health") or {}
-    ).get("status") == "Healthy"
+    sync = status.get("sync") or {}
+    # Until Argo CD compares against the new cloud, its status is the source's.
+    compared = (sync.get("comparedTo") or {}).get("destination") or {}
+    return (
+        _destination(app) == cloud
+        and compared.get("name") == cloud
+        and sync.get("status") == "Synced"
+        and (status.get("health") or {}).get("status") == "Healthy"
+    )
 
 
-def wait_target(_db, move: ProjectMove, step: dict, _steps) -> bool:
+def _target_waiting(move: ProjectMove) -> str | None:
+    """What the target still waits for, read live; None once it is healthy."""
     # The project's on-prem Applications (AppProjects, image updaters) stay.
     apps = [
         app
@@ -353,15 +360,18 @@ def wait_target(_db, move: ProjectMove, step: dict, _steps) -> bool:
         if _destination(app) in PUBLIC
     ]
     if not any(_destination(app) == move.target for app in apps):
-        step["detail"] = f"Waiting for the apps to run on {move.target}"
-        return False
+        return f"Waiting for the apps to run on {move.target}"
     waiting = [
         app["metadata"]["name"]
         for app in apps
-        if _destination(app) != move.target or not _ready(app)
+        if not _ready_on(app, move.target)
     ]
-    step["detail"] = f"Waiting for {', '.join(waiting)}" if waiting else None
-    return not waiting
+    return f"Waiting for {', '.join(waiting)}" if waiting else None
+
+
+def wait_target(_db, move: ProjectMove, step: dict, _steps) -> bool:
+    step["detail"] = _target_waiting(move)
+    return step["detail"] is None
 
 
 async def persist_restores(
@@ -391,6 +401,11 @@ async def persist_restores(
 def cleanup_source(_db, move: ProjectMove, step: dict, steps) -> bool:
     if _named(steps, "wait_target")["status"] != "done":
         raise StepFailed("The target is not healthy yet")
+    # Checked again live before each round of deletions.
+    waiting = _target_waiting(move)
+    if waiting:
+        step["detail"] = waiting
+        return False
     cloud = TargetCloud(move.source)
     left = _namespaces(move.project, cloud)
     for ns in left:

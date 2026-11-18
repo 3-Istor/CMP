@@ -82,10 +82,14 @@ def _cluster(name, backups=True):
 
 
 def _app(name, dest, sync="Synced", health="Healthy"):
+    compared = {"destination": {"name": dest}}
     return {
         "metadata": {"name": name},
         "spec": {"destination": {"name": dest}},
-        "status": {"sync": {"status": sync}, "health": {"status": health}},
+        "status": {
+            "sync": {"status": sync, "comparedTo": compared},
+            "health": {"status": health},
+        },
     }
 
 
@@ -242,10 +246,15 @@ def advance(db, move):
     return asyncio.run(steps.advance(db, move))
 
 
-def _apps_on(kube, cloud):
+def _apps_on(kube, cloud, compared=True):
+    """The ApplicationSet moved the apps; *compared*: Argo CD refreshed them."""
     for app in kube.items[(ONPREM, f"{ARGOCD}/applications")]:
         if app["spec"]["destination"]["name"] == "aws":
             app["spec"]["destination"]["name"] = cloud
+            if compared:
+                app["status"]["sync"]["comparedTo"]["destination"][
+                    "name"
+                ] = cloud
 
 
 # ── start_checks ────────────────────────────────────────────────────────────
@@ -463,6 +472,7 @@ def test_cleanup_deletes_only_labelled_namespaces_on_the_source(db, world):
     kube = world.kube
     kube.add(AWS, NAMESPACES, _ns("alpha-old", deleting=True))
     kube.add(GCP, NAMESPACES, _ns("alpha-system"), _ns("alpha-shop"))
+    _apps_on(kube, "gcp")
     move = _row(db, done=_before("cleanup_source"))
 
     advance(db, move)
@@ -509,6 +519,40 @@ def test_wait_target_counts_only_public_cloud_applications(db, world):
     apps[3]["status"]["health"]["status"] = "Healthy"
     advance(db, move)
     assert _step(move, "wait_target")["status"] == "done"
+
+
+def test_wait_target_waits_for_argo_to_compare_against_the_target(db, world):
+    move = _row(db, done=_before("wait_target"))
+    # Moved by the ApplicationSet, statuses still those of the stopped source.
+    _apps_on(world.kube, "gcp", compared=False)
+
+    advance(db, move)
+
+    step = _step(move, "wait_target")
+    assert step["status"] == "running"
+    assert "alpha-bootstrap" in step["detail"]
+    assert "alpha-shop-backend" in step["detail"]
+
+    for app in world.kube.items[(ONPREM, f"{ARGOCD}/applications")]:
+        app["status"]["sync"]["comparedTo"] = {
+            "destination": dict(app["spec"]["destination"])
+        }
+    advance(db, move)
+    assert _step(move, "wait_target")["status"] == "done"
+
+
+def test_cleanup_checks_the_target_again_before_deleting(db, world):
+    _apps_on(world.kube, "gcp")
+    apps = world.kube.items[(ONPREM, f"{ARGOCD}/applications")]
+    apps[3]["status"]["health"]["status"] = "Degraded"
+    move = _row(db, done=_before("cleanup_source"))
+
+    advance(db, move)
+
+    assert not [e for e in world.log if e[0] == "delete"]
+    step = _step(move, "cleanup_source")
+    assert step["status"] == "running"
+    assert "alpha-shop-backend" in step["detail"]
 
 
 def test_prepare_waits_for_the_appprojects(db, world):
@@ -578,10 +622,12 @@ def test_a_project_without_backed_up_data_moves(db, world):
         _cluster("alpha-shop-backend-db", backups=False)
     ]
     kube.items[(AWS, _deployments("alpha-shop"))] = [_workload("site", 0)]
-    _apps_on(kube, "gcp")
     move = _row(db)
 
-    advance(db, move)
+    advance(db, move)  # switch, then wait_target waits for Argo CD
+    assert _step(move, "wait_target")["status"] == "running"
+    _apps_on(kube, "gcp")
+    advance(db, move)  # cleanup_source waits for the deletions
     kube.items[(AWS, NAMESPACES)] = []
     advance(db, move)
 
