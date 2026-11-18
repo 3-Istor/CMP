@@ -388,7 +388,7 @@ def test_backing_values_are_the_catalogue_presets():
     )
 
     values = _values(files, "mongodb")
-    del values["podLabels"], values["network"]
+    del values["podLabels"], values["network"], values["offhours"]
     assert values == generate.load_preset("mongodb")
     assert sorted(files) == [
         "apps/epitweet/elasticsearch/values.yaml",
@@ -868,3 +868,58 @@ def test_allow_from_is_rewritten_with_the_header_kept():
         "image": {"tag": "1"},
         "network": {"allowFrom": ["a", "b"]},
     }
+
+
+def test_every_imported_app_sleeps_at_night_like_a_template_app():
+    specs = generate.resolve(_plan())
+    digests = {name: _digest(i) for i, name in enumerate(_services(specs))}
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, digests, REPO, SHA, PREFIX
+    )
+
+    assert all(
+        YAML(typ="safe").load(text)["offhours"]["enabled"]
+        for text in files.values()
+    )
+
+
+def test_an_app_wakes_after_and_sleeps_before_the_apps_it_calls():
+    specs = generate.resolve(_plan())
+    digests = {name: _digest(i) for i, name in enumerate(_services(specs))}
+
+    files = generate.apply_to_record(
+        _record(),
+        "epitweet",
+        specs,
+        digests,
+        REPO,
+        SHA,
+        PREFIX,
+        wake_order={"mongodb": 0, "user-service": 1},
+    )
+
+    backing, service = _values(files, "mongodb"), _values(
+        files, "user-service"
+    )
+    assert backing["offhours"]["wakeAt"] == "0 7 * * *"
+    assert service["offhours"]["wakeAt"] == "5 7 * * *"
+    assert service["offhours"]["sleepAt"] == "25 1 * * *"
+    assert backing["offhours"]["sleepAt"] == "30 1 * * *"
+
+
+def test_an_app_kept_awake_has_no_schedule():
+    specs = generate.resolve(_plan(), {"offhours": {"redis": False}})
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, {}, REPO, SHA, PREFIX
+    )
+
+    assert _values(files, "redis")["offhours"] == {"enabled": False}
+
+
+def test_an_offhours_edit_of_an_unknown_app_is_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_plan(), {"offhours": {"nope": False}})
+
+    assert "'nope': not an app of the import" in str(error.value)

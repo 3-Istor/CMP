@@ -89,6 +89,7 @@ class PlanEdits(BaseModel):
     probe: dict[str, ProbeEdit] = Field(default_factory=dict)
     drop_links: list[LinkRef] = Field(default_factory=list, max_length=200)
     pooler: dict[str, bool] = Field(default_factory=dict)
+    offhours: dict[str, bool] = Field(default_factory=dict)
 
 
 class SourceSettings(BaseModel):

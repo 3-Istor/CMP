@@ -1004,3 +1004,18 @@ def test_the_managed_database_password_is_generated_once_for_cnpg(world):
     assert len(first["password"]) == 48
     assert second == first
     assert "QUARKUS_NEO4J_AUTHENTICATION_PASSWORD" in second
+
+
+def test_deploy_wakes_backing_apps_before_the_services_calling_them(world):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    files = cluster.commits[-1]["files"]
+    wake = {
+        path.split("/")[2]: YAML(typ="safe").load(text)["offhours"]["wakeAt"]
+        for path, text in files.items()
+        if path.endswith("values.yaml")
+    }
+    assert wake["mongodb"] == "0 7 * * *"
+    assert wake["user-service"] != "0 7 * * *"

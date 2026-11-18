@@ -63,6 +63,15 @@ PORT_NAME = re.compile(r"[a-z]([-a-z0-9]{0,13}[a-z0-9])?")
 PROBE_PATH = re.compile(r"/[A-Za-z0-9._~/-]{0,200}")
 USER_LINE = re.compile(r"^\s*USER\s+(\d+)(?::\d+)?\s*$", re.MULTILINE)
 
+# The schedule of a template app (app-templates values-backend.yaml.tpl).
+OFFHOURS_SLEEP_HOUR = 1
+OFFHOURS_WAKE_HOUR = 7
+OFFHOURS_TIMEZONE = "Europe/Paris"
+# Minutes between two deploy waves: an app wakes after, and sleeps before,
+# the apps it links to.
+OFFHOURS_STEP_MINUTES = 5
+OFFHOURS_LAST_WAVE = 6
+
 VALUES_HEADER = (
     "# Written by the CMP from the import of {repo} at {sha}.\n"
     "# Change it from the CMP: the next build rewrites this file.\n"
@@ -122,6 +131,8 @@ class AppSpec:
     # The CNPG database of a service, as {"backing": plan name, "pooler":
     # bool}, for a managed backing app it links to.
     database: dict | None = None
+    # Sleeps at night with the project's other apps (offhours-guard).
+    offhours: bool = True
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -245,8 +256,9 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     ``public`` ({app: bool}, services only), ``memory`` ({app:
     {requests_mem_mib, limits_mem_mib}}), ``port`` ({app: port}, the
     service's first port), ``probe`` ({app: {kind, path, port}}),
-    ``drop_links`` ([{from, to}], plan names) and ``pooler`` ({app: bool},
-    a service with a managed database).
+    ``drop_links`` ([{from, to}], plan names), ``pooler`` ({app: bool},
+    a service with a managed database) and ``offhours`` ({app: bool}, false
+    keeps the app awake at night).
 
     Raises:
         PlanError: With every problem found, not only the first.
@@ -260,6 +272,7 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     port_edits: dict[str, int] = dict(edits.get("port") or {})
     probe_edits: dict[str, dict] = dict(edits.get("probe") or {})
     pooler_edits: dict[str, bool] = dict(edits.get("pooler") or {})
+    offhours_edits: dict[str, bool] = dict(edits.get("offhours") or {})
     dropped = {
         (link.get("from"), link.get("to"))
         for link in edits.get("drop_links") or []
@@ -410,6 +423,12 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
             ):
                 problems.append(f"'{name}': only an imported service {what}")
 
+    for name, enabled in offhours_edits.items():
+        spec = next((s for s in specs if s.name == name), None)
+        if spec is None:
+            problems.append(f"'{name}': not an app of the import")
+        else:
+            spec.offhours = bool(enabled)
     names = [s.name for s in specs]
     for spec in specs:
         problems += check_name(spec.name)
@@ -896,6 +915,25 @@ def with_allow_from(values_text: str, allowed: list[str]) -> str:
     return dump_yaml(values, header)
 
 
+def offhours_values(spec: AppSpec, wave: int) -> dict:
+    """
+    The prod schedule of a template app, staggered by deploy wave: backing
+    apps wake first and sleep last, so an app never wakes before what it
+    calls.
+    """
+    if not spec.offhours:
+        return {"enabled": False}
+    wave = min(wave, OFFHOURS_LAST_WAVE)
+    sleep = (OFFHOURS_LAST_WAVE - wave) * OFFHOURS_STEP_MINUTES
+    wake = wave * OFFHOURS_STEP_MINUTES
+    return {
+        "enabled": True,
+        "sleepAt": f"{sleep} {OFFHOURS_SLEEP_HOUR} * * *",
+        "wakeAt": f"{wake} {OFFHOURS_WAKE_HOUR} * * *",
+        "timezone": OFFHOURS_TIMEZONE,
+    }
+
+
 def backing_values(project: str, spec: AppSpec) -> dict:
     values = load_preset(spec.backing_kind)
     # The generic alerts of backing containers select on it (CNP-302).
@@ -987,6 +1025,7 @@ def apply_to_record(  # pylint: disable=too-many-arguments
     sha: str,
     image_prefix: str,
     cloud: TargetCloud = TargetCloud.ONPREM,
+    wake_order: dict[str, int] | None = None,
 ) -> dict[str, str]:
     """
     Add or refresh the imported apps in *record* (mutated) and return the
@@ -1051,6 +1090,9 @@ def apply_to_record(  # pylint: disable=too-many-arguments
             else service_values(
                 project, spec, image_prefix, digests[spec.name], cloud
             )
+        )
+        values["offhours"] = offhours_values(
+            spec, (wake_order or {}).get(spec.name, 0)
         )
         entries.append((spec.name, values))
     # Once every entry is in: an app admits the callers of the whole record.

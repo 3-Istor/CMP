@@ -1491,6 +1491,8 @@ export interface ImportPlanEdits {
   probe: Record<string, PlanProbe>;
   drop_links: { from: string; to: string }[];
   pooler: Record<string, boolean>;
+  /** false keeps the app awake at night; absent, it sleeps like a template app. */
+  offhours: Record<string, boolean>;
 }
 
 export interface ImportCapacity {

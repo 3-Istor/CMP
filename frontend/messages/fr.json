@@ -3554,7 +3554,9 @@
         "restoreLinkOf": "Garder le lien de {from} vers {to}",
         "managed": "Fournie par la plateforme : une base {kind} gérée (CNPG) dans le namespace de l'app qui l'utilise, sauvegardée chaque nuit, avec un mot de passe généré.",
         "pooler": "Pooler de connexions (PgBouncer)",
-        "poolerHelp": "L'app joint sa base {database} par PgBouncer. Utile si elle ouvre beaucoup de connexions."
+        "poolerHelp": "L'app joint sa base {database} par PgBouncer. Utile si elle ouvre beaucoup de connexions.",
+        "offhours": "Veille la nuit",
+        "offhoursHelp": "Arrêtée de 1 h à 7 h, comme les apps créées depuis un modèle. Les bases se réveillent avant les apps qui les appellent."
       }
     },
     "problem": {

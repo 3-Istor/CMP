@@ -31,6 +31,7 @@ export type PlanEditAction =
   | { type: "setProbe"; app: string; probe: PlanProbe }
   | { type: "toggleLink"; from: string; to: string }
   | { type: "setPooler"; app: string; value: boolean }
+  | { type: "setOffhours"; app: string; value: boolean }
   | { type: "reset"; edits?: ImportPlanEdits };
 
 export function emptyEdits(): ImportPlanEdits {
@@ -43,6 +44,7 @@ export function emptyEdits(): ImportPlanEdits {
     probe: {},
     drop_links: [],
     pooler: {},
+    offhours: {},
   };
 }
 
@@ -167,6 +169,7 @@ export function planEditsReducer(
         port: moveKey(state.port, before, after),
         probe: moveKey(state.probe, before, after),
         pooler: moveKey(state.pooler, before, after),
+        offhours: moveKey(state.offhours, before, after),
       };
     }
     case "toggleExclude":
@@ -240,6 +243,15 @@ export function planEditsReducer(
         pooler: action.value
           ? { ...state.pooler, [name]: true }
           : without(state.pooler, name),
+      };
+    }
+    case "setOffhours": {
+      const name = finalName(state, action.app);
+      return {
+        ...state,
+        offhours: action.value
+          ? without(state.offhours, name)
+          : { ...state.offhours, [name]: false },
       };
     }
     case "toggleLink": {
