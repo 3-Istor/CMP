@@ -23,6 +23,7 @@ export interface ConfirmDialogProps {
   description: string;
   consequences?: string[];
   expectedName?: string;
+  children?: React.ReactNode;
   confirmLabel: string;
   destructive?: boolean;
   onConfirm: () => Promise<void>;
@@ -58,6 +59,7 @@ function ConfirmBody({
   description,
   consequences,
   expectedName,
+  children,
   confirmLabel,
   destructive,
   onConfirm,
@@ -112,6 +114,8 @@ function ConfirmBody({
           </ul>
         </div>
       )}
+
+      {children}
 
       {needsName && (
         <form

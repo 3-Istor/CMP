@@ -2906,6 +2906,34 @@
       "title": "Sécurité",
       "description": "La politique CI appliquée à chaque app, et où partent les nouveaux problèmes de sécurité."
     },
+    "location": {
+      "title": "Emplacement",
+      "description": "Le cloud sur lequel tourne le projet.",
+      "runsOn": "Tourne sur {cloud}",
+      "move": "Déplacer vers {cloud}",
+      "onprem": "Le déplacement des projets on-prem n'est pas encore disponible.",
+      "notUp": "{cloud} n'est pas up.",
+      "confirmTitle": "Déplacer {name} vers {cloud} ?",
+      "confirmDescription": "Les apps s'arrêtent jusqu'à ce que le projet tourne sur {cloud}.",
+      "confirmLabel": "Déplacer",
+      "dataLoss": "Les données de {names} seront perdues",
+      "moving": "Déplacement vers {cloud}",
+      "banner": "Déplacement vers {cloud} · {step}",
+      "bannerFailed": "Le déplacement vers {cloud} a échoué",
+      "details": "Détails",
+      "retry": "Réessayer",
+      "cancel": "Annuler le déplacement",
+      "steps": {
+        "prepare": "Préparer la cible",
+        "stop_source": "Arrêter les apps",
+        "final_backup": "Sauvegarde finale",
+        "switch": "Basculer le cloud",
+        "wait_target": "Attendre les apps",
+        "persist_restores": "Enregistrer la restauration",
+        "cleanup_source": "Nettoyer la source",
+        "finish": "Terminer"
+      }
+    },
     "danger": {
       "title": "Zone de danger",
       "description": "Des actions sans retour possible.",

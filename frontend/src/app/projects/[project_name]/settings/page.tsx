@@ -5,6 +5,7 @@ import {
   ProjectSection,
   useProjectContext,
 } from "@/components/projects/ProjectContext";
+import { ProjectLocation } from "@/components/projects/ProjectLocation";
 import { ProjectExportCard } from "@/components/projects/ProjectExportCard";
 import { AlertsCard } from "@/components/security/AlertsCard";
 import { ProjectPolicyCard } from "@/components/security/SettingsCard";
@@ -275,6 +276,13 @@ export default function ProjectSettingsPage() {
             <ProjectExportCard project={projectName} />
           </Section>
         )}
+
+        <Section
+          title={t("location.title")}
+          description={t("location.description")}
+        >
+          <ProjectLocation />
+        </Section>
 
         {canDelete && (
           <Section
