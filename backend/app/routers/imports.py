@@ -88,6 +88,7 @@ class PlanEdits(BaseModel):
     port: dict[str, int] = Field(default_factory=dict)
     probe: dict[str, ProbeEdit] = Field(default_factory=dict)
     drop_links: list[LinkRef] = Field(default_factory=list, max_length=200)
+    pooler: dict[str, bool] = Field(default_factory=dict)
 
 
 class SourceSettings(BaseModel):

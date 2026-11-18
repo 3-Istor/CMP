@@ -16,11 +16,29 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
+from app.models.project import TargetCloud
+from app.services.app_security_data import BackupUpdate, backup_patch
 from app.services.imports.secret_scan import is_emittable_value
 from app.services.registry_names import HOSTNAME_DOMAIN
 
 CATALOGUE_DIR = Path(__file__).parent / "catalogue"
 SUPPORTED_BACKING = ("mongodb", "redis", "neo4j", "elasticsearch")
+# Backing kinds the platform runs as a managed service of the app linking to
+# them instead of as a container (the plan's BackingPlan.managed).
+MANAGED_BACKING = ("postgres",)
+# What cnp-generic-app sets when db.enabled; an imported variable of the same
+# name would shadow it.
+CHART_DB_ENV = frozenset(
+    {"DB_TYPE", "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"}
+)
+# Prefixes of the variables a Postgres client reads without naming the link.
+POSTGRES_ENV_PREFIXES = ("POSTGRES", "PG", "DATABASE_", "SPRING_DATASOURCE_")
+# Kubernetes expands $(VAR) from the variables listed before it: the chart's
+# DB_* come first, so the password never leaves the synced secret.
+POSTGRES_URL = (
+    "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+)
+JDBC_URL = "jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
 IMPORTED_NAME = re.compile(r"[a-z]([-a-z0-9]*[a-z0-9])?")
 MAX_IMPORTED_NAME = 40
 # <name>-<project> is the project's own auth, status and offhours hostname.
@@ -101,6 +119,9 @@ class AppSpec:
     # Env names filled from a generated backing credential, as
     # {"env": NAME, "backing": app, "key": "password"}.
     secret_env: list[dict] = field(default_factory=list)
+    # The CNPG database of a service, as {"backing": plan name, "pooler":
+    # bool}, for a managed backing app it links to.
+    database: dict | None = None
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -208,6 +229,14 @@ def _checked_probe(
     return probe
 
 
+def is_managed(backing: dict) -> bool:
+    return bool(
+        backing.get("supported")
+        and backing.get("managed") in MANAGED_BACKING
+        and backing.get("kind") == backing.get("managed")
+    )
+
+
 def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     """
     Apply the user's edits to a plan and return the apps to deploy.
@@ -215,8 +244,9 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     Edits: ``exclude`` (plan names), ``rename`` ({plan name: app name}),
     ``public`` ({app: bool}, services only), ``memory`` ({app:
     {requests_mem_mib, limits_mem_mib}}), ``port`` ({app: port}, the
-    service's first port), ``probe`` ({app: {kind, path, port}}) and
-    ``drop_links`` ([{from, to}], plan names).
+    service's first port), ``probe`` ({app: {kind, path, port}}),
+    ``drop_links`` ([{from, to}], plan names) and ``pooler`` ({app: bool},
+    a service with a managed database).
 
     Raises:
         PlanError: With every problem found, not only the first.
@@ -229,6 +259,7 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     memory_edits: dict[str, dict] = dict(edits.get("memory") or {})
     port_edits: dict[str, int] = dict(edits.get("port") or {})
     probe_edits: dict[str, dict] = dict(edits.get("probe") or {})
+    pooler_edits: dict[str, bool] = dict(edits.get("pooler") or {})
     dropped = {
         (link.get("from"), link.get("to"))
         for link in edits.get("drop_links") or []
@@ -250,8 +281,12 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
     specs: list[AppSpec] = []
     # plan name -> (old port, new port) of a service whose port was edited.
     port_moves: dict[str, tuple[int, int]] = {}
+    managed: set[str] = set()
     for backing in plan["backing"]:
         if backing["name"] in excluded:
+            continue
+        if is_managed(backing):
+            managed.add(backing["name"])
             continue
         if backing["kind"] not in SUPPORTED_BACKING or not backing.get(
             "supported"
@@ -354,13 +389,25 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
                 warnings=warnings,
             )
         )
+    links = [
+        link
+        for link in plan["links"]
+        if (link["from"], link["to"]) not in dropped
+    ]
+    problems += _attach_databases(specs, links, managed, pooler_edits)
     for edited, what in (
         (public_edits, "is public"),
         (port_edits, "has an editable port"),
         (probe_edits, "has an editable probe"),
+        (pooler_edits, "with a managed database has a pooler"),
     ):
         for name in edited:
-            if not any(s.name == name and s.kind == "service" for s in specs):
+            if not any(
+                s.name == name
+                and s.kind == "service"
+                and (edited is not pooler_edits or s.database)
+                for s in specs
+            ):
                 problems.append(f"'{name}': only an imported service {what}")
 
     names = [s.name for s in specs]
@@ -369,16 +416,59 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
         if names.count(spec.name) > 1:
             problems.append(f"two apps are named '{spec.name}'")
     by_plan_name = {s.plan_name: s for s in specs}
-    links = [
-        link
-        for link in plan["links"]
-        if (link["from"], link["to"]) not in dropped
-    ]
-    _link(links, specs, by_plan_name, final, port_moves)
+    _link(
+        [link for link in links if link["to"] not in managed],
+        specs,
+        by_plan_name,
+        final,
+        port_moves,
+    )
     _wire_credentials(specs, by_plan_name)
     if problems:
         raise PlanError(sorted(set(problems)))
     return specs
+
+
+def _attach_databases(
+    specs: list[AppSpec],
+    links: list[dict],
+    managed: set[str],
+    pooler_edits: dict[str, bool],
+) -> list[str]:
+    """
+    Give each managed backing app to the one service linking to it. The
+    database lives in that service's namespace: two services cannot share it.
+    """
+    problems = []
+    services = {s.plan_name: s for s in specs if s.kind == "service"}
+    for backing in sorted(managed):
+        owners = sorted(
+            {
+                link["from"]
+                for link in links
+                if link["to"] == backing and link["from"] in services
+            }
+        )
+        if len(owners) > 1:
+            problems.append(
+                f"managed database '{backing}' is used by {', '.join(owners)}:"
+                " a managed database belongs to one app, keep the link of one"
+            )
+            continue
+        if not owners:
+            continue
+        spec = services[owners[0]]
+        if spec.database:
+            problems.append(
+                f"app '{spec.name}' links to two managed databases, it can "
+                "have one"
+            )
+            continue
+        spec.database = {
+            "backing": backing,
+            "pooler": bool(pooler_edits.get(spec.name, False)),
+        }
+    return problems
 
 
 def _move_port(ports: list[dict], new: int) -> tuple[int, int] | None:
@@ -472,6 +562,8 @@ def _wire_credentials(specs: list[AppSpec], by_plan_name: dict) -> None:
     for spec in specs:
         if spec.kind != "service":
             continue
+        if spec.database:
+            _wire_database(spec)
         links = {d["app"]: d for d in spec.depends_on}
         backing = {
             s.name: s.backing_kind
@@ -525,6 +617,57 @@ def _wire_credentials(specs: list[AppSpec], by_plan_name: dict) -> None:
         spec.env = kept
 
 
+def _postgres_value(name: str, value: str | None) -> str | None:
+    """What a Postgres variable becomes on the managed database, by its name."""
+    upper = name.upper()
+    if value and value.startswith("jdbc:"):
+        return JDBC_URL
+    if (value and "://" in value) or any(
+        word in upper for word in ("URL", "URI", "DSN", "CONNECTION")
+    ):
+        return POSTGRES_URL
+    for words, reference in (
+        (("PASS",), "$(DB_PASSWORD)"),
+        (("USER",), "$(DB_USER)"),
+        (("HOST", "SERVER"), "$(DB_HOST)"),
+        (("PORT",), "$(DB_PORT)"),
+        (("DB", "DATABASE", "NAME"), "$(DB_NAME)"),
+    ):
+        if any(word in upper for word in words):
+            return reference
+    return None
+
+
+def _wire_database(spec: AppSpec) -> None:
+    """
+    Point the service's Postgres variables at its managed database. The
+    chart injects DB_HOST, DB_USER, DB_PASSWORD and the rest; the variables
+    the code reads are rebuilt from them, so it runs unchanged.
+    """
+    backing = spec.database["backing"]
+    kept = []
+    for env in spec.env:
+        name = env["name"]
+        if name.upper() in CHART_DB_ENV:
+            continue
+        linked = env.get("from_link") == backing or name.upper().startswith(
+            POSTGRES_ENV_PREFIXES
+        )
+        if not linked:
+            kept.append(env)
+            continue
+        value = _postgres_value(name, env.get("value"))
+        if value is None:
+            spec.warnings.append(
+                f"{name} looks like a setting of the database '{backing}': "
+                "dropped, the app reads DB_HOST, DB_PORT, DB_NAME, DB_USER "
+                "and DB_PASSWORD"
+            )
+            continue
+        kept.append({**env, "value": value, "secret": False})
+    spec.env = kept
+
+
 def check_capacity(
     specs: list[AppSpec],
     max_project_mib: int,
@@ -569,7 +712,30 @@ def secret_path(app: str) -> str:
 
 
 def needs_secret(spec: AppSpec) -> bool:
-    return bool(spec.secret_env) or spec.backing_kind == "neo4j"
+    return (
+        bool(spec.secret_env)
+        or spec.backing_kind == "neo4j"
+        or bool(spec.database)
+    )
+
+
+def database_values(
+    spec: AppSpec, cloud: TargetCloud = TargetCloud.ONPREM
+) -> dict:
+    """
+    db of cnp-generic-app, as a template app's backend gets it: backed up
+    to the RGW of the project's cloud, its exporter scraped. The initdb
+    secret is the app's own (``secret_path``), username app.
+    """
+    return {
+        "enabled": True,
+        "name": spec.name,
+        "metrics": True,
+        "backup": backup_patch(BackupUpdate(enabled=True), cloud)["db"][
+            "backup"
+        ],
+        "pooler": {"enabled": bool(spec.database.get("pooler"))},
+    }
 
 
 def _http_probe_path(spec: AppSpec) -> str | None:
@@ -603,7 +769,11 @@ def _probes(spec: AppSpec) -> dict:
 
 
 def service_values(
-    project: str, spec: AppSpec, image_prefix: str, digest: str
+    project: str,
+    spec: AppSpec,
+    image_prefix: str,
+    digest: str,
+    cloud: TargetCloud = TargetCloud.ONPREM,
 ) -> dict:
     jvm = spec.language in ("java", "kotlin", "scala")
     values: dict = {
@@ -645,6 +815,8 @@ def service_values(
         ]
     if needs_secret(spec):
         values["secrets"] = _secrets(project, spec.name)
+    if spec.database:
+        values["db"] = database_values(spec, cloud)
     workload: dict = {"probes": _probes(spec)}
     if spec.run_as_user is not None:
         workload["podSecurityContext"] = {
@@ -759,7 +931,7 @@ def values_path(project: str, app: str) -> str:
     return f"apps/{project}/{app}/values.yaml"
 
 
-def apply_to_record(
+def apply_to_record(  # pylint: disable=too-many-arguments
     record: dict,
     project: str,
     specs: list[AppSpec],
@@ -767,6 +939,7 @@ def apply_to_record(
     repo: str,
     sha: str,
     image_prefix: str,
+    cloud: TargetCloud = TargetCloud.ONPREM,
 ) -> dict[str, str]:
     """
     Add or refresh the imported apps in *record* (mutated) and return the
@@ -828,7 +1001,7 @@ def apply_to_record(
             backing_values(project, spec)
             if spec.kind == "backing"
             else service_values(
-                project, spec, image_prefix, digests[spec.name]
+                project, spec, image_prefix, digests[spec.name], cloud
             )
         )
         files[values_path(project, spec.name)] = dump_yaml(values, header)

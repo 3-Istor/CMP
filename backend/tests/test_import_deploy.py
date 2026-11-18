@@ -141,8 +141,8 @@ def world(monkeypatch):
     return Session, cluster
 
 
-def _published_run(Session) -> str:
-    specs = generate.resolve(PLAN)
+def _published_run(Session, plan: dict = PLAN) -> str:
+    specs = generate.resolve(plan)
     with Session() as db:
         source = db.query(ImportSource).first()
         if source is None:
@@ -933,3 +933,44 @@ def test_cleanup_marks_each_app_deleted_once_its_namespace_is_deleted(
             db.get(Deployment, rows[a]).status for a in (first, second)
         } == {DeploymentStatus.DELETED}
         assert db.query(ImportSource).count() == 0
+
+
+def test_the_managed_database_password_is_generated_once_for_cnpg(world):
+    Session, cluster = world
+    plan = json.loads(json.dumps(PLAN))
+    plan["backing"].append(
+        {
+            "name": "postgres",
+            "kind": "postgres",
+            "image": "postgres:16",
+            "supported": True,
+            "managed": "postgres",
+            "port": 5432,
+            "resources": {
+                "requests_mem_mib": 256,
+                "limits_mem_mib": 512,
+                "cpu": "100m",
+            },
+        }
+    )
+    plan["links"].append(
+        {
+            "from": "social-graph-service",
+            "to": "postgres",
+            "port": 5432,
+            "alias": "postgres",
+            "evidence": [],
+        }
+    )
+    _deploy(_published_run(Session, plan))
+    first = cluster.vault[("project-epitweet", "social-graph-service/imports")]
+
+    _deploy(_published_run(Session, plan))
+
+    second = cluster.vault[
+        ("project-epitweet", "social-graph-service/imports")
+    ]
+    assert first["username"] == "app"
+    assert len(first["password"]) == 48
+    assert second == first
+    assert "QUARKUS_NEO4J_AUTHENTICATION_PASSWORD" in second
