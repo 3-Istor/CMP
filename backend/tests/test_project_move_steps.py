@@ -648,6 +648,27 @@ def test_stop_source_waits_for_the_pods_to_go(db, world):
     assert _step(move, "stop_source")["status"] == "done"
 
 
+def test_stop_source_ignores_finished_pods(db, world):
+    kube = world.kube
+    evicted = _pod("shop-backend-evicted")
+    evicted["status"] = {"phase": "Failed"}
+    kube.items[(AWS, _pods("alpha-shop"))] = [evicted]
+    move = _row(db, done=("prepare",))
+
+    advance(db, move)
+    assert _step(move, "stop_source")["status"] == "done"
+
+    running = _pod("shop-backend-live")
+    running["status"] = {"phase": "Running"}
+    kube.items[(AWS, _pods("alpha-shop"))] = [evicted, running]
+    move = _row(db, done=("prepare",))
+    advance(db, move)
+    step = _step(move, "stop_source")
+    assert step["status"] == "running"
+    assert "shop-backend-live" in step["detail"]
+    assert "evicted" not in step["detail"]
+
+
 def test_kube_errors_keep_the_step_waiting(db, world):
     move = _row(db, done=("prepare",))
 

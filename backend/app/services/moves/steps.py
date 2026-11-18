@@ -411,6 +411,9 @@ async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
 
 def _replicated(pod: dict) -> bool:
     """A pod of a Deployment or Rollout (CNPG and Job pods are not)."""
+    # Evicted pods stay owned by their ReplicaSet until PodGC.
+    if (pod.get("status") or {}).get("phase") in ("Succeeded", "Failed"):
+        return False
     owners = pod["metadata"].get("ownerReferences") or []
     return any(o.get("kind") == "ReplicaSet" for o in owners)
 
