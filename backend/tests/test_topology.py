@@ -67,6 +67,8 @@ class World:
         self.groups: list[str] = []
         self.record = copy.deepcopy(RECORD)
         self.commits: list[str] = []
+        self.values: dict[str, str] = {}
+        self.files: dict = {}
         self.flows: list[dict] = []
         self.metric_present = True
         self.queries: list[str] = []
@@ -159,10 +161,13 @@ def world(monkeypatch):
     async def commit(project, change, message):
         record = copy.deepcopy(world.record)
         # Same arguments as registry_commit.commit_record_change gives.
-        await change(record, "head")
+        world.files = await change(record, "head")
         world.record = record
         world.commits.append(message)
         return "c0ffee"
+
+    async def read_values(project, app, head):
+        return world.values.get(app)
 
     def kube_list(path, params=None, cloud=None):
         world.kube_paths.append(path)
@@ -185,6 +190,7 @@ def world(monkeypatch):
     monkeypatch.setattr(topology, "kube_list", kube_list)
     monkeypatch.setattr(topology, "_vm_query", vm_query)
     monkeypatch.setattr(app_links, "commit_record_change", commit)
+    monkeypatch.setattr(app_links, "_read_values", read_values)
     return world
 
 
@@ -429,6 +435,34 @@ def test_link_is_kept_on_the_import_row_for_the_next_build(client, world):
         assert row.spec["depends_on"] == [
             {"app": "api", "port": 8080, "alias": "api", "manual": True}
         ]
+
+
+def test_a_link_admits_the_caller_in_the_target_network_policy(client, world):
+    world.values = {
+        "api": "# Written by the CMP.\nnetwork:\n  allowFrom: []\n"
+    }
+
+    _link(client)
+
+    assert world.files == {
+        "apps/shop/api/values.yaml": "# Written by the CMP.\n"
+        "network:\n  allowFrom:\n  - worker\n"
+    }
+
+
+def test_an_unlink_stops_admitting_the_caller(client, world):
+    world.values = {
+        "cache": "network:\n  allowFrom:\n  - api\n",
+    }
+
+    client.delete(
+        "/api/projects/shop/topology/links",
+        params={"from": "api", "to": "cache", "alias": "redis"},
+    )
+
+    assert world.files == {
+        "apps/shop/cache/values.yaml": "network:\n  allowFrom: []\n"
+    }
 
 
 def test_member_cannot_link_apps(client, world):

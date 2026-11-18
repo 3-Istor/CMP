@@ -40,6 +40,7 @@ class Cluster:
         self.vault: dict[tuple[str, str], dict] = {}
         self.vault_writes: list[tuple[str, str]] = []
         self.roles: dict[tuple[str, str], str] = {}
+        self.policies: dict[str, str] = {}
         self.commits: list[dict] = []
         self.cnames: list[str] = []
         self.argo: dict[str, str] = {}
@@ -64,6 +65,12 @@ class Cluster:
 
     async def delete_app_role(self, mount, name):
         self.roles.pop((mount, name), None)
+
+    async def write_policy(self, name, policy):
+        self.policies[name] = policy
+
+    async def delete_policy(self, name):
+        self.policies.pop(name, None)
 
     async def commit(self, project, change, message):
         record = json.loads(json.dumps(self.record))
@@ -120,6 +127,12 @@ def world(monkeypatch):
     )
     monkeypatch.setattr(
         deploy.vault_client, "delete_app_role", cluster.delete_app_role
+    )
+    monkeypatch.setattr(
+        deploy.vault_client, "write_policy", cluster.write_policy
+    )
+    monkeypatch.setattr(
+        deploy.vault_client, "delete_policy", cluster.delete_policy
     )
     monkeypatch.setattr(deploy, "commit_record_change", cluster.commit)
     monkeypatch.setattr(deploy, "list_records", cluster.records)
@@ -240,7 +253,7 @@ def test_neo4j_password_is_generated_once_and_copied_to_its_consumer(world):
     }
 
 
-def test_each_app_with_a_secret_gets_its_own_read_only_vault_role(world):
+def test_each_app_with_a_secret_gets_a_role_reading_only_its_own_path(world):
     Session, cluster = world
 
     _deploy(_published_run(Session))
@@ -253,9 +266,22 @@ def test_each_app_with_a_secret_gets_its_own_read_only_vault_role(world):
         }
     assert with_secret >= {"neo4j", "social-graph-service"}
     assert cluster.roles == {
-        ("kubernetes", f"epitweet-{app}-role"): "project-epitweet-read-policy"
+        ("kubernetes", f"epitweet-{app}-role"): f"epitweet-{app}-policy"
         for app in with_secret
     }
+
+
+def test_the_policy_of_an_app_does_not_reach_another_app_of_its_project(
+    world,
+):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    policy = cluster.policies["epitweet-social-graph-service-policy"]
+    assert 'path "project-epitweet/data/social-graph-service/*"' in policy
+    assert 'path "project-epitweet/metadata/social-graph-service/*"' in policy
+    assert "neo4j" not in policy and "project-epitweet/data/*" not in policy
 
 
 def test_deploy_creates_one_app_row_per_imported_app(world):
@@ -756,7 +782,7 @@ def test_removal_deletes_the_vault_roles_of_the_apps_it_took_out(removal):
 
     _remove(Session)
 
-    assert cluster.roles == {}
+    assert cluster.roles == {} and cluster.policies == {}
 
 
 def test_removal_keeps_a_template_app_named_like_a_pending_service(removal):

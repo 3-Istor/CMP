@@ -106,14 +106,20 @@ def _auth_mount(db: Session, project: str) -> str:
 async def _ensure_app_roles(
     db: Session, project: str, specs: list[AppSpec]
 ) -> None:
-    """The Vault role each app with a secret syncs it with (read-only)."""
+    """
+    The Vault role each app with a secret syncs it with, bound to a policy
+    reading that app's secrets only. Written over a role that still carries
+    the project-wide read policy.
+    """
     mount = _auth_mount(db, project)
     for spec in specs:
         if generate.needs_secret(spec):
+            policy = generate.app_policy_name(project, spec.name)
+            await vault_client.write_policy(
+                policy, generate.app_policy(project, spec.name)
+            )
             await vault_client.write_app_role(
-                mount,
-                generate.app_role_name(project, spec.name),
-                f"project-{project}-read-policy",
+                mount, generate.app_role_name(project, spec.name), policy
             )
 
 
@@ -726,6 +732,9 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
         try:
             await vault_client.delete_app_role(
                 mount, generate.app_role_name(project, app)
+            )
+            await vault_client.delete_policy(
+                generate.app_policy_name(project, app)
             )
         except vault_client.VaultError as exc:
             logger.warning("Vault role cleanup of %s failed: %s", app, exc)
