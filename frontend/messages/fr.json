@@ -3764,6 +3764,29 @@
       "notBackedUp": "Non sauvegardé",
       "alternative": "Les données de ce conteneur ne sont pas sauvegardées. Alternative gérée et sauvegardée : {target}.",
       "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées. La plateforme propose Postgres et des buckets S3 gérés, sauvegardés."
+    },
+    "estimate": {
+      "title": "Ressources et coût",
+      "loading": "Calcul des ressources et du coût…",
+      "app": "App",
+      "requests": "Demandé",
+      "limits": "Limite",
+      "volume": "Volume",
+      "monthly": "Coût / mois",
+      "total": "Total",
+      "estimatedHelp": "Estimation : valeurs devinées par l'analyse, à confirmer après déploiement.",
+      "database": "+ {mib} Mio estimés pour sa base gérée",
+      "costBasis": "Coût de calcul des ressources demandées, au tarif du cluster {cloud} de l'onglet FinOps. Hors stockage, réseau et forfait plateforme.",
+      "noPrices": "Coût indisponible : la FinOps n'a pas de tarif pour ce cluster.",
+      "rateEstimated": "Tarif provisoire.",
+      "quota": "{used} Mio demandés pour le projet (dont {other} Mio par ses autres imports), sur {max} Mio autorisés.",
+      "cluster": "Place libre sur le cluster : {mem} Mio et {cpu}.",
+      "clusterUnknown": "Place libre sur le cluster inconnue : le cluster ne répond pas.",
+      "gain": "Suivre les recommandations libérerait environ {mib} Mio de RAM.",
+      "diffTitle": "Changements par rapport au déploiement actuel",
+      "diffEmpty": "Aucun changement.",
+      "added": "{app} sera ajoutée.",
+      "removed": "{app} n'est plus dans le plan : elle reste déployée jusqu'à la suppression de l'import."
     }
   },
   "obs": {

@@ -16,6 +16,7 @@ import { useCallback, useId, useMemo, useState } from "react";
 import { TopologyCanvas } from "@/components/topology/TopologyCanvas";
 import { TopologyLegend } from "@/components/topology/TopologyLegend";
 import { SELECT_CLASS } from "@/components/topology/LinkDialog";
+import { EstimatePanel } from "@/components/imports/EstimatePanel";
 import { NotBackedUp, RecommendationItem } from "@/components/imports/Recommendations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,7 @@ import {
   type GraphNode,
 } from "@/lib/topology";
 import { cn } from "@/lib/utils";
-import type { ImportCapacity, ImportPlan, ImportPlanEdits, Topology } from "@/types";
+import type { ImportCapacity, ImportEstimate, ImportPlan, ImportPlanEdits, Topology } from "@/types";
 
 function Panel({
   title,
@@ -412,7 +413,11 @@ export function PlanReview({
   onAbandon,
   dismissedRecommendations,
   onDismissRecommendation,
+  runId,
+  estimate,
 }: {
+  runId: string;
+  estimate: ImportEstimate | null;
   projectName: string;
   plan: ImportPlan;
   edits: ImportPlanEdits;
@@ -525,6 +530,8 @@ export function PlanReview({
           </div>
         </aside>
       </div>
+
+      <EstimatePanel projectName={projectName} runId={runId} edits={edits} initial={estimate} />
 
       {recommendations.length > 0 && (
         <Panel title={t("recommendations")} icon={Lightbulb}>

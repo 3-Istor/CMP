@@ -1693,6 +1693,16 @@ export const rebuildImport = (project: string, sourceId: string) =>
     { method: "POST" },
   ).then((r) => r.run);
 
+export const estimateImport = (
+  project: string,
+  runId: string,
+  edits: import("@/types").ImportPlanEdits,
+) =>
+  request<import("@/types").ImportEstimate>(
+    `${projectPath(project)}/imports/runs/${encodeURIComponent(runId)}/estimate`,
+    { method: "POST", body: JSON.stringify(edits) },
+  );
+
 export const getManagedServices = (project: string, app?: string) =>
   request<import("@/types").ManagedServicesView>(
     `${projectPath(project)}/imports/recommendations` +

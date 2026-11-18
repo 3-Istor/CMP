@@ -295,6 +295,8 @@ function WizardForRun({
           live={live}
           applying={applying}
           onApply={() => void apply()}
+          runId={run.id}
+          estimate={run.estimate ?? null}
           dismissedRecommendations={run.dismissed_recommendations ?? []}
           onDismissRecommendation={async (id) => {
             await dismissRecommendation(projectName, id);
