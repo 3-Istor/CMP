@@ -1538,7 +1538,8 @@ export type NotificationKind =
   | "member_added"
   | "approval_request"
   | "access"
-  | "access_review";
+  | "access_review"
+  | "move";
 
 export interface AppNotification {
   id: number;
@@ -1861,6 +1862,10 @@ export type ProjectMove = {
 
 export const getCurrentMove = (project: string) =>
   request<ProjectMove | null>(`/projects/${project}/moves/current`);
+
+/** Apps whose data would start empty on the other cloud. */
+export const getMoveDataLoss = (project: string) =>
+  request<string[]>(`/projects/${project}/moves/data-loss`);
 
 export const startMove = (project: string, confirm_data_loss: boolean) =>
   request<ProjectMove>(`/projects/${project}/move`, {

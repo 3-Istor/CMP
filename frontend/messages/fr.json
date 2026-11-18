@@ -2781,7 +2781,9 @@
       "access_review_terraform_task": "Retirer {user} de {group} dans le Terraform K3s",
       "access_review_inactive": "{user} ne s'est pas connecté depuis {days} jours",
       "access_review_disabled": "{user} a été désactivé après {days} jours sans connexion",
-      "import_rebuild_pending": "Une reconstruction de {repo} attend un admin"
+      "import_rebuild_pending": "Une reconstruction de {repo} attend un admin",
+      "move_done": "{project} tourne maintenant sur {cloud}",
+      "move_failed": "Le déplacement de {project} vers {cloud} a échoué"
     }
   },
   "secretsPresence": {

@@ -2781,7 +2781,9 @@
       "access_review_terraform_task": "Remove {user} from {group} in the K3s Terraform",
       "access_review_inactive": "{user} has not logged in for {days} days",
       "access_review_disabled": "{user} was disabled after {days} days without login",
-      "import_rebuild_pending": "A rebuild of {repo} waits for an admin"
+      "import_rebuild_pending": "A rebuild of {repo} waits for an admin",
+      "move_done": "{project} now runs on {cloud}",
+      "move_failed": "Move of {project} to {cloud} failed"
     }
   },
   "secretsPresence": {

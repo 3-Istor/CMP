@@ -29,34 +29,46 @@ function move(status: "running" | "failed", done: number) {
 }
 
 const accepted = { status: 202, json: move("running", 0) };
+const nothingLost = { "/projects/demo/moves/data-loss": { json: [] } };
 
 test("admin moves the project once, with the name typed", async ({ page }) => {
   const posts: unknown[] = [];
   page.on("request", (r) => {
     if (r.method() === "POST" && r.url().endsWith("/api/projects/demo/move")) posts.push(r.postDataJSON());
   });
-  await installMockApi(page, { ...VARIANTS.aws, "/projects/demo/moves/current": { json: null }, "/projects/demo/move": accepted });
+  await installMockApi(page, {
+    ...VARIANTS.aws,
+    ...nothingLost,
+    "/projects/demo/moves/current": { json: null },
+    "/projects/demo/move": accepted,
+  });
   await page.goto("/projects/demo/settings");
   await expect(page.getByText("Runs on AWS")).toBeVisible();
   await shot(page, "1-admin-button");
   await page.getByRole("button", { name: "Move to GCP" }).click();
   await expect(page.getByText("Apps stop until the project runs on GCP.")).toBeVisible();
   await page.getByLabel(/Type/).fill("demo");
+  await expect(page.getByLabel(/will be lost/)).toHaveCount(0);
   await shot(page, "2-confirm-dialog");
   await page.getByRole("button", { name: "Move", exact: true }).click();
   await expect.poll(() => posts.length).toBe(1);
   expect(posts[0]).toEqual({ confirm_data_loss: false });
 });
 
-test("backing apps need the data loss box", async ({ page }) => {
+test("data that starts empty needs the data loss box", async ({ page }) => {
   let body: unknown;
   page.on("request", (r) => {
     if (r.method() === "POST" && r.url().endsWith("/api/projects/demo/move")) body = r.postDataJSON();
   });
-  await installMockApi(page, { ...VARIANTS.aws, ...VARIANTS.imported, "/projects/demo/moves/current": { json: null }, "/projects/demo/move": accepted });
+  await installMockApi(page, {
+    ...VARIANTS.aws,
+    "/projects/demo/moves/data-loss": { json: ["demo-app", "shop (staging)"] },
+    "/projects/demo/moves/current": { json: null },
+    "/projects/demo/move": accepted,
+  });
   await page.goto("/projects/demo/settings");
   await page.getByRole("button", { name: "Move to GCP" }).click();
-  await page.getByLabel("Data in demo-app will be lost").check();
+  await page.getByLabel("Data in demo-app, shop (staging) will be lost").check();
   await page.getByLabel(/Type/).fill("demo");
   await page.getByRole("button", { name: "Move", exact: true }).click();
   await expect.poll(() => body).toEqual({ confirm_data_loss: true });
@@ -133,4 +145,27 @@ test("an on-prem project cannot move", async ({ page }) => {
   await expect(page.getByText("Moving on-prem projects is not available yet.")).toBeVisible();
   await expect(page.getByRole("button", { name: /Move to/ })).toHaveCount(0);
   await shot(page, "6-onprem");
+});
+
+test("a done move shows in the notifications", async ({ page }) => {
+  const notice = {
+    id: 1,
+    project: "demo",
+    app: null,
+    kind: "move",
+    title_key: "move_done",
+    params: { project: "demo", cloud: "GCP" },
+    link: "/projects/demo/settings",
+    created_at: "2026-11-18T10:05:00Z",
+    read_at: null,
+  };
+  await installMockApi(page, {
+    ...VARIANTS.aws,
+    "/projects/demo/moves/current": { json: null },
+    "/notifications": { json: [notice] },
+    "/notifications/unread-count": { json: { count: 1 } },
+  });
+  await page.goto("/projects/demo/settings");
+  await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
+  await expect(page.getByText("demo now runs on GCP")).toBeVisible();
 });

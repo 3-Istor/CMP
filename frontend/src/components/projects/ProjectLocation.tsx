@@ -7,16 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
-import { type ProjectMove, moveAction, startMove } from "@/lib/api";
+import { type ProjectMove, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
 import { useGlobalHealth } from "@/lib/hooks";
 import { CircleAlert, CircleCheck, Circle, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-
-// Imported apps keep their data outside the database backups.
-const BACKING = ["import-service", "import-backing"];
 
 const cloudName = (cloud: string) => cloud.toUpperCase();
 
@@ -61,10 +58,11 @@ export function MoveBanner() {
 
 export function ProjectLocation() {
   const t = useTranslations("projectSettings.location");
-  const { projectName, targetCloud, apps, can, move, setMove } = useProjectContext();
+  const { projectName, targetCloud, can, move, setMove } = useProjectContext();
   const { health } = useGlobalHealth(0);
   const [confirming, setConfirming] = useState(false);
   const [dataLoss, setDataLoss] = useState(false);
+  const [lost, setLost] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   if (!targetCloud) return null;
@@ -75,7 +73,6 @@ export function ProjectLocation() {
   const target = targetCloud === "aws" ? "gcp" : "aws";
   const targetName = cloudName(target);
   const targetUp = health?.clusters.some((c) => c.cloud === target && c.state === "up") ?? false;
-  const backing = apps.filter((a) => BACKING.includes(a.template_id)).map((a) => a.name);
   const canMove = can("project.move");
 
   const act = (action: "retry" | "cancel") => {
@@ -112,7 +109,12 @@ export function ProjectLocation() {
                   disabled={!targetUp}
                   onClick={() => {
                     setDataLoss(false);
+                    setLost([]);
                     setConfirming(true);
+                    // On failure the move request itself names what would be lost.
+                    getMoveDataLoss(projectName)
+                      .then(setLost)
+                      .catch(() => setLost([]));
                   }}
                 >
                   {t("move", { cloud: targetName })}
@@ -166,7 +168,7 @@ export function ProjectLocation() {
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
       >
-        {backing.length > 0 && (
+        {lost.length > 0 && (
           <div className="flex items-center gap-2">
             <input
               id="move-data-loss"
@@ -174,7 +176,7 @@ export function ProjectLocation() {
               checked={dataLoss}
               onChange={(e) => setDataLoss(e.target.checked)}
             />
-            <Label htmlFor="move-data-loss">{t("dataLoss", { names: backing.join(", ") })}</Label>
+            <Label htmlFor="move-data-loss">{t("dataLoss", { names: lost.join(", ") })}</Label>
           </div>
         )}
       </ConfirmDialog>
