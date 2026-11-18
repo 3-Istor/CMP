@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.database import Base
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.imports import ImportRun, ImportService, ImportSource
+from app.models.project import Project, TargetCloud
 from app.services.imports import deploy, generate, service
 
 PLAN = json.loads(
@@ -256,6 +257,31 @@ def test_each_app_with_a_secret_gets_its_own_read_only_vault_role(world):
         ("kubernetes", f"epitweet-{app}-role"): "project-epitweet-read-policy"
         for app in with_secret
     }
+
+
+def _public(Session):
+    with Session() as db:
+        db.add(
+            Project(
+                project_name="epitweet",
+                owner_username="alice",
+                target_cloud=TargetCloud.GCP,
+            )
+        )
+        db.commit()
+
+
+def test_a_public_project_gets_its_roles_on_both_public_mounts(world):
+    Session, cluster = world
+    _public(Session)
+
+    _deploy(_published_run(Session))
+
+    # A move to the other cloud finds the roles waiting.
+    mounts = {mount for mount, _ in cluster.roles}
+    assert mounts == {"kubernetes-aws", "kubernetes-gcp"}
+    names = {name for _, name in cluster.roles}
+    assert {("kubernetes-aws", n) for n in names} <= set(cluster.roles)
 
 
 def test_deploy_creates_one_app_row_per_imported_app(world):
@@ -751,6 +777,17 @@ def test_removal_takes_out_what_the_import_deployed(removal):
 
 def test_removal_deletes_the_vault_roles_of_the_apps_it_took_out(removal):
     Session, cluster, calls = removal
+    _deploy(_published_run(Session))
+    assert cluster.roles
+
+    _remove(Session)
+
+    assert cluster.roles == {}
+
+
+def test_removal_deletes_the_roles_on_both_public_mounts(removal):
+    Session, cluster, calls = removal
+    _public(Session)
     _deploy(_published_run(Session))
     assert cluster.roles
 
