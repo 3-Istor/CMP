@@ -185,6 +185,39 @@ class TestLoop:
 
         assert [c.args[1].id for c in advance.call_args_list] == [move_id]
 
+    def test_a_failing_move_does_not_stop_the_next_one(self, env):
+        http, _, db = env
+        first = _start(http).json()["id"]
+        db.add(
+            ProjectMove(
+                project="beta",
+                source="aws",
+                target="gcp",
+                status="running",
+                steps=[],
+                restores=[],
+                actor="x",
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+        second = db.query(ProjectMove).filter_by(project="beta").one().id
+        seen = []
+
+        async def advance(_db, move):
+            seen.append(move.id)
+            if move.id == first:
+                raise RuntimeError("commit failed")
+
+        with (
+            mock.patch.object(loop, "SessionLocal", return_value=db),
+            mock.patch.object(db, "close"),
+            mock.patch.object(steps, "advance", new=advance),
+        ):
+            asyncio.run(loop.tick())
+
+        assert seen == [first, second]
+
 
 class TestAudit:
     @pytest.mark.parametrize(

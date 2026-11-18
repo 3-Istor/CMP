@@ -34,12 +34,18 @@ async def tick() -> None:
         ]
         for move_id in ids:
             move = db.get(ProjectMove, move_id)
-            async with project_lock(move.project):
-                db.refresh(move)  # a cancel may have landed while waiting
-                try:
+            if move is None:  # deleted since the query
+                continue
+            try:
+                async with project_lock(move.project):
+                    db.refresh(move)  # a cancel may have landed meanwhile
                     await steps.advance(db, move)
-                except (ClusterNotConnectedError, KubeUnavailableError) as exc:
-                    logger.warning("move %s waits: %s", move_id, exc)
+            except (ClusterNotConnectedError, KubeUnavailableError) as exc:
+                logger.warning("move %s waits: %s", move_id, exc)
+            except Exception:  # pylint: disable=broad-exception-caught
+                # One bad row must not starve the others or poison the session.
+                logger.exception("move %s failed", move_id)
+                db.rollback()
 
 
 async def move_loop() -> None:
