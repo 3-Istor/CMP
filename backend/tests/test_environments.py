@@ -19,7 +19,7 @@ from app.models.environment import (
     PromotionPolicy,
     VerificationRun,
 )
-from app.models.project import TargetCloud
+from app.models.project import Project, TargetCloud
 from app.routers import deployments as deployments_router
 from app.routers import environments as router
 from app.services.clusters import state
@@ -780,6 +780,19 @@ class TestCloudObservation:
             {"github_installation_id": "42", "target_cloud": "aws"}
         )
         return deployment
+
+    def test_a_moved_app_is_read_on_its_project_cloud(self, db):
+        # A move flips the project; app_config keeps the creation cloud.
+        db.add(
+            Project(
+                project_name="shop",
+                owner_username="o",
+                target_cloud=TargetCloud.GCP,
+            )
+        )
+        db.commit()
+
+        assert gitops.target_cloud(self._cloud_app(db)) == "gcp"
 
     def test_cloud_pods_are_read_on_the_project_cluster(self, db):
         image = "ghcr.io/3-istor/web:1.4.0-rc.2"

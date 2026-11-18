@@ -6,8 +6,10 @@ from io import StringIO
 from typing import Any
 
 from ruamel.yaml import YAML
+from sqlalchemy.orm import object_session
 
 from app.models.deployment import Deployment
+from app.models.project import Project
 from app.services import app_repo
 from app.services import app_security_data as security_data
 from app.services.environments import layout
@@ -45,6 +47,16 @@ def app_type(deployment: Deployment) -> str:
 
 
 def target_cloud(deployment: Deployment) -> str:
+    """Where the app runs now: its project's cloud, which a move changes."""
+    session = object_session(deployment)
+    cloud = session and (
+        session.query(Project.target_cloud)
+        .filter(Project.project_name == deployment.project_id)
+        .scalar()
+    )
+    if cloud:
+        return cloud.value
+    # app_config keeps the creation cloud, for Terraform only.
     return (
         json.loads(deployment.app_config or "{}").get("target_cloud")
         or "onprem"

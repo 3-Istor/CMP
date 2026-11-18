@@ -9,6 +9,7 @@ import { ImportsList } from "@/components/imports/ImportsList";
 import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { MoveBanner } from "@/components/projects/ProjectLocation";
 import { OpenAppMenu } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
@@ -200,6 +201,7 @@ export default function ProjectPage() {
         }
       />
       <PageBody>
+        <MoveBanner />
         {canViewObservability && (
           <SecurityAlert
             project={projectName}

@@ -38,6 +38,11 @@ _session.mount("https://", HTTPAdapter(pool_maxsize=16))
 class KubeUnavailableError(Exception):
     """Raised when the Kubernetes API cannot be reached or refuses the read."""
 
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        # The HTTP status of a refusal; None when nothing answered.
+        self.status = status
+
 
 class ClusterNotConnectedError(Exception):
     """A public cloud's cluster is not up: nothing was sent to it."""
@@ -141,7 +146,8 @@ def _request(
             break
     if not response.ok and response.status_code != 404:
         raise KubeUnavailableError(
-            f"{method} {path}: HTTP {response.status_code}"
+            f"{method} {path}: HTTP {response.status_code}",
+            response.status_code,
         )
     return response
 
@@ -201,7 +207,7 @@ def kube_create(
     """
     response = _request("POST", path, json=body, cloud=cloud)
     if response.status_code == 404:
-        raise KubeUnavailableError(f"POST {path}: HTTP 404")
+        raise KubeUnavailableError(f"POST {path}: HTTP 404", 404)
     return response.json()
 
 
@@ -238,7 +244,7 @@ def kube_merge_patch(
         cloud=cloud,
     )
     if response.status_code == 404:
-        raise KubeUnavailableError(f"PATCH {path}: HTTP 404")
+        raise KubeUnavailableError(f"PATCH {path}: HTTP 404", 404)
     return response.json()
 
 
@@ -256,5 +262,5 @@ def kube_replace(
     """
     response = _request("PUT", path, json=body, cloud=cloud)
     if response.status_code == 404:
-        raise KubeUnavailableError(f"PUT {path}: HTTP 404")
+        raise KubeUnavailableError(f"PUT {path}: HTTP 404", 404)
     return response.json()

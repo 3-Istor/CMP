@@ -144,3 +144,22 @@ def test_malformed_cloud_secret_is_kube_unavailable():
         session.request.return_value = _response(200, secret)
         with pytest.raises(kc.KubeUnavailableError):
             kc.kube_get("/api/v1/namespaces", cloud=TargetCloud.AWS)
+
+
+@pytest.mark.parametrize("status", [403, 422, 503])
+def test_a_refusal_carries_its_http_status(status):
+    with mock.patch.object(kc, "_session") as session:
+        session.request.return_value = _response(status)
+        with pytest.raises(kc.KubeUnavailableError) as exc:
+            kc.kube_delete("/api/v1/namespaces/x")
+
+    assert exc.value.status == status
+
+
+def test_a_network_error_has_no_status():
+    with mock.patch.object(kc, "_session") as session:
+        session.request.side_effect = kc.requests.ConnectionError("reset")
+        with pytest.raises(kc.KubeUnavailableError) as exc:
+            kc.kube_list("/api/v1/namespaces")
+
+    assert exc.value.status is None

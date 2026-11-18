@@ -17,6 +17,7 @@ import {
 import { useFormat } from "@/lib/useFormat";
 import { cn } from "@/lib/utils";
 import {
+  ArrowRightLeft,
   Bell,
   CheckCircle2,
   KeyRound,
@@ -44,6 +45,7 @@ const KIND_ICONS: Record<NotificationKind, LucideIcon> = {
   approval_request: ShieldQuestion,
   access: KeyRound,
   access_review: UserCheck,
+  move: ArrowRightLeft,
 };
 
 const KIND_TONES: Record<NotificationKind, string> = {
@@ -55,6 +57,7 @@ const KIND_TONES: Record<NotificationKind, string> = {
   approval_request: "text-primary",
   access: "text-amber-600 dark:text-amber-400",
   access_review: "text-amber-600 dark:text-amber-400",
+  move: "text-primary",
 };
 
 function useUnreadCount(): [number, () => Promise<void>] {

@@ -6,11 +6,9 @@ writes ``db.restore`` in the app's values file and the shared chart creates
 the next generation of the database from the chosen backup.
 """
 
-import difflib
 import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
-from io import StringIO
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -19,30 +17,23 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.models.deployment import Deployment
-from app.routers.deployments import _deep_merge, _yaml
 from app.routers.security import (
     CurrentUser,
     _app_deployment,
-    _github_token,
     _require_admin,
     _require_member,
     _username,
 )
-from app.services import app_security_data as security_data
 from app.services.clusters.state import project_cloud
-from app.services.github_service import (
-    FileNotInRepoError,
-    GitHubAppError,
-    get_default_branch,
-    get_file_content,
-    put_file_content,
-)
+from app.services.github_service import FileNotInRepoError, GitHubAppError
 from app.services.kube_client import (
     KubeUnavailableError,
     kube_create,
     kube_list,
 )
+from app.services.moves import assert_not_moving
 from app.services.security import restore as restores
+from app.services.security import restore_commit
 from app.services.security.collector import utcnow
 
 logger = logging.getLogger(__name__)
@@ -62,6 +53,7 @@ async def request_backup(
     """On-demand backup of every database of the app that has backups enabled."""
     await _require_admin(token, payload.project)
     _app_deployment(db, payload.project, payload.app)
+    assert_not_moving(db, payload.project)
     namespace = f"{payload.project}-{payload.app}"
     cloud = project_cloud(db, payload.project)
     try:
@@ -88,21 +80,7 @@ async def request_backup(
             await run_in_threadpool(
                 kube_create,
                 f"/apis/postgresql.cnpg.io/v1/namespaces/{namespace}/backups",
-                {
-                    "apiVersion": "postgresql.cnpg.io/v1",
-                    "kind": "Backup",
-                    "metadata": {
-                        "name": f"{name}-manual-{stamp}",
-                        "labels": {"cnp.3istor.com/requested-by": "cmp"},
-                    },
-                    "spec": {
-                        "cluster": {"name": name},
-                        "method": "plugin",
-                        "pluginConfiguration": {
-                            "name": "barman-cloud.cloudnative-pg.io"
-                        },
-                    },
-                },
+                restores.backup_body(f"{name}-manual-{stamp}", name),
                 cloud=cloud,
             )
     except KubeUnavailableError as exc:
@@ -207,61 +185,20 @@ async def _commit_restore(
     dry_run: bool,
 ) -> dict[str, str]:
     """Merge ``make_patch(values)`` into the backend values file and commit it."""
-    app_type = security_data.app_type_of(
-        deployment.app_config, deployment.terraform_outputs
-    )
-    _, values_file = security_data.values_files_for(app_type)
-    installation_token, repo = await _github_token(deployment)
+    actor = _username(token)
+    message = restore_commit.message(label, actor)
     try:
-        branch = await get_default_branch(installation_token, repo)
-        raw, sha = await get_file_content(
-            installation_token, repo, values_file, branch
-        )
-        values = _yaml.load(raw)
-        if not isinstance(values, dict) or not security_data.has_database(
-            values
-        ):
-            raise HTTPException(
-                status_code=409, detail="This app has no database."
-            )
-        if not security_data.read_backup(values).enabled:
-            raise HTTPException(
-                status_code=409,
-                detail="Les sauvegardes de cette base sont désactivées.",
-            )
-        _deep_merge(values, make_patch(values))
-        out = StringIO()
-        _yaml.dump(values, out)
-        message = f"chore(cmp): {label} ({_username(token)})"
         if dry_run:
-            return {
-                "message": message,
-                "diff": "".join(
-                    difflib.unified_diff(
-                        raw.splitlines(keepends=True),
-                        out.getvalue().splitlines(keepends=True),
-                        fromfile=f"a/{values_file}",
-                        tofile=f"b/{values_file}",
-                    )
-                ),
-            }
-        result = await put_file_content(
-            installation_token,
-            repo,
-            values_file,
-            out.getvalue(),
-            message,
-            sha,
-            branch,
+            diff = await restore_commit.values_diff(deployment, make_patch)
+            return {"message": message, "diff": diff}
+        commit = await restore_commit.commit_values_patch(
+            deployment, label, make_patch, actor
         )
     except FileNotInRepoError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except GitHubAppError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {
-        "message": message,
-        "commit": (result.get("commit") or {}).get("sha", ""),
-    }
+    return {"message": message, "commit": commit}
 
 
 class RestoreRequest(BaseModel):
@@ -285,6 +222,7 @@ async def request_restore(
     """
     await _require_admin(token, payload.project)
     deployment = _app_deployment(db, payload.project, payload.app)
+    assert_not_moving(db, payload.project)
     namespace = f"{payload.project}-{payload.app}"
     target_time = payload.target_time
     if target_time is not None and target_time.tzinfo is not None:
@@ -358,6 +296,7 @@ async def request_restore_latest(
     """
     await _require_admin(token, payload.project)
     deployment = _app_deployment(db, payload.project, payload.app)
+    assert_not_moving(db, payload.project)
     try:
         clusters = await run_in_threadpool(
             kube_list,
@@ -377,15 +316,12 @@ async def request_restore_latest(
         )
 
     def make_patch(values: dict) -> dict:
-        # Generation 0 is the chart's own cluster, N the -db-r<N> recovered one.
-        generation = restores.current_generation(values)
-        suffix = f"-db-r{generation}" if generation else "-db"
-        current = [n for n in names if n.endswith(suffix)]
-        if len(current) != 1:
+        current = restores.current_cluster(values, names)
+        if current is None:
             raise HTTPException(
                 status_code=409, detail="Cannot tell which database is current"
             )
-        return restores.latest_patch(values, current[0])
+        return restores.latest_patch(values, current)
 
     result = await _commit_restore(
         token, deployment, "restore to latest", make_patch, dry_run

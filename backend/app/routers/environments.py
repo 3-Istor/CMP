@@ -51,6 +51,7 @@ from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
 )
+from app.services.moves import assert_not_moving
 from app.services.step_up import assert_step_up
 
 router = APIRouter(prefix="/deployments", tags=["Environments"])
@@ -354,6 +355,7 @@ async def enable_staging(
     deployment = await run_in_threadpool(
         _app, db, token, deployment_id, ProjectRole.ADMIN
     )
+    assert_not_moving(db, deployment.project_id)
     await ensure_cluster_up(TargetCloud(gitops.target_cloud(deployment)))
     try:
         row = activation.start_enable(
@@ -375,6 +377,7 @@ async def disable_staging(
     deployment = await run_in_threadpool(
         _app, db, token, deployment_id, ProjectRole.ADMIN
     )
+    assert_not_moving(db, deployment.project_id)
     try:
         row = await activation.start_disable(db, deployment)
     except (activation.ActivationRefused, gitops.GitOpsError) as exc:

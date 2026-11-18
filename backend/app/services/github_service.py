@@ -851,6 +851,24 @@ async def get_branch_head(
     return response.json()["object"]["sha"]
 
 
+async def compare_commits(
+    installation_token: str, repo_full_name: str, base: str, head: str
+) -> str:
+    """How *head* relates to *base*: ahead, behind, identical or diverged."""
+    url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/compare/{base}...{head}"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url, headers=_api_headers(installation_token), timeout=15.0
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(
+            f"Failed to compare {base}...{head}: {exc}"
+        ) from exc
+    return response.json().get("status", "")
+
+
 async def commit_files(
     installation_token: str,
     repo_full_name: str,

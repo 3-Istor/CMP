@@ -18,6 +18,7 @@ import app.models.notification  # noqa: F401
 import app.models.observability  # noqa: F401
 import app.models.project  # noqa: F401
 import app.models.project_export  # noqa: F401
+import app.models.project_move  # noqa: F401
 import app.models.release  # noqa: F401
 import app.models.user_github  # noqa: F401
 import app.models.user_preference  # noqa: F401
