@@ -19,6 +19,7 @@ from app.routers import security_databases as router
 from app.services.clusters.state import not_connected_response
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import ClusterNotConnectedError
+from app.services.security import restore_commit
 
 BACKEND = "deploy/values-backend.yaml"
 VALUES = "db:\n  enabled: true\n  backup:\n    enabled: true\n"
@@ -61,13 +62,17 @@ def setup(monkeypatch):
     async def get(*_args):
         return VALUES, "sha"
 
-    monkeypatch.setattr(router, "get_file_content", get)
-    monkeypatch.setattr(router, "put_file_content", put)
+    monkeypatch.setattr(restore_commit, "get_file_content", get)
+    monkeypatch.setattr(restore_commit, "put_file_content", put)
     monkeypatch.setattr(
-        router, "get_default_branch", mock.AsyncMock(return_value="main")
+        restore_commit,
+        "get_default_branch",
+        mock.AsyncMock(return_value="main"),
     )
     monkeypatch.setattr(
-        router, "_github_token", mock.AsyncMock(return_value=("t", "r"))
+        restore_commit,
+        "_github_token",
+        mock.AsyncMock(return_value=("t", "r")),
     )
 
     app = FastAPI()
@@ -117,10 +122,23 @@ def test_restore_latest_picks_the_current_generation(setup):
     async def get(*_args):
         return values, "sha"
 
-    mp.setattr(router, "get_file_content", get)
+    mp.setattr(restore_commit, "get_file_content", get)
 
     assert _post(client).status_code == 200
     assert "sourceServer: shop-api-backend-db-r2" in commits[0][2]
+
+
+def test_restore_latest_dry_run_returns_the_diff(setup):
+    client, commits, mp, _ = setup
+    mp.setattr(
+        router, "kube_list", lambda *a, **k: [_cluster("shop-api-backend-db")]
+    )
+
+    response = _post(client, params={"dry_run": "true"})
+
+    assert response.status_code == 200
+    assert "+    sourceServer: shop-api-backend-db" in response.json()["diff"]
+    assert commits == []
 
 
 def test_restore_latest_refuses_without_backups(setup):
