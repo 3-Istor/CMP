@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from unittest import mock
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import TargetCloud
+from app.models.project_move import ProjectMove
 from app.routers import (  # noqa: F401  (import order)
     deployments as _deployments,
 )
@@ -177,4 +179,39 @@ def test_restore_latest_requires_admin(setup):
     mp.setattr(router, "kube_list", lambda *a, **k: [_cluster("x-db")])
 
     assert _post(client).status_code == 403
+    assert commits == []
+
+
+@pytest.mark.parametrize(
+    "path,body",
+    [
+        ("/security/restores/latest", {"project": "shop", "app": "api"}),
+        (
+            "/security/restores",
+            {"project": "shop", "app": "api", "backup": "b"},
+        ),
+        ("/security/backups", {"project": "shop", "app": "api"}),
+    ],
+)
+def test_backups_and_restores_wait_for_a_move(setup, path, body):
+    client, commits, mp, app = setup
+    db = next(app.dependency_overrides[get_db]())
+    db.add(
+        ProjectMove(
+            project="shop",
+            source="aws",
+            target="gcp",
+            status="failed",
+            steps=[],
+            actor="hugo",
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
+    mp.setattr(router, "kube_list", lambda *a, **k: [_cluster("x-db")])
+
+    response = client.post(path, json=body)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This project is moving."
     assert commits == []

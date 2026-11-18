@@ -31,6 +31,7 @@ from app.services.kube_client import (
     kube_create,
     kube_list,
 )
+from app.services.moves import assert_not_moving
 from app.services.security import restore as restores
 from app.services.security import restore_commit
 from app.services.security.collector import utcnow
@@ -52,6 +53,7 @@ async def request_backup(
     """On-demand backup of every database of the app that has backups enabled."""
     await _require_admin(token, payload.project)
     _app_deployment(db, payload.project, payload.app)
+    assert_not_moving(db, payload.project)
     namespace = f"{payload.project}-{payload.app}"
     cloud = project_cloud(db, payload.project)
     try:
@@ -220,6 +222,7 @@ async def request_restore(
     """
     await _require_admin(token, payload.project)
     deployment = _app_deployment(db, payload.project, payload.app)
+    assert_not_moving(db, payload.project)
     namespace = f"{payload.project}-{payload.app}"
     target_time = payload.target_time
     if target_time is not None and target_time.tzinfo is not None:
@@ -293,6 +296,7 @@ async def request_restore_latest(
     """
     await _require_admin(token, payload.project)
     deployment = _app_deployment(db, payload.project, payload.app)
+    assert_not_moving(db, payload.project)
     try:
         clusters = await run_in_threadpool(
             kube_list,
