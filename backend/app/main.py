@@ -29,6 +29,7 @@ from app.routers import (
     finops_finance,
     imports,
     infra,
+    issue_reports,
     links,
     notifications,
     observability,
@@ -433,6 +434,7 @@ app.include_router(imports.router, prefix="/api")
 app.include_router(imports.worker, prefix="/api")
 app.include_router(imports.webhooks, prefix="/api")
 app.include_router(infra.router, prefix="/api")
+app.include_router(issue_reports.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")
 app.include_router(notifications.router, prefix="/api")

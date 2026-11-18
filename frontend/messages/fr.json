@@ -26,7 +26,8 @@
       "openMenu": "Ouvrir le menu",
       "skipToContent": "Aller au contenu",
       "access": "Accès élevés",
-      "accessReviews": "Revues d'accès"
+      "accessReviews": "Revues d'accès",
+      "issueReports": "Retours des assistants"
     },
     "home": {
       "fallbackName": "Développeur",
@@ -3878,5 +3879,40 @@
       "monthly": "{amount} par mois",
       "noHints": "Rien à économiser : la réservation colle à l'usage."
     }
+  },
+  "issueReports": {
+    "title": "Retours des assistants",
+    "description": "Difficultés que les assistants IA ont rencontrées sur la plateforme, envoyées avec l'accord de leur utilisateur. Les secrets en sont retirés avant l'enregistrement.",
+    "loading": "Chargement des retours",
+    "forbidden": "Réservé aux administrateurs de la plateforme.",
+    "empty": "Aucun retour ici.",
+    "filterLabel": "Filtrer par statut",
+    "filters": {
+      "new": "Nouveaux",
+      "exported": "Exportés",
+      "closed": "Fermés",
+      "all": "Tous"
+    },
+    "statuses": {
+      "new": "Nouveau",
+      "exported": "Exporté vers Jira",
+      "closed": "Fermé"
+    },
+    "categories": {
+      "missing_tool": "Outil manquant",
+      "error": "Erreur incomprise",
+      "documentation": "Documentation absente",
+      "bug": "Bug",
+      "other": "Autre"
+    },
+    "seen": "{count, plural, one {Signalé une fois} other {Signalé # fois}}, dernier le {date}",
+    "reportedBy": "Envoyé par {users} via {assistant}",
+    "unknownAssistant": "un assistant",
+    "project": "projet {project}",
+    "copyForJira": "Copier pour Jira",
+    "copied": "Texte copié : collez-le dans un ticket Jira, puis marquez le retour comme exporté.",
+    "markExported": "Marquer exporté",
+    "close": "Fermer",
+    "reopen": "Rouvrir"
   }
 }

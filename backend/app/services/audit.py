@@ -231,6 +231,8 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/access/requests/{request_id}/deny"): "access.deny",
     ("POST", "/api/access/requests/{request_id}/cancel"): "access.cancel",
     ("POST", "/api/access/requests/{request_id}/end"): "access.end",
+    ("POST", "/api/issue-reports"): "issue.report",
+    ("PATCH", "/api/issue-reports/{report_id}"): "issue.report.update",
     ("POST", "/api/access-reviews/campaigns"): "access_review.start",
     (
         "POST",

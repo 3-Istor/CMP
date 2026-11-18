@@ -12,6 +12,7 @@ import {
   History,
   Home,
   KeyRound,
+  MessageSquareWarning,
   Shield,
   UserCheck,
   Wallet,
@@ -30,7 +31,8 @@ export type PageKey =
   | "alerts"
   | "assistants"
   | "access"
-  | "accessReviews";
+  | "accessReviews"
+  | "issueReports";
 
 export interface PageEntry {
   key: PageKey;
@@ -114,6 +116,13 @@ export const PLATFORM_PAGES: PageEntry[] = [
     icon: UserCheck,
     isActive: (pathname) => pathname.startsWith("/access-reviews"),
     platformRoles: ["infra", "security-auditor"],
+  },
+  {
+    key: "issueReports",
+    href: "/issue-reports",
+    icon: MessageSquareWarning,
+    isActive: (pathname) => pathname.startsWith("/issue-reports"),
+    platformRoles: ["infra"],
   },
 ];
 
