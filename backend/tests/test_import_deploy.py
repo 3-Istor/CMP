@@ -266,7 +266,9 @@ def test_each_app_with_a_secret_gets_a_role_reading_only_its_own_path(world):
         }
     assert with_secret >= {"neo4j", "social-graph-service"}
     assert cluster.roles == {
-        ("kubernetes", f"epitweet-{app}-role"): f"epitweet-{app}-policy"
+        ("kubernetes", f"epitweet-{app}-role"): (
+            f"project-epitweet-app-{app}-policy"
+        )
         for app in with_secret
     }
 
@@ -278,7 +280,9 @@ def test_the_policy_of_an_app_does_not_reach_another_app_of_its_project(
 
     _deploy(_published_run(Session))
 
-    policy = cluster.policies["epitweet-social-graph-service-policy"]
+    policy = cluster.policies[
+        "project-epitweet-app-social-graph-service-policy"
+    ]
     assert 'path "project-epitweet/data/social-graph-service/*"' in policy
     assert 'path "project-epitweet/metadata/social-graph-service/*"' in policy
     assert "neo4j" not in policy and "project-epitweet/data/*" not in policy

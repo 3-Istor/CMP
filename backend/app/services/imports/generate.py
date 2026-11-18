@@ -852,7 +852,7 @@ def app_role_name(project: str, app: str) -> str:
 
 
 def app_policy_name(project: str, app: str) -> str:
-    return f"{project}-{app}-policy"
+    return f"project-{project}-app-{app}-policy"
 
 
 def app_policy(project: str, app: str) -> str:
