@@ -1,5 +1,6 @@
 """MCP tools of the repository import (CNP-243): D19 of the import dossier."""
 
+import asyncio
 import json
 from unittest import mock
 
@@ -515,3 +516,56 @@ def test_get_import_explains_a_rebuild_waiting_for_github_access(
     explanation = result["imports"][0]["rebuild_pending"]["explanation"]
     assert "bob's GitHub access" in explanation
     assert "confirms the rebuild in the CMP" in explanation
+
+
+RECOMMENDATION = {
+    "id": "neo4j-to-postgres:neo4j",
+    "subject": "neo4j",
+    "rule": "neo4j-to-postgres",
+    "target": "postgres",
+    "level": "advised",
+    "reason": "Le graphe tient dans des tables Postgres.",
+    "gain_mem_mib": 1024,
+    "effort": "medium",
+    "evidence": [],
+}
+
+
+def test_get_import_marks_the_recommendations_the_project_ignored():
+    plan = {"services": [], "recommendations": [RECOMMENDATION]}
+
+    shown = mcp_server._plan_for_agent(plan, ["neo4j-to-postgres:neo4j"])
+
+    assert shown["recommendations"] == [{**RECOMMENDATION, "dismissed": True}]
+
+
+def test_the_app_tool_returns_what_the_cmp_app_page_shows():
+    class Caller:
+        async def api(self, method, path, **kwargs):
+            assert kwargs["params"] == {"app": "neo4j"}
+            return {
+                "recommendations": [
+                    {**RECOMMENDATION, "app": "neo4j", "dismissed": False},
+                    {**RECOMMENDATION, "id": "old", "dismissed": True},
+                ],
+                "backing": [
+                    {
+                        "app": "neo4j",
+                        "kind": "neo4j",
+                        "backed_up": False,
+                        "managed_alternative": "postgres",
+                    }
+                ],
+            }
+
+    shown = asyncio.run(
+        mcp_server._managed_services(
+            Caller(), {"project_id": "demo", "name": "neo4j"}
+        )
+    )
+
+    assert (
+        [r["id"] for r in shown["recommendations"]],
+        shown["dismissed"],
+        shown["backing"]["backed_up"],
+    ) == (["neo4j-to-postgres:neo4j"], ["old"], False)

@@ -5,6 +5,7 @@ import {
   Ban,
   Gauge,
   KeyRound,
+  Lightbulb,
   Loader2,
   RotateCcw,
   ShieldCheck,
@@ -15,6 +16,7 @@ import { useCallback, useId, useMemo, useState } from "react";
 import { TopologyCanvas } from "@/components/topology/TopologyCanvas";
 import { TopologyLegend } from "@/components/topology/TopologyLegend";
 import { SELECT_CLASS } from "@/components/topology/LinkDialog";
+import { NotBackedUp, RecommendationItem } from "@/components/imports/Recommendations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -178,6 +180,18 @@ function AppEditor({
           </div>
           <p className="text-xs text-muted-foreground">{t("offhoursHelp")}</p>
         </div>
+      )}
+
+      {backing && backing.supported && !isManaged(backing) && (
+        <NotBackedUp
+          backing={{
+            app: planName,
+            kind: backing.kind,
+            backed_up: false,
+            managed_alternative:
+              plan.recommendations?.find((r) => r.subject === planName)?.target ?? null,
+          }}
+        />
       )}
 
       {backing && (
@@ -396,6 +410,8 @@ export function PlanReview({
   applying,
   onApply,
   onAbandon,
+  dismissedRecommendations,
+  onDismissRecommendation,
 }: {
   projectName: string;
   plan: ImportPlan;
@@ -404,6 +420,8 @@ export function PlanReview({
   capacity: ImportCapacity;
   live: Topology | null;
   applying: boolean;
+  dismissedRecommendations: string[];
+  onDismissRecommendation: (id: string) => Promise<void>;
   onApply: () => void;
   onAbandon: () => void;
 }) {
@@ -422,6 +440,9 @@ export function PlanReview({
     [live],
   );
   const problems = planProblems(plan, edits, taken);
+  const recommendations = (plan.recommendations ?? []).filter(
+    (r) => !dismissedRecommendations.includes(r.id),
+  );
   const gauge = capacityGauge(plan, edits, capacity);
   const blocked = problems.length > 0 || gauge.over || gauge.tooBig.length > 0;
 
@@ -504,6 +525,22 @@ export function PlanReview({
           </div>
         </aside>
       </div>
+
+      {recommendations.length > 0 && (
+        <Panel title={t("recommendations")} icon={Lightbulb}>
+          <p className="text-sm text-muted-foreground">{t("recommendationsBody")}</p>
+          <ul className="divide-y">
+            {recommendations.map((r) => (
+              <RecommendationItem
+                key={r.id}
+                item={r}
+                app={finalName(edits, r.subject)}
+                onDismiss={() => onDismissRecommendation(r.id)}
+              />
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <CapacityPanel plan={plan} edits={edits} capacity={capacity} />

@@ -10,6 +10,7 @@ import { useProjectContext } from "@/components/projects/ProjectContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   applyImport,
+  dismissRecommendation,
   getAgentConfirmation,
   getImportRun,
   getImports,
@@ -294,6 +295,11 @@ function WizardForRun({
           live={live}
           applying={applying}
           onApply={() => void apply()}
+          dismissedRecommendations={run.dismissed_recommendations ?? []}
+          onDismissRecommendation={async (id) => {
+            await dismissRecommendation(projectName, id);
+            await load();
+          }}
           onAbandon={() => {
             try {
               sessionStorage.removeItem(EDITS_KEY + run.id);

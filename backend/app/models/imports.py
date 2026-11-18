@@ -175,3 +175,24 @@ class ImportWebhookDelivery(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     received_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class ImportRecommendationDismissal(Base):
+    """A recommendation of the analyzer a project chose to ignore (CNP-305)."""
+
+    __tablename__ = "import_recommendation_dismissals"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_name",
+            "recommendation_id",
+            name="uq_import_recommendation_dismissals",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_name: Mapped[str] = mapped_column(String(100), index=True)
+    recommendation_id: Mapped[str] = mapped_column(String(200))
+    dismissed_by: Mapped[str] = mapped_column(String(255))
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )

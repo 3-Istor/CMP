@@ -12,7 +12,9 @@ import json
 import logging
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import Path as FastApiPath
+from fastapi import Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -24,7 +26,13 @@ from app.services import audit
 from app.services.agents import policy
 from app.services.authz import RequireAdmin, RequireMember
 from app.services.github_service import GitHubAppError
-from app.services.imports import access, deploy, rebuilds, service
+from app.services.imports import (
+    access,
+    deploy,
+    rebuilds,
+    recommendations,
+    service,
+)
 from app.services.imports.oidc import WorkerTokenError, verify_worker_token
 from app.services.imports.service import ImportRefused
 from app.services.project_registry import RegistryError
@@ -174,7 +182,59 @@ async def get_import_run(run_id: str, ctx: RequireMember, db: DbSession):
         **service.run_view(run),
         "capacity": service.capacity_view(db, ctx.project_name, run.source),
         "services": [service.service_view(s) for s in run.source.services],
+        "dismissed_recommendations": sorted(
+            recommendations.dismissed_ids(db, ctx.project_name)
+        ),
     }
+
+
+@router.get("/{project_name}/imports/recommendations")
+async def list_recommendations(
+    ctx: RequireMember,
+    db: DbSession,
+    app: Annotated[str | None, Query(max_length=63)] = None,
+):
+    """Managed services to move to, and the backing apps not backed up."""
+    _enabled()
+    return recommendations.for_project(db, ctx.project_name, app)
+
+
+RecommendationId = Annotated[str, FastApiPath(max_length=200)]
+
+
+@router.post(
+    "/{project_name}/imports/recommendations/{recommendation_id}/dismiss",
+    status_code=204,
+)
+async def dismiss_recommendation(
+    recommendation_id: RecommendationId,
+    ctx: RequireAdmin,
+    db: DbSession,
+    request: Request,
+):
+    """Ignore a recommendation for the whole project, later analyses too."""
+    _enabled()
+    recommendations.dismiss(
+        db, ctx.project_name, recommendation_id, ctx.username
+    )
+    audit.note(request, target=recommendation_id)
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/{project_name}/imports/recommendations/{recommendation_id}/dismiss",
+    status_code=204,
+)
+async def restore_recommendation(
+    recommendation_id: RecommendationId,
+    ctx: RequireAdmin,
+    db: DbSession,
+    request: Request,
+):
+    _enabled()
+    recommendations.restore(db, ctx.project_name, recommendation_id)
+    audit.note(request, target=recommendation_id)
+    return Response(status_code=204)
 
 
 @router.post("/{project_name}/imports/{source_id}/apply", status_code=202)

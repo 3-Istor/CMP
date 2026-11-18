@@ -82,6 +82,7 @@ EXPORTED_TABLES: dict[str, TableSpec] = {
     "import_sources": TableSpec(_by("project_name")),
     "import_runs": TableSpec(_by_import_source),
     "import_services": TableSpec(_by_import_source),
+    "import_recommendation_dismissals": TableSpec(_by("project_name")),
 }
 
 PLATFORM = "platform"
