@@ -773,7 +773,7 @@ export function useReleaseHistory(deploymentId: number) {
 }
 
 /** The project's running or failed move, or null. Polls while one is active. */
-export function useCurrentMove(projectName: string | null) {
+export function useCurrentMove(projectName: string | null, onSettled?: () => void) {
   const [move, setMove] = useState<import("./api").ProjectMove | null>(null);
   const load = useCallback(async () => {
     if (!projectName) return;
@@ -785,6 +785,12 @@ export function useCurrentMove(projectName: string | null) {
     }
   }, [projectName]);
   const active = move !== null;
+  // A move leaving "current" is done or cancelled: the project's cloud changed.
+  const wasActive = useRef(false);
+  useEffect(() => {
+    if (wasActive.current && !active) onSettled?.();
+    wasActive.current = active;
+  }, [active, onSettled]);
   useEffect(() => {
     void load();
     if (!active) return;

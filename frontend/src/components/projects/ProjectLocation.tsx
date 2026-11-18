@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
 import { type ProjectMove, moveAction, startMove } from "@/lib/api";
-import { useCurrentMove, useGlobalHealth } from "@/lib/hooks";
+import { useGlobalHealth } from "@/lib/hooks";
 import { CircleAlert, CircleCheck, Circle, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -33,8 +33,7 @@ const time = (iso: string | null) =>
 /** Banner for the project overview while a move is active. */
 export function MoveBanner() {
   const t = useTranslations("projectSettings.location");
-  const { projectName } = useProjectContext();
-  const { move } = useCurrentMove(projectName);
+  const { projectName, move } = useProjectContext();
   if (!move) return null;
   const current = move.steps.find((s) => s.status !== "done") ?? move.steps[move.steps.length - 1];
   const cloud = cloudName(move.target);
@@ -62,9 +61,8 @@ export function MoveBanner() {
 
 export function ProjectLocation() {
   const t = useTranslations("projectSettings.location");
-  const { projectName, targetCloud, apps, can } = useProjectContext();
+  const { projectName, targetCloud, apps, can, move, setMove } = useProjectContext();
   const { health } = useGlobalHealth(0);
-  const { move, setMove } = useCurrentMove(projectName);
   const [confirming, setConfirming] = useState(false);
   const [dataLoss, setDataLoss] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -146,7 +144,7 @@ export function ProjectLocation() {
                       {t("retry")}
                     </Button>
                   )}
-                  {move.steps.find((s) => s.name === "stop_source")?.status !== "done" && (
+                  {move.steps.find((s) => s.name === "stop_source")?.status === "pending" && (
                     <Button size="sm" variant="outline" disabled={busy} onClick={() => act("cancel")}>
                       {t("cancel")}
                     </Button>

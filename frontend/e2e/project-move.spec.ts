@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import projects from "./fixtures/projects.json";
 import { installMockApi, VARIANTS } from "./fixtures/mock-api";
 
 const SHOTS = process.env.MOVE_SHOTS_DIR;
@@ -89,10 +90,33 @@ test("an active move shows the banner and the steps", async ({ page }) => {
   await shot(page, "4-steps");
 });
 
-test("cancel is offered until the source is stopped", async ({ page }) => {
-  await installMockApi(page, { ...VARIANTS.aws, "/projects/demo/moves/current": { json: move("running", 1) } });
+test("cancel is offered only before the source is stopped", async ({ page }) => {
+  await installMockApi(page, { ...VARIANTS.aws, "/projects/demo/moves/current": { json: move("running", 0) } });
   await page.goto("/projects/demo/settings");
   await expect(page.getByRole("button", { name: "Cancel move" })).toBeVisible();
+});
+
+test("cancel is hidden once the source is stopping", async ({ page }) => {
+  await installMockApi(page, { ...VARIANTS.aws, "/projects/demo/moves/current": { json: move("running", 1) } });
+  await page.goto("/projects/demo/settings");
+  await expect(page.getByText("Moving to GCP", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel move" })).toHaveCount(0);
+});
+
+test("the cloud flips when the move ends", async ({ page }) => {
+  let ended = false;
+  await installMockApi(page, { ...VARIANTS.aws });
+  await page.route(/\/api\/projects\/demo\/moves\/current$/, (r) =>
+    r.fulfill({ json: ended ? null : move("running", 5) }),
+  );
+  await page.route(/\/api\/projects\/(\?.*)?$/, (r) =>
+    r.fulfill({ json: [{ ...projects[0], target_cloud: ended ? "gcp" : "aws" }] }),
+  );
+  await page.goto("/projects/demo/settings");
+  await expect(page.getByText("Runs on AWS")).toBeVisible();
+  ended = true;
+  await expect(page.getByText("Runs on GCP")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Move to AWS" })).toBeVisible();
 });
 
 test("a failed move offers Retry", async ({ page }) => {
