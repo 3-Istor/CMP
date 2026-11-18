@@ -325,7 +325,7 @@ async def _precheck(move: ProjectMove) -> None:
     if missing:
         problems.append(
             f"Missing on Vault {mount}: {', '.join(missing)} "
-            "(apply the project's Terraform again)"
+            "(apply the project's Terraform or redeploy its imports)"
         )
     if problems:
         raise StepFailed("; ".join(problems))
