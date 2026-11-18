@@ -30,6 +30,7 @@ from app.routers import (
     imports,
     infra,
     links,
+    moves,
     notifications,
     observability,
     power,
@@ -60,6 +61,7 @@ from app.services.grafana_service import (
     sync_all_project_orgs,
 )
 from app.services.kube_client import ClusterNotConnectedError
+from app.services.moves.loop import move_loop
 from app.services.project_export import runner as project_export_runner
 from app.services.project_status import fail_interrupted_runs
 from app.services.release.recorder import release_recorder_loop
@@ -315,6 +317,7 @@ async def lifespan(app: FastAPI):
     activity_collector_task = asyncio.create_task(activity_collector_loop())
     release_recorder_task = asyncio.create_task(release_recorder_loop())
     environment_task = asyncio.create_task(environment_loop())
+    move_task = asyncio.create_task(move_loop())
     cloud_backups_task = asyncio.create_task(cloud_backups_loop())
     access_sweep_task = asyncio.create_task(access_sweep_loop())
     access_review_task = asyncio.create_task(access_review_loop())
@@ -348,6 +351,7 @@ async def lifespan(app: FastAPI):
     activity_collector_task.cancel()
     release_recorder_task.cancel()
     environment_task.cancel()
+    move_task.cancel()
     cloud_backups_task.cancel()
     access_sweep_task.cancel()
     access_review_task.cancel()
@@ -364,6 +368,7 @@ async def lifespan(app: FastAPI):
         activity_collector_task,
         release_recorder_task,
         environment_task,
+        move_task,
         cloud_backups_task,
         access_sweep_task,
         access_review_task,
@@ -438,6 +443,7 @@ app.include_router(notifications.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
 app.include_router(project_export.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
+app.include_router(moves.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
 app.include_router(power.router, prefix="/api")
 app.include_router(environments.router, prefix="/api")
