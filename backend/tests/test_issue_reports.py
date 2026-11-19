@@ -4,6 +4,7 @@ platform admins read it in the CMP.
 """
 
 import asyncio
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -15,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import mcp_server
 from app.core.database import Base, get_db
-from app.models.issue_report import IssueReport
+from app.models.issue_report import IssueReport, IssueReportSubmission
 from app.routers import issue_reports as router
 from app.services import issue_reports
 from app.services.agents import internal_api
@@ -202,3 +203,28 @@ def test_a_summary_past_the_size_limit_is_refused(cmp):
     )
 
     assert response.status_code == 422
+
+
+def test_purge_drops_stale_reports_and_old_quota_rows(cmp):
+    _report(user_confirmed=True)
+    _report(user_confirmed=True, summary="Another difficulty")
+    with cmp.sessions() as db:
+        stale, fresh = db.query(IssueReport).order_by(IssueReport.id).all()
+        long_ago = stale.last_reported_at - timedelta(
+            days=issue_reports.REPORT_RETENTION_DAYS + 1
+        )
+        stale.last_reported_at = long_ago
+        db.query(IssueReportSubmission).update(
+            {
+                IssueReportSubmission.created_at: fresh.created_at
+                - timedelta(days=issue_reports.SUBMISSION_RETENTION_DAYS + 1)
+            }
+        )
+        db.commit()
+
+        issue_reports.purge_expired(db)
+
+        assert [r.summary for r in db.query(IssueReport).all()] == [
+            "Another difficulty"
+        ]
+        assert db.query(IssueReportSubmission).count() == 0

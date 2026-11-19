@@ -8,15 +8,19 @@ per UTC day. Only the reporter's username is kept about them.
 
 import hashlib
 import re
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
-from sqlalchemy import func
+from sqlalchemy import delete, func
 from sqlalchemy.orm import Session
 
+from app.core.database import SessionLocal
 from app.models.issue_report import IssueReport, IssueReportSubmission
 from app.services.agents.redact import mask_text
 
 DAILY_QUOTA = 10
+REPORT_RETENTION_DAYS = 90
+# The quota only looks at the current UTC day.
+SUBMISSION_RETENTION_DAYS = 7
 CATEGORIES = ("missing_tool", "error", "documentation", "bug", "other")
 STATUSES = ("new", "exported", "closed")
 SUMMARY_MAX = 300
@@ -138,3 +142,34 @@ def view(report: IssueReport) -> dict:
         "created_at": report.created_at.isoformat(),
         "last_reported_at": report.last_reported_at.isoformat(),
     }
+
+
+def purge_expired(db: Session) -> int:
+    """Drop reports nobody sent again for REPORT_RETENTION_DAYS, and quota
+    rows past SUBMISSION_RETENTION_DAYS."""
+    now = _now()
+    removed = (
+        db.execute(
+            delete(IssueReportSubmission).where(
+                IssueReportSubmission.created_at
+                < now - timedelta(days=SUBMISSION_RETENTION_DAYS)
+            )
+        ).rowcount
+        or 0
+    )
+    removed += (
+        db.execute(
+            delete(IssueReport).where(
+                IssueReport.last_reported_at
+                < now - timedelta(days=REPORT_RETENTION_DAYS)
+            )
+        ).rowcount
+        or 0
+    )
+    db.commit()
+    return removed
+
+
+def purge_expired_now() -> int:
+    with SessionLocal() as db:
+        return purge_expired(db)
