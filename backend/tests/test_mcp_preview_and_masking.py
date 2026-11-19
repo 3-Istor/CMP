@@ -25,11 +25,11 @@ from app.services.agents.redact import MASK, mask
 
 VAULT_TOKEN = "hvs." + "CAESIJ2kb8Xq" * 8
 GITHUB_TOKEN = "ghp_" + "Zq3" * 12
-JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.c2lnbmF0dXJlLXZhbHVl"
-DB_PASSWORD = "s3cr3t-Db-Pa55-w0rd"
+JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.c2lnbmF0dXJlLXZhbHVl"  # gitleaks:allow
+DB_PASSWORD = "s3cr3t-Db-Pa55-w0rd"  # gitleaks:allow
 AWS_SECRET = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY"
 STRIPE_KEY = "sk_live_" + "4eC39HqLyjWDarjtT1zdp7dc"
-PRIVATE_KEY_BODY = "MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6"
+PRIVATE_KEY_BODY = "MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6"  # gitleaks:allow
 PRIVATE_KEY = (
     "-----BEGIN RSA PRIVATE KEY-----\n"
     f"{PRIVATE_KEY_BODY}\n"
