@@ -94,8 +94,11 @@ jobs:
       contents: read
       packages: write
       id-token: write
+    # Each build gets its own runner and BuildKit on one shared VM: two at a
+    # time keep a multi-service repo from filling its disk.
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
 __MATRIX__
@@ -231,7 +234,15 @@ def on_import_runners(workflow: str) -> str:
     execute an imported repository's code.
     """
     runs_on = IMPORT_RUNS_ON.replace("__RUNS_ON__", RUNS_ON)
-    return _TEMPLATE_RUNS_ON.sub(lambda _match: runs_on, workflow)
+    workflow = _TEMPLATE_RUNS_ON.sub(lambda _match: runs_on, workflow)
+    # The template's image scan runs docker build on the repo's own
+    # Dockerfiles: the import runners have no Docker daemon, and an imported
+    # repo's Dockerfiles may be the ones the analyzer had to repair. Its images
+    # are scanned when the analyzer builds them and in the cluster by Trivy.
+    return workflow.replace(
+        "    if: needs.discover-images.outputs.matrix != '[]'",
+        "    if: false",
+    )
 
 
 def values_file(app: str) -> str:
