@@ -1849,7 +1849,7 @@ async def import_repo(
         PlanEdits | None,
         Field(
             description="The user's changes: exclude, rename, public, "
-            "memory, port, probe, drop_links, pooler"
+            "memory, port, probe, drop_links, pooler, offhours"
         ),
     ] = None,
     confirmation_id: str | None = None,

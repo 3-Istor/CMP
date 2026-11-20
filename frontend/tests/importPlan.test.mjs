@@ -93,3 +93,16 @@ test("the pooler toggle follows a renamed app", () => {
 
   assert.deepEqual(edits.pooler, { users: true });
 });
+
+test("keeping an app awake is an edit, putting it back to sleep removes it", () => {
+  let edits = importPlan.planEditsReducer(
+    importPlan.emptyEdits(),
+    { type: "setOffhours", app: "redis", value: false },
+    epitweet,
+  );
+  assert.deepEqual(edits.offhours, { redis: false });
+
+  edits = importPlan.planEditsReducer(edits, { type: "setOffhours", app: "redis", value: true }, epitweet);
+
+  assert.deepEqual(edits.offhours, {});
+});

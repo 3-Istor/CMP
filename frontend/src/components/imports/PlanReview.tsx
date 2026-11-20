@@ -128,6 +128,7 @@ function AppEditor({
     limits: useId(),
     public: useId(),
     pooler: useId(),
+    offhours: useId(),
   };
   const service = effectiveService(plan, edits, planName);
   const backing = plan.backing.find((b) => b.name === planName);
@@ -163,6 +164,21 @@ function AppEditor({
           spellCheck={false}
         />
       </div>
+
+      {!(backing && isManaged(backing)) && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor={ids.offhours}>{t("offhours")}</Label>
+            <Switch
+              id={ids.offhours}
+              checked={edits.offhours[finalName(edits, planName)] ?? true}
+              disabled={excluded}
+              onCheckedChange={(value: boolean) => dispatch({ type: "setOffhours", app: planName, value })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">{t("offhoursHelp")}</p>
+        </div>
+      )}
 
       {backing && (
         <p className="text-sm text-muted-foreground">

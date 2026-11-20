@@ -476,12 +476,16 @@ async def _deploy(db: Session, run: ImportRun, progress: _Progress) -> None:
             run.sha,
             settings.IMPORT_IMAGE_PREFIX,
             cloud,
+            wake_order,
         )
 
     commit = ""
     states: dict[str, str] = {}
     failures = progress.failures
     waves = deploy_waves(deployable)
+    wake_order = {
+        spec.name: number for number, wave in enumerate(waves) for spec in wave
+    }
     for number, wave in enumerate(waves, start=1):
         committed.extend(wave)
         since = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

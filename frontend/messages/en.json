@@ -3554,7 +3554,9 @@
         "restoreLinkOf": "Keep the link from {from} to {to}",
         "managed": "Provided by the platform: a managed {kind} database (CNPG) in the namespace of the app using it, backed up every night, with a generated password.",
         "pooler": "Connection pooler (PgBouncer)",
-        "poolerHelp": "The app reaches its database {database} through PgBouncer. Useful when it opens many connections."
+        "poolerHelp": "The app reaches its database {database} through PgBouncer. Useful when it opens many connections.",
+        "offhours": "Sleep at night",
+        "offhoursHelp": "Stopped from 1 am to 7 am, like apps created from a template. Databases wake before the apps calling them."
       }
     },
     "problem": {
