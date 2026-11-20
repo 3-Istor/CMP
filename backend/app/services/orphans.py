@@ -35,9 +35,17 @@ VAULT_AUTH_MOUNTS = {
     TargetCloud.AWS: "kubernetes-aws",
     TargetCloud.GCP: "kubernetes-gcp",
 }
-# Folders under project-<p> and under cnp/projects/<p> that are the
-# project's own, not an app's.
-PROJECT_FOLDERS = {"system", "_staging-realm"}
+# Folders under project-<p> and under cnp/projects/<p>, and namespaces
+# <p>-<name>, that are the project's own, not an app's: project-bootstrap
+# writes the tenant realm's admin (and its staging twin), and cloud projects
+# get a <p>-backups namespace for their database backups.
+PROJECT_FOLDERS = {
+    "system",
+    "_staging-realm",
+    "backups",
+    "keycloak-tenant-admin",
+    "keycloak-tenant-admin-staging",
+}
 
 
 @dataclass(frozen=True)
@@ -86,6 +94,14 @@ def _verdict(
     if not alive.has_app(project, app):
         return app, "no app of that name in the project"
     return None, None
+
+
+def _owned_by_an_app(alive: Alive, project: str, name: str) -> bool:
+    """A secret named <app>-<suffix> (optispace-demo-accounts-staging) is
+    that app's."""
+    return any(
+        name.startswith(f"{app}-") for app in alive.apps.get(project, set())
+    )
 
 
 def _split(name: str, projects: Iterable[str]) -> tuple[str, str] | None:
@@ -157,6 +173,12 @@ def check_kv(alive: Alive, project: str, paths: list[str]) -> list[Orphan]:
     found = []
     for folder in sorted({p.split("/", 1)[0] for p in paths}):
         app, reason = _verdict(alive, project, folder)
+        if (
+            reason
+            and project in alive.projects
+            and _owned_by_an_app(alive, project, folder)
+        ):
+            continue
         if reason:
             found.append(
                 Orphan(
