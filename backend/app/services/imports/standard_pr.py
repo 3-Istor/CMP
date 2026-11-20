@@ -87,8 +87,13 @@ async def _template_files() -> dict[str, str]:
     token = await get_org_installation_token()
     files = {}
     for path, (repo, source_path) in standard_repo.TEMPLATE_FILES.items():
-        files[path], _ = await get_file_content(
+        content, _ = await get_file_content(
             token, f"{settings.GITHUB_ORG}/{repo}", source_path, ref="main"
+        )
+        files[path] = (
+            standard_repo.on_import_runners(content)
+            if path.startswith(standard_repo.WORKFLOWS_DIR)
+            else content
         )
     return files
 
