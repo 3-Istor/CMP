@@ -300,3 +300,39 @@ def test_a_deletion_run_again_after_a_failure_finishes(
 def _namespace(name, project):
     labels = {project_registry.PROJECT_LABEL: project} if project else {}
     return {"metadata": {"name": name, "labels": labels}}
+
+
+def test_project_bootstrap_secrets_and_backups_namespace_are_not_orphans():
+    # Arrange
+    alive = orphans.Alive({"shop": "onprem"}, {"shop": {"web"}})
+    namespaces = [
+        {
+            "metadata": {
+                "name": "shop-backups",
+                "labels": {"cnp.3istor.com/project": "shop"},
+            }
+        }
+    ]
+
+    # Act
+    found = orphans.check_kv(
+        alive,
+        "shop",
+        ["keycloak-tenant-admin", "keycloak-tenant-admin-staging"],
+    ) + orphans.check_namespaces(alive, "onprem", namespaces)
+
+    # Assert
+    assert found == []
+
+
+def test_a_secret_named_after_a_live_app_is_that_apps():
+    # Arrange
+    alive = orphans.Alive({"shop": "onprem"}, {"shop": {"web"}})
+
+    # Act
+    found = orphans.check_kv(
+        alive, "shop", ["web-demo-accounts-staging", "gone"]
+    )
+
+    # Assert
+    assert [o.name for o in found] == ["project-shop/gone"]
