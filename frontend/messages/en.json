@@ -3557,7 +3557,9 @@
         "poolerHelp": "The app reaches its database {database} through PgBouncer. Useful when it opens many connections.",
         "offhours": "Sleep at night",
         "offhoursHelp": "Stopped from 1 am to 7 am, like apps created from a template. Databases wake before the apps calling them."
-      }
+      },
+      "recommendations": "Recommendations",
+      "recommendationsBody": "Services managed by the platform, backed up and lighter, can replace these engines. This is advice: you can import as is."
     },
     "problem": {
       "unsupported": "{app} is not in the catalogue: exclude it.",
@@ -3737,6 +3739,31 @@
       "appFailuresCaption": "Apps that did not start",
       "problem": "Problem",
       "detail": "Detail"
+    },
+    "recommendations": {
+      "title": "Recommended managed services",
+      "none": "No recommendation for this app.",
+      "target": {
+        "postgres": "to managed Postgres",
+        "bucket": "to a managed S3 bucket"
+      },
+      "level": {
+        "advised": "Advised",
+        "evaluate": "To evaluate"
+      },
+      "effort": {
+        "low": "Low effort",
+        "medium": "Medium effort",
+        "high": "High effort"
+      },
+      "gain": "{mib} MiB less RAM",
+      "dismiss": "Ignore for this project",
+      "restore": "Show again",
+      "dismissedCount": "{count, plural, one {# ignored recommendation} other {# ignored recommendations}}",
+      "failed": "The action failed: {message}",
+      "notBackedUp": "Not backed up",
+      "alternative": "The data of this container is not backed up. Managed, backed up alternative: {target}.",
+      "alternativeGeneric": "The data of this container is not backed up. The platform offers managed, backed up Postgres and S3 buckets."
     }
   },
   "obs": {

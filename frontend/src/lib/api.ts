@@ -1693,6 +1693,21 @@ export const rebuildImport = (project: string, sourceId: string) =>
     { method: "POST" },
   ).then((r) => r.run);
 
+export const getManagedServices = (project: string, app?: string) =>
+  request<import("@/types").ManagedServicesView>(
+    `${projectPath(project)}/imports/recommendations` +
+      (app ? `?app=${encodeURIComponent(app)}` : ""),
+  );
+
+const recommendationPath = (project: string, id: string) =>
+  `${projectPath(project)}/imports/recommendations/${encodeURIComponent(id)}/dismiss`;
+
+export const dismissRecommendation = (project: string, id: string) =>
+  request<void>(recommendationPath(project, id), { method: "POST" });
+
+export const restoreRecommendation = (project: string, id: string) =>
+  request<void>(recommendationPath(project, id), { method: "DELETE" });
+
 export const deleteImport = (project: string, sourceId: string) =>
   request<{ message: string }>(
     `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}`,

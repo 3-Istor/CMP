@@ -1470,6 +1470,36 @@ export interface PlanLink {
   evidence: { file: string; line: number; kind: string }[];
 }
 
+export interface PlanRecommendation {
+  id: string;
+  /** Plan name of the app it applies to. */
+  subject: string;
+  rule: string;
+  target: "postgres" | "bucket";
+  level: "advised" | "evaluate";
+  reason: string;
+  gain_mem_mib: number | null;
+  effort: "low" | "medium" | "high";
+  evidence: { file: string; line: number; kind: string }[];
+}
+
+export interface AppRecommendation extends PlanRecommendation {
+  /** Name of the deployed app. */
+  app: string;
+  repository: string;
+  dismissed: boolean;
+}
+
+export interface ManagedServicesView {
+  recommendations: AppRecommendation[];
+  backing: {
+    app: string;
+    kind: string;
+    backed_up: boolean;
+    managed_alternative: "postgres" | "bucket" | null;
+  }[];
+}
+
 export interface ImportPlan {
   schema_version: string;
   source: { branch: string | null; sha: string | null };
@@ -1480,6 +1510,7 @@ export interface ImportPlan {
   secrets_found: { file: string; line: number; kind: string; redacted: string }[];
   warnings: string[];
   capacity: { requests_mem_mib: number; limits_mem_mib: number };
+  recommendations?: PlanRecommendation[];
 }
 
 export interface ImportPlanEdits {
@@ -1605,6 +1636,7 @@ export interface ImportRun {
 export interface ImportRunDetail extends ImportRun {
   capacity: ImportCapacity;
   services: ImportServiceView[];
+  dismissed_recommendations: string[];
 }
 
 export interface ImportRebuildPending {

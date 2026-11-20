@@ -3557,7 +3557,9 @@
         "poolerHelp": "L'app joint sa base {database} par PgBouncer. Utile si elle ouvre beaucoup de connexions.",
         "offhours": "Veille la nuit",
         "offhoursHelp": "Arrêtée de 1 h à 7 h, comme les apps créées depuis un modèle. Les bases se réveillent avant les apps qui les appellent."
-      }
+      },
+      "recommendations": "Recommandations",
+      "recommendationsBody": "Des services gérés par la plateforme, sauvegardés et plus légers, peuvent remplacer ces moteurs. Ce sont des conseils : vous pouvez importer tel quel."
     },
     "problem": {
       "unsupported": "{app} n'est pas dans le catalogue : excluez-la.",
@@ -3737,6 +3739,31 @@
       "appFailuresCaption": "Apps qui n'ont pas démarré",
       "problem": "Problème",
       "detail": "Détail"
+    },
+    "recommendations": {
+      "title": "Services gérés recommandés",
+      "none": "Aucune recommandation pour cette app.",
+      "target": {
+        "postgres": "vers Postgres géré",
+        "bucket": "vers un bucket S3 géré"
+      },
+      "level": {
+        "advised": "Conseillé",
+        "evaluate": "À évaluer"
+      },
+      "effort": {
+        "low": "Effort faible",
+        "medium": "Effort moyen",
+        "high": "Effort élevé"
+      },
+      "gain": "{mib} Mio de RAM en moins",
+      "dismiss": "Ignorer pour ce projet",
+      "restore": "Afficher à nouveau",
+      "dismissedCount": "{count, plural, one {# recommandation ignorée} other {# recommandations ignorées}}",
+      "failed": "L'action n'a pas abouti : {message}",
+      "notBackedUp": "Non sauvegardé",
+      "alternative": "Les données de ce conteneur ne sont pas sauvegardées. Alternative gérée et sauvegardée : {target}.",
+      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées. La plateforme propose Postgres et des buckets S3 gérés, sauvegardés."
     }
   },
   "obs": {

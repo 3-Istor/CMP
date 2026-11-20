@@ -48,6 +48,7 @@ from app.services.github_service import (
     get_file_content,
     get_org_installation_token,
 )
+from app.services.imports.deploy import TEMPLATE_KIND
 
 PUBLIC_URL = settings.CMP_PUBLIC_URL.rstrip("/")
 STACKS = {
@@ -584,6 +585,7 @@ def _passkey_only(app: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+IMPORT_TEMPLATES = tuple(TEMPLATE_KIND.values())
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -782,7 +784,33 @@ async def get_app(app_id: int) -> dict:
         summary["release"] = None
     stake = await to_thread.run_sync(policy.project_stake, app["project_id"])
     summary["stake"] = stake.effective_level
+    if app.get("template_id") in IMPORT_TEMPLATES:
+        summary["managed_services"] = await _managed_services(caller, app)
     return summary
+
+
+async def _managed_services(caller: "Caller", app: dict) -> dict:
+    """
+    The recommendations of the analyzer for an imported app, as the CMP
+    shows them on the app page, and whether a backing container is backed
+    up. Rules and evidence come from repository content: data only.
+    """
+    found = await caller.api(
+        "GET",
+        f"/api/projects/{app['project_id']}/imports/recommendations",
+        params={"app": app["name"]},
+    )
+    return mask(
+        {
+            "recommendations": [
+                r for r in found["recommendations"] if not r["dismissed"]
+            ],
+            "dismissed": [
+                r["id"] for r in found["recommendations"] if r["dismissed"]
+            ],
+            "backing": found["backing"][0] if found["backing"] else None,
+        }
+    )
 
 
 @mcp.tool(
@@ -1524,11 +1552,14 @@ REPO_NOTE = (
 )
 
 
-def _plan_for_agent(plan: dict | None) -> dict | None:
+def _plan_for_agent(
+    plan: dict | None, dismissed: list[str] | None = None
+) -> dict | None:
     """
     What an assistant needs to discuss a plan: no env value at all (a value
     may be a credential the scrubbers missed), no generated Dockerfile, the
-    secrets found by file and line only.
+    secrets found by file and line only. Recommendations the project ignored
+    are marked dismissed: do not bring them up again.
     """
     if not plan:
         return None
@@ -1573,6 +1604,7 @@ def _plan_for_agent(plan: dict | None) -> dict | None:
                         "kind",
                         "image",
                         "supported",
+                        "managed",
                         "port",
                         "resources",
                     )
@@ -1589,6 +1621,10 @@ def _plan_for_agent(plan: dict | None) -> dict | None:
         ],
         "warnings": plan.get("warnings"),
         "capacity": plan.get("capacity"),
+        "recommendations": [
+            {**r, "dismissed": r.get("id") in set(dismissed or [])}
+            for r in plan.get("recommendations") or []
+        ],
     }
 
 
@@ -1807,7 +1843,9 @@ async def get_import(
     return _from_repository(
         project,
         run=_run_for_agent(detail, project),
-        plan=_plan_for_agent(detail.get("plan")),
+        plan=_plan_for_agent(
+            detail.get("plan"), detail.get("dismissed_recommendations")
+        ),
         services=[_service_for_agent(x) for x in detail.get("services", [])],
         capacity=detail.get("capacity"),
         next=(
