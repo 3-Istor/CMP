@@ -9,6 +9,7 @@ deploy/, cnp/ and .github/ is written: the app code stays as it is.
 """
 
 import json
+import re
 from dataclasses import dataclass
 
 from app.core.config import settings
@@ -215,6 +216,22 @@ class Build:
     file: str
     target: str
     image: str
+
+
+IMPORT_RUNS_ON = (
+    "runs-on: ${{ fromJSON(vars.CNP_IMPORT_RUNS_ON || '__RUNS_ON__') }}"
+)
+_TEMPLATE_RUNS_ON = re.compile(r"runs-on:[^\n]*")
+
+
+def on_import_runners(workflow: str) -> str:
+    """A template workflow with every job moved to the ephemeral import runners.
+
+    The template repos run on the org's persistent runners, which must never
+    execute an imported repository's code.
+    """
+    runs_on = IMPORT_RUNS_ON.replace("__RUNS_ON__", RUNS_ON)
+    return _TEMPLATE_RUNS_ON.sub(lambda _match: runs_on, workflow)
 
 
 def values_file(app: str) -> str:
