@@ -1280,3 +1280,41 @@ def test_an_ignored_recommendation_can_be_shown_again(client, world):
 
     body = client.get("/api/projects/shop/imports/recommendations").json()
     assert body["recommendations"][0]["dismissed"] is False
+
+
+def test_the_estimate_follows_the_edits_of_the_plan(client, world):
+    source = _source(world)
+    run = _run(world, source, status="succeeded", plan=PLAN)
+
+    before = client.post(
+        f"/api/projects/shop/imports/runs/{run.id}/estimate", json={}
+    ).json()
+    after = client.post(
+        f"/api/projects/shop/imports/runs/{run.id}/estimate",
+        json={"exclude": ["search-service", "elasticsearch"]},
+    ).json()
+
+    assert (
+        after["total"]["requests"]["mem_mib"]
+        < before["total"]["requests"]["mem_mib"]
+    )
+
+
+def test_the_run_view_carries_the_estimate_of_the_plan(client, world):
+    source = _source(world)
+    run = _run(world, source, status="succeeded", plan=PLAN)
+
+    body = client.get(f"/api/projects/shop/imports/runs/{run.id}").json()
+
+    assert body["estimate"]["total"]["requests"]["mem_mib"] > 0
+
+
+def test_a_run_without_plan_has_no_estimate(client, world):
+    source = _source(world)
+    run = _run(world, source, kind="build", status="running")
+
+    response = client.post(
+        f"/api/projects/shop/imports/runs/{run.id}/estimate", json={}
+    )
+
+    assert response.status_code == 409

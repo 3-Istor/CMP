@@ -509,7 +509,7 @@ async def _taken_names(
     return taken
 
 
-def _other_imports_mib(db: Session, project: str, source: ImportSource) -> int:
+def other_imports_mib(db: Session, project: str, source: ImportSource) -> int:
     """Memory the project's other imports already request."""
     return sum(
         int(s.spec.get("requests_mem_mib") or 0)
@@ -528,7 +528,7 @@ def capacity_view(db: Session, project: str, source: ImportSource) -> dict:
     return {
         "project_max_mib": settings.IMPORT_MAX_PROJECT_REQUESTS_MIB,
         "namespace_max_mib": settings.IMPORT_NAMESPACE_REQUESTS_MIB,
-        "other_imports_mib": _other_imports_mib(db, project, source),
+        "other_imports_mib": other_imports_mib(db, project, source),
         # resolve() deploys catalogue backing apps with the preset, not with
         # what the analyzer guessed from the compose file.
         "backing_requests_mib": {
@@ -585,7 +585,7 @@ async def approve(  # pylint: disable=too-many-arguments
         settings.IMPORT_MAX_PROJECT_REQUESTS_MIB,
         settings.IMPORT_NAMESPACE_REQUESTS_MIB,
         settings.IMPORT_NAMESPACE_REQUESTS_MILLICPU,
-        _other_imports_mib(db, project, source),
+        other_imports_mib(db, project, source),
     )
     try:
         records = await list_records()

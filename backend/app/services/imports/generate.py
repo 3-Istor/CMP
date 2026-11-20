@@ -151,10 +151,10 @@ def load_preset(kind: str) -> dict:
 
 
 def preset_requests_mib(kind: str) -> int:
-    return _mib(load_preset(kind)["resources"]["requests"]["memory"])
+    return mib(load_preset(kind)["resources"]["requests"]["memory"])
 
 
-def _mib(quantity: str) -> int:
+def mib(quantity: str) -> int:
     quantity = str(quantity)
     if quantity.endswith("Gi"):
         return int(float(quantity[:-2]) * 1024)
@@ -163,7 +163,7 @@ def _mib(quantity: str) -> int:
     raise ValueError(f"unsupported memory quantity {quantity}")
 
 
-def _millicpu(quantity: str) -> int:
+def millicpu(quantity: str) -> int:
     quantity = str(quantity)
     if quantity.endswith("m"):
         return int(quantity[:-1])
@@ -320,10 +320,10 @@ def resolve(plan: dict, edits: dict | None = None) -> list[AppSpec]:
                     {"name": p["name"], "port": p["port"]}
                     for p in preset["service"]["ports"]
                 ],
-                requests_mem_mib=_mib(
+                requests_mem_mib=mib(
                     preset["resources"]["requests"]["memory"]
                 ),
-                limits_mem_mib=_mib(preset["resources"]["limits"]["memory"]),
+                limits_mem_mib=mib(preset["resources"]["limits"]["memory"]),
                 cpu=str(preset["resources"]["requests"]["cpu"]),
             )
         )
@@ -704,7 +704,7 @@ def check_capacity(
                 f"app '{spec.name}' requests {spec.requests_mem_mib} MiB, "
                 f"its namespace quota is {namespace_mib} MiB"
             )
-        if _millicpu(spec.cpu) > namespace_millicpu:
+        if millicpu(spec.cpu) > namespace_millicpu:
             problems.append(
                 f"app '{spec.name}' requests {spec.cpu} CPU, its namespace "
                 f"quota is {namespace_millicpu}m"

@@ -1633,7 +1633,54 @@ export interface ImportRun {
   updated_at: string;
 }
 
+export interface ResourceAmount {
+  cpu_m: number;
+  mem_mib: number;
+}
+
+export interface ImportEstimateApp {
+  app: string;
+  kind: "service" | "backing";
+  requests: ResourceAmount;
+  limits: ResourceAmount;
+  database_mem_mib: number | null;
+  volume_gib: number;
+  monthly_eur: number | null;
+  estimated: boolean;
+}
+
+export interface ImportEstimate {
+  basis: "requests";
+  cloud: string;
+  currency: "EUR";
+  priced: boolean;
+  rate_estimated: boolean;
+  apps: ImportEstimateApp[];
+  total: {
+    requests: ResourceAmount;
+    limits: ResourceAmount;
+    volume_gib: number;
+    monthly_eur: number | null;
+  };
+  plan_problems: string[];
+  quota: {
+    project_max_mib: number;
+    namespace_max_mib: number;
+    namespace_max_millicpu: number;
+    other_imports_mib: number;
+    problems: string[];
+  };
+  cluster: { allocatable: ResourceAmount; requested: ResourceAmount; free: ResourceAmount } | null;
+  diff: {
+    added: string[];
+    removed: string[];
+    changed: { app: string; field: string; before: unknown; after: unknown }[];
+  } | null;
+  recommendations_gain_mib: number;
+}
+
 export interface ImportRunDetail extends ImportRun {
+  estimate: ImportEstimate | null;
   capacity: ImportCapacity;
   services: ImportServiceView[];
   dismissed_recommendations: string[];

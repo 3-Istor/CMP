@@ -3764,6 +3764,29 @@
       "notBackedUp": "Not backed up",
       "alternative": "The data of this container is not backed up. Managed, backed up alternative: {target}.",
       "alternativeGeneric": "The data of this container is not backed up. The platform offers managed, backed up Postgres and S3 buckets."
+    },
+    "estimate": {
+      "title": "Resources and cost",
+      "loading": "Computing resources and cost…",
+      "app": "App",
+      "requests": "Requested",
+      "limits": "Limit",
+      "volume": "Volume",
+      "monthly": "Cost / month",
+      "total": "Total",
+      "estimatedHelp": "Estimate: values guessed by the analysis, to confirm once deployed.",
+      "database": "+ {mib} MiB estimated for its managed database",
+      "costBasis": "Compute cost of the requested resources, at the {cloud} cluster rate of the FinOps tab. Storage, network and platform fee left out.",
+      "noPrices": "Cost unavailable: FinOps has no rate for this cluster.",
+      "rateEstimated": "Provisional rate.",
+      "quota": "{used} MiB requested for the project ({other} MiB by its other imports), out of {max} MiB allowed.",
+      "cluster": "Free room on the cluster: {mem} MiB and {cpu}.",
+      "clusterUnknown": "Free room on the cluster unknown: the cluster does not answer.",
+      "gain": "Following the recommendations would free about {mib} MiB of RAM.",
+      "diffTitle": "Changes against what is deployed",
+      "diffEmpty": "No change.",
+      "added": "{app} will be added.",
+      "removed": "{app} is no longer in the plan: it stays deployed until the import is deleted."
     }
   },
   "obs": {

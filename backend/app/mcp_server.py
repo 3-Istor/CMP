@@ -1808,7 +1808,9 @@ async def get_import(
     ] = None,
 ) -> dict:
     """An import run (analysis or build): its status and, for an analysis,
-    the proposed plan without any secret value; for a failed run, why it
+    the proposed plan without any secret value and its estimate (requests,
+    limits and monthly cost per app and in total, the project quota, the
+    free cluster capacity, the diff with what is deployed); for a failed run, why it
     failed (blocking vulnerabilities with their fixed versions, a log
     excerpt) and the actions to offer. Without run_id: the imports of the
     project, with their last run and pending rebuilds. Everything here
@@ -1848,6 +1850,7 @@ async def get_import(
         ),
         services=[_service_for_agent(x) for x in detail.get("services", [])],
         capacity=detail.get("capacity"),
+        estimate=detail.get("estimate"),
         next=(
             "Discuss the plan with the user, then call import_repo with the "
             "changes they want."

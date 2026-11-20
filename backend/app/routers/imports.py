@@ -29,6 +29,7 @@ from app.services.github_service import GitHubAppError
 from app.services.imports import (
     access,
     deploy,
+    estimate,
     rebuilds,
     recommendations,
     service,
@@ -178,14 +179,48 @@ async def get_import_run(run_id: str, ctx: RequireMember, db: DbSession):
         run = service.get_run(db, ctx.project_name, run_id)
     except ImportRefused as exc:
         raise _refused(exc) from exc
+    estimated = (
+        await run_in_threadpool(estimate.for_run, db, run, None)
+        if _is_plan(run)
+        else None
+    )
     return {
         **service.run_view(run),
+        "estimate": estimated,
         "capacity": service.capacity_view(db, ctx.project_name, run.source),
         "services": [service.service_view(s) for s in run.source.services],
         "dismissed_recommendations": sorted(
             recommendations.dismissed_ids(db, ctx.project_name)
         ),
     }
+
+
+def _is_plan(run) -> bool:
+    return (
+        run.kind == service.RunKind.ANALYZE.value
+        and run.status == service.RunStatus.SUCCEEDED.value
+        and bool(run.plan)
+    )
+
+
+@router.post("/{project_name}/imports/runs/{run_id}/estimate")
+async def estimate_import_run(
+    run_id: str, edits: PlanEdits, ctx: RequireMember, db: DbSession
+):
+    """RAM, CPU, cost, quota, free capacity and diff of the edited plan."""
+    _enabled()
+    try:
+        run = service.get_run(db, ctx.project_name, run_id)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    if not _is_plan(run):
+        raise HTTPException(409, "This run is not a finished analysis")
+    return await run_in_threadpool(
+        estimate.for_run,
+        db,
+        run,
+        edits.model_dump(mode="json", by_alias=True),
+    )
 
 
 @router.get("/{project_name}/imports/recommendations")
