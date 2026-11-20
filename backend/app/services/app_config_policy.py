@@ -18,13 +18,22 @@ EDITABLE_PREFIXES: tuple[tuple[str, ...], ...] = (
     ("service",),
     ("resources",),
     ("autoscaling",),
-    ("db",),
-    ("migrations",),
-    ("release",),
+    ("db", "enabled"),
+    ("db", "name"),
+    ("db", "storage"),
+    ("db", "metrics"),
+    ("db", "pooler"),
+    ("bucket", "enabled"),
+    ("migrations", "timeout"),
+    ("migrations", "resources"),
     ("monitoring",),
+    ("metrics",),
+    ("tracing",),
     ("offhours",),
     ("configMap",),
     ("env",),
+    ("secrets", "keys"),
+    ("network", "allowFrom"),
     ("livenessProbe",),
     ("readinessProbe",),
     ("startupProbe",),
@@ -35,6 +44,19 @@ EDITABLE_PREFIXES: tuple[tuple[str, ...], ...] = (
     ("ingress", "sso_protected"),
     ("ingress", "allowedGroups"),
 )
+
+# Values with an endpoint of their own, which checks what a plain merge
+# cannot (a canary in progress, the chart's release rules, the backup bucket
+# of a public cloud, a restore's source): the generic form would skip those
+# checks. The repository can still change them, under the chart's schema.
+ELSEWHERE: dict[tuple[str, ...], str] = {
+    ("release",): "the Release tab",
+    ("migrations", "enabled"): "the Release tab",
+    ("migrations", "command"): "the Release tab",
+    ("migrations", "backupBefore"): "the database backups",
+    ("db", "backup"): "the Security tab (database backups)",
+    ("db", "restore"): "the restore dialog of the Security tab",
+}
 
 _MISSING = object()
 
@@ -63,9 +85,20 @@ def is_editable(path: tuple[str, ...]) -> bool:
 
 
 def forbidden_changes(current: Any, updates: Any) -> list[str]:
-    """Dotted paths *updates* would change outside EDITABLE_PREFIXES."""
-    return sorted(
-        ".".join(path)
-        for path in changed_paths(current, updates)
-        if not is_editable(path)
-    )
+    """Dotted paths *updates* would change outside EDITABLE_PREFIXES, each
+    with the place that changes it when there is one."""
+    refused = []
+    for path in changed_paths(current, updates):
+        if is_editable(path):
+            continue
+        where = next(
+            (
+                place
+                for prefix, place in ELSEWHERE.items()
+                if path[: len(prefix)] == prefix
+            ),
+            None,
+        )
+        dotted = ".".join(path)
+        refused.append(f"{dotted} (use {where})" if where else dotted)
+    return sorted(refused)
