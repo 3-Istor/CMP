@@ -1102,9 +1102,36 @@ def apply_to_record(  # pylint: disable=too-many-arguments
     return files
 
 
+def switch_to_repo(record: dict, repo: str, names: set[str]) -> set[str]:
+    """
+    Point the import's apps *names* at their repository (mutates *record*):
+    the cnp-apps ApplicationSet then reads deploy/values-<app>.yaml there.
+    Returns the apps switched, whose cnp-projects values file goes.
+    """
+    switched = set()
+    for app in (record.get("spec") or {}).get("apps") or []:
+        if not isinstance(app, dict) or app.get("repoURL"):
+            continue
+        owned = app.get("type") == "backing" or (
+            app.get("type") == "service" and _from_repo(app, repo)
+        )
+        if owned and app.get("name") in names:
+            app["repoURL"] = repo_url(repo)
+            switched.add(app["name"])
+    return switched
+
+
 def remove_from_record(record: dict, project: str, names: set[str]) -> dict:
-    """Drop the apps and their values files; links to them go with them."""
+    """
+    Drop the apps and their values files; links to them go with them. An
+    app reading its values from its repository has none here.
+    """
     spec = record.setdefault("spec", {})
+    in_repo = {
+        a.get("name")
+        for a in spec.get("apps") or []
+        if isinstance(a, dict) and a.get("repoURL")
+    }
     apps = [
         a
         for a in spec.get("apps") or []
@@ -1118,4 +1145,4 @@ def remove_from_record(record: dict, project: str, names: set[str]) -> dict:
             if not app["dependsOn"]:
                 del app["dependsOn"]
     spec["apps"] = apps
-    return {values_path(project, name): None for name in names}
+    return {values_path(project, name): None for name in names - in_repo}

@@ -180,6 +180,7 @@ def source_view(source: ImportSource) -> dict:
         "created_at": source.created_at,
         "auto_rebuild": source.auto_rebuild,
         "rebuild_pending": source.rebuild_pending,
+        "standard_repo": source.standard_repo,
         "runs": [run_view(r) for r in source.runs[-5:]],
         "services": [service_view(s) for s in source.services],
     }
@@ -312,6 +313,26 @@ def _refuse_if_busy(db: Session, source: ImportSource) -> None:
         raise ImportRefused(
             "A run of this import is already in progress",
             latest_run=run_pointer(active),
+        )
+
+
+REPO_MANAGED_STATES = frozenset({"merged", "switched"})
+
+
+def refuse_if_repo_managed(source: ImportSource) -> None:
+    """
+    Once its standard pull request is merged, the repository's deploy/ and
+    CI deploy the import: a build or an apply of the CMP would write the
+    platform's copy back over them.
+    """
+    state = (source.standard_repo or {}).get("state")
+    if state in REPO_MANAGED_STATES:
+        raise ImportRefused(
+            f"{source.repo_full_name} deploys from its own deploy/ folder and "
+            "CI since its standard pull request was merged: change "
+            "deploy/values-<app>.yaml or push to "
+            f"{source.branch} instead",
+            409,
         )
 
 
@@ -552,6 +573,7 @@ async def approve(  # pylint: disable=too-many-arguments
     the person reviewed: a newer one, an assistant's re-analysis say, is
     never applied in its place.
     """
+    refuse_if_repo_managed(source)
     _refuse_if_busy(db, source)
     analysis = _last_run(source, RunKind.ANALYZE)
     if analysis is None or analysis.status != RunStatus.SUCCEEDED.value:
@@ -685,6 +707,7 @@ async def rebuild(
     service never built is always part of it. With *confirmed_by_sub*, the
     admin who confirmed it is who later rebuilds run as.
     """
+    refuse_if_repo_managed(source)
     _refuse_if_busy(db, source)
     build = _last_run(source, RunKind.BUILD)
     if build is None or not source.services:

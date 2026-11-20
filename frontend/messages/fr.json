@@ -3624,7 +3624,28 @@
         "unknown_user": "le CMP ne trouve pas le compte de {user}, qui le reconstruit."
       },
       "pendingHelp": "Une reconstruction s'exécute avec l'accès GitHub de la personne qui la lance. En confirmant, vous la lancez avec votre accès et votre passkey ; les suivantes se feront en votre nom.",
-      "linkGithub": "Lier mon compte GitHub"
+      "linkGithub": "Lier mon compte GitHub",
+      "standard": {
+        "opened": "Pull request ouverte sur {repo}",
+        "openFailed": "Impossible d'ouvrir la pull request : {message}",
+        "open": "Ouvrir la pull request standard",
+        "view": "Pull request #{number}",
+        "untilMerged": "Tant qu'elle n'est pas fusionnée, ces apps tournent avec la copie de leurs réglages gardée par la plateforme, qui les reconstruit à chaque push. Une fois fusionnée, le dossier deploy/ du dépôt et sa CI les déploient, et le CMP ne les reconstruit plus.",
+        "kept": "Restées sur la plateforme (leur fichier de valeurs a été retiré avant la fusion) : {apps}",
+        "state": {
+          "none": "{repo} n'est pas encore déployé comme une app de template : ouvrez sa pull request standard pour ajouter deploy/ et la CI.",
+          "open": "Pull request standard ouverte sur {repo} : fusionnez-la pour déployer depuis le dépôt.",
+          "merged": "Pull request fusionnée : bascule de {repo} sur son dossier deploy/.",
+          "switched": "{repo} se déploie depuis son dossier deploy/ et sa CI : modifiez deploy/values-*.yaml pour changer une app.",
+          "closed": "La pull request standard de {repo} a été fermée sans fusion : les apps restent sur la plateforme.",
+          "failed": "La pull request standard de {repo} n'a pas pu être ouverte."
+        },
+        "conflict": {
+          "replaced": "remplacé par la pull request",
+          "deploy": "conservé dans deploy/ : vérifiez qu'il ne sert pas à un autre déploiement",
+          "workflow": "conservé : vérifiez qu'il ne construit ni ne déploie aussi ces services"
+        }
+      }
     },
     "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey.",
     "failure": {

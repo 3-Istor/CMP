@@ -1694,6 +1694,23 @@ export interface ImportRebuildPending {
   apps: string[] | null;
 }
 
+export interface ImportStandardRepoConflict {
+  path: string;
+  kind: "replaced" | "deploy" | "workflow";
+}
+
+/** The pull request moving an import to deploy/ and CI in its repo (CNP-303). */
+export interface ImportStandardRepo {
+  state: "open" | "merged" | "switched" | "closed" | "failed";
+  url?: string;
+  number?: number;
+  apps?: string[];
+  conflicts?: ImportStandardRepoConflict[];
+  excluded?: Record<string, string>;
+  kept?: string[];
+  error?: string;
+}
+
 export interface ImportSourceView {
   id: string;
   repo_full_name: string;
@@ -1702,6 +1719,7 @@ export interface ImportSourceView {
   created_at: string;
   auto_rebuild: boolean;
   rebuild_pending: ImportRebuildPending | null;
+  standard_repo: ImportStandardRepo | null;
   runs: ImportRun[];
   services: ImportServiceView[];
 }

@@ -980,3 +980,100 @@ async def create_release(
             f"Failed to publish release {tag} on '{repo_full_name}': "
             f"{_github_error_message(response)}"
         )
+
+
+async def _call(
+    installation_token: str, method: str, path: str, what: str, **kwargs
+) -> httpx.Response:
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method,
+                f"{GITHUB_API_BASE}{path}",
+                headers=_api_headers(installation_token),
+                timeout=20.0,
+                **kwargs,
+            )
+    except httpx.HTTPError as exc:
+        raise GitHubAppError(f"Failed to {what}: {exc}") from exc
+    if response.status_code >= 400:
+        raise GitHubAppError(
+            f"Failed to {what}: HTTP {response.status_code} "
+            f"{_github_error_message(response)}"
+        )
+    return response
+
+
+async def list_tree_paths(
+    installation_token: str, repo_full_name: str, sha: str
+) -> set[str]:
+    """
+    Every file path of the tree at *sha*.
+
+    Raises:
+        GitHubAppError: On HTTP errors, or a tree too large to list whole.
+    """
+    response = await _call(
+        installation_token,
+        "GET",
+        f"/repos/{repo_full_name}/git/trees/{sha}",
+        f"list the files of '{repo_full_name}'",
+        params={"recursive": "1"},
+    )
+    body = response.json()
+    if body.get("truncated"):
+        raise GitHubAppError(
+            f"The tree of '{repo_full_name}' is too large to list"
+        )
+    return {
+        item["path"]
+        for item in body.get("tree") or []
+        if item.get("type") == "blob" and isinstance(item.get("path"), str)
+    }
+
+
+async def create_branch(
+    installation_token: str, repo_full_name: str, branch: str, sha: str
+) -> None:
+    """
+    Raises:
+        GitHubAppError: On HTTP errors, an existing branch included.
+    """
+    await _call(
+        installation_token,
+        "POST",
+        f"/repos/{repo_full_name}/git/refs",
+        f"create branch {branch} on '{repo_full_name}'",
+        json={"ref": f"refs/heads/{branch}", "sha": sha},
+    )
+
+
+async def open_pull_request(  # pylint: disable=too-many-arguments
+    installation_token: str,
+    repo_full_name: str,
+    head: str,
+    base: str,
+    title: str,
+    body: str,
+) -> dict:
+    """The pull request GitHub created, as it returns it."""
+    response = await _call(
+        installation_token,
+        "POST",
+        f"/repos/{repo_full_name}/pulls",
+        f"open a pull request on '{repo_full_name}'",
+        json={"head": head, "base": base, "title": title, "body": body},
+    )
+    return response.json()
+
+
+async def get_pull_request(
+    installation_token: str, repo_full_name: str, number: int
+) -> dict:
+    response = await _call(
+        installation_token,
+        "GET",
+        f"/repos/{repo_full_name}/pulls/{number}",
+        f"read pull request #{number} of '{repo_full_name}'",
+    )
+    return response.json()

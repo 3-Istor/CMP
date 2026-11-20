@@ -1,0 +1,392 @@
+"""
+The template model for an imported repository (CNP-303), as pure functions.
+
+What the standard pull request adds: deploy/values-<app>.yaml for every app
+of the import, which the cnp-apps ApplicationSet reads from the repository
+once the record names it as the app's repoURL, and the CI of the template
+repositories, building and signing one image per service. Nothing outside
+deploy/, cnp/ and .github/ is written: the app code stays as it is.
+"""
+
+import json
+from dataclasses import dataclass
+
+from app.core.config import settings
+from app.models.project import TargetCloud
+from app.services.imports import generate
+from app.services.imports.generate import AppSpec
+from app.services.imports.service import SAFE_PATH
+
+CI_PATH = ".github/workflows/ci.yml"
+DOCKERFILE_DIR = "cnp/docker"
+WORKFLOWS_DIR = ".github/workflows/"
+# Copied as they are from the template repositories, so an imported repo
+# gets the same files as one created from a template: path in the imported
+# repo -> (template repository, path there).
+TEMPLATE_FILES = {
+    ".github/dependabot.yml": (
+        "template-html-css",
+        ".github/dependabot.yml",
+    ),
+    ".github/workflows/cnp-verify.yml": (
+        "template-html-css",
+        ".github/workflows/cnp-verify.yml",
+    ),
+    ".github/workflows/security.yml": (
+        "app-templates",
+        "templates/k3s-gitops-app/security.yml",
+    ),
+}
+# The tag the CI gives every build of main; Argo CD Image Updater follows
+# its digest.
+TRACKED_TAG = "main"
+
+VALUES_HEADER = (
+    "# Deploy values of {app} on CNP, read by Argo CD from {branch}.\n"
+    "# Change them here: a merge to {branch} changes the deployment. Names,\n"
+    "# links, network policy, route and pull secret come from the platform\n"
+    "# and win over this file.\n"
+)
+CI_IMAGE_NOTE = (
+    "# image.tag is rewritten by Argo CD Image Updater after each build of\n"
+    "# {branch} (.github/workflows/ci.yml).\n"
+)
+
+CI_TEMPLATE = """\
+# CNP template CI of an imported repository: one image per service, built on
+# every push and pull request, published and signed on main and on vX.Y.Z
+# tags. Argo CD Image Updater deploys each new build of main. The matrix
+# lists the services of the import: change it when a service moves.
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "**" ]
+    tags: [ "v*.*.*" ]
+    paths-ignore:
+      - "deploy/**"
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - "deploy/**"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker-build-and-push:
+    name: Build ${{ matrix.app }}
+    runs-on: ${{ fromJSON(vars.CNP_CI_RUNS_ON || '["self-hosted","Linux","X64"]') }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+__MATRIX__
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GitHub Container Registry
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse to overwrite a released version
+        # A version is built once: rebuilding under the same tag would put an
+        # image nobody tested behind a name that was.
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          image="${IMAGE}:${GITHUB_REF_NAME#v}"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "::error::$image already exists. Push a new tag instead of moving this one."
+            exit 1
+          fi
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ matrix.image }}
+          flavor: latest=false
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+
+      - name: Build and push the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Install cosign
+        if: env.PUBLISH == 'true'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      # Keyless: the certificate binds the signature to this workflow and ref
+      # through the GitHub OIDC token, so there is no key to store or rotate.
+      # Admission checks it to refuse images built outside this CI (CNP-299).
+      - name: Sign image
+        if: env.PUBLISH == 'true'
+        env:
+          IMAGE: ${{ matrix.image }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"
+
+  # Merged by the workflow once the images build: GitHub auto-merge would need
+  # a repo setting and branch protection that imported repos may not have.
+  dependabot-merge:
+    runs-on: ${{ fromJSON(vars.CNP_CI_RUNS_ON || '["self-hosted","Linux","X64"]') }}
+    needs: [docker-build-and-push]
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Merge patch and minor updates
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+"""
+
+
+@dataclass(frozen=True)
+class Build:
+    app: str
+    context: str
+    file: str
+    target: str
+    image: str
+
+
+def values_file(app: str) -> str:
+    return f"deploy/values-{app}.yaml"
+
+
+def ci_image(project: str, app: str) -> str:
+    """
+    A package of its own: the import workflow's package of the same app
+    belongs to extern-project-analyzer, which the repo's CI cannot push to.
+    Under imports/<project>/, the only org images restrict-tenant-images
+    lets the project's namespaces run.
+    """
+    return f"{settings.IMPORT_IMAGE_PREFIX}/{project}/{app}/ci".lower()
+
+
+def dockerfile_path(app: str) -> str:
+    return f"{DOCKERFILE_DIR}/{app}.Dockerfile"
+
+
+def _safe(path: str | None) -> bool:
+    return (
+        path is not None
+        and bool(SAFE_PATH.fullmatch(path))
+        and ".." not in path.split("/")
+    )
+
+
+def builds(
+    project: str, specs: list[AppSpec], plan: dict
+) -> tuple[list[Build], dict[str, str], dict[str, str]]:
+    """
+    The CI matrix of the services, the Dockerfiles the analyzer repaired
+    (written under cnp/docker, the repo's own left as they are), and the
+    services the CI cannot build, with why.
+    """
+    recipes = {s["name"]: s["build"] for s in plan.get("services") or []}
+    matrix: list[Build] = []
+    files: dict[str, str] = {}
+    excluded: dict[str, str] = {}
+    for spec in sorted(specs, key=lambda s: s.name):
+        if spec.kind != "service":
+            continue
+        build = recipes.get(spec.plan_name) or {}
+        strategy = build.get("strategy")
+        context = build.get("context") or "."
+        target = build.get("stage") or ""
+        if strategy == "dockerfile" and _safe(build.get("dockerfile")):
+            dockerfile = build["dockerfile"]
+        elif strategy == "repaired_dockerfile" and build.get(
+            "generated_dockerfile"
+        ):
+            dockerfile = dockerfile_path(spec.name)
+            files[dockerfile] = build["generated_dockerfile"]
+            if build.get("generated_dockerignore"):
+                # BuildKit reads <Dockerfile>.dockerignore before the
+                # context's own .dockerignore.
+                files[f"{dockerfile}.dockerignore"] = build[
+                    "generated_dockerignore"
+                ]
+        else:
+            excluded[spec.name] = (
+                f"built by the platform with {strategy or 'no recipe'}: the "
+                "standard CI builds from a Dockerfile, add one and list the "
+                f"service in {CI_PATH}"
+            )
+            continue
+        if not _safe(context) or (target and not _safe(target)):
+            excluded[spec.name] = "unsafe build path in the analysis"
+            continue
+        matrix.append(
+            Build(
+                spec.name,
+                context,
+                dockerfile,
+                target,
+                ci_image(project, spec.name),
+            )
+        )
+    return matrix, files, excluded
+
+
+def ci_workflow(matrix: list[Build]) -> str:
+    # JSON is YAML: every value is quoted, none can open a ${{ }} expression
+    # (the paths are SAFE_PATH, the names DNS labels).
+    lines = "\n".join(
+        "          - "
+        + json.dumps(
+            {
+                "app": b.app,
+                "context": b.context,
+                "file": b.file,
+                "target": b.target,
+                "image": b.image,
+            }
+        )
+        for b in matrix
+    )
+    return CI_TEMPLATE.replace("__MATRIX__", lines)
+
+
+def repo_values(  # pylint: disable=too-many-arguments
+    project: str,
+    specs: list[AppSpec],
+    digests: dict[str, str],
+    built: set[str],
+    branch: str,
+    cloud: TargetCloud,
+    wake_order: dict[str, int],
+) -> dict[str, str]:
+    """
+    deploy/values-<app>.yaml of every app, the values the CMP writes to
+    cnp-projects today. A service the CI builds follows its CI image; one
+    it cannot build keeps the platform's last digest.
+    """
+    files: dict[str, str] = {}
+    for spec in specs:
+        if spec.kind == "backing":
+            values = generate.backing_values(project, spec)
+        elif spec.name in digests:
+            values = generate.service_values(
+                project,
+                spec,
+                settings.IMPORT_IMAGE_PREFIX,
+                digests[spec.name],
+                cloud,
+            )
+        else:
+            continue
+        header = VALUES_HEADER.format(app=spec.name, branch=branch)
+        if spec.name in built:
+            values["image"] = {
+                "repository": ci_image(project, spec.name),
+                "tag": TRACKED_TAG,
+            }
+            header += CI_IMAGE_NOTE.format(branch=branch)
+        values["offhours"] = generate.offhours_values(
+            spec, wake_order.get(spec.name, 0)
+        )
+        files[values_file(spec.name)] = generate.dump_yaml(values, header)
+    return files
+
+
+def conflicts(existing: set[str], files: set[str]) -> list[dict]:
+    """
+    What the repository already has where the pull request writes: files it
+    replaces, and files it keeps that may deploy or build the app too.
+    """
+    found = []
+    for path in sorted(existing):
+        if path in files:
+            found.append({"path": path, "kind": "replaced"})
+        elif path.startswith("deploy/"):
+            found.append({"path": path, "kind": "deploy"})
+        elif path.startswith(WORKFLOWS_DIR) and path.endswith(
+            (".yml", ".yaml")
+        ):
+            found.append({"path": path, "kind": "workflow"})
+    return found
+
+
+CONFLICT_TEXT = {
+    "replaced": "replaced by this pull request",
+    "deploy": "kept in deploy/: check it is not meant for another deployment",
+    "workflow": "kept: check it does not build or deploy these services too",
+}
+
+
+def pr_body(  # pylint: disable=too-many-arguments
+    project: str,
+    branch: str,
+    values: list[str],
+    matrix: list[Build],
+    found: list[dict],
+    excluded: dict[str, str],
+) -> str:
+    lines = [
+        f"CNP opens this pull request so this repository deploys project "
+        f"`{project}` like an app created from a CNP template.",
+        "",
+        "## What it adds",
+        "",
+        f"- `deploy/values-<app>.yaml` for {len(values)} apps: Argo CD reads "
+        f"them from `{branch}` once this is merged. Edit them to change a "
+        "deployment, no CMP needed.",
+        f"- `{CI_PATH}`: builds {len(matrix)} images on every push, publishes "
+        f"and signs them on `{branch}` and `vX.Y.Z` tags. Each build of "
+        f"`{branch}` is deployed.",
+        "- The security scans, Dependabot settings and verification workflow "
+        "of the template repositories.",
+        "",
+        "No application code changes.",
+        "",
+        "## Until it is merged",
+        "",
+        "The apps keep running from the platform's copy of their settings, "
+        "rebuilt by the platform on each push. Once merged, the platform "
+        "stops building them and the CMP no longer changes their settings.",
+    ]
+    if found:
+        lines += ["", "## Conflicts", ""]
+        lines += [
+            f"- `{c['path']}`: {CONFLICT_TEXT[c['kind']]}" for c in found
+        ]
+    if excluded:
+        lines += ["", "## Not built by this CI", ""]
+        lines += [f"- `{app}`: {why}" for app, why in sorted(excluded.items())]
+    return "\n".join(lines) + "\n"
