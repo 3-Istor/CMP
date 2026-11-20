@@ -38,10 +38,10 @@ TEMPLATE_FILES = {
         "templates/k3s-gitops-app/security.yml",
     ),
 }
-DEPLOY_BRANCH = "cnp/deploy"
-# Where a release's image lives on DEPLOY_BRANCH, the per-environment file
-# of the template apps (deploy/env/<env>/<component>.yaml).
-IMAGE_FILE = "deploy/env/prod/{app}.yaml"
+# Where a release's image lives: in cnp-projects, not on a branch of the
+# imported repo, since Argo CD refuses two revisions of one repository in an
+# application and the values are read from the repo's default branch.
+IMAGE_FILE = "apps/{project}/{app}/release.yaml"
 # The ephemeral, isolated runners of the import workflow: the CI builds the
 # repo's code, never on a persistent runner shared with other jobs.
 RUNS_ON = '["self-hosted","cnp-import-ephemeral"]'
@@ -55,8 +55,8 @@ VALUES_HEADER = (
 )
 CI_IMAGE_NOTE = (
     "# The image tag is not here: a vX.Y.Z tag builds X.Y.Z and Argo CD\n"
-    "# Image Updater writes it to deploy/env/prod/{app}.yaml on the\n"
-    f"# {DEPLOY_BRANCH} branch, which Argo CD reads on top of this file.\n"
+    "# Image Updater writes it to apps/<project>/{app}/release.yaml in\n"
+    "# 3-Istor/cnp-projects, which Argo CD reads on top of this file.\n"
 )
 IMAGE_HEADER = (
     "# Release of {app}, written by Argo CD Image Updater on each vX.Y.Z\n"
@@ -391,13 +391,13 @@ def image_files(
     project: str, built: set[str], digests: dict[str, str]
 ) -> dict[str, str]:
     """
-    deploy/env/prod/<app>.yaml of DEPLOY_BRANCH for each service the CI
+    apps/<project>/<app>/release.yaml in cnp-projects for each service the CI
     builds, until its first release: the image the import built, pinned by
     digest through the tag (the chart's image.digest would outlive the
     release the updater writes as image.tag).
     """
     return {
-        IMAGE_FILE.format(app=app): generate.dump_yaml(
+        IMAGE_FILE.format(project=project, app=app): generate.dump_yaml(
             {
                 "image": {
                     "repository": f"{settings.IMPORT_IMAGE_PREFIX}/"
@@ -457,8 +457,7 @@ def pr_body(  # pylint: disable=too-many-arguments
         f"- `{CI_PATH}`: builds {len(matrix)} images on every push to check "
         "them, publishes and signs them on `vX.Y.Z` tags only. A tag is a "
         "release: CNP deploys X.Y.Z, like an app created from a template. "
-        "The release lands in `deploy/env/prod/<app>.yaml` of the "
-        f"`{DEPLOY_BRANCH}` branch, which CNP writes; nothing is pushed to "
+        "The release lands in CNP's own registry, nothing is pushed to "
         f"`{branch}`.",
         "- The security scans, Dependabot settings and verification workflow "
         "of the template repositories.",
