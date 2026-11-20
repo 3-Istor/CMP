@@ -201,3 +201,38 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def state_bucket():
+    """An S3 client on the Terraform state bucket, with the CMP's identity."""
+    credentials = (
+        boto3_credentials()
+        if enabled()
+        else {
+            "aws_access_key_id": settings.TF_BACKEND_AWS_ACCESS_KEY_ID,
+            "aws_secret_access_key": settings.TF_BACKEND_AWS_SECRET_ACCESS_KEY,
+        }
+    )
+    return boto3.client(
+        "s3", region_name=settings.TF_BACKEND_AWS_REGION, **credentials
+    )
+
+
+def state_keys(prefix: str, s3=None) -> list[str]:
+    s3 = s3 or state_bucket()
+    keys = []
+    for page in s3.get_paginator("list_objects_v2").paginate(
+        Bucket=settings.TF_BACKEND_S3_BUCKET, Prefix=prefix
+    ):
+        keys.extend(item["Key"] for item in page.get("Contents", []))
+    return keys
+
+
+def delete_states(prefix: str) -> list[str]:
+    """Delete every state object under *prefix*; nothing there is not an
+    error. Only after a destroy that succeeded: the states are empty."""
+    s3 = state_bucket()
+    keys = state_keys(prefix, s3)
+    for key in keys:
+        s3.delete_object(Bucket=settings.TF_BACKEND_S3_BUCKET, Key=key)
+    return keys
