@@ -159,9 +159,21 @@ __MATRIX__
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
+      # Not sigstore/cosign-installer: it needs envsubst, which the ephemeral
+      # import runners lack. Same cosign release, checksum verified.
       - name: Install cosign
         if: env.PUBLISH == 'true'
-        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        env:
+          COSIGN_VERSION: "3.1.4"
+          COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl --fail --silent --show-error --location --proto '=https' --output "$bin/cosign" "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "${COSIGN_SHA256}  $bin/cosign" | sha256sum --check --strict
+          chmod 0755 "$bin/cosign"
+          echo "$bin" >> "$GITHUB_PATH"
 
       # Keyless: the certificate binds the signature to this workflow and tag
       # through the GitHub OIDC token, so there is no key to store or rotate.
