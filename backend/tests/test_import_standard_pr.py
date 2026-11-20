@@ -447,34 +447,29 @@ def test_merge_removes_the_values_files_from_cnp_projects(world, github):
     asyncio.run(standard_pr.refresh(source_id))
 
     files = world[1].commits[-1]["files"]
-    assert len(files) == 11
-    assert set(files.values()) == {None}
+    removed = {path for path, text in files.items() if text is None}
+    assert len(removed) == 11
+    assert all(path.endswith("/values.yaml") for path in removed)
 
 
-def test_merge_pins_the_imported_image_on_the_deploy_branch(world, github):
+def test_merge_pins_the_imported_image_in_cnp_projects(world, github):
     source_id = _merged(world, github)
 
     asyncio.run(standard_pr.refresh(source_id))
 
-    pins = github.commits[-1]
-    assert pins["branch"] == "cnp/deploy"
-    assert github.branches.get("cnp/deploy") == "d" * 40
-    image = _load(pins["files"]["deploy/env/prod/frontend.yaml"])["image"]
+    files = world[1].commits[-1]["files"]
+    image = _load(files["apps/epitweet/frontend/release.yaml"])["image"]
     assert image["repository"] == "ghcr.io/3-istor/imports/epitweet/frontend"
     assert image["tag"].startswith("imported@sha256:")
 
 
-def test_a_release_already_on_the_deploy_branch_is_kept(world, github):
+def test_merge_writes_nothing_to_the_imported_repository(world, github):
     source_id = _merged(world, github)
-    github.branches["cnp/deploy"] = "d" * 40
-    github.deploy_tree = {
-        standard_repo.IMAGE_FILE.format(app=a)
-        for a in _source(world, source_id).standard_repo["built"]
-    }
+    before = len(github.commits)
 
     asyncio.run(standard_pr.refresh(source_id))
 
-    assert all(c["branch"] != "cnp/deploy" for c in github.commits)
+    assert len(github.commits) == before
 
 
 def test_the_cmp_never_commits_to_the_default_branch(world, github):
