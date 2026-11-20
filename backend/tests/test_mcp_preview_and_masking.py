@@ -193,6 +193,8 @@ def _get(path: str):  # pylint: disable=too-many-return-statements
 def _write(method: str, path: str):
     if path == "/api/projects/demo/imports":
         return {"run": {**RUN, "status": "queued"}}
+    if path == "/api/issue-reports":
+        return {"id": 1, "duplicate": False, "remaining_today": 9}
     if path == "/api/deployments/":
         return {**APP, "id": 8, "name": "site"}
     if path.startswith("/api/deployments/7/release/"):
@@ -346,6 +348,12 @@ WRITE_CALLS = {
         "user_confirmed": True,
     },
     "database_backup": {"project": "demo", "app": "shop"},
+    "report_issue": {
+        "category": "error",
+        "summary": "get_app answers 500 on every app",
+        "steps": LOG_LINE,
+        "user_confirmed": True,
+    },
 }
 # A person approves or applies these in the CMP: the call never applies.
 APPROVED_IN_CMP = {"import_repo", "link_apps", "unlink_apps"}
@@ -443,7 +451,10 @@ def test_a_preview_changes_nothing_and_asks_nobody(cmp, tool):
     ) == (True, [], [], 0, 0)
 
 
-@pytest.mark.parametrize("tool", sorted(set(WRITE_CALLS) - APPROVED_IN_CMP))
+# report_issue has no stake policy: test_issue_reports covers its preview.
+@pytest.mark.parametrize(
+    "tool", sorted(set(WRITE_CALLS) - APPROVED_IN_CMP - {"report_issue"})
+)
 def test_applying_runs_the_call_the_preview_showed(cmp, tool, monkeypatch):
     previewed = _call(tool, {**WRITE_CALLS[tool], "preview": True})
     gate = mock.AsyncMock(wraps=mcp_server._gate)

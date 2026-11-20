@@ -23,7 +23,7 @@ from app.core.database import SessionLocal
 from app.models.audit import ActivityRecord, AuditEvent
 from app.models.deployment import Deployment
 from app.models.security import SecurityException
-from app.services import notifications
+from app.services import issue_reports, notifications
 from app.services.keycloak_service import decode_platform_token
 
 logger = logging.getLogger(__name__)
@@ -231,6 +231,8 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/access/requests/{request_id}/deny"): "access.deny",
     ("POST", "/api/access/requests/{request_id}/cancel"): "access.cancel",
     ("POST", "/api/access/requests/{request_id}/end"): "access.end",
+    ("POST", "/api/issue-reports"): "issue.report",
+    ("PATCH", "/api/issue-reports/{report_id}"): "issue.report.update",
     ("POST", "/api/access-reviews/campaigns"): "access_review.start",
     (
         "POST",
@@ -673,5 +675,11 @@ async def audit_retention_loop() -> None:
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error(
                 "Notification retention error: %s", exc, exc_info=True
+            )
+        try:
+            await run_in_threadpool(issue_reports.purge_expired_now)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error(
+                "Issue report retention error: %s", exc, exc_info=True
             )
         await asyncio.sleep(6 * 3600)

@@ -1838,3 +1838,18 @@ export const projectExportLink = (project: string, exportId: string) =>
     `/projects/${encodeURIComponent(project)}/exports/${encodeURIComponent(exportId)}/link`,
     { method: "POST" },
   );
+
+// Platform issue reports sent by assistants (platform admins only)
+export const getIssueReports = (status?: import("@/types/issueReport").IssueReportStatus) =>
+  request<import("@/types/issueReport").IssueReport[]>(
+    status ? `/issue-reports?status=${status}` : "/issue-reports",
+  );
+
+export const setIssueReportStatus = (
+  id: number,
+  status: import("@/types/issueReport").IssueReportStatus,
+) =>
+  request<import("@/types/issueReport").IssueReport>(`/issue-reports/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });

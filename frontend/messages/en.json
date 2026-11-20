@@ -26,7 +26,8 @@
       "openMenu": "Open the menu",
       "skipToContent": "Skip to content",
       "access": "Elevated access",
-      "accessReviews": "Access reviews"
+      "accessReviews": "Access reviews",
+      "issueReports": "Assistant reports"
     },
     "home": {
       "fallbackName": "Developer",
@@ -3878,5 +3879,40 @@
       "monthly": "{amount} per month",
       "noHints": "Nothing to save: requests fit the usage."
     }
+  },
+  "issueReports": {
+    "title": "Assistant reports",
+    "description": "Difficulties AI assistants met on the platform, sent with their user's consent. Secrets are removed before they are stored.",
+    "loading": "Loading reports",
+    "forbidden": "For platform admins only.",
+    "empty": "No report here.",
+    "filterLabel": "Filter by status",
+    "filters": {
+      "new": "New",
+      "exported": "Exported",
+      "closed": "Closed",
+      "all": "All"
+    },
+    "statuses": {
+      "new": "New",
+      "exported": "Exported to Jira",
+      "closed": "Closed"
+    },
+    "categories": {
+      "missing_tool": "Missing tool",
+      "error": "Unexplained error",
+      "documentation": "Missing documentation",
+      "bug": "Bug",
+      "other": "Other"
+    },
+    "seen": "{count, plural, one {Reported once} other {Reported # times}}, last on {date}",
+    "reportedBy": "Sent by {users} through {assistant}",
+    "unknownAssistant": "an assistant",
+    "project": "project {project}",
+    "copyForJira": "Copy for Jira",
+    "copied": "Copied: paste it into a Jira ticket, then mark the report exported.",
+    "markExported": "Mark exported",
+    "close": "Close",
+    "reopen": "Reopen"
   }
 }
