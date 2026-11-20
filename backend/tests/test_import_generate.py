@@ -387,7 +387,9 @@ def test_backing_values_are_the_catalogue_presets():
         _record(), "epitweet", specs, {}, REPO, SHA, PREFIX
     )
 
-    assert _values(files, "mongodb") == generate.load_preset("mongodb")
+    values = _values(files, "mongodb")
+    del values["podLabels"], values["network"]
+    assert values == generate.load_preset("mongodb")
     assert sorted(files) == [
         "apps/epitweet/elasticsearch/values.yaml",
         "apps/epitweet/mongodb/values.yaml",
@@ -806,3 +808,63 @@ def test_a_postgres_the_analyzer_did_not_mark_managed_is_still_refused():
         generate.resolve(_postgres_plan("user-service", managed=None))
 
     assert "'postgres' (postgres) is not in the catalogue" in str(error.value)
+
+
+def test_backing_pods_carry_the_backing_role_label():
+    specs = generate.resolve(_plan())
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, {}, REPO, SHA, PREFIX
+    )
+
+    assert _values(files, "redis")["podLabels"] == {
+        "cnp.3istor.com/role": "backing"
+    }
+
+
+def test_an_app_admits_only_the_apps_linking_to_it():
+    specs = generate.resolve(_plan())
+    digests = {name: _digest(i) for i, name in enumerate(_services(specs))}
+    linking_to_mongodb = sorted(
+        s.name
+        for s in specs
+        if any(d["app"] == "mongodb" for d in s.depends_on)
+    )
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, digests, REPO, SHA, PREFIX
+    )
+
+    assert linking_to_mongodb
+    assert _values(files, "mongodb")["network"] == {
+        "allowFrom": linking_to_mongodb
+    }
+    assert _values(files, "frontend")["network"] == {"allowFrom": []}
+
+
+def test_a_template_app_linking_to_an_imported_app_is_admitted():
+    specs = generate.resolve(_plan())
+    record = _record(
+        {"name": "admin", "type": "service", "dependsOn": [{"app": "redis"}]}
+    )
+
+    files = generate.apply_to_record(
+        record, "epitweet", specs, {}, REPO, SHA, PREFIX
+    )
+
+    assert "admin" in _values(files, "redis")["network"]["allowFrom"]
+
+
+def test_allow_from_is_rewritten_with_the_header_kept():
+    text = generate.dump_yaml(
+        {"image": {"tag": "1"}, "network": {"allowFrom": ["a"]}},
+        "# Written by the CMP.\n",
+    )
+
+    rewritten = generate.with_allow_from(text, ["a", "b"])
+
+    assert rewritten.startswith("# Written by the CMP.\n")
+    assert YAML(typ="safe").load(rewritten) == {
+        "image": {"tag": "1"},
+        "network": {"allowFrom": ["a", "b"]},
+    }

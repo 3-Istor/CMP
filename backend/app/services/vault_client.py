@@ -155,6 +155,40 @@ async def write_app_role(mount: str, name: str, policy: str) -> None:
         raise VaultError(f"Vault role write failed ({response.status_code})")
 
 
+def _policy_url(name: str) -> str:
+    if not vault_auth.is_configured():
+        raise VaultError("Vault is not configured on the CMP.")
+    return f"{settings.VAULT_URL}/v1/sys/policies/acl/{name}"
+
+
+async def write_policy(name: str, policy: str) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.put(
+                _policy_url(name),
+                headers=await _headers(),
+                json={"policy": policy},
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 204):
+        raise VaultError(f"Vault policy write failed ({response.status_code})")
+
+
+async def delete_policy(name: str) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.delete(
+                _policy_url(name), headers=await _headers()
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 204, 404):
+        raise VaultError(
+            f"Vault policy delete failed ({response.status_code})"
+        )
+
+
 async def delete_app_role(mount: str, name: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:

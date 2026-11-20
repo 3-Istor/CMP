@@ -851,8 +851,55 @@ def app_role_name(project: str, app: str) -> str:
     return f"{project}-{app}-role"
 
 
+def app_policy_name(project: str, app: str) -> str:
+    return f"project-{project}-app-{app}-policy"
+
+
+def app_policy(project: str, app: str) -> str:
+    """
+    Read on the app's own secrets only: the role of one app no longer reads
+    the other apps of its project. People keep the project-wide policies.
+    """
+    return "".join(
+        f'path "project-{project}/{kind}/{app}/*" {{\n'
+        '  capabilities = ["read"]\n'
+        "}\n"
+        for kind in ("data", "metadata")
+    )
+
+
+def callers(record: dict, app: str) -> list[str]:
+    """The apps of the record linking to *app*, the only ones it admits."""
+    return sorted(
+        {
+            entry["name"]
+            for entry in (record.get("spec") or {}).get("apps") or []
+            if isinstance(entry, dict)
+            and "name" in entry
+            and any(
+                isinstance(link, dict) and link.get("app") == app
+                for link in entry.get("dependsOn") or []
+            )
+        }
+    )
+
+
+def with_allow_from(values_text: str, allowed: list[str]) -> str:
+    """A values file of the CMP with its network.allowFrom replaced."""
+    header = "".join(
+        line
+        for line in values_text.splitlines(keepends=True)
+        if line.startswith("#")
+    )
+    values = YAML(typ="safe").load(values_text) or {}
+    values["network"] = {"allowFrom": list(allowed)}
+    return dump_yaml(values, header)
+
+
 def backing_values(project: str, spec: AppSpec) -> dict:
     values = load_preset(spec.backing_kind)
+    # The generic alerts of backing containers select on it (CNP-302).
+    values["podLabels"] = {"cnp.3istor.com/role": "backing"}
     if spec.backing_kind == "neo4j":
         for env in values.get("env") or []:
             ref = (env.get("valueFrom") or {}).get("secretKeyRef")
@@ -987,6 +1034,7 @@ def apply_to_record(  # pylint: disable=too-many-arguments
     } | {s.name for s in deployable}
     header = VALUES_HEADER.format(repo=repo, sha=sha)
     files: dict[str, str] = {}
+    entries = []
     for spec in deployable:
         entry = registry_entry(spec, project, repo, sha)
         links = _depends_on(spec, present)
@@ -1004,7 +1052,11 @@ def apply_to_record(  # pylint: disable=too-many-arguments
                 project, spec, image_prefix, digests[spec.name], cloud
             )
         )
-        files[values_path(project, spec.name)] = dump_yaml(values, header)
+        entries.append((spec.name, values))
+    # Once every entry is in: an app admits the callers of the whole record.
+    for name, values in entries:
+        values["network"] = {"allowFrom": callers(record, name)}
+        files[values_path(project, name)] = dump_yaml(values, header)
     return files
 
 

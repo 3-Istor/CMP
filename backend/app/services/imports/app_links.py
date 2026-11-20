@@ -16,8 +16,14 @@ import logging
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.imports import ImportService, ImportSource
 from app.services import topology_cache
+from app.services.github_service import (
+    FileNotInRepoError,
+    get_file_content,
+    get_org_installation_token,
+)
 from app.services.imports import generate
 from app.services.imports.registry_commit import commit_record_change
 from app.services.imports.service import ImportRefused, _active_run
@@ -84,6 +90,38 @@ def _linkable(apps: dict[str, dict], name: str) -> dict:
     return app
 
 
+async def _read_values(project: str, app: str, head: str) -> str | None:
+    """The values file the CMP wrote for *app*, at *head*."""
+    token = await get_org_installation_token()
+    try:
+        raw, _ = await get_file_content(
+            token,
+            settings.CNP_REGISTRY_REPO,
+            generate.values_path(project, app),
+            ref=head,
+        )
+    except FileNotInRepoError:
+        return None
+    return raw
+
+
+async def _admit_callers(
+    project: str, record: dict, target: str, head: str
+) -> dict[str, str | None]:
+    """
+    The target's values with network.allowFrom following its callers in
+    *record*, so a link drawn here is not dropped by its network policy.
+    """
+    raw = await _read_values(project, target, head)
+    if raw is None:
+        return {}
+    return {
+        generate.values_path(project, target): generate.with_allow_from(
+            raw, generate.callers(record, target)
+        )
+    }
+
+
 def _no_import_running(db: Session, project: str, app: str) -> None:
     """A deploy rewrites the caller's entry from its spec: wait for it."""
     row = _import_row(db, project, app)
@@ -124,7 +162,6 @@ async def add_link(
     link = {"app": target, "port": port, "alias": alias}
 
     async def change(record: dict, head: str) -> dict[str, str | None]:
-        del head
         apps = _apps(record)
         caller = _linkable(apps, source)
         _linkable(apps, target)
@@ -140,7 +177,7 @@ async def add_link(
         if alias != target:
             entry["alias"] = alias
         current.append(entry)
-        return {}
+        return await _admit_callers(project, record, target, head)
 
     commit = await commit_record_change(
         project, change, f"feat(registry): link {source} to {target}:{port}"
@@ -172,7 +209,6 @@ async def remove_link(
         )
 
     async def change(record: dict, head: str) -> dict[str, str | None]:
-        del head
         caller = _apps(record).get(source)
         links = (caller or {}).get("dependsOn") or []
         kept = [d for d in links if not matches(d)]
@@ -182,7 +218,7 @@ async def remove_link(
             caller["dependsOn"] = kept
         else:
             del caller["dependsOn"]
-        return {}
+        return await _admit_callers(project, record, target, head)
 
     commit = await commit_record_change(
         project, change, f"feat(registry): unlink {source} from {target}"
