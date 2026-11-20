@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.roles import ProjectRole
 from app.mcp_server import (
     PENDING,
+    PREVIEW,
     PUBLIC_URL,
     READ_ONLY,
     Caller,
@@ -30,7 +31,7 @@ from app.mcp_server import (
     mcp,
     tool_errors,
 )
-from app.services import app_config_policy
+from app.services import app_config_policy, audit
 
 # Values keys with a tool and a rule of their own (a restore is a db.restore
 # patch, release is release.settings), or that switch off a safety net.
@@ -61,6 +62,8 @@ async def _app_gate(
     user_confirmed: bool,
     confirmation_id: str | None = None,
     passkey: bool = False,
+    preview: bool = False,
+    changes: Any = None,
 ) -> tuple[dict, dict | None]:
     """The app, and the answer to return instead when the policy stops it.
     ``{app}`` in ``summary`` becomes the app's name. *passkey*: the route
@@ -81,6 +84,8 @@ async def _app_gate(
         namespace=app.get("k8s_namespace"),
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
+        changes=changes,
     )
     return app, answer if verdict == "stop" else None
 
@@ -97,6 +102,8 @@ async def _project_gate(
     user_confirmed: bool,
     confirmation_id: str | None = None,
     passkey: bool = False,
+    preview: bool = False,
+    changes: Any = None,
 ) -> dict | None:
     caller.require_write()
     await caller.require_role(project, minimum)
@@ -117,6 +124,8 @@ async def _project_gate(
         summary=summary,
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
+        changes=changes,
     )
     return answer if verdict == "stop" else None
 
@@ -149,6 +158,7 @@ async def app_power(
     ],
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Restart, put to sleep, wake, pause or resume an app."""
     caller = Caller()
@@ -167,6 +177,7 @@ async def app_power(
         summary=f"{action.capitalize()} the app '{{app}}'?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
@@ -214,6 +225,7 @@ async def update_app_config(
     component: str | None = None,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Change the app's deployment settings: one commit on main, which the
     platform deploys."""
@@ -256,6 +268,8 @@ async def update_app_config(
         summary=f"Change the settings of '{{app}}': {changes}?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
+        changes=audit.changes(view.get("config", {}), changes),
     )
     if stop:
         return stop
@@ -321,6 +335,7 @@ async def staging(
     timezone: str | None = None,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Add, remove, wake or schedule the staging environment of an app."""
     caller = Caller()
@@ -339,6 +354,18 @@ async def staging(
     arguments = {"app_id": app_id, "action": action}
     if action in ("enable", "schedule"):
         arguments["offhours"] = offhours
+    path = f"/api/deployments/{app_id}/environments/staging"
+    kept: dict = {}
+    schedule = None
+    if action == "schedule":
+        # The PUT replaces the whole schedule: keep what was not given.
+        current = await caller.api("GET", f"{path}/offhours")
+        kept = {
+            key: current[key]
+            for key in ("enabled", "sleepAt", "wakeAt", "timezone")
+            if key in current
+        }
+        schedule = {**kept, **offhours}
     _, stop = await _app_gate(
         caller,
         app_id,
@@ -355,10 +382,13 @@ async def staging(
         }[action],
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
+        changes=(
+            audit.changes(kept, schedule) if schedule is not None else None
+        ),
     )
     if stop:
         return stop
-    path = f"/api/deployments/{app_id}/environments/staging"
     if action == "enable":
         result = await caller.api("POST", path, json={"offhours": offhours})
     elif action == "disable":
@@ -366,16 +396,7 @@ async def staging(
     elif action == "wake":
         result = await caller.api("POST", f"{path}/wake", json={})
     else:
-        # The PUT replaces the whole schedule: keep what was not given.
-        current = await caller.api("GET", f"{path}/offhours")
-        kept = {
-            key: current[key]
-            for key in ("enabled", "sleepAt", "wakeAt", "timezone")
-            if key in current
-        }
-        result = await caller.api(
-            "PUT", f"{path}/offhours", json={**kept, **offhours}
-        )
+        result = await caller.api("PUT", f"{path}/offhours", json=schedule)
     return {"ok": True, "app_id": app_id, "action": action, "result": result}
 
 
@@ -403,6 +424,7 @@ async def promotion(
     ] = None,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Follow a promotion of staging to prod: accept a step, or cancel it.
     Starting one (rollbacks included) asks for a passkey, so the user does it
@@ -450,6 +472,7 @@ async def promotion(
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
         passkey=action == "start",
+        preview=preview,
     )
     if stop:
         return stop
@@ -493,6 +516,7 @@ async def set_promotion_policy(
     ] = None,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Change how staging is promoted to prod. Fields not given are kept."""
     caller = Caller()
@@ -508,6 +532,12 @@ async def set_promotion_policy(
     }
     if not changes:
         raise ValueError("Give at least one field to change.")
+    path = f"/api/deployments/{app_id}/promotion-policy"
+    current = await caller.api("GET", path)
+    body = {
+        key: current.get(key)
+        for key in ("suites", "soakMinutes", "requireApproval", "autoPromote")
+    }
     _, stop = await _app_gate(
         caller,
         app_id,
@@ -518,15 +548,11 @@ async def set_promotion_policy(
         summary=f"Change the promotion policy of '{{app}}': {changes}?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
+        changes=audit.changes(body, changes),
     )
     if stop:
         return stop
-    path = f"/api/deployments/{app_id}/promotion-policy"
-    current = await caller.api("GET", path)
-    body = {
-        key: current.get(key)
-        for key in ("suites", "soakMinutes", "requireApproval", "autoPromote")
-    }
     result = await caller.api("PUT", path, json={**body, **changes})
     return {"ok": True, "app_id": app_id, "policy": result}
 
@@ -543,6 +569,7 @@ async def ci_run(
     run_id: int | None = None,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Run a test suite against an environment, or cancel a run."""
     if action == "start" and not suite:
@@ -574,6 +601,7 @@ async def ci_run(
         ),
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
@@ -610,6 +638,7 @@ async def release_traffic(
     minutes: Annotated[int, Field(ge=1, le=15)] = 5,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Generate or stop test traffic on the app during a rollout."""
     caller = Caller()
@@ -632,6 +661,7 @@ async def release_traffic(
         ),
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
@@ -659,12 +689,15 @@ async def update_release_settings(
     ],
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Change how the app is released (strategy, canary checks): one commit,
     refused while a canary is running."""
     if not changes:
         raise ValueError("Give at least one field to change.")
     caller = Caller()
+    path = f"/api/deployments/{app_id}/release/settings"
+    settings_now = (await caller.api("GET", path)).get("settings", {})
     _, stop = await _app_gate(
         caller,
         app_id,
@@ -675,14 +708,12 @@ async def update_release_settings(
         summary=f"Change the release settings of '{{app}}': {changes}?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
+        changes=audit.changes(settings_now, changes),
     )
     if stop:
         return stop
-    path = f"/api/deployments/{app_id}/release/settings"
-    view = await caller.api("GET", path)
-    result = await caller.api(
-        "PUT", path, json={**view.get("settings", {}), **changes}
-    )
+    result = await caller.api("PUT", path, json={**settings_now, **changes})
     return {"ok": True, "app_id": app_id, "result": result}
 
 
@@ -709,6 +740,7 @@ async def project_member(
     role: Literal["admin", "member", "guest"] = "member",
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Add someone to a project with a role, or remove them. The owner role
     is never given by an assistant."""
@@ -732,6 +764,7 @@ async def project_member(
         ),
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
@@ -753,6 +786,7 @@ async def delete_project(
     project: str,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Delete an empty project (delete its apps first with delete_app). Only
     sandbox and demo projects, and only while the CMP does not ask for a
@@ -769,6 +803,7 @@ async def delete_project(
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
         passkey=True,
+        preview=preview,
     )
     if stop:
         return stop
@@ -817,37 +852,43 @@ async def set_budget(
     threshold_critical: Annotated[int, Field(ge=1, le=100)] = 90,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Set the monthly budget of a project and when it alerts (percent).
     Only the project's owner may."""
     caller = Caller()
+    budget = {
+        "monthly_amount_eur": monthly_amount_eur,
+        "threshold_warn": threshold_warn,
+        "threshold_critical": threshold_critical,
+    }
+    current = (
+        await _optional(caller, f"/api/finops/budgets/{project}")
+        if preview
+        else None
+    )
     stop = await _project_gate(
         caller,
         project,
         "finops.budget",
         minimum=ProjectRole.OWNER,
         tool="set_budget",
-        arguments={
-            "project": project,
-            "monthly_amount_eur": monthly_amount_eur,
-            "threshold_warn": threshold_warn,
-            "threshold_critical": threshold_critical,
-        },
+        arguments={"project": project, **budget},
         summary=f"Set the budget of '{project}' to {monthly_amount_eur} EUR "
         f"a month (alerts at {threshold_warn} % and {threshold_critical} %)?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
+        changes=(
+            audit.changes(current if isinstance(current, dict) else {}, budget)
+            if preview
+            else None
+        ),
     )
     if stop:
         return stop
     result = await caller.api(
-        "PUT",
-        f"/api/finops/budgets/{project}",
-        json={
-            "monthly_amount_eur": monthly_amount_eur,
-            "threshold_warn": threshold_warn,
-            "threshold_critical": threshold_critical,
-        },
+        "PUT", f"/api/finops/budgets/{project}", json=budget
     )
     return {"ok": True, "project": project, "budget": result}
 
@@ -866,6 +907,7 @@ async def cost_recommendation(
     ],
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Act on a cost recommendation from get_costs."""
     caller = Caller()
@@ -896,6 +938,7 @@ async def cost_recommendation(
         f"{found.get('monthly_saving_eur')} EUR a month)?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
@@ -959,6 +1002,7 @@ async def security_scan(
     ] = "trivy-operator",
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Ask for a new security scan of an app."""
     caller = Caller()
@@ -972,6 +1016,7 @@ async def security_scan(
         summary=f"Scan '{app}' in '{project}' again ({source})?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
@@ -1013,6 +1058,7 @@ async def request_security_exception(
     expires_on: date | None = None,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Except a finding. Some exceptions apply at once and silence the
     finding in CI too, so standard and critical projects need a person's
@@ -1040,6 +1086,7 @@ async def request_security_exception(
         f"'{project}' (it may stop failing CI): {statement!r}",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
@@ -1087,6 +1134,7 @@ async def database_backup(
     app: str,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
+    preview: PREVIEW = False,
 ) -> dict:
     """Take a backup of the app's database now."""
     caller = Caller()
@@ -1100,6 +1148,7 @@ async def database_backup(
         summary=f"Back up the database of '{app}' now?",
         user_confirmed=user_confirmed,
         confirmation_id=confirmation_id,
+        preview=preview,
     )
     if stop:
         return stop
