@@ -23,6 +23,8 @@ import {
   capacityGauge,
   effectiveService,
   finalName,
+  isManaged,
+  managedDatabaseOf,
   planProblems,
   type PlanEditAction,
 } from "@/lib/importPlan";
@@ -125,11 +127,13 @@ function AppEditor({
     requests: useId(),
     limits: useId(),
     public: useId(),
+    pooler: useId(),
   };
   const service = effectiveService(plan, edits, planName);
   const backing = plan.backing.find((b) => b.name === planName);
   const excluded = edits.exclude.includes(planName);
   const links = plan.links.filter((l) => l.from === planName || l.to === planName);
+  const database = service ? managedDatabaseOf(plan, edits, planName) : null;
   const [nameDraft, setNameDraft] = useState(finalName(edits, planName));
 
   return (
@@ -162,7 +166,11 @@ function AppEditor({
 
       {backing && (
         <p className="text-sm text-muted-foreground">
-          {backing.supported ? t("catalogue", { kind: backing.kind }) : t("notCatalogue", { kind: backing.kind })}
+          {isManaged(backing)
+            ? t("managed", { kind: backing.kind })
+            : backing.supported
+              ? t("catalogue", { kind: backing.kind })
+              : t("notCatalogue", { kind: backing.kind })}
         </p>
       )}
 
@@ -177,6 +185,20 @@ function AppEditor({
               onCheckedChange={(value: boolean) => dispatch({ type: "setPublic", app: planName, value })}
             />
           </div>
+          {database && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={ids.pooler}>{t("pooler")}</Label>
+                <Switch
+                  id={ids.pooler}
+                  checked={edits.pooler[service.name] ?? false}
+                  disabled={excluded}
+                  onCheckedChange={(value: boolean) => dispatch({ type: "setPooler", app: planName, value })}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">{t("poolerHelp", { database })}</p>
+            </div>
+          )}
           {service.ports.length > 0 && (
             <div className="space-y-1.5">
               <Label htmlFor={ids.port}>{t("port")}</Label>

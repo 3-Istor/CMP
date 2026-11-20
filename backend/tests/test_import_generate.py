@@ -663,3 +663,146 @@ def test_an_edited_probe_overrides_an_unsafe_analyzer_probe():
         "path": "/ok",
         "port": 80,
     }
+
+
+def _postgres_plan(*consumers: str, managed: str | None = "postgres") -> dict:
+    plan = _plan()
+    plan["backing"].append(
+        {
+            "name": "postgres",
+            "kind": "postgres",
+            "image": "postgres:16",
+            "supported": True,
+            "managed": managed,
+            "port": 5432,
+            "resources": {
+                "requests_mem_mib": 256,
+                "limits_mem_mib": 512,
+                "cpu": "100m",
+            },
+            "credentials_found": ["POSTGRES_PASSWORD"],
+        }
+    )
+    for consumer in consumers:
+        plan["links"].append(
+            {
+                "from": consumer,
+                "to": "postgres",
+                "port": 5432,
+                "alias": "postgres",
+                "evidence": [
+                    {"file": "compose.yml", "line": 3, "kind": "env_url"}
+                ],
+            }
+        )
+    service = next(s for s in plan["services"] if s["name"] == consumers[0])
+    service["env"] += [
+        {
+            "name": "DATABASE_URL",
+            "value": None,
+            "from_link": "postgres",
+            "secret": True,
+        },
+        {
+            "name": "QUARKUS_DATASOURCE_JDBC_URL",
+            "value": "jdbc:postgresql://postgres:5432/users",
+            "from_link": "postgres",
+            "secret": False,
+        },
+        {
+            "name": "POSTGRES_PASSWORD",
+            "value": None,
+            "from_link": None,
+            "secret": True,
+        },
+        {"name": "DB_HOST", "value": "postgres", "secret": False},
+    ]
+    return plan
+
+
+def test_a_managed_postgres_becomes_the_database_of_the_app_linking_to_it():
+    specs = {
+        s.name: s for s in generate.resolve(_postgres_plan("user-service"))
+    }
+
+    assert "postgres" not in specs
+    assert specs["user-service"].database == {
+        "backing": "postgres",
+        "pooler": False,
+    }
+    assert "postgres" not in {
+        d["app"] for d in specs["user-service"].depends_on
+    }
+
+
+def test_the_postgres_variables_of_the_code_point_at_the_managed_database():
+    spec = next(
+        s
+        for s in generate.resolve(_postgres_plan("user-service"))
+        if s.name == "user-service"
+    )
+
+    env = {e["name"]: e["value"] for e in spec.env}
+
+    assert env["DATABASE_URL"] == generate.POSTGRES_URL
+    assert env["QUARKUS_DATASOURCE_JDBC_URL"] == generate.JDBC_URL
+    assert env["POSTGRES_PASSWORD"] == "$(DB_PASSWORD)"
+    assert "DB_HOST" not in env
+    assert spec.secret_env == [
+        item
+        for item in spec.secret_env
+        if item["env"] not in ("DATABASE_URL", "POSTGRES_PASSWORD")
+    ]
+
+
+def test_managed_database_values_are_backed_up_and_read_the_app_secret():
+    spec = next(
+        s
+        for s in generate.resolve(
+            _postgres_plan("user-service"),
+            {"pooler": {"user-service": True}},
+        )
+        if s.name == "user-service"
+    )
+
+    values = generate.service_values(
+        "epitweet", spec, PREFIX, _digest(1), generate.TargetCloud.AWS
+    )
+
+    assert values["db"] == {
+        "enabled": True,
+        "name": "user-service",
+        "metrics": True,
+        "backup": {
+            "enabled": True,
+            "bucket": "vault",
+            "endpointURL": generate.backup_patch(
+                generate.BackupUpdate(), generate.TargetCloud.AWS
+            )["db"]["backup"]["endpointURL"],
+        },
+        "pooler": {"enabled": True},
+    }
+    assert values["secrets"]["vaultPath"] == (
+        "project-epitweet/user-service/imports"
+    )
+
+
+def test_a_managed_database_shared_by_two_apps_is_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_postgres_plan("user-service", "post-service"))
+
+    assert "belongs to one app" in str(error.value)
+
+
+def test_a_pooler_on_an_app_without_managed_database_is_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_plan(), {"pooler": {"user-service": True}})
+
+    assert "managed database has a pooler" in str(error.value)
+
+
+def test_a_postgres_the_analyzer_did_not_mark_managed_is_still_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_postgres_plan("user-service", managed=None))
+
+    assert "'postgres' (postgres) is not in the catalogue" in str(error.value)

@@ -1458,6 +1458,8 @@ export interface PlanBacking {
   port: number | null;
   resources: { requests_mem_mib: number; limits_mem_mib: number; cpu: string };
   credentials_found: string[];
+  /** Run by the platform as the database of the app linking to it. */
+  managed?: "postgres" | null;
 }
 
 export interface PlanLink {
@@ -1488,6 +1490,7 @@ export interface ImportPlanEdits {
   port: Record<string, number>;
   probe: Record<string, PlanProbe>;
   drop_links: { from: string; to: string }[];
+  pooler: Record<string, boolean>;
 }
 
 export interface ImportCapacity {

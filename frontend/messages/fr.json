@@ -3550,7 +3550,10 @@
         "removeLink": "Retirer",
         "restoreLink": "Garder",
         "removeLinkOf": "Retirer le lien de {from} vers {to}",
-        "restoreLinkOf": "Garder le lien de {from} vers {to}"
+        "restoreLinkOf": "Garder le lien de {from} vers {to}",
+        "managed": "Fournie par la plateforme : une base {kind} gérée (CNPG) dans le namespace de l'app qui l'utilise, sauvegardée chaque nuit, avec un mot de passe généré.",
+        "pooler": "Pooler de connexions (PgBouncer)",
+        "poolerHelp": "L'app joint sa base {database} par PgBouncer. Utile si elle ouvre beaucoup de connexions."
       }
     },
     "problem": {
@@ -3560,7 +3563,8 @@
       "memory": "{app} : la mémoire demandée doit valoir au moins 16 Mio et au plus la limite.",
       "probePath": "{app} : une sonde HTTP a besoin d'un chemin, par exemple /health.",
       "probePort": "{app} : une sonde HTTP doit utiliser le premier port, celui que la supervision vérifie.",
-      "nothing": "Toutes les apps sont exclues : il n'y a rien à importer."
+      "nothing": "Toutes les apps sont exclues : il n'y a rien à importer.",
+      "sharedDatabase": "{app} : une base gérée appartient à une seule app. Retirez les liens des autres apps."
     },
     "list": {
       "title": "Repos importés",

@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 POLL_SECONDS = 10
 TEMPLATE_KIND = {"service": "import-service", "backing": "import-backing"}
+DB_USER = "app"
 BACKING_TITLE = {
     "mongodb": "MongoDB",
     "redis": "Redis",
@@ -131,9 +132,11 @@ async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
             await vault_client.write_kv(mount, path, {"NEO4J_AUTH": auth})
         passwords[spec.name] = auth.split("/", 1)[1]
     for spec in specs:
-        if not spec.secret_env:
+        if not (spec.secret_env or spec.database):
             continue
         data = {}
+        if spec.database:
+            data.update(await _database_credential(mount, spec))
         for item in spec.secret_env:
             if item["key"] == "url":
                 data[item["env"]] = item["value"]
@@ -144,6 +147,20 @@ async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
         await vault_client.write_kv(
             mount, generate.secret_path(spec.name), data
         )
+
+
+async def _database_credential(mount: str, spec: AppSpec) -> dict[str, str]:
+    """
+    The CNPG initdb secret of the app's database, generated once: CNPG sets
+    the password only at creation, a new one would lock the app out.
+    """
+    current = await vault_client.read_kv(
+        mount, generate.secret_path(spec.name)
+    )
+    password = str(current.get("password") or "")
+    if current.get("username") != DB_USER or not password:
+        password = secrets.token_hex(24)
+    return {"username": DB_USER, "password": password}
 
 
 def import_fields(project: str, service: ImportService) -> dict:
@@ -452,6 +469,7 @@ async def _deploy(db: Session, run: ImportRun, progress: _Progress) -> None:
             source.repo_full_name,
             run.sha,
             settings.IMPORT_IMAGE_PREFIX,
+            cloud,
         )
 
     commit = ""
