@@ -1693,6 +1693,12 @@ export const rebuildImport = (project: string, sourceId: string) =>
     { method: "POST" },
   ).then((r) => r.run);
 
+export const openStandardPr = (project: string, sourceId: string) =>
+  request<import("@/types").ImportSourceView>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/standard-pr`,
+    { method: "POST" },
+  );
+
 export const estimateImport = (
   project: string,
   runId: string,

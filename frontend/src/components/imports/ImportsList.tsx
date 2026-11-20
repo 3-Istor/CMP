@@ -10,10 +10,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
-import { deleteImport, getImports, rebuildImport, updateImportSettings } from "@/lib/api";
+import { deleteImport, getImports, openStandardPr, rebuildImport, updateImportSettings } from "@/lib/api";
 import { importRefusal } from "@/lib/importRefusal";
 import type { ImportSourceView } from "@/types";
 import { RebuildPendingNotice } from "./RebuildPendingNotice";
+import { StandardRepoNotice } from "./StandardRepoNotice";
 
 const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
 const TD = "px-3 py-2 align-middle";
@@ -85,6 +86,16 @@ export function ImportsList({
     }
   };
 
+  const openPr = async (source: ImportSourceView) => {
+    try {
+      const updated = await openStandardPr(projectName, source.id);
+      setSources((all) => all.map((s) => (s.id === updated.id ? updated : s)));
+      toast.success(t("standard.opened", { repo: source.repo_full_name }));
+    } catch (err) {
+      toast.error(t("standard.openFailed", { message: importRefusal(err).message }));
+    }
+  };
+
   const pending = sources.filter((s) => s.rebuild_pending);
 
   return (
@@ -98,6 +109,14 @@ export function ImportsList({
           source={source}
           canManage={canManage}
           onRebuild={() => void rebuild(source)}
+        />
+      ))}
+      {sources.map((source) => (
+        <StandardRepoNotice
+          key={`standard-${source.id}`}
+          source={source}
+          canManage={canManage}
+          onOpen={() => void openPr(source)}
         />
       ))}
       <div className="overflow-x-auto rounded-xl border">
@@ -142,7 +161,7 @@ export function ImportsList({
                   <td className={TD}>
                     <Switch
                       checked={source.auto_rebuild}
-                      disabled={!canManage || saving === source.id}
+                      disabled={!canManage || saving === source.id || source.standard_repo?.state === "switched"}
                       onCheckedChange={(value) => void setAutoRebuild(source, value)}
                       aria-label={t("autoRebuildOf", { repo: source.repo_full_name })}
                     />
@@ -153,7 +172,11 @@ export function ImportsList({
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={active || source.services.length === 0}
+                          disabled={
+                            active ||
+                            source.services.length === 0 ||
+                            ["merged", "switched"].includes(source.standard_repo?.state ?? "")
+                          }
                           onClick={() => void rebuild(source)}
                           aria-label={t("rebuildOf", { repo: source.repo_full_name })}
                         >

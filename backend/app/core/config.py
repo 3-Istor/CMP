@@ -336,6 +336,11 @@ class Settings(BaseSettings):
     # posts its plan: GitHub's 6 h job ceiling.
     IMPORT_BUILD_TIMEOUT_MINUTES: int = 360
     IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/imports"
+    # Standard pull request of an import (CNP-303): deploy/ values and the
+    # template CI in the repository, which Argo CD then reads. Off until the
+    # registry schema, the cnp-apps ApplicationSet and the AppProjects accept
+    # a repoURL on imported apps: a switched record would not render before.
+    IMPORT_STANDARD_PR_ENABLED: bool = False
     # Platform repositories nobody imports, owner/name, comma separated.
     IMPORT_DENY_REPOS: str = (
         "3-Istor/K3s,3-Istor/CMP,3-Istor/Cloud,3-Istor/cnp-projects,"

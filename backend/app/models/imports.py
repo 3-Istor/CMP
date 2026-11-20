@@ -78,6 +78,10 @@ class ImportSource(Base):
     # Set when an automatic rebuild could not run as rebuild_user: an admin
     # confirms it from the CMP.
     rebuild_pending: Mapped[dict | None] = mapped_column(JSON)
+    # The pull request that moves the import to the template model (CNP-303):
+    # deploy/ values and the standard CI in the repository. Once merged and
+    # switched, Argo CD reads the repository and its CI builds the images.
+    standard_repo: Mapped[dict | None] = mapped_column(JSON)
 
     runs: Mapped[list["ImportRun"]] = relationship(
         back_populates="source",

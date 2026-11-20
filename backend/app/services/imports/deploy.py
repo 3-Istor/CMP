@@ -546,6 +546,17 @@ async def _deploy(db: Session, run: ImportRun, progress: _Progress) -> None:
         commit=commit,
         failed=[f["app"] for f in failures],
     )
+    if not failures:
+        # Imported here: standard_pr builds on this module.
+        from app.services.imports import (  # pylint: disable=C0415
+            standard_pr,
+        )
+
+        _spawn(
+            standard_pr.open_after_deploy(
+                source.id, run.approved_by or run.requested_by
+            )
+        )
 
 
 def _image_ref(project: str, spec: AppSpec, digests: dict[str, str]) -> str:

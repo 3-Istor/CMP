@@ -33,6 +33,7 @@ from app.services.imports import (
     rebuilds,
     recommendations,
     service,
+    standard_pr,
 )
 from app.services.imports.oidc import WorkerTokenError, verify_worker_token
 from app.services.imports.service import ImportRefused
@@ -341,6 +342,47 @@ async def rebuild_import(
     return {"run": service.run_view(run)}
 
 
+@router.get("/{project_name}/imports/{source_id}/standard-pr/preview")
+async def preview_standard_pr(
+    source_id: str, ctx: RequireAdmin, db: DbSession
+):
+    """The files the standard pull request adds and what they conflict with."""
+    _enabled()
+    try:
+        standard_pr.ensure_enabled()
+        source = service.get_source(db, ctx.project_name, source_id)
+        return await standard_pr.preview(db, source)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    except GitHubAppError as exc:
+        raise HTTPException(502, f"GitHub could not be read: {exc}") from exc
+
+
+@router.post("/{project_name}/imports/{source_id}/standard-pr")
+async def open_standard_pr(
+    source_id: str, ctx: RequireAdmin, db: DbSession, request: Request
+):
+    """
+    Open the pull request that moves the import to the template model, for
+    an import deployed before it opened on its own (or whose pull request
+    was closed). It writes to the repository: step-up, like a rebuild.
+    """
+    _enabled()
+    assert_step_up(ctx.token)
+    try:
+        standard_pr.ensure_enabled()
+        source = service.get_source(db, ctx.project_name, source_id)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    await _recheck_repository(db, ctx.token, source)
+    try:
+        await standard_pr.open_pr(db, source, ctx.username)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    audit.note(request, target=source.repo_full_name)
+    return service.source_view(source)
+
+
 @router.put("/{project_name}/imports/{source_id}/settings")
 async def update_import_settings(
     source_id: str,
@@ -358,6 +400,8 @@ async def update_import_settings(
         assert_step_up(ctx.token)
     try:
         source = service.get_source(db, ctx.project_name, source_id)
+        if body.auto_rebuild:
+            service.refuse_if_repo_managed(source)
     except ImportRefused as exc:
         raise _refused(exc) from exc
     source.auto_rebuild = body.auto_rebuild

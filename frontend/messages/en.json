@@ -3624,7 +3624,28 @@
         "unknown_user": "the CMP cannot find the account of {user}, who rebuilds it."
       },
       "pendingHelp": "A rebuild runs with the GitHub access of whoever starts it. By confirming, you start it with your access and your passkey; later rebuilds run as you.",
-      "linkGithub": "Link my GitHub account"
+      "linkGithub": "Link my GitHub account",
+      "standard": {
+        "opened": "Pull request opened on {repo}",
+        "openFailed": "Could not open the pull request: {message}",
+        "open": "Open the standard pull request",
+        "view": "Pull request #{number}",
+        "untilMerged": "Until it is merged, these apps run from the platform's copy of their settings and the platform rebuilds them on each push. Once merged, deploy/ in the repository drives them, a vX.Y.Z tag releases a new version through the repository's CI, and the CMP no longer rebuilds them.",
+        "kept": "Kept on the platform (their values file was removed before the merge): {apps}",
+        "state": {
+          "none": "{repo} is not yet deployed like a template app: open its standard pull request to add deploy/ and the CI.",
+          "open": "Standard pull request open on {repo}: merge it to deploy from the repository.",
+          "merged": "Pull request merged: switching {repo} to its deploy/ folder.",
+          "switched": "{repo} deploys from its deploy/ folder: edit deploy/values-*.yaml to change an app, push a vX.Y.Z tag to release a new version.",
+          "closed": "The standard pull request of {repo} was closed without merge: the apps stay on the platform.",
+          "failed": "The standard pull request of {repo} could not be opened."
+        },
+        "conflict": {
+          "replaced": "replaced by the pull request",
+          "deploy": "kept in deploy/: check it is not meant for another deployment",
+          "workflow": "kept: check it does not build or deploy these services too"
+        }
+      }
     },
     "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey.",
     "failure": {
