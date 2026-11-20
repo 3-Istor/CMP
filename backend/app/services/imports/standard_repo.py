@@ -37,9 +37,14 @@ TEMPLATE_FILES = {
         "templates/k3s-gitops-app/security.yml",
     ),
 }
-# The tag the CI gives every build of main; Argo CD Image Updater follows
-# its digest.
-TRACKED_TAG = "main"
+DEPLOY_BRANCH = "cnp/deploy"
+# Where a release's image lives on DEPLOY_BRANCH, the per-environment file
+# of the template apps (deploy/env/<env>/<component>.yaml).
+IMAGE_FILE = "deploy/env/prod/{app}.yaml"
+# The ephemeral, isolated runners of the import workflow: the CI builds the
+# repo's code, never on a persistent runner shared with other jobs.
+RUNS_ON = '["self-hosted","cnp-import-ephemeral"]'
+BUILDKIT = "tcp://buildkitd:1234"
 
 VALUES_HEADER = (
     "# Deploy values of {app} on CNP, read by Argo CD from {branch}.\n"
@@ -48,15 +53,22 @@ VALUES_HEADER = (
     "# and win over this file.\n"
 )
 CI_IMAGE_NOTE = (
-    "# image.tag is rewritten by Argo CD Image Updater after each build of\n"
-    "# {branch} (.github/workflows/ci.yml).\n"
+    "# The image tag is not here: a vX.Y.Z tag builds X.Y.Z and Argo CD\n"
+    "# Image Updater writes it to deploy/env/prod/{app}.yaml on the\n"
+    f"# {DEPLOY_BRANCH} branch, which Argo CD reads on top of this file.\n"
+)
+IMAGE_HEADER = (
+    "# Release of {app}, written by Argo CD Image Updater on each vX.Y.Z\n"
+    "# tag. Until the first one, the image the CNP import built.\n"
 )
 
 CI_TEMPLATE = """\
 # CNP template CI of an imported repository: one image per service, built on
-# every push and pull request, published and signed on main and on vX.Y.Z
-# tags. Argo CD Image Updater deploys each new build of main. The matrix
-# lists the services of the import: change it when a service moves.
+# every push and pull request to check it builds, published and signed on
+# vX.Y.Z tags only. A tag is a release: Argo CD Image Updater deploys X.Y.Z.
+# The matrix lists the services of the import: change it when a service
+# moves. Jobs run on the CNP import runners (ephemeral, one job each, no
+# Docker daemon: BuildKit is remote), never on a shared runner.
 name: CI Pipeline
 
 on:
@@ -72,12 +84,11 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   docker-build-and-push:
     name: Build ${{ matrix.app }}
-    runs-on: ${{ fromJSON(vars.CNP_CI_RUNS_ON || '["self-hosted","Linux","X64"]') }}
+    runs-on: ${{ fromJSON(vars.CNP_IMPORT_RUNS_ON || '__RUNS_ON__') }}
     permissions:
       contents: read
       packages: write
@@ -88,23 +99,34 @@ jobs:
         include:
 __MATRIX__
     env:
-      PUBLISH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+      PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Log in to GitHub Container Registry
-        if: env.PUBLISH == 'true'
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver: remote
+          endpoint: ${{ vars.CNP_IMPORT_BUILDKIT_ENDPOINT || '__BUILDKIT__' }}
+
+      # No daemon to log in through: BuildKit reads the client's config.
+      - name: Registry credentials
+        if: env.PUBLISH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          mkdir -p ~/.docker
+          auth=$(printf '%s:%s' "$ACTOR" "$TOKEN" | base64 -w0)
+          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$auth" > ~/.docker/config.json
 
       - name: Refuse to overwrite a released version
         # A version is built once: rebuilding under the same tag would put an
         # image nobody tested behind a name that was.
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.PUBLISH == 'true'
         env:
           IMAGE: ${{ matrix.image }}
         run: |
@@ -121,9 +143,8 @@ __MATRIX__
           images: ${{ matrix.image }}
           flavor: latest=false
           tags: |
-            type=ref,event=branch
-            type=sha,prefix=sha-
             type=semver,pattern={{version}}
+            type=sha,prefix=sha-
 
       - name: Build and push the image
         id: build
@@ -142,7 +163,7 @@ __MATRIX__
         if: env.PUBLISH == 'true'
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
 
-      # Keyless: the certificate binds the signature to this workflow and ref
+      # Keyless: the certificate binds the signature to this workflow and tag
       # through the GitHub OIDC token, so there is no key to store or rotate.
       # Admission checks it to refuse images built outside this CI (CNP-299).
       - name: Sign image
@@ -154,7 +175,7 @@ __MATRIX__
   # Merged by the workflow once the images build: GitHub auto-merge would need
   # a repo setting and branch protection that imported repos may not have.
   dependabot-merge:
-    runs-on: ${{ fromJSON(vars.CNP_CI_RUNS_ON || '["self-hosted","Linux","X64"]') }}
+    runs-on: ${{ fromJSON(vars.CNP_IMPORT_RUNS_ON || '__RUNS_ON__') }}
     needs: [docker-build-and-push]
     if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
     permissions:
@@ -280,7 +301,11 @@ def ci_workflow(matrix: list[Build]) -> str:
         )
         for b in matrix
     )
-    return CI_TEMPLATE.replace("__MATRIX__", lines)
+    return (
+        CI_TEMPLATE.replace("__MATRIX__", lines)
+        .replace("__RUNS_ON__", RUNS_ON)
+        .replace("__BUILDKIT__", BUILDKIT)
+    )
 
 
 def repo_values(  # pylint: disable=too-many-arguments
@@ -313,16 +338,38 @@ def repo_values(  # pylint: disable=too-many-arguments
             continue
         header = VALUES_HEADER.format(app=spec.name, branch=branch)
         if spec.name in built:
-            values["image"] = {
-                "repository": ci_image(project, spec.name),
-                "tag": TRACKED_TAG,
-            }
-            header += CI_IMAGE_NOTE.format(branch=branch)
+            values["image"] = {"repository": ci_image(project, spec.name)}
+            header += CI_IMAGE_NOTE.format(app=spec.name)
         values["offhours"] = generate.offhours_values(
             spec, wake_order.get(spec.name, 0)
         )
         files[values_file(spec.name)] = generate.dump_yaml(values, header)
     return files
+
+
+def image_files(
+    project: str, built: set[str], digests: dict[str, str]
+) -> dict[str, str]:
+    """
+    deploy/env/prod/<app>.yaml of DEPLOY_BRANCH for each service the CI
+    builds, until its first release: the image the import built, pinned by
+    digest through the tag (the chart's image.digest would outlive the
+    release the updater writes as image.tag).
+    """
+    return {
+        IMAGE_FILE.format(app=app): generate.dump_yaml(
+            {
+                "image": {
+                    "repository": f"{settings.IMPORT_IMAGE_PREFIX}/"
+                    f"{project}/{app}".lower(),
+                    "tag": f"imported@{digests[app]}",
+                }
+            },
+            IMAGE_HEADER.format(app=app),
+        )
+        for app in sorted(built)
+        if app in digests
+    }
 
 
 def conflicts(existing: set[str], files: set[str]) -> list[dict]:
@@ -367,9 +414,12 @@ def pr_body(  # pylint: disable=too-many-arguments
         f"- `deploy/values-<app>.yaml` for {len(values)} apps: Argo CD reads "
         f"them from `{branch}` once this is merged. Edit them to change a "
         "deployment, no CMP needed.",
-        f"- `{CI_PATH}`: builds {len(matrix)} images on every push, publishes "
-        f"and signs them on `{branch}` and `vX.Y.Z` tags. Each build of "
-        f"`{branch}` is deployed.",
+        f"- `{CI_PATH}`: builds {len(matrix)} images on every push to check "
+        "them, publishes and signs them on `vX.Y.Z` tags only. A tag is a "
+        "release: CNP deploys X.Y.Z, like an app created from a template. "
+        "The release lands in `deploy/env/prod/<app>.yaml` of the "
+        f"`{DEPLOY_BRANCH}` branch, which CNP writes; nothing is pushed to "
+        f"`{branch}`.",
         "- The security scans, Dependabot settings and verification workflow "
         "of the template repositories.",
         "",
@@ -379,7 +429,19 @@ def pr_body(  # pylint: disable=too-many-arguments
         "",
         "The apps keep running from the platform's copy of their settings, "
         "rebuilt by the platform on each push. Once merged, the platform "
-        "stops building them and the CMP no longer changes their settings.",
+        "stops building them and the CMP no longer changes their settings. "
+        "They keep running the image CNP built until your first `vX.Y.Z` "
+        "tag.",
+        "",
+        "## Runners",
+        "",
+        "The CI runs on the CNP import runners (runner group "
+        "`cnp-import-ephemeral`: one job per runner, then destroyed), never "
+        "on a shared runner. A CNP organization admin must give this "
+        "repository access to that group (Organization settings > Actions > "
+        "Runner groups > cnp-import-ephemeral: add the repository, and allow "
+        "its `.github/workflows/ci.yml` if the group is limited to selected "
+        "workflows). Until then the jobs wait for a runner.",
     ]
     if found:
         lines += ["", "## Conflicts", ""]

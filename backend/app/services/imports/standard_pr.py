@@ -5,8 +5,10 @@ The CMP opens it with a token down-scoped to the one repository, never
 pushes to the imported branch itself, and waits for a person to merge it.
 Once merged, the import's apps read deploy/values-<app>.yaml from the
 repository (repoURL in the record), their values leave cnp-projects, and the
-repository's CI builds the images: the platform's rebuild stops, so only one
-of the two ever builds an app.
+repository's CI builds the images on vX.Y.Z tags: the platform's rebuild
+stops, so only one of the two ever builds an app. Releases land on the
+cnp/deploy branch, which the CMP creates and the image updater writes: the
+CMP writes the default branch only through the pull request.
 """
 
 import logging
@@ -228,6 +230,7 @@ async def open_pr(db: Session, source: ImportSource, user: str) -> dict:
             path.removeprefix("deploy/values-").removesuffix(".yaml")
             for path in about["values"]
         ),
+        "built": sorted(b.app for b in about["matrix"]),
         "conflicts": found,
         "excluded": about["excluded"],
     }
@@ -303,6 +306,51 @@ async def refresh(source_id: str) -> str:
         return await _switch(db, source)
 
 
+async def _ensure_deploy_branch(
+    source: ImportSource, record: dict, apps: set[str]
+) -> None:
+    """
+    The branch the image updater writes releases to, made from the merge
+    with the image each CI-built service runs until its first release. A
+    file already there (a release, or an earlier attempt) is kept.
+
+    Raises:
+        GitHubAppError: The branch could not be read, made or written.
+    """
+    repo = source.repo_full_name
+    branch = standard_repo.DEPLOY_BRANCH
+    token = await _token(source, {"contents": "write"})
+    try:
+        head = await get_branch_head(token, repo, branch)
+    except GitHubAppError:
+        head = record["merge_sha"]
+        await create_branch(token, repo, branch, head)
+    digests = {
+        row.app_name: row.last_digest
+        for row in source.services
+        if row.kind == "service" and row.last_digest
+    }
+    present = await list_tree_paths(token, repo, head)
+    files = {
+        path: text
+        for path, text in standard_repo.image_files(
+            source.project_name,
+            set(record.get("built") or []) & apps,
+            digests,
+        ).items()
+        if path not in present
+    }
+    if files:
+        await commit_files(
+            token,
+            repo,
+            files,
+            "chore(cnp): pin the imported images until the first release",
+            parent_sha=head,
+            branch=branch,
+        )
+
+
 async def _switch(db: Session, source: ImportSource) -> str:
     """
     Point the apps whose values the merge brought at the repository. An app
@@ -335,6 +383,11 @@ async def _switch(db: Session, source: ImportSource) -> str:
         source.standard_repo = record
         db.commit()
         return FAILED
+    try:
+        await _ensure_deploy_branch(source, record, apps)
+    except GitHubAppError as exc:
+        logger.warning("Switch of %s deferred: %s", repo, exc)
+        return MERGED
     switched: set[str] = set()
 
     async def change(registry: dict, head: str) -> dict[str, str | None]:

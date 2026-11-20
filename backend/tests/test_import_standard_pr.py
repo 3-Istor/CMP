@@ -8,6 +8,7 @@ from ruamel.yaml import YAML
 
 from app.core.config import settings
 from app.models.imports import ImportRun, ImportSource
+from app.services.github_service import GitHubAppError
 from app.services.imports import (
     generate,
     rebuilds,
@@ -34,6 +35,8 @@ class GitHub:
     def __init__(self):
         self.tree: set[str] = {"README.md", "tinyx/pom.xml"}
         self.merged_tree: set[str] | None = None
+        self.deploy_tree: set[str] = set()
+        self.created: dict[str, str] = {}
         self.branches: dict[str, str] = {}
         self.commits: list[dict] = []
         self.pulls: list[dict] = []
@@ -51,22 +54,30 @@ class GitHub:
         return f"# {repo}/{path}\n", "sha"
 
     async def head(self, token, repo, branch="main"):
-        return HEAD
+        if branch == "main":
+            return HEAD
+        if branch not in self.branches:
+            raise GitHubAppError(f"no branch {branch}")
+        return self.branches[branch]
 
     async def paths(self, token, repo, sha):
+        if sha == "d" * 40:
+            return set(self.deploy_tree)
         if sha != MERGE:
             return set(self.tree)
         if self.merged_tree is not None:
             return set(self.merged_tree)
-        return self.tree | set(self.commits[-1]["files"])
+        return self.tree | set(self.commits[0]["files"])
 
     async def branch(self, token, repo, branch, sha):
+        self.created[branch] = sha
         self.branches[branch] = sha
 
     async def commit(self, token, repo, files, message, parent_sha, branch):
         self.commits.append(
             {"files": files, "parent": parent_sha, "branch": branch}
         )
+        self.branches[branch] = "d" * 40
         return "d" * 40
 
     async def open(self, token, repo, head, base, title, body):
@@ -187,7 +198,7 @@ def test_pull_request_is_committed_on_its_own_branch_off_the_head(
 
     assert github.commits[0]["parent"] == HEAD
     assert github.pulls[0]["base"] == "main"
-    assert github.branches == {github.pulls[0]["head"]: HEAD}
+    assert github.created == {github.pulls[0]["head"]: HEAD}
 
 
 def test_pull_request_token_writes_contents_pulls_and_workflows_only(
@@ -204,7 +215,7 @@ def test_pull_request_token_writes_contents_pulls_and_workflows_only(
     )
 
 
-def test_a_ci_built_service_follows_the_main_tag_of_its_ci_image(
+def test_a_ci_built_service_names_its_ci_image_but_no_release_on_main(
     world, github
 ):
     source_id = _deployed(world)
@@ -215,8 +226,33 @@ def test_a_ci_built_service_follows_the_main_tag_of_its_ci_image(
         github.commits[0]["files"]["deploy/values-user-service.yaml"]
     )
     assert values["image"] == {
-        "repository": "ghcr.io/3-istor/imports/epitweet/user-service/ci",
-        "tag": "main",
+        "repository": "ghcr.io/3-istor/imports/epitweet/user-service/ci"
+    }
+
+
+def test_ci_publishes_and_signs_on_release_tags_only(world, github):
+    source_id = _deployed(world)
+
+    _open(world, source_id)
+
+    job = _load(github.commits[0]["files"][standard_repo.CI_PATH])["jobs"][
+        "docker-build-and-push"
+    ]
+    assert job["env"]["PUBLISH"] == (
+        "${{ github.event_name == 'push' && "
+        "startsWith(github.ref, 'refs/tags/v') }}"
+    )
+
+
+def test_ci_runs_on_the_ephemeral_import_runners_only(world, github):
+    source_id = _deployed(world)
+
+    _open(world, source_id)
+
+    jobs = _load(github.commits[0]["files"][standard_repo.CI_PATH])["jobs"]
+    assert {job["runs-on"] for job in jobs.values()} == {
+        "${{ fromJSON(vars.CNP_IMPORT_RUNS_ON || "
+        '\'["self-hosted","cnp-import-ephemeral"]\') }}'
     }
 
 
@@ -413,6 +449,40 @@ def test_merge_removes_the_values_files_from_cnp_projects(world, github):
     files = world[1].commits[-1]["files"]
     assert len(files) == 11
     assert set(files.values()) == {None}
+
+
+def test_merge_pins_the_imported_image_on_the_deploy_branch(world, github):
+    source_id = _merged(world, github)
+
+    asyncio.run(standard_pr.refresh(source_id))
+
+    pins = github.commits[-1]
+    assert pins["branch"] == "cnp/deploy"
+    assert github.branches.get("cnp/deploy") == "d" * 40
+    image = _load(pins["files"]["deploy/env/prod/frontend.yaml"])["image"]
+    assert image["repository"] == "ghcr.io/3-istor/imports/epitweet/frontend"
+    assert image["tag"].startswith("imported@sha256:")
+
+
+def test_a_release_already_on_the_deploy_branch_is_kept(world, github):
+    source_id = _merged(world, github)
+    github.branches["cnp/deploy"] = "d" * 40
+    github.deploy_tree = {
+        standard_repo.IMAGE_FILE.format(app=a)
+        for a in _source(world, source_id).standard_repo["built"]
+    }
+
+    asyncio.run(standard_pr.refresh(source_id))
+
+    assert all(c["branch"] != "cnp/deploy" for c in github.commits)
+
+
+def test_the_cmp_never_commits_to_the_default_branch(world, github):
+    source_id = _merged(world, github)
+
+    asyncio.run(standard_pr.refresh(source_id))
+
+    assert all(c["branch"] != "main" for c in github.commits)
 
 
 def test_merge_stops_the_platform_rebuild(world, github):
