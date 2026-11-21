@@ -323,7 +323,7 @@ async def create_deployment(
 
 
 @router.get("/{deployment_id}", response_model=DeploymentRead)
-async def get_deployment(
+def get_deployment(
     deployment_id: int,
     token: CurrentUser,
     db: Session = Depends(get_db),
@@ -334,7 +334,7 @@ async def get_deployment(
 
 
 @router.get("/{deployment_id}/outputs")
-async def get_deployment_outputs(
+def get_deployment_outputs(
     deployment_id: int,
     token: CurrentUser,
     db: Session = Depends(get_db),
@@ -379,7 +379,7 @@ def _still_running(deployment_id: int) -> bool:
 
 
 @router.get("/{deployment_id}/logs/stream")
-async def stream_deployment_logs(
+def stream_deployment_logs(
     deployment_id: int,
     request: Request,
     token: CurrentUser,

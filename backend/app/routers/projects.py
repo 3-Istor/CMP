@@ -589,7 +589,7 @@ async def create_project(
 
 
 @router.get("/{project_name}/apps", response_model=list[DeploymentRead])
-async def list_project_apps(
+def list_project_apps(
     ctx: RequireGuest,
     db: Session = Depends(get_db),
 ) -> list[DeploymentRead]:

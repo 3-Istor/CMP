@@ -52,9 +52,14 @@ def _watch(loop: asyncio.AbstractEventLoop, loop_thread: int) -> None:
 
 def start() -> None:
     """Watch the running loop from a daemon thread."""
+    loop = asyncio.get_running_loop()
     threading.Thread(
         target=_watch,
-        args=(asyncio.get_running_loop(), threading.get_ident()),
-        name="loop-watchdog",
+        args=(loop, threading.get_ident()),
+        name=thread_name(loop),
         daemon=True,
     ).start()
+
+
+def thread_name(loop: asyncio.AbstractEventLoop) -> str:
+    return f"loop-watchdog-{id(loop)}"

@@ -74,7 +74,7 @@ def _export(db: Session, project: str, export_id: str) -> ProjectExport:
 
 
 @router.post("/{project_name}/export", status_code=202)
-async def request_export(
+def request_export(
     ctx: RequireOwner,
     request: Request,
     background_tasks: BackgroundTasks,

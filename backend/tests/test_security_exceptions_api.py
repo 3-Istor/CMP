@@ -124,7 +124,7 @@ def test_a_core_exception_without_a_reviewer_approval_is_pending(
 
 def _queue(factory, token):
     with factory() as db:
-        return asyncio.run(security.pending_exceptions(token, db))
+        return security.pending_exceptions(token, db)
 
 
 def test_pending_queue_lists_every_project_core_first(session_factory):

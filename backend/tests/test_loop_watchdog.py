@@ -32,13 +32,16 @@ def test_stays_quiet_while_the_loop_answers(monkeypatch, caplog):
     monkeypatch.setattr(loop_watchdog, "STALL_SECONDS", 0.2)
     monkeypatch.setattr(loop_watchdog, "PING_SECONDS", 0.05)
 
+    names = []
+
     async def handler():
         loop_watchdog.start()
+        names.append(loop_watchdog.thread_name(asyncio.get_running_loop()))
         await asyncio.sleep(0.5)
 
     # Act
     with caplog.at_level(logging.WARNING, logger=loop_watchdog.__name__):
         asyncio.run(handler())
 
-    # Assert
-    assert not caplog.records
+    # Assert: watchdogs of apps started by other tests may log meanwhile
+    assert not [r for r in caplog.records if r.threadName == names[0]]

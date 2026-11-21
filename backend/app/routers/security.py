@@ -791,7 +791,7 @@ async def list_exceptions(
 
 
 @router.get("/exceptions/pending", response_model=list[ExceptionRead])
-async def pending_exceptions(
+def pending_exceptions(
     token: CurrentUser, db: Session = Depends(get_db)
 ) -> list[ExceptionRead]:
     """Every project's exceptions waiting for a reviewer, critical first."""
