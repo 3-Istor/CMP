@@ -151,21 +151,11 @@ HYPERVISORS_TTL = 15
 _hypervisors_cache: tuple[float, list] | None = (
     None  # (monotonic time, hypervisors)
 )
+_hypervisors_refresh: asyncio.Task | None = None
 
 
-async def get_global_health() -> GlobalHealthResponse:
-    """
-    Get health status of the base infrastructure (OpenStack hypervisors).
-    The listing (a Keystone login each time) is cached for HYPERVISORS_TTL seconds.
-    """
+async def _refresh_hypervisors() -> list:
     global _hypervisors_cache
-    if (
-        _hypervisors_cache
-        and time.monotonic() - _hypervisors_cache[0] < HYPERVISORS_TTL
-    ):
-        return GlobalHealthResponse(
-            openstack_hypervisors=list(_hypervisors_cache[1])
-        )
     try:
         hypervisors = await asyncio.wait_for(
             _get_openstack_hypervisors(), timeout=30.0
@@ -177,7 +167,28 @@ async def get_global_health() -> GlobalHealthResponse:
         logger.error("Failed to get hypervisor status: %s", exc)
         hypervisors = []
     _hypervisors_cache = (time.monotonic(), hypervisors)
-    return GlobalHealthResponse(openstack_hypervisors=list(hypervisors))
+    return hypervisors
+
+
+async def get_global_health() -> GlobalHealthResponse:
+    """
+    Get health status of the base infrastructure (OpenStack hypervisors).
+
+    The listing costs a Keystone login, so it is cached. Once older than
+    HYPERVISORS_TTL the cached listing is still served while one background
+    refresh replaces it: the home page polls this every 15 s.
+    """
+    global _hypervisors_refresh
+    if _hypervisors_cache is None:
+        return GlobalHealthResponse(
+            openstack_hypervisors=list(await _refresh_hypervisors())
+        )
+    stale = time.monotonic() - _hypervisors_cache[0] >= HYPERVISORS_TTL
+    if stale and (_hypervisors_refresh is None or _hypervisors_refresh.done()):
+        _hypervisors_refresh = asyncio.create_task(_refresh_hypervisors())
+    return GlobalHealthResponse(
+        openstack_hypervisors=list(_hypervisors_cache[1])
+    )
 
 
 async def _get_openstack_hypervisors() -> list[HypervisorStatus]:

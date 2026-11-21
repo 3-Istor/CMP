@@ -24,14 +24,14 @@ class TestCatalogSync:
     def test_refuses_a_user_who_is_not_a_platform_admin(self):
         with mock.patch.object(catalog, "get_repository") as repository:
             with pytest.raises(HTTPException) as exc:
-                asyncio.run(catalog.sync_templates(MEMBER))
+                catalog.sync_templates(MEMBER)
 
         assert exc.value.status_code == 403
         repository.return_value.force_sync.assert_not_called()
 
     def test_syncs_for_a_platform_admin(self):
         with mock.patch.object(catalog, "get_repository") as repository:
-            asyncio.run(catalog.sync_templates(ADMIN))
+            catalog.sync_templates(ADMIN)
 
         repository.return_value.force_sync.assert_called_once()
 

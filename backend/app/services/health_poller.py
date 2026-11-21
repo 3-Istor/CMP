@@ -47,7 +47,10 @@ async def check_app_health() -> None:
             .filter(
                 Deployment.status.in_(
                     [DeploymentStatus.RUNNING, DeploymentStatus.DEGRADED]
-                )
+                ),
+                # This probe reads AWS ASGs and OpenStack VMs: a Kubernetes
+                # app has neither, and each probe costs a Keystone login.
+                Deployment.provider_type != ProviderType.KUBERNETES,
             )
             .all()
         )

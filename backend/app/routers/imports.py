@@ -161,7 +161,7 @@ async def create_import(
 
 
 @router.get("/{project_name}/imports")
-async def list_imports(ctx: RequireMember, db: DbSession):
+def list_imports(ctx: RequireMember, db: DbSession):
     _enabled()
     service.expire_stale(project=ctx.project_name)
     sources = (
@@ -225,7 +225,7 @@ async def estimate_import_run(
 
 
 @router.get("/{project_name}/imports/recommendations")
-async def list_recommendations(
+def list_recommendations(
     ctx: RequireMember,
     db: DbSession,
     app: Annotated[str | None, Query(max_length=63)] = None,
@@ -242,7 +242,7 @@ RecommendationId = Annotated[str, FastApiPath(max_length=200)]
     "/{project_name}/imports/recommendations/{recommendation_id}/dismiss",
     status_code=204,
 )
-async def dismiss_recommendation(
+def dismiss_recommendation(
     recommendation_id: RecommendationId,
     ctx: RequireAdmin,
     db: DbSession,
@@ -261,7 +261,7 @@ async def dismiss_recommendation(
     "/{project_name}/imports/recommendations/{recommendation_id}/dismiss",
     status_code=204,
 )
-async def restore_recommendation(
+def restore_recommendation(
     recommendation_id: RecommendationId,
     ctx: RequireAdmin,
     db: DbSession,
@@ -384,7 +384,7 @@ async def open_standard_pr(
 
 
 @router.put("/{project_name}/imports/{source_id}/settings")
-async def update_import_settings(
+def update_import_settings(
     source_id: str,
     body: SourceSettings,
     ctx: RequireAdmin,

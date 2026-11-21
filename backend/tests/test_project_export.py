@@ -653,13 +653,11 @@ def test_an_export_interrupted_by_a_restart_is_marked_failed(factory):
 def _request_export(factory, token):
     with factory() as session:
         ctx = assert_project_role(session, token, "alpha", ProjectRole.OWNER)
-        return asyncio.run(
-            export_router.request_export(
-                ctx,
-                _request(),
-                BackgroundTasks(),
-                session,
-            )
+        return export_router.request_export(
+            ctx,
+            _request(),
+            BackgroundTasks(),
+            session,
         )
 
 

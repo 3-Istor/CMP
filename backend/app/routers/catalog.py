@@ -14,13 +14,13 @@ router = APIRouter(
 
 
 @router.get("/", response_model=list[CatalogTemplate])
-async def list_templates() -> list[CatalogTemplate]:
+def list_templates() -> list[CatalogTemplate]:
     """Return all available app templates."""
     return get_all_templates()
 
 
 @router.get("/{template_id}", response_model=CatalogTemplate)
-async def get_template(template_id: str) -> CatalogTemplate:
+def get_template(template_id: str) -> CatalogTemplate:
     template = get_template_by_id(template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -28,7 +28,7 @@ async def get_template(template_id: str) -> CatalogTemplate:
 
 
 @router.post("/sync")
-async def sync_templates(token: dict = Depends(get_current_user)):
+def sync_templates(token: dict = Depends(get_current_user)):
     """Force sync the template repository from Git (platform admins)."""
     if not is_cnp_admin(token):
         raise HTTPException(
