@@ -14,22 +14,36 @@ import {
 } from "./api";
 import { can, canAsPlatform, type Capability } from "./permissions";
 import { usePlatformRoles } from "./usePlatformRoles";
+import { pollWhileVisible } from "./visiblePolling";
 
 /** Run `read` now, then whenever its answer reaches `intervalMs` of age (a newer
- * answer another poller fetched is reused): shown data never outlives the interval. */
+ * answer another poller fetched is reused): shown data never outlives the interval.
+ * A read falling due while the tab is hidden waits for the tab to show again. */
 export function pollDue(read: () => Promise<unknown>, intervalMs: number) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
+  let missed = false;
   const run = async () => {
     const data = await read();
     if (stopped || intervalMs <= 0) return;
     const at = answerStamp(data) ?? Date.now();
-    timer = setTimeout(run, Math.max(0, at + intervalMs - Date.now()));
+    timer = setTimeout(due, Math.max(0, at + intervalMs - Date.now()));
   };
+  const due = () => {
+    if (document.visibilityState === "visible") void run();
+    else missed = true;
+  };
+  const onVisibility = () => {
+    if (!missed || document.visibilityState !== "visible") return;
+    missed = false;
+    void run();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
   void run();
   return () => {
     stopped = true;
     clearTimeout(timer);
+    document.removeEventListener("visibilitychange", onVisibility);
   };
 }
 
@@ -104,8 +118,7 @@ export function useGlobalHealth(intervalMs = 15000) {
   useEffect(() => {
     refresh();
     if (intervalMs <= 0) return;
-    const timer = setInterval(refresh, intervalMs);
-    return () => clearInterval(timer);
+    return pollWhileVisible(refresh, intervalMs);
   }, [refresh, intervalMs]);
 
   return { health, loading, error, refresh };
@@ -639,10 +652,10 @@ export function useProjectsHealth(intervalMs = 30_000) {
         // Cards are a convenience: a failed refresh keeps the last value.
         .catch(() => {});
     load();
-    const timer = setInterval(load, intervalMs);
+    const stop = pollWhileVisible(load, intervalMs);
     return () => {
       alive = false;
-      clearInterval(timer);
+      stop();
     };
   }, [intervalMs]);
 
@@ -699,13 +712,13 @@ export function useRelease(deploymentId: number) {
 
   useEffect(() => {
     const controller = new AbortController();
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let stopPolling: (() => void) | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let failures = 0;
 
     const startPolling = () => {
       setLive("polling");
-      pollTimer = setInterval(refresh, RELEASE_POLL_MS);
+      stopPolling = pollWhileVisible(refresh, RELEASE_POLL_MS);
     };
 
     const connect = async () => {
@@ -739,7 +752,7 @@ export function useRelease(deploymentId: number) {
     connect();
     return () => {
       controller.abort();
-      if (pollTimer) clearInterval(pollTimer);
+      stopPolling?.();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   }, [deploymentId, refresh]);

@@ -2,6 +2,7 @@
 
 import { ApiError } from "@/lib/api";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { pollWhileVisible } from "./visiblePolling";
 
 export interface CardData<T> {
   data: T | null;
@@ -70,8 +71,7 @@ export function useCardData<T>(
 
   useEffect(() => {
     if (!enabled || intervalMs <= 0) return;
-    const timer = setInterval(() => void load(), intervalMs);
-    return () => clearInterval(timer);
+    return pollWhileVisible(() => void load(), intervalMs);
   }, [enabled, intervalMs, load]);
 
   const retry = useCallback(() => {

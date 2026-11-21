@@ -42,6 +42,7 @@ import type {
 } from "@/types/accessReview";
 
 import { LastLogin, ReviewTable } from "./ReviewItems";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const POLL_MS = 30_000;
 
@@ -83,8 +84,7 @@ export function AccessReviewsPanel() {
 
   useEffect(() => {
     load();
-    const id = window.setInterval(load, POLL_MS);
-    return () => window.clearInterval(id);
+    return pollWhileVisible(load, POLL_MS);
   }, [load]);
 
   useEffect(loadDetail, [loadDetail]);

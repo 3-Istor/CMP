@@ -15,6 +15,7 @@ import { importRefusal } from "@/lib/importRefusal";
 import type { ImportSourceView } from "@/types";
 import { RebuildPendingNotice } from "./RebuildPendingNotice";
 import { StandardRepoNotice } from "./StandardRepoNotice";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
 const TD = "px-3 py-2 align-middle";
@@ -52,8 +53,7 @@ export function ImportsList({
   const busy = sources.some((s) => ACTIVE.includes(s.runs.at(-1)?.status ?? ""));
   useEffect(() => {
     if (!busy) return;
-    const timer = setInterval(refresh, 10_000);
-    return () => clearInterval(timer);
+    return pollWhileVisible(refresh, 10_000);
   }, [busy, refresh]);
 
   if (sources.length === 0) return null;
