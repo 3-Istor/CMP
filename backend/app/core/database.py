@@ -9,6 +9,10 @@ engine = create_engine(
     settings.DATABASE_URL,
     # SQLite only: lets FastAPI's threadpool share connections.
     connect_args={"check_same_thread": False} if _is_sqlite else {},
+    # As many connections as FastAPI's 40 threadpool workers: with the
+    # default 5 + 10, requests queued 30 s for a connection under load.
+    pool_size=10,
+    max_overflow=30,
 )
 
 # Enable WAL mode for SQLite to prevent database locks from freezing the backend

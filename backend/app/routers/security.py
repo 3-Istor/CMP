@@ -417,7 +417,14 @@ async def get_overview(
 ) -> list[ProjectOverview]:
     """Grade of every project the caller can see, for lists and badges."""
     if reads_platform_security(token):
-        projects = sorted(
+        return await run_in_threadpool(_overview, db, None)
+    names = await run_in_threadpool(_user_project_names, token)
+    return await run_in_threadpool(_overview, db, names)
+
+
+def _overview(db: Session, names: list[str] | None) -> list[ProjectOverview]:
+    if names is None:
+        names = list(
             {
                 d.project_id
                 for d in db.query(Deployment).filter(
@@ -426,10 +433,8 @@ async def get_overview(
                 )
             }
         )
-    else:
-        projects = sorted(await run_in_threadpool(_user_project_names, token))
     result = []
-    for project in projects:
+    for project in sorted(names):
         s = _summary(db, project, None, "developer")
         result.append(
             ProjectOverview(
@@ -452,7 +457,7 @@ async def get_summary(
     db: Session = Depends(get_db),
 ) -> Summary:
     await _require_member(token, project, view)
-    return _summary(db, project, app, view)
+    return await run_in_threadpool(_summary, db, project, app, view)
 
 
 @router.get("/findings", response_model=list[FindingRead])
@@ -467,6 +472,20 @@ async def get_findings(
     db: Session = Depends(get_db),
 ) -> list[FindingRead]:
     await _require_member(token, project, view)
+    return await run_in_threadpool(
+        _findings, db, project, app, view, category, state, include_info
+    )
+
+
+def _findings(
+    db: Session,
+    project: str,
+    app: str | None,
+    view: View,
+    category: Category | None,
+    state: str,
+    include_info: bool,
+) -> list[FindingRead]:
     today = utcnow().date()
     items = store.for_audience(
         store.merged_findings(
@@ -502,6 +521,9 @@ async def get_trend(
     db: Session = Depends(get_db),
 ) -> list[TrendPoint]:
     await _require_member(token, project, "developer")
+    snapshots = await run_in_threadpool(
+        store.snapshots, db, project, app, days, utcnow().date()
+    )
     return [
         TrendPoint(
             day=s.day,
@@ -512,7 +534,7 @@ async def get_trend(
             recommended=s.recommended,
             new_major=s.new_major,
         )
-        for s in store.snapshots(db, project, app, days, utcnow().date())
+        for s in snapshots
     ]
 
 

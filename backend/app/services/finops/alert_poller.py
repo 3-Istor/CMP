@@ -331,16 +331,23 @@ async def _budgets_then_forecasts() -> None:
     await check_forecasts()
 
 
+async def _one_pass() -> None:
+    await asyncio.gather(
+        _budgets_then_forecasts(),
+        check_spikes(),
+        return_exceptions=True,
+    )
+
+
 async def finops_alert_loop() -> None:
     """Main FinOps alert loop (budgets + spikes) every POLL_INTERVAL_SECONDS."""
     logger.info("FinOps alert poller started")
     while True:
         try:
-            await asyncio.gather(
-                _budgets_then_forecasts(),
-                check_spikes(),
-                return_exceptions=True,
-            )
+            # The checks query the cost store and OpenCost synchronously; on
+            # the request loop one pass froze every request until liveness
+            # killed the pod. Their own loop in a worker thread keeps it off.
+            await asyncio.to_thread(asyncio.run, _one_pass())
         except Exception as exc:
             logger.error("Error in FinOps alert loop: %s", exc, exc_info=True)
         await asyncio.sleep(POLL_INTERVAL_SECONDS)

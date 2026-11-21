@@ -526,8 +526,11 @@ async def security_collector_loop() -> None:
         cluster = has_cluster and started - last_cluster >= CLUSTER_INTERVAL
         github = started - last_github >= GITHUB_INTERVAL
         try:
+            # collect_once reads and writes the store synchronously between
+            # its awaits: its own loop in a worker thread keeps that off the
+            # request loop.
             await cluster_states()
-            await collect_once(cluster, github)
+            await asyncio.to_thread(asyncio.run, collect_once(cluster, github))
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("Security collector error: %s", exc, exc_info=True)
         if cluster:
