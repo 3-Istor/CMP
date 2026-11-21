@@ -635,7 +635,7 @@ export function LogsView({
           </p>
         ))}
 
-      {/* On Loki a typed phrase replaces the trace id as the search. */}
+      {/* On the project logs a typed phrase replaces the trace id as the search. */}
       {trace && (obs || !filters.search) && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
           <span>{t("logs.traceFilter", { id: trace.slice(0, 12) })}</span>

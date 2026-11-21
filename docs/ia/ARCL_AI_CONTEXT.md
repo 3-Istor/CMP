@@ -23,7 +23,7 @@ an AI assistant connected to the CMP's MCP server.
 | Releases | git tag `vX.Y.Z` on the app repo, Argo Rollouts canary when configured |
 | Identity | Keycloak `auth.3istor.com`, realm `3istor` |
 | Secrets | Vault + Vault Secrets Operator |
-| Observability | VictoriaMetrics, Loki, Grafana per project |
+| Observability | VictoriaMetrics, VictoriaLogs, VictoriaTraces, Grafana per project |
 | Docs | `3-Istor/cnp-docs` (https://3-istor.github.io/cnp-docs/) |
 
 ## Invariants

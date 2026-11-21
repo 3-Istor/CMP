@@ -1,11 +1,11 @@
 """
 Restore drill, step 1: export a project from a fake platform.
 
-The CMP database (SQLite), the cluster listing, Vault, Keycloak and Loki are
-fakes. The database dump is the real dump Job, run in a kind cluster through
-``kubectl proxy`` against a TLS PostgreSQL there; the bucket copy (S3), the
-git bundle and the export bucket (Garage) are the real adapters against
-throwaway containers. Prints {"url", "sha256", "size"} of the archive as
+The CMP database (SQLite), the cluster listing, Vault, Keycloak and
+VictoriaLogs are fakes. The database dump is the real dump Job, run in a kind
+cluster through ``kubectl proxy`` against a TLS PostgreSQL there; the bucket
+copy (S3), the git bundle and the export bucket (Garage) are the real
+adapters against throwaway containers. Prints {"url", "sha256", "size"} of the archive as
 JSON.
 
     python -m tests.export_drill.make_fixture --work DIR

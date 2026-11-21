@@ -749,10 +749,6 @@ async def project_logs(
 ) -> list[LogLine]:
     """The project's pod logs, newest first; every member may read them."""
     await _role(token, project, app_logs=True)
-    if search and "`" in search:
-        raise HTTPException(
-            status_code=400, detail="Backticks are not allowed."
-        )
     start, end = _window(since, until, days=1)
     try:
         lines = await sources.app_logs(
@@ -766,7 +762,7 @@ async def project_logs(
             end,
             limit,
         )
-    except sources.LokiUnavailableError as exc:
+    except sources.LogsUnavailableError as exc:
         raise HTTPException(
             status_code=502, detail="Logs are unavailable."
         ) from exc
@@ -785,7 +781,7 @@ async def log_targets(token: CurrentUser, project: str) -> LogTargets:
                 for label in ("namespace", "pod", "container")
             )
         )
-    except sources.LokiUnavailableError as exc:
+    except sources.LogsUnavailableError as exc:
         raise HTTPException(
             status_code=502, detail="Logs are unavailable."
         ) from exc
@@ -883,37 +879,21 @@ async def log_volume(
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=hours)
     step = max(60, hours * 60)
-    selector = sources.volume_selector(project, _label(namespace, "namespace"))
     try:
-        counts, sizes = await asyncio.gather(
-            sources.loki_matrix(
-                f"sum by (namespace) (count_over_time({selector}[{step}s]))",
-                start,
-                end,
-                step,
-                tenant=sources.project_tenants(project),
-            ),
-            sources.loki_matrix(
-                f"sum by (namespace) (bytes_over_time({selector}[{step}s]))",
-                start,
-                end,
-                step,
-                tenant=sources.project_tenants(project),
-            ),
+        series_found = await sources.log_volume(
+            project, _label(namespace, "namespace"), start, end, step
         )
-    except sources.LokiUnavailableError as exc:
+    except sources.LogsUnavailableError as exc:
         raise HTTPException(
             status_code=502, detail="Logs are unavailable."
         ) from exc
     by_ns: dict[str, dict[datetime, list[float]]] = defaultdict(
         lambda: defaultdict(lambda: [0.0, 0.0])
     )
-    for metric, values in counts:
+    for metric, values in series_found:
+        column = 0 if metric.get("__name__") == "lines" else 1
         for when, v in values:
-            by_ns[metric.get("namespace", "")][when][0] = v
-    for metric, values in sizes:
-        for when, v in values:
-            by_ns[metric.get("namespace", "")][when][1] = v
+            by_ns[metric.get("namespace", "")][when][column] = v
     series = []
     for ns, points in by_ns.items():
         ordered = sorted(points.items())
