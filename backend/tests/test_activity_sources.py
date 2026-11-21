@@ -2,7 +2,9 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from unittest import mock
+from urllib.parse import parse_qsl
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -172,18 +174,24 @@ def test_keycloak_login_error_is_a_failure_of_the_project_realm():
     )
 
 
-def test_logs_query_is_pinned_to_the_project():
+def test_logs_query_selects_the_project_streams_first():
     query = src.logs_query("shop", "shop-web", None, None, "timeout", "error")
 
     assert query.startswith(
-        '{project="shop", namespace="shop-web"} |= `timeout`'
+        '{project="shop", namespace="shop-web"} ~"timeout"'
     )
+
+
+def test_a_search_is_matched_as_literal_text():
+    query = src.logs_query("shop", None, None, None, 'a.b"} or *', None)
+
+    assert query.endswith(r'~"a\\.b\"\\} or \\*"')
 
 
 def test_collector_resumes_after_a_full_page(session_factory):
     calls = []
 
-    async def fake_lines(query, start, end, limit, direction="backward"):
+    async def fake_lines(query, start, end, limit, oldest_first=False):
         calls.append((start, end))
         if len(calls) == 1:
             return [
@@ -199,7 +207,7 @@ def test_collector_resumes_after_a_full_page(session_factory):
     start = datetime.now(timezone.utc) - timedelta(minutes=30)
     with (
         mock.patch.object(collector, "SessionLocal", session_factory),
-        mock.patch.object(src, "loki_lines", fake_lines),
+        mock.patch.object(src, "log_lines", fake_lines),
         mock.patch.object(collector, "PAGE", 3),
         mock.patch.object(collector, "_cursor", lambda s: start),
     ):
@@ -342,16 +350,6 @@ def test_invalid_project_names_are_refused(client_for):
     assert response.status_code == 400
 
 
-def test_search_cannot_break_out_of_the_query(client_for):
-    client = client_for("admin", [])
-
-    response = client.get(
-        "/api/activity/logs", params={"project": "shop", "search": "a` or `b"}
-    )
-
-    assert response.status_code == 400
-
-
 def flow_line(direction="INGRESS", port=8000) -> str:
     return json.dumps(
         {
@@ -447,11 +445,16 @@ def test_log_volume_sums_each_namespace_and_finds_the_peak(client_for):
     t1 = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
     t2 = t1 + timedelta(hours=1)
 
-    async def matrix(query, start, end, step, tenant=None):
-        value = 600.0 if "count_over_time" in query else 6000.0
-        return [({"namespace": "shop-web"}, [(t1, value), (t2, value / 2)])]
+    async def volume(project, namespace, start, end, step):
+        return [
+            (
+                {"__name__": name, "namespace": "shop-web"},
+                [(t1, value), (t2, value / 2)],
+            )
+            for name, value in (("lines", 600.0), ("bytes", 6000.0))
+        ]
 
-    with mock.patch.object(src, "loki_matrix", matrix):
+    with mock.patch.object(src, "log_volume", volume):
         body = client.get(
             "/api/activity/logs/volume?project=shop&hours=24"
         ).json()
@@ -479,22 +482,20 @@ def test_log_volume_refuses_a_foreign_label_value(client_for):
     assert response.status_code == 400
 
 
-def test_project_logs_are_read_from_the_project_tenant_and_the_shared_one(
-    client_for,
-):
+def test_project_logs_are_read_from_the_project_streams_only(client_for):
     client = client_for("member", [])
     seen = {}
 
     async def lines(
-        query, start, end, limit, direction="backward", tenant=None
+        query, start, end, limit, oldest_first=False, streams=None
     ):
-        seen["tenant"] = tenant
+        seen["streams"] = streams
         return []
 
-    with mock.patch.object(src, "loki_lines", lines):
+    with mock.patch.object(src, "log_lines", lines):
         client.get("/api/activity/logs?project=shop")
 
-    assert seen["tenant"] == "shop|default"
+    assert seen["streams"] == '{project="shop"}'
 
 
 def test_project_admins_are_grafana_editors_not_admins():
@@ -546,3 +547,75 @@ def test_namespace_projects_adds_cloud_projects_from_db(session_factory):
         "shop-api": "shop",
         "shop-api-stg": "shop",
     }
+
+
+@pytest.fixture
+def vlogs(monkeypatch):
+    sent = []
+
+    def serve(answer):
+        def respond(request):
+            sent.append(dict(parse_qsl(request.content.decode())))
+            return answer
+
+        monkeypatch.setattr(src.settings, "OBS_VLOGS_URL", "http://vl.test")
+        monkeypatch.setattr(
+            src,
+            "_client",
+            lambda: httpx.AsyncClient(
+                transport=httpx.MockTransport(respond),
+                base_url="http://vl.test",
+            ),
+        )
+        return sent
+
+    return serve
+
+
+def test_log_lines_come_newest_first_with_their_stream_fields(vlogs):
+    rows = [
+        {"_time": "2026-10-10T12:00:00.5Z", "_msg": "old", "pod": "p"},
+        {"_time": "2026-10-10T12:00:01.123456789Z", "_msg": "new", "pod": "p"},
+    ]
+    vlogs(httpx.Response(200, text="\n".join(json.dumps(r) for r in rows)))
+
+    lines = asyncio.run(
+        src.log_lines("*", NOW, NOW + timedelta(hours=1), 10, True)
+    )
+
+    assert [(line, labels) for _, labels, line in lines] == [
+        ("new", {"pod": "p"}),
+        ("old", {"pod": "p"}),
+    ]
+
+
+def test_log_lines_reads_the_half_open_window_oldest_first(vlogs):
+    sent = vlogs(httpx.Response(200, text=""))
+
+    asyncio.run(src.log_lines("*", NOW, NOW + timedelta(hours=1), 10, True))
+
+    assert sent[0]["query"].startswith(
+        "_time:[2026-10-10T12:00:00.000000Z, 2026-10-10T13:00:00.000000Z) *"
+        " | sort by (_time) | limit 10"
+    )
+
+
+def test_log_volume_is_pinned_to_the_project_streams(vlogs):
+    sent = vlogs(
+        httpx.Response(200, json={"data": {"result": []}, "status": "ok"})
+    )
+
+    asyncio.run(
+        src.log_volume("shop", None, NOW, NOW + timedelta(hours=1), 60)
+    )
+
+    assert sent[0]["extra_stream_filters"] == '{project="shop"}'
+
+
+def test_an_unreachable_store_is_reported_as_unavailable(vlogs):
+    vlogs(httpx.Response(502, text="bad gateway"))
+
+    with pytest.raises(src.LogsUnavailableError):
+        asyncio.run(
+            src.log_label_values("shop", "pod", NOW, NOW + timedelta(hours=1))
+        )

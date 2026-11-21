@@ -8,8 +8,6 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from app.core.config import settings
-
 
 @dataclass(frozen=True)
 class Param:
@@ -51,25 +49,17 @@ def namespace_matcher(namespaces: list[str]) -> str:
     return 'namespace=~"' + "|".join(names) + '"'
 
 
-# Per namespace log line counters: Alloy's (Loki) or the VictoriaLogs
-# recording rules (one sample a minute, so summed, not increased).
+# Per namespace log line counts, from the VictoriaLogs recording rules: one
+# sample a minute, so summed, not increased.
 _LOG_COUNTERS = {
-    "loki": {
-        "lines": "loki_process_custom_log_lines_total",
-        "error_lines": "loki_process_custom_log_error_lines_total",
-    },
-    "vl": {
-        "lines": "cnp_log_lines:count1m",
-        "error_lines": "cnp_log_error_lines:count1m",
-    },
+    "lines": "cnp_log_lines:count1m",
+    "error_lines": "cnp_log_error_lines:count1m",
 }
 
 
 def _log_count(kind: str, ns: str, window: str) -> str:
-    backend = "vl" if settings.LOGS_BACKEND == "vl" else "loki"
-    metric = _LOG_COUNTERS[backend][kind]
-    rollup = "sum_over_time" if backend == "vl" else "increase"
-    return f"sum by (namespace) ({rollup}({metric}{{{ns}}}[{window}]))"
+    metric = _LOG_COUNTERS[kind]
+    return f"sum by (namespace) (sum_over_time({metric}{{{ns}}}[{window}]))"
 
 
 CATALOG: tuple[AlertTemplate, ...] = (

@@ -475,8 +475,8 @@ async def collect_logs(
                 count += 1
     bundle.add_file(
         rel,
-        item_type="loki.logs",
-        source=f"loki:{project}",
+        item_type="victorialogs.logs",
+        source=f"victorialogs:{project}",
         media_type=fmt.JSONL,
         metadata={
             "namespaces": namespaces,

@@ -131,14 +131,10 @@ async def get_app_logs(
     q: Annotated[str | None, Query(max_length=200)] = None,
     db: Session = Depends(get_db),
 ) -> list[AppLogLine]:
-    """Newest first. Read from the project's own Loki tenant only."""
+    """Newest first. Read from the project's own log streams only."""
     _, scope = _kubernetes_app(db, token, deployment_id)
     if component and component not in scope.components:
         raise HTTPException(status_code=400, detail="Unknown component.")
-    if q and "`" in q:
-        raise HTTPException(
-            status_code=400, detail="Backticks are not allowed."
-        )
     try:
         lines = await overview.app_logs(
             scope,
@@ -149,7 +145,7 @@ async def get_app_logs(
             limit,
             datetime.now(timezone.utc),
         )
-    except sources.LokiUnavailableError as exc:
+    except sources.LogsUnavailableError as exc:
         raise HTTPException(
             status_code=502, detail="Logs are unavailable."
         ) from exc

@@ -29,10 +29,10 @@ from app.services.project_export.sources import (
     JobDumper,
     KeycloakIdentityReader,
     KubeClusterReader,
-    LokiLogReader,
     S3BucketReader,
     S3ExportStore,
     VaultSecretReader,
+    VictoriaLogsReader,
     export_store_configured,
     obc_buckets,
 )
@@ -61,7 +61,7 @@ def platform_sources(
         buckets=S3BucketReader(obc_buckets(cloud)),
         secrets=VaultSecretReader(),
         identity=KeycloakIdentityReader(),
-        logs=LokiLogReader(),
+        logs=VictoriaLogsReader(),
     )
 
 
@@ -142,7 +142,7 @@ async def build(
         collectors.collect_identity(project, sources.identity, bundle),
     )
     await step(
-        "loki",
+        "logs",
         collectors.collect_logs(
             project,
             namespaces,

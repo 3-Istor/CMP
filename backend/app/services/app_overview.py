@@ -26,13 +26,19 @@ RATE_RANGE = "5m"
 EVENT_KINDS = {"Pod", "ReplicaSet", "Rollout", "Deployment"}
 _NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _LEVEL_WORDS = (
-    ("error", r"\b(error|err|fatal|panic|exception|critical)\b"),
-    ("warn", r"\b(warn|warning)\b"),
-    ("info", r"\binfo\b"),
-    ("debug", r"\b(debug|trace)\b"),
+    ("error", "error|err|fatal|panic|exception|critical"),
+    ("warn", "warn|warning"),
+    ("info", "info"),
+    ("debug", "debug|trace"),
 )
-LEVEL_PATTERNS = {name: f"(?i){regex}" for name, regex in _LEVEL_WORDS}
-_LEVEL_RES = [(n, re.compile(r, re.IGNORECASE)) for n, r in _LEVEL_WORDS]
+_LEVEL_RES = [
+    (name, re.compile(rf"\b({words})\b", re.IGNORECASE))
+    for name, words in _LEVEL_WORDS
+]
+_FIELD_RES = [
+    (name, re.compile(f"^({words})$", re.IGNORECASE))
+    for name, words in _LEVEL_WORDS
+]
 
 
 class MetricsUnavailableError(Exception):
@@ -204,12 +210,22 @@ async def app_metrics(
 # ── Logs ─────────────────────────────────────────────────────────────────────
 
 
-def level_of(line: str) -> str | None:
+def level_of(line: str, field: str | None = None) -> str | None:
+    """From the JSON line's level field when it has one, else its words."""
+    if field:
+        return next((n for n, p in _FIELD_RES if p.match(field)), None)
     head = line[:200]
     for name, pattern in _LEVEL_RES:
         if pattern.search(head):
             return name
     return None
+
+
+def level_filter(level: str) -> str:
+    words = dict(_LEVEL_WORDS)[level]
+    by_words = sources.quoted(rf"(?i)\b({words})\b")
+    by_field = sources.quoted(f"(?i)^({words})$")
+    return f"(_msg:~{by_words} or json.level:~{by_field})"
 
 
 def component_of(scope: Scope, pod: str) -> str | None:
@@ -221,11 +237,12 @@ def component_of(scope: Scope, pod: str) -> str | None:
 
 def logs_selector(scope: Scope, component: str | None) -> str:
     selector = [
-        f'project="{scope.project}"',
-        f'namespace="{scope.namespace}"',
+        f"project={sources.quoted(scope.project)}",
+        f"namespace={sources.quoted(scope.namespace)}",
     ]
     if component:
-        selector.append(f'pod=~"{_fullname(scope, component)}-.+"')
+        pods = f"{_fullname(scope, component)}-.+"
+        selector.append(f"pod=~{sources.quoted(pods)}")
     return "{" + ", ".join(selector) + "}"
 
 
@@ -234,9 +251,9 @@ def logs_query(
 ) -> str:
     query = logs_selector(scope, component)
     if text:
-        query += f" |= `{text}`"
+        query += f" {sources.contains(text)}"
     if level:
-        query += f" |~ `{LEVEL_PATTERNS[level]}`"
+        query += f" {level_filter(level)}"
     return query
 
 
@@ -249,19 +266,20 @@ async def app_logs(
     limit: int,
     now: datetime,
 ) -> list[dict[str, Any]]:
-    lines = await sources.loki_lines(
+    lines = await sources.log_lines(
         logs_query(scope, component, level, text),
         now - timedelta(seconds=LOG_WINDOWS[since]),
         now,
         limit,
-        tenant=sources.project_tenants(scope.project),
+        streams=sources.project_streams(scope.project),
+        fields=("json.level",),
     )
     return [
         {
             "time": when,
             "component": component_of(scope, labels.get("pod", "")),
             "pod": labels.get("pod", ""),
-            "level": level_of(line),
+            "level": level_of(line, labels.get("json.level")),
             "line": line,
         }
         for when, labels, line in lines
