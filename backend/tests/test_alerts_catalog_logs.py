@@ -1,5 +1,3 @@
-from unittest import mock
-
 import pytest
 
 from app.services.alerts_catalog import BY_ID, namespace_matcher
@@ -25,15 +23,6 @@ NS = namespace_matcher(["shop-web"])
 def test_victorialogs_counters_are_summed_per_minute_samples(alert, expected):
     template = BY_ID[alert]
 
-    with mock.patch("app.services.alerts_catalog.settings.LOGS_BACKEND", "vl"):
-        expr = template.expr(NS, template.defaults())
-
-    assert expr == expected
-
-
-def test_loki_stays_the_default_until_the_switch():
-    template = BY_ID["error_logs"]
-
     expr = template.expr(NS, template.defaults())
 
-    assert "increase(loki_process_custom_log_error_lines_total" in expr
+    assert expr == expected

@@ -39,7 +39,6 @@ EDITABLE_PREFIXES: tuple[tuple[str, ...], ...] = (
     ("startupProbe",),
     ("podAnnotations",),
     ("podLabels",),
-    ("logRetention",),
     ("ingress", "enabled"),
     ("ingress", "sso_protected"),
     ("ingress", "allowedGroups"),

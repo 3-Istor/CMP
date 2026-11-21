@@ -3,9 +3,10 @@ Sources of the Activity tab.
 
 The audit sources (Kubernetes API, Vault, Keycloak, Argo CD syncs) are read
 across all projects by the activity collector, a minute at a time, and kept in
-the CMP database: querying Loki over days on every page load took longer than
-the gateway's timeout. Pod logs are still read live, one project at a time.
-Every LogQL query is built here; the browser never sends one.
+the CMP database: querying the log store over days on every page load took
+longer than the gateway's timeout. Pod logs are still read live from
+VictoriaLogs, one project at a time. Every LogsQL query is built here; the
+browser never sends one.
 """
 
 import hashlib
@@ -32,24 +33,47 @@ _RBAC = "rbac.authorization.k8s.io"
 # The operator syncing VaultSecrets reads project secrets all day.
 _VAULT_MACHINES = ("kubernetes-vault-secrets-operator",)
 
+_REGEX_SPECIAL = set(r"\.+*?()|[]{}^$")
+
+
+def quoted(text: str) -> str:
+    """A LogsQL quoted string; JSON escaping is LogsQL's string escaping."""
+    return json.dumps(text, ensure_ascii=False)
+
+
+def contains(text: str) -> str:
+    """A filter on _msg containing ``text`` as is, like LogQL's ``|=``."""
+    return "~" + quoted(
+        "".join(f"\\{c}" if c in _REGEX_SPECIAL else c for c in text)
+    )
+
+
+# Every audit source keeps its raw line in _msg (Fluent Bit's "log" field).
 KUBERNETES_QUERY = (
-    '{job="k8s-audit"} '
-    '| json user="user.username", sub="objectRef.subresource" '
+    '{job="k8s-audit"}'
+    " | unpack_json fields (user.username, objectRef.subresource)"
     # system:admin is the admin kubeconfig: a person, not a controller.
-    '| user !~ "system:.*" or user = "system:admin" '
-    'or sub =~ "exec|attach|portforward"'
+    ' | filter user.username:!~"^system:" or user.username:="system:admin"'
+    ' or objectRef.subresource:~"^(exec|attach|portforward)$"'
 )
 VAULT_QUERY = (
-    '{namespace="vault", container="vault"} |= `"type":"response"`'
-    + "".join(f" != `{m}`" for m in _VAULT_MACHINES)
+    '{namespace="vault", container="vault"} '
+    + contains('"type":"response"')
+    + "".join(f" -{contains(m)}" for m in _VAULT_MACHINES)
 )
-KEYCLOAK_QUERY = '{namespace=~"keycloak|.+-system"} |= `org.keycloak.events`'
+KEYCLOAK_QUERY = '{namespace=~"keycloak|.+-system"} ' + contains(
+    "org.keycloak.events"
+)
 NETWORK_QUERY = (
-    '{namespace="kube-system", container="cilium-agent"} |= `"POLICY_DENIED"`'
+    '{namespace="kube-system", container="cilium-agent"} '
+    + contains('"POLICY_DENIED"')
 )
+STREAM_FIELDS = ("cluster", "namespace", "pod", "container", "project", "app")
+# One tenant for every log (D6): the stream fields are the isolation.
+LOGS_TENANT = {"AccountID": "0", "ProjectID": "0"}
 
 
-class LokiUnavailableError(Exception):
+class LogsUnavailableError(Exception):
     pass
 
 
@@ -71,62 +95,79 @@ class Event:
     is_read: bool = False
 
 
-def _ns(when: datetime) -> str:
-    return str(int(when.timestamp() * 1e9))
+def stamp(when: datetime) -> str:
+    return when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def _client(tenant: str | None = None) -> httpx.AsyncClient:
+def time_filter(start: datetime, end: datetime) -> str:
+    return f"_time:[{stamp(start)}, {stamp(end)})"
+
+
+def project_streams(project: str) -> str:
+    """The project's own streams, ANDed with any query that carries it."""
+    return "{project=" + quoted(project) + "}"
+
+
+def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
-        base_url=settings.LOKI_URL,
-        auth=(settings.LOKI_USERNAME, settings.LOKI_PASSWORD),
-        headers={"X-Scope-OrgID": tenant or settings.LOKI_TENANT},
-        timeout=30,
+        base_url=settings.OBS_VLOGS_URL, headers=LOGS_TENANT, timeout=30
     )
 
 
-def project_tenants(project: str) -> str:
-    """
-    A project's logs live in the tenant named after it; lines written before
-    the move to per-project tenants are still in the shared one until they
-    expire.
-    """
-    return f"{project}|{settings.LOKI_TENANT}"
+async def _post(path: str, data: dict[str, Any]) -> httpx.Response:
+    if not settings.OBS_VLOGS_URL:
+        raise LogsUnavailableError("OBS_VLOGS_URL is not set")
+    try:
+        async with _client() as client:
+            response = await client.post(path, data=data)
+    except httpx.HTTPError as exc:
+        raise LogsUnavailableError(str(exc)) from exc
+    if response.status_code != 200:
+        raise LogsUnavailableError(
+            f"VictoriaLogs answered {response.status_code}: "
+            f"{response.text[:200]}"
+        )
+    return response
 
 
-async def loki_lines(
+def _when(raw: str) -> datetime:
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+
+async def log_lines(
     query: str,
     start: datetime,
     end: datetime,
     limit: int,
-    direction: str = "backward",
-    tenant: str | None = None,
+    oldest_first: bool = False,
+    streams: str | None = None,
+    fields: tuple[str, ...] = (),
 ) -> list[tuple[datetime, dict[str, str], str]]:
-    """Log lines matching ``query``, newest first."""
-    try:
-        async with _client(tenant) as client:
-            response = await client.get(
-                "/loki/api/v1/query_range",
-                params={
-                    "query": query,
-                    "start": _ns(start),
-                    "end": _ns(end),
-                    "limit": limit,
-                    "direction": direction,
-                },
-            )
-    except httpx.HTTPError as exc:
-        raise LokiUnavailableError(str(exc)) from exc
-    if response.status_code != 200:
-        raise LokiUnavailableError(
-            f"Loki answered {response.status_code}: {response.text[:200]}"
-        )
+    """
+    The first ``limit`` lines matching ``query`` in [start, end), newest
+    first whichever end they were read from, with their stream fields and
+    ``fields``. ``streams`` is a stream filter VictoriaLogs ANDs with the
+    whole query.
+    """
+    order = "" if oldest_first else " desc"
+    wanted = STREAM_FIELDS + fields
+    data = {
+        "query": f"{time_filter(start, end)} {query}"
+        f" | sort by (_time{order}) | limit {limit}"
+        f" | fields _time, _msg, {', '.join(wanted)}",
+    }
+    if streams:
+        data["extra_stream_filters"] = streams
+    response = await _post("/select/logsql/query", data)
     lines = []
-    for stream in response.json()["data"]["result"]:
-        for ts, line in stream["values"]:
-            when = datetime.fromtimestamp(int(ts) / 1e9, tz=timezone.utc)
-            lines.append((when, stream["stream"], line))
+    for raw in response.text.splitlines():
+        if not raw.strip():
+            continue
+        row = json.loads(raw)
+        labels = {f: row[f] for f in wanted if row.get(f)}
+        lines.append((_when(row["_time"]), labels, row.get("_msg", "")))
     lines.sort(key=lambda item: item[0], reverse=True)
-    return lines[:limit]
+    return lines
 
 
 def namespace_projects() -> dict[str, str]:
@@ -403,10 +444,21 @@ class LogLine:
     line: str
 
 
-_LEVELS = {
-    "error": r"(?i)\b(error|err|fatal|panic|exception)\b",
-    "warn": r"(?i)\b(warn|warning)\b",
+# A JSON line's level is in json.level, a plain line's in its words.
+LEVELS = {
+    "error": (
+        "error|err|fatal|panic|exception",
+        "error|err|fatal|panic|critical",
+    ),
+    "warn": ("warn|warning", "warn|warning"),
 }
+
+
+def level_filter(level: str) -> str:
+    words, names = LEVELS[level]
+    by_words = quoted(rf"(?i)\b({words})\b")
+    by_field = quoted(f"(?i)^({names})$")
+    return f"(_msg:~{by_words} or json.level:~{by_field})"
 
 
 def logs_query(
@@ -417,19 +469,19 @@ def logs_query(
     search: str | None,
     level: str | None,
 ) -> str:
-    selector = [f'project="{project}"']
+    selector = [f"project={quoted(project)}"]
     for label, value in (
         ("namespace", namespace),
         ("pod", pod),
         ("container", container),
     ):
         if value:
-            selector.append(f'{label}="{value}"')
+            selector.append(f"{label}={quoted(value)}")
     query = "{" + ", ".join(selector) + "}"
     if search:
-        query += f" |= `{search}`"
-    if level in _LEVELS:
-        query += f" |~ `{_LEVELS[level]}`"
+        query += f" {contains(search)}"
+    if level in LEVELS:
+        query += f" {level_filter(level)}"
     return query
 
 
@@ -445,8 +497,8 @@ async def app_logs(
     limit: int,
 ) -> list[LogLine]:
     query = logs_query(project, namespace, pod, container, search, level)
-    lines = await loki_lines(
-        query, start, end, limit, tenant=project_tenants(project)
+    lines = await log_lines(
+        query, start, end, limit, streams=project_streams(project)
     )
     return [
         LogLine(
@@ -463,46 +515,41 @@ async def app_logs(
 async def log_label_values(
     project: str, label: str, start: datetime, end: datetime
 ) -> list[str]:
-    try:
-        async with _client(project_tenants(project)) as client:
-            response = await client.get(
-                f"/loki/api/v1/label/{label}/values",
-                params={
-                    "query": f'{{project="{project}"}}',
-                    "start": _ns(start),
-                    "end": _ns(end),
-                },
-            )
-    except httpx.HTTPError as exc:
-        raise LokiUnavailableError(str(exc)) from exc
-    if response.status_code != 200:
-        raise LokiUnavailableError(f"Loki answered {response.status_code}")
-    return sorted(response.json().get("data") or [])
+    response = await _post(
+        "/select/logsql/stream_field_values",
+        {
+            "query": f"{time_filter(start, end)} {project_streams(project)}",
+            "field": label,
+            "extra_stream_filters": project_streams(project),
+        },
+    )
+    return sorted(v["value"] for v in response.json().get("values") or [])
 
 
-async def loki_matrix(
-    query: str,
+async def log_volume(
+    project: str,
+    namespace: str | None,
     start: datetime,
     end: datetime,
     step: int,
-    tenant: str | None = None,
 ) -> list[tuple[dict[str, str], list[tuple[datetime, float]]]]:
-    """A metric query's series."""
-    try:
-        async with _client(tenant) as client:
-            response = await client.get(
-                "/loki/api/v1/query_range",
-                params={
-                    "query": query,
-                    "start": _ns(start),
-                    "end": _ns(end),
-                    "step": step,
-                },
-            )
-    except httpx.HTTPError as exc:
-        raise LokiUnavailableError(str(exc)) from exc
-    if response.status_code != 200:
-        raise LokiUnavailableError(f"Loki answered {response.status_code}")
+    """Lines and bytes per namespace and step, one series per name."""
+    selector = f"project={quoted(project)}"
+    if namespace:
+        selector += f", namespace={quoted(namespace)}"
+    response = await _post(
+        "/select/logsql/stats_query_range",
+        {
+            # The same counts as the cnp_log_* recording rules.
+            "query": "{" + selector + "}"
+            " | stats by (namespace) count() lines,"
+            " sum_len(_msg, json.*) bytes",
+            "start": stamp(start),
+            "end": stamp(end),
+            "step": f"{step}s",
+            "extra_stream_filters": project_streams(project),
+        },
+    )
     return [
         (
             series["metric"],
@@ -513,10 +560,3 @@ async def loki_matrix(
         )
         for series in response.json()["data"]["result"]
     ]
-
-
-def volume_selector(project: str, namespace: str | None) -> str:
-    selector = f'project="{project}"'
-    if namespace:
-        selector += f', namespace="{namespace}"'
-    return "{" + selector + "}"

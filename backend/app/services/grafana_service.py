@@ -10,7 +10,7 @@ Organization naming convention: "Project <TitleCasedProjectName>"
   Example: project "alpha" -> "Project Alpha", project "sandbox" -> "Project Sandbox"
 
 Role mappings (CMP to Grafana): every project role is "Editor". An org Admin
-could edit the Loki datasource and read another project's tenant.
+could edit a datasource and read through credentials it was not given.
 
 All operations are async and use connection pooling via httpx.AsyncClient.
 Errors are logged but do not crash the caller (graceful degradation).
@@ -169,8 +169,8 @@ def _map_role_to_grafana(
     Returns:
         Grafana role ("Admin", "Editor", "Viewer").
     """
-    # Project admins stay Editors: a Grafana org Admin can edit the Loki
-    # datasource and point it at another project's tenant.
+    # Project admins stay Editors: a Grafana org Admin can edit the
+    # datasources and point them elsewhere.
     normalised = role.lower()
     if normalised in ("admin", "owner", "member"):
         return "Editor"

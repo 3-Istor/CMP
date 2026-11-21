@@ -40,8 +40,8 @@ from app.services.project_export.sources import (
     DatabaseRef,
     GitRepoArchiver,
     JobDumper,
-    LokiLogReader,
     VaultSecretReader,
+    VictoriaLogsReader,
     dump_job,
 )
 from tests.project_export_fakes import (
@@ -523,11 +523,11 @@ def test_log_pages_do_not_repeat_lines_at_page_boundaries():
         (t0 + timedelta(seconds=i // 2), {"a": "b"}, f"l{i}") for i in range(7)
     ]
 
-    async def loki_lines(query, start, end, limit, direction, tenant):
+    async def log_lines(query, start, end, limit, oldest_first, streams):
         return [entry for entry in lines if start <= entry[0] < end][:limit]
 
     async def read() -> list[str]:
-        reader = LokiLogReader()
+        reader = VictoriaLogsReader()
         out = []
         async for page in reader.pages(
             "alpha", ["alpha-shop"], t0, t0 + timedelta(hours=1)
@@ -537,8 +537,8 @@ def test_log_pages_do_not_repeat_lines_at_page_boundaries():
 
     # Act
     with (
-        mock.patch("app.services.project_export.sources.LOKI_PAGE", 3),
-        mock.patch.object(activity_sources, "loki_lines", loki_lines),
+        mock.patch("app.services.project_export.sources.LOG_PAGE", 3),
+        mock.patch.object(activity_sources, "log_lines", log_lines),
     ):
         result = asyncio.run(read())
 
@@ -548,14 +548,14 @@ def test_log_pages_do_not_repeat_lines_at_page_boundaries():
 
 def test_logs_are_read_from_the_project_namespaces_never_a_name_prefix():
     # Arrange
-    queries = []
+    streams_read = []
 
-    async def loki_lines(query, start, end, limit, direction, tenant):
-        queries.append(query)
+    async def log_lines(query, start, end, limit, oldest_first, streams):
+        streams_read.append(streams)
         return []
 
     async def read() -> None:
-        async for _ in LokiLogReader().pages(
+        async for _ in VictoriaLogsReader().pages(
             "shop",
             ["shop-web", "shop-system"],
             datetime(2026, 11, 1),
@@ -564,11 +564,11 @@ def test_logs_are_read_from_the_project_namespaces_never_a_name_prefix():
             pass
 
     # Act
-    with mock.patch.object(activity_sources, "loki_lines", loki_lines):
+    with mock.patch.object(activity_sources, "log_lines", log_lines):
         asyncio.run(read())
 
     # Assert
-    assert queries == ['{namespace=~"shop-web|shop-system"}']
+    assert streams_read == ['{namespace=~"shop-web|shop-system"}']
 
 
 # ---------------------------------------------------------------------------

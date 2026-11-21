@@ -88,7 +88,8 @@ def targets() -> dict[str, dict[str, list[tuple[str, str]]]]:
     for sample in response.json()["data"]["result"]:
         labels = sample["metric"]
         kind, _, name = labels.get("target", "").partition("/")
-        # Alloy's pod scrape moves the controller's label to exported_namespace.
+        # The pod scrape keeps the target's own namespace label as
+        # exported_namespace (honorLabels off).
         namespace = labels.get("exported_namespace")
         cluster = labels.get("cluster") or "onprem"
         if namespace and name and kind in REPLICAS:
