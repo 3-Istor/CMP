@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app import mcp_server
+from app.core import loop_watchdog
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import (
@@ -279,6 +280,8 @@ async def lifespan(app: FastAPI):
             target=run_deployment, args=(deployment_id,), daemon=True
         ).start()
     project_export_runner.fail_interrupted()
+
+    loop_watchdog.start()
 
     import_reconcile_task = None
     if settings.IMPORT_ENABLED:

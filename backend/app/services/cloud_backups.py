@@ -206,11 +206,17 @@ async def sync_keys(db: Session) -> list[str]:
     return written
 
 
+async def _tick() -> None:
+    with SessionLocal() as db:
+        await sync_keys(db)
+
+
 async def cloud_backups_loop() -> None:
     while True:
         try:
-            with SessionLocal() as db:
-                await sync_keys(db)
+            # sync_keys queries the database synchronously between its awaits:
+            # its own loop in a worker thread keeps that off the request loop.
+            await asyncio.to_thread(asyncio.run, _tick())
         except Exception:  # the loop must survive one bad tick
             logger.exception("cloud backups tick failed")
         await asyncio.sleep(TICK_SECONDS)
