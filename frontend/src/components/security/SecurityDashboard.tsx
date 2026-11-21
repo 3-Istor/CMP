@@ -39,6 +39,7 @@ import { ScansCard } from "./ScansCard";
 import { ScoreRing } from "./ScoreRing";
 import { AppSettingsCard, ProjectPolicyCard } from "./SettingsCard";
 import { NewMajorChart, ScoreTrendChart } from "./TrendCharts";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const REFRESH_MS = 60_000;
 const PRIORITY_LIMIT = 6;
@@ -88,10 +89,10 @@ function useSecurityData(project: string, app: string | null, view: SecurityView
   );
 
   useEffect(() => {
-    const timer = setInterval(refresh, REFRESH_MS);
+    const stop = pollWhileVisible(refresh, REFRESH_MS);
     const first = setTimeout(refresh, 0);
     return () => {
-      clearInterval(timer);
+      stop();
       clearTimeout(first);
     };
   }, [refresh]);

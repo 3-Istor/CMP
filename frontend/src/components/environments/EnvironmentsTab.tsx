@@ -42,6 +42,7 @@ import { errorMessage, formatDateTime, TONE } from "../release/format";
 import { diffConsequences, EnvDiffCard } from "./EnvDiffCard";
 import { PromotionPolicyCard } from "./PromotionPolicyCard";
 import { StagingSettingsCard } from "./StagingSettingsCard";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const POLL_MS = 5000;
 
@@ -426,8 +427,7 @@ export function EnvironmentsTab({
 
   useEffect(() => {
     refresh();
-    const timer = setInterval(refresh, POLL_MS);
-    return () => clearInterval(timer);
+    return pollWhileVisible(refresh, POLL_MS);
   }, [refresh]);
 
   if (error != null && !view) {

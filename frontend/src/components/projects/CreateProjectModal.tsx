@@ -29,6 +29,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 type ClusterState = ClusterStatus["state"] | "checking";
 
@@ -140,20 +141,20 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     // Poll until the bootstrap ends, then open the import of the chosen repository.
     useEffect(() => {
         if (!open || !waiting) return;
-        const timer = setInterval(async () => {
+        const stop = pollWhileVisible(async () => {
             try {
                 const project = (await getProjects()).find((p) => p.name === waiting);
                 if (!project) return;
                 setStep(project.step_message);
                 if (project.status === "active") {
-                    clearInterval(timer);
+                    stop();
                     clearProjectsCache();
                     onCloseRef.current();
                     router.push(
                         `/projects/${encodeURIComponent(waiting)}/import?repo=${encodeURIComponent(repo)}`,
                     );
                 } else if (isProjectFailed(project)) {
-                    clearInterval(timer);
+                    stop();
                     setWaiting(null);
                     setError(project.step_message || t("failed"));
                 }
@@ -161,7 +162,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                 // A missed poll is retried on the next tick.
             }
         }, WAIT_POLL_MS);
-        return () => clearInterval(timer);
+        return stop;
     }, [open, waiting, repo, router, t]);
 
     const handleSubmit = async (e: React.FormEvent) => {

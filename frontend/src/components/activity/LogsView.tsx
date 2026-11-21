@@ -37,6 +37,7 @@ import { NativeSelect } from "./NativeSelect";
 import { NetworkPanel } from "./NetworkPanel";
 import { VolumeCard } from "./VolumeCard";
 import { severityOf, TOKEN_CLASS, tokenize } from "./logHighlight";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const LIVE_MS = 3000;
 const CONTEXT_MS = 60_000;
@@ -290,9 +291,9 @@ export function LogsView({
 
   useEffect(() => {
     if (!live || !ready) return;
-    const timer = setInterval(async () => {
+    return pollWhileVisible(async () => {
       // A slow store must not pile up queries: skip the tick while one runs.
-      if (document.hidden || polling.current) return;
+      if (polling.current) return;
       polling.current = true;
       const id = generation.current;
       try {
@@ -321,7 +322,6 @@ export function LogsView({
         polling.current = false;
       }
     }, LIVE_MS);
-    return () => clearInterval(timer);
   }, [live, ready, fetchRows, compact]);
 
   // Follow the end like a terminal, unless the reader scrolled up.

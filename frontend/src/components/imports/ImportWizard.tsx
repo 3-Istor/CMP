@@ -33,6 +33,7 @@ import { AnalysisStep } from "./AnalysisStep";
 import { ImportProgress } from "./ImportProgress";
 import { PlanReview } from "./PlanReview";
 import { RepoStep } from "./RepoStep";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const POLL_MS = 3000;
 const STEPS = ["repo", "analysis", "review", "progress"] as const;
@@ -149,8 +150,7 @@ function WizardForRun({
   const running = run && !["succeeded", "failed", "cancelled"].includes(run.status);
   useEffect(() => {
     if (!running) return;
-    const timer = setInterval(() => void load(), POLL_MS);
-    return () => clearInterval(timer);
+    return pollWhileVisible(() => void load(), POLL_MS);
   }, [running, load]);
 
   const step = stepOf(run);
