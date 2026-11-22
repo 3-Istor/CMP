@@ -2927,6 +2927,7 @@
       "moving": "Déplacement vers {cloud}",
       "banner": "Déplacement vers {cloud} · {step}",
       "bannerFailed": "Le déplacement vers {cloud} a échoué",
+      "cancelling": "Annulation…",
       "details": "Détails",
       "retry": "Réessayer",
       "cancel": "Annuler le déplacement",

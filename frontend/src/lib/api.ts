@@ -1883,7 +1883,7 @@ export type ProjectMove = {
   id: number;
   source: string;
   target: string;
-  status: "running" | "failed" | "done" | "cancelled";
+  status: "running" | "failed" | "cancelling" | "done" | "cancelled";
   steps: MoveStep[];
   detail: string | null;
   actor: string;

@@ -2,6 +2,7 @@
 
 import { CLOUD_META } from "@/components/finops/format";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { MoveActions, MoveButtons } from "@/components/projects/ProjectLocation";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -51,12 +52,13 @@ export function PlacementPanel() {
   const { projectName, move } = useProjectContext();
   const t = useTranslations("placement");
   const tSteps = useTranslations("projectSettings.location.steps");
+  const tLocation = useTranslations("projectSettings.location");
   const [data, setData] = useState<ProjectPlacement | null>(null);
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<
     (PlacementPod & { node: string; cloud: Cloud }) | null
   >(null);
-  const moving = move?.status === "running";
+  const moving = move?.status === "running" || move?.status === "cancelling";
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -128,7 +130,12 @@ export function PlacementPanel() {
             {failed ? t("loadFailed") : t("live")}
           </span>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MoveButtons />
+          {move?.status === "cancelling" && (
+            <span className="text-sm text-muted-foreground">{tLocation("cancelling")}</span>
+          )}
+          <MoveActions />
           {data?.clusters.map((c) => (
             <a key={c.cloud} href={c.console_url} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <Swatch cloud={c.cloud} />
