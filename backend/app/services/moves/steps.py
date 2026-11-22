@@ -9,7 +9,7 @@ namespaces once the target is healthy; the rest are registry commits.
 
 import inspect
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -651,6 +651,19 @@ def _refused(exc: Exception) -> bool:
     return 400 <= status < 500 and status not in (408, 429)
 
 
+# The on-prem API server answered 403 for about 50 s each time it restarted
+# (three times on 22/11): a 401/403 fails a step only once it outlasts this.
+REFUSAL_GRACE = timedelta(minutes=2)
+
+
+def _refusal_outlasted(step: dict, exc: Exception) -> bool:
+    """Whether an auth refusal has lasted past REFUSAL_GRACE; starts its clock."""
+    if getattr(exc, "status", None) not in (401, 403):
+        return True
+    since = step.setdefault("refused_since", _now().isoformat())
+    return _now() - datetime.fromisoformat(since) >= REFUSAL_GRACE
+
+
 async def _fail(
     db: Session, move: ProjectMove, steps: list[dict], step: dict, detail: str
 ) -> ProjectMove:
@@ -694,7 +707,7 @@ async def advance(db: Session, move: ProjectMove) -> ProjectMove:
             else:
                 done = await run_in_threadpool(run, db, move, step, steps)
         except (ClusterNotConnectedError, KubeUnavailableError) as exc:
-            if _refused(exc):
+            if _refused(exc) and _refusal_outlasted(step, exc):
                 return await _fail(db, move, steps, step, str(exc))
             # A cluster out of reach is a wait, not a failure.
             step["detail"] = str(exc)
@@ -702,6 +715,8 @@ async def advance(db: Session, move: ProjectMove) -> ProjectMove:
         except Exception as exc:  # pylint: disable=broad-exception-caught
             detail = str(getattr(exc, "detail", None) or exc)
             return await _fail(db, move, steps, step, detail)
+        else:
+            step.pop("refused_since", None)
         if not done:
             step["status"] = "running"
             _save(db, move, steps)
