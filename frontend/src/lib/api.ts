@@ -1898,10 +1898,14 @@ export const getCurrentMove = (project: string) =>
 export const getMoveDataLoss = (project: string) =>
   request<string[]>(`/projects/${project}/moves/data-loss`);
 
-export const startMove = (project: string, confirm_data_loss: boolean) =>
+export const startMove = (
+  project: string,
+  confirm_data_loss: boolean,
+  target: "onprem" | "public",
+) =>
   request<ProjectMove>(`/projects/${project}/move`, {
     method: "POST",
-    body: JSON.stringify({ confirm_data_loss }),
+    body: JSON.stringify({ confirm_data_loss, target }),
   });
 
 export const moveAction = (

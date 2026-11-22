@@ -237,16 +237,20 @@ def test_sync_leaves_absent_backup_before_alone(world):
     assert not world.commits
 
 
-@pytest.mark.parametrize(
-    "cloud,app_type",
-    [(TargetCloud.ONPREM, "fullstack"), (TargetCloud.AWS, "static")],
-)
-def test_sync_ignores_onprem_and_static(world, cloud, app_type):
-    world.add(cloud=cloud, app_type=app_type)
+def test_sync_ignores_static(world):
+    world.add(app_type="static")
     world.secret()
 
     assert world.sync() == []
     assert not world.vault and not world.commits
+
+
+def test_sync_keys_copies_onprem_project_key(world):
+    world.add(cloud=TargetCloud.ONPREM)
+    world.secret()
+
+    assert world.sync() == ["api/backup"]
+    assert world.vault == {("project-shop", "api/backup"): KEY}
 
 
 def test_backup_patch_on_cloud_app_uses_vault():

@@ -125,6 +125,23 @@ class TestStart:
 
         assert response.json() == ["shop (staging)"]
 
+    def test_start_move_passes_target(self, env):
+        http, _, _ = env
+
+        with mock.patch.object(
+            steps, "start_checks", new=mock.AsyncMock(return_value="onprem")
+        ) as checks:
+            response = http.post(
+                "/api/projects/alpha/move", json={"target": "onprem"}
+            )
+            invalid = http.post(
+                "/api/projects/alpha/move", json={"target": "aws"}
+            )
+
+        assert response.status_code == 202
+        assert checks.await_args.args[3] == "onprem"
+        assert invalid.status_code == 422
+
     def test_admin_starts_one_move_and_a_second_is_refused(self, env):
         http, _, db = env
 
