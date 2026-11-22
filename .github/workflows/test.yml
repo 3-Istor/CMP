@@ -126,6 +126,10 @@ jobs:
         working-directory: ./frontend
         run: npx playwright test e2e/a11y.spec.ts
 
+      - name: Run AI pages behaviour tests
+        working-directory: ./frontend
+        run: npx playwright test e2e/ai.spec.ts
+
       - name: Upload accessibility report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
