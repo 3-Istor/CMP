@@ -33,7 +33,9 @@ from app.services.ai import (
     identity,
 )
 from app.services.ai import registry as ai_registry
-from app.services.ai import service
+from app.services.ai import (
+    service,
+)
 from app.services.ai import usage as ai_usage
 from app.services.ai.declaration import ProjectAi, client_id
 from app.services.authz import (
