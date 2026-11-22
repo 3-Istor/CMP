@@ -42,6 +42,7 @@ RESULT_TO_MODEL = 20_000
 CODE_TOOL = "run_python"
 TIMEOUT = httpx.Timeout(120.0, connect=5.0)
 BUDGET_MARKERS = ("ai_budget_exhausted", "budget")
+REFUSAL_HEADER = "x-cnp-refusal"
 
 
 class GatewayRefusal(Exception):
@@ -57,7 +58,13 @@ class GatewayError(RuntimeError):
     """The gateway or the model failed (not a refusal)."""
 
 
-def refusal_of(status: int, body: str) -> GatewayRefusal | None:
+def refusal_of(
+    status: int, body: str, marker: str | None = None
+) -> GatewayRefusal | None:
+    """The gateway names its own refusals (header x-cnp-refusal); a 429
+    without it is the rate limiter."""
+    if marker in ("budget", "policy"):
+        return GatewayRefusal(marker, status, _message(body))
     if status == 429:
         text = body.lower()
         reason = (
@@ -115,7 +122,11 @@ async def complete(token: str, body: dict) -> dict:
             )
     except httpx.HTTPError as exc:
         raise GatewayError(f"AI gateway unreachable: {exc}") from exc
-    refused = refusal_of(response.status_code, response.text)
+    refused = refusal_of(
+        response.status_code,
+        response.text,
+        response.headers.get(REFUSAL_HEADER),
+    )
     if refused:
         raise refused
     if response.status_code >= 400:
@@ -297,7 +308,11 @@ async def _stream(
     ) as response:
         if response.status_code >= 400:
             text = (await response.aread()).decode(errors="replace")
-            refused = refusal_of(response.status_code, text)
+            refused = refusal_of(
+                response.status_code,
+                text,
+                response.headers.get(REFUSAL_HEADER),
+            )
             if refused:
                 raise refused
             raise GatewayError(

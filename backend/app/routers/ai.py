@@ -111,7 +111,8 @@ class ProjectAiBody(BaseModel):
 
 class AppAiBody(BaseModel):
     enabled: bool = True
-    daily_token_budget: int = Field(default=0, ge=0, le=1_000_000_000)
+    # 0 is an app without model access (an MCP server only).
+    daily_token_budget: int = Field(default=50_000, ge=0, le=1_000_000_000)
 
 
 class Trigger(BaseModel):

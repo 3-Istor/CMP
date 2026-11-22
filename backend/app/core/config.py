@@ -259,8 +259,8 @@ class Settings(BaseSettings):
     AI_MODELS: str = "claude-haiku-5-5,claude-sonnet-5-5"
     AI_DEFAULT_MODEL: str = "claude-haiku-5-5"
     AI_DRAFT_MODEL: str = "claude-haiku-5-5"
-    AI_CMP_CLIENT_ID: str = "app-platform-cmp"
-    AI_PLATFORM_PROJECT: str = "platform"
+    AI_CMP_CLIENT_ID: str = "cmp-ai"
+    AI_CMP_CLIENT_SECRET: str = ""
     # Chantier budget rule: test chats and drafts stay small.
     AI_TEST_MAX_TOKENS: int = 1500
     AI_TEST_MAX_STEPS: int = 8

@@ -34,6 +34,11 @@ GATEWAY_AUDIENCE = "ai-gateway"
 TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"
 ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 TOKEN_LIFESPAN = "300"
+# Realm scope of the gateway (audience, project and agent claims), and the
+# group whose attribute names the project of a service account.
+BASE_SCOPES = ("basic", "ai-gateway")
+PROJECTS_GROUP = "ai-projects"
+PROJECT_ATTRIBUTE = "cnp_ai_project"
 # Realm scopes the gateway policy may also check; attached when they exist.
 WRITE_SCOPE = "mcp-write"
 READ_SCOPE = "mcp-read"
@@ -106,8 +111,29 @@ def _scope_ids() -> dict[str, str]:
     return {s["name"]: s["id"] for s in _admin("GET", "/client-scopes") or []}
 
 
-def _mappers(project: str) -> list[dict]:
-    return [
+def _claim(name: str, value: str) -> dict:
+    return {
+        "name": name,
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-hardcoded-claim-mapper",
+        "config": {
+            "claim.name": name,
+            "claim.value": value,
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+        },
+    }
+
+
+def _mappers(client_id: str, project: str) -> list[dict]:
+    """
+    The realm scope ``ai-gateway`` derives ``project`` and ``agent`` from
+    the service account's group: right for client credentials, empty for a
+    test chat token, whose subject is the user. The same values hardcoded on
+    the client keep both kinds of token alike.
+    """
+    mappers = [
         {
             "name": "aud-ai-gateway",
             "protocol": "openid-connect",
@@ -118,19 +144,11 @@ def _mappers(project: str) -> list[dict]:
                 "id.token.claim": "false",
             },
         },
-        {
-            "name": "project",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-hardcoded-claim-mapper",
-            "config": {
-                "claim.name": "project",
-                "claim.value": project,
-                "jsonType.label": "String",
-                "access.token.claim": "true",
-                "id.token.claim": "false",
-            },
-        },
+        _claim("project", project),
     ]
+    if client_id.startswith("agent-"):
+        mappers.append(_claim("agent", f"service-account-{client_id}"))
+    return mappers
 
 
 def scopes_for(tools: list[str], catalogue: dict[str, list[str]]) -> list[str]:
@@ -172,7 +190,7 @@ def ensure_client(
                     "standard.token.exchange.enabled": "true",
                     "access.token.lifespan": TOKEN_LIFESPAN,
                 },
-                "protocolMappers": _mappers(project),
+                "protocolMappers": _mappers(client_id, project),
             },
         )
         existing = _find(client_id)
@@ -181,21 +199,52 @@ def ensure_client(
     elif not existing.get("enabled", True):
         set_enabled(client_id, True)
     available = _scope_ids()
-    missing = [s for s in scopes if s not in available]
+    wanted = [*BASE_SCOPES, *scopes]
+    missing = [s for s in wanted if s not in available]
     if missing:
         logger.warning(
             "Realm scopes %s missing: %s gets the others only",
             missing,
             client_id,
         )
-    for scope in scopes:
+    for scope in wanted:
         if scope in available:
             _admin(
                 "PUT",
                 f"/clients/{existing['id']}/default-client-scopes/"
                 f"{available[scope]}",
             )
+    _join_project_group(existing["id"], project)
     return existing["id"]
+
+
+def _group_or_create() -> dict:
+    try:
+        return _admin("GET", f"/group-by-path/{PROJECTS_GROUP}")
+    except IdentityError as exc:
+        if exc.status != 404:
+            raise
+    _admin("POST", "/groups", {"name": PROJECTS_GROUP})
+    return _admin("GET", f"/group-by-path/{PROJECTS_GROUP}")
+
+
+def _join_project_group(internal_id: str, project: str) -> None:
+    """The service account in ``/ai-projects/<project>``, whose attribute
+    the gateway's ``project`` claim reads."""
+    try:
+        group = _admin("GET", f"/group-by-path/{PROJECTS_GROUP}/{project}")
+    except IdentityError as exc:
+        if exc.status != 404:
+            raise
+        parent = _group_or_create()
+        _admin(
+            "POST",
+            f"/groups/{parent['id']}/children",
+            {"name": project, "attributes": {PROJECT_ATTRIBUTE: [project]}},
+        )
+        group = _admin("GET", f"/group-by-path/{PROJECTS_GROUP}/{project}")
+    user = _admin("GET", f"/clients/{internal_id}/service-account-user")
+    _admin("PUT", f"/users/{user['id']}/groups/{group['id']}")
 
 
 def client_secret(client_id: str) -> str:
@@ -337,37 +386,32 @@ def exchange_for_agent(user_token: str, agent_client: str) -> str:
             "client_secret": client_secret(agent_client),
             "subject_token": first["access_token"],
             "subject_token_type": ACCESS_TOKEN_TYPE,
-            "audience": GATEWAY_AUDIENCE,
+            # No audience: the agent's own ones (the gateway, and the
+            # sandbox runner when it has run_python), as its tokens carry.
         }
     )
     return second["access_token"]
 
 
-def client_token(client_id: str) -> str:
-    """Client credentials token of *client_id*, cached until near expiry."""
-    cached = _client_tokens.get(client_id)
+def cmp_gateway_token() -> str:
+    """The CMP's own gateway client (``cmp-ai``, created with the gateway),
+    its secret from Vault through the CMP's environment."""
+    if not settings.AI_CMP_CLIENT_SECRET:
+        raise IdentityError(
+            503, "The CMP's AI gateway client is not configured."
+        )
+    cached = _client_tokens.get(settings.AI_CMP_CLIENT_ID)
     if cached and time.monotonic() < cached[1]:
         return cached[0]
     data = _grant(
         {
             "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret(client_id),
+            "client_id": settings.AI_CMP_CLIENT_ID,
+            "client_secret": settings.AI_CMP_CLIENT_SECRET,
         }
     )
-    _client_tokens[client_id] = (
+    _client_tokens[settings.AI_CMP_CLIENT_ID] = (
         data["access_token"],
         time.monotonic() + max(int(data.get("expires_in", 60)) - 30, 0),
     )
     return data["access_token"]
-
-
-def cmp_gateway_token() -> str:
-    """The CMP's own app client, created on first use."""
-    ensure_client(
-        settings.AI_CMP_CLIENT_ID,
-        settings.AI_PLATFORM_PROJECT,
-        "CMP: brouillons d'agents",
-        [],
-    )
-    return client_token(settings.AI_CMP_CLIENT_ID)
