@@ -181,7 +181,12 @@ function ModelsCard({ ai }: { ai: ProjectAi }) {
   );
 }
 
-function BudgetCard({ ai, today, month }: { ai: ProjectAi; today: AiUsageItem[]; month: AiUsageItem[] }) {
+function BudgetCard({ ai, today, month, unavailable }: {
+  ai: ProjectAi;
+  today: AiUsageItem[];
+  month: AiUsageItem[];
+  unavailable: boolean;
+}) {
   const t = useTranslations("ai.tab");
   const f = useAiFormat();
   const used = usageTotals(today);
@@ -197,7 +202,7 @@ function BudgetCard({ ai, today, month }: { ai: ProjectAi; today: AiUsageItem[];
         size={112}
       >
         <span>
-          <span className="block text-xl font-semibold tabular-nums">{pct} %</span>
+          <span className="block text-xl font-semibold tabular-nums">{unavailable ? "?" : `${pct} %`}</span>
           <span className="text-[0.7rem] text-muted-foreground">{t("today")}</span>
         </span>
       </RingGauge>
@@ -211,7 +216,11 @@ function BudgetCard({ ai, today, month }: { ai: ProjectAi; today: AiUsageItem[];
           <span className="font-semibold">{f.eur(monthCost)}</span>
           <span className="text-muted-foreground"> {t("thisMonth")}</span>
         </p>
-        <p className="text-xs text-muted-foreground">{t("alertAt", { pct: ALERT_PCT })}</p>
+        {unavailable ? (
+          <p role="status" className="text-xs text-amber-800 dark:text-amber-300">{t("usageUnavailable")}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">{t("alertAt", { pct: ALERT_PCT })}</p>
+        )}
       </div>
     </div>
   );
@@ -448,7 +457,12 @@ export function ProjectAiTab() {
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <AccessCard ai={current} onChange={setOverride} />
-              <BudgetCard ai={current} today={today.data?.items ?? []} month={month.data?.items ?? []} />
+              <BudgetCard
+                ai={current}
+                today={today.data?.items ?? []}
+                month={month.data?.items ?? []}
+                unavailable={!today.loading && !today.data}
+              />
               <ModelsCard ai={current} />
             </div>
             <AppsTable ai={current} usage={today.data?.items ?? []} onGranted={ai.retry} />
