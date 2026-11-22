@@ -1927,3 +1927,50 @@ export const setIssueReportStatus = (
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
+
+// Placement views (platform admins only)
+export type PlacementPod = {
+  name: string;
+  namespace: string;
+  status: string;
+  kind: "web" | "api" | "db" | "tunnel" | "monitor";
+};
+
+export type ProjectPlacement = {
+  clusters: {
+    cloud: "onprem" | "aws" | "gcp";
+    state: string;
+    console_url: string;
+    nodes: { name: string; instance_type: string | null; pods: PlacementPod[] }[];
+  }[];
+  database: {
+    name: string;
+    generation: number | null;
+    last_archived_wal: string | null;
+  } | null;
+  backups: { claim: string; bucket: string | null; uid: string | null }[];
+};
+
+export type PlatformPlacement = {
+  clusters: {
+    cloud: "onprem" | "aws" | "gcp";
+    state: string;
+    console_url: string;
+    nodes: number;
+    memory_requested_pct: number | null;
+    projects: {
+      name: string;
+      apps: number;
+      moving_to: string | null;
+      moving_from: string | null;
+    }[];
+  }[];
+};
+
+export const getProjectPlacement = (project: string) =>
+  request<ProjectPlacement>(
+    `/projects/${encodeURIComponent(project)}/placement`,
+  );
+
+export const getPlatformPlacement = () =>
+  request<PlatformPlacement>("/placement");

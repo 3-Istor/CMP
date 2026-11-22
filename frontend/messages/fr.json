@@ -27,7 +27,8 @@
       "skipToContent": "Aller au contenu",
       "access": "Accès élevés",
       "accessReviews": "Revues d'accès",
-      "issueReports": "Retours des assistants"
+      "issueReports": "Retours des assistants",
+      "placement": "Placement"
     },
     "home": {
       "fallbackName": "Développeur",
@@ -4017,5 +4018,71 @@
     "markExported": "Marquer exporté",
     "close": "Fermer",
     "reopen": "Rouvrir"
+  },
+  "placement": {
+    "title": "Placement",
+    "admin": "Admin",
+    "live": "En direct",
+    "runsOn": "Tourne sur",
+    "cutover": "Coupure",
+    "cutoverHint": "apps arrêtées à saines",
+    "ready": "Prêts sur la cible",
+    "readyHint": "pods",
+    "database": "Base de données",
+    "generation": "génération",
+    "pods": "{count, plural, one {pod} other {pods}} de {project}",
+    "source": "Source",
+    "target": "Cible",
+    "empty": "Rien ici",
+    "arriving": "En attente d'Argo CD",
+    "state": {
+      "up": "Actif",
+      "down": "Arrêté",
+      "starting": "Démarrage",
+      "unknown": "Inconnu",
+      "unreachable": "Injoignable"
+    },
+    "console": {
+      "onprem": "Argo CD",
+      "aws": "Console EKS",
+      "gcp": "Console GKE"
+    },
+    "pod": "Pod",
+    "namespace": "Namespace",
+    "node": "Nœud",
+    "status": "Statut",
+    "close": "Fermer",
+    "openIn": "Ouvrir dans {console}",
+    "backups": "Sauvegardes · Ceph RGW",
+    "bucket": "bucket {name}",
+    "claim": "OBC {name}",
+    "events": "Événements du déplacement",
+    "noEvents": "Aucun déplacement en cours",
+    "data": "Données",
+    "dbName": "Base de données",
+    "wal": "Dernier WAL archivé",
+    "onCluster": "Tourne sur",
+    "moving": "Départ",
+    "movingTo": "Déplacement vers {cloud}",
+    "arrivingBadge": "Arrivée",
+    "running": "En marche",
+    "emptyProject": "Vide",
+    "clustersUp": "Clusters actifs",
+    "projects": "Projets",
+    "movingNow": "En déplacement",
+    "memory": "Mémoire demandée",
+    "nodes": "{count, plural, one {# nœud} other {# nœuds}}",
+    "unread": "n/d",
+    "apps": "{count, plural, =0 {aucune app} one {# app} other {# apps}}",
+    "loadFailed": "Lecture du placement impossible",
+    "podStatus": {
+      "Running": "En marche",
+      "Pending": "En attente",
+      "Starting": "Démarrage",
+      "Terminating": "Arrêt",
+      "Failed": "En échec",
+      "Succeeded": "Terminé"
+    },
+    "step": "Étape {n} sur {total} · {name}"
   }
 }
