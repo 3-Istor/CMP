@@ -161,7 +161,7 @@ export function PlacementPanel() {
             {cutover > 0 ? <CountUp trigger="load" to={cutover} suffix=" s" /> : "–"}
           </Stat>
           <Stat label={t("ready")} hint={t("readyHint")}>
-            <CountUp trigger="load" to={readyOnHere} />
+            {move ? <CountUp trigger="load" to={readyOnHere} /> : "–"}
           </Stat>
           <Stat label={t("database")} hint={t("generation")}>
             {data?.database?.generation != null ? (
@@ -237,7 +237,7 @@ export function PlacementPanel() {
                         onClick={() => setSelected({ ...p, node: n.name, cloud: c.cloud })}
                         className="flex w-full items-center gap-2.5 border-t px-2.5 py-2 text-left hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring"
                       >
-                        <span className="grid h-6 w-9 shrink-0 place-items-center rounded-md bg-muted text-[10px] font-semibold uppercase">
+                        <span className="grid h-6 min-w-9 shrink-0 place-items-center rounded-md px-1 bg-muted text-[10px] font-semibold uppercase">
                           {p.kind}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -345,7 +345,9 @@ export function PlacementPanel() {
                 value={
                   data?.database?.last_archived_wal
                     ? new Date(data.database.last_archived_wal).toLocaleTimeString()
-                    : "–"
+                    : data?.database?.archiving == null
+                      ? "–"
+                      : t(data.database.archiving ? "archivingOn" : "archivingOff")
                 }
               />
             </div>

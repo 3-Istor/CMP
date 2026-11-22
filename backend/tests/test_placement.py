@@ -7,7 +7,10 @@ from app.models.project import TargetCloud
 from app.routers import placement as router
 from app.services import placement
 from app.services.keycloak_service import get_current_user
-from app.services.kube_client import ClusterNotConnectedError
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    KubeUnavailableError,
+)
 
 
 def _pod(name="p", phase="Running", ready=True, deleting=False, labels=None):
@@ -46,13 +49,55 @@ def test_pod_status_phases():
     [
         ("demo-db-1", {"cnpg.io/cluster": "demo-db"}, "db"),
         ("demo-tunnel-abc", {}, "tunnel"),
-        ("demo-gatus-abc", {}, "monitor"),
-        ("demo-api", {"app.kubernetes.io/component": "backend"}, "api"),
-        ("demo-web", {}, "web"),
+        ("gatus-7cb854656d-5mx6t", {}, "monitor"),
+        ("migrate-x", {"cnp.3istor.com/role": "migration"}, "job"),
+        (
+            "iot-api-869cf6f-xfggt",
+            {"app.kubernetes.io/instance": "iot-api-backend"},
+            "api",
+        ),
+        (
+            "iot-api-869cf6f-xfggt",
+            {"app.kubernetes.io/instance": "iot-api-backend-stg"},
+            "api",
+        ),
+        (
+            "iot-web-1",
+            {"app.kubernetes.io/instance": "iot-web-frontend"},
+            "web",
+        ),
+        ("shop-1", {"app.kubernetes.io/instance": "shop-app"}, "web"),
+        ("offhours-guard-1", {}, "system"),
     ],
 )
 def test_pod_kind(name, labels, kind):
     assert placement.pod_kind(_pod(name, labels=labels)) == kind
+
+
+@pytest.mark.parametrize(
+    "name,generation",
+    [("todo-move-todo-backend-db-r4", 4), ("todo-move-todo-backend-db", 0)],
+)
+def test_database_generation_is_the_restore_suffix(name, generation):
+    cluster = {"metadata": {"name": name, "generation": 1}}
+    assert placement.database(cluster)["generation"] == generation
+
+
+def test_database_archiving_comes_from_the_condition():
+    cluster = {
+        "metadata": {"name": "d"},
+        "status": {
+            "conditions": [
+                {
+                    "type": "ContinuousArchiving",
+                    "status": "True",
+                    "lastTransitionTime": "t",
+                }
+            ]
+        },
+    }
+    assert placement.database(cluster)["archiving"] is True
+    assert placement.database({"metadata": {"name": "d"}})["archiving"] is None
 
 
 class FakeKube:
@@ -79,7 +124,10 @@ class FakeKube:
         if path == "/api/v1/namespaces":
             return [{"metadata": {"name": "demo-api"}}]
         if path.endswith("/pods"):
-            pod = _pod("demo-web")
+            pod = _pod(
+                "demo-web",
+                labels={"app.kubernetes.io/instance": "demo-frontend"},
+            )
             pod["spec"]["containers"] = [
                 {"resources": {"requests": {"memory": "2Gi"}}}
             ]
@@ -136,6 +184,23 @@ def test_unreachable_cluster_is_marked(client):
     node = by_cloud["onprem"]["nodes"][0]
     assert node["instance_type"] == "m5.large"
     assert node["pods"][0]["kind"] == "web"
+
+
+def test_forbidden_nodes_do_not_hide_the_pods(client, monkeypatch):
+    kube = FakeKube()
+
+    def read(path, params=None, cloud=TargetCloud.ONPREM):
+        if path == "/api/v1/nodes":
+            raise KubeUnavailableError("forbidden", 403)
+        return kube(path, params, cloud)
+
+    monkeypatch.setattr(placement, "kube_list", read)
+    body = client.get("/api/projects/demo/placement").json()
+    onprem = next(c for c in body["clusters"] if c["cloud"] == "onprem")
+
+    assert onprem["state"] == "up"
+    assert onprem["nodes"][0]["name"] == "n1"
+    assert onprem["nodes"][0]["instance_type"] is None
 
 
 def test_platform_map_lists_projects_per_cluster(client):

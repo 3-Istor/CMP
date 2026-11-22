@@ -11,7 +11,7 @@ const placement = {
     { cloud: "aws", state: "up", console_url: "https://aws.example/eks", nodes: [{ name: "ip-10-0-1-87", instance_type: "m7i-flex.large", pods: [pod("demo-api-1", "api")] }] },
     { cloud: "gcp", state: "unreachable", console_url: "https://gcp.example/gke", nodes: [] },
   ],
-  database: { name: "demo-db-r4", generation: 4, last_archived_wal: "2026-11-22T10:00:00Z" },
+  database: { name: "demo-db-r4", generation: 4, last_archived_wal: null, archiving: true },
   backups: [{ claim: "demo-db-backup", bucket: "cnpg-demo-db", uid: "u1" }],
 };
 
@@ -36,6 +36,7 @@ test("platform admin sees the live placement of a project", async ({ page }) => 
   await expect(page.getByText("demo-web-1")).toBeVisible();
   await expect(page.getByText("Unreachable")).toBeVisible();
   await expect(page.getByText("demo-db-backup")).toBeVisible();
+  await expect(page.getByText("Archiving on")).toBeVisible();
   if (process.env.PLACEMENT_SHOT) {
     await page.getByText("Move events").scrollIntoViewIfNeeded();
     await page.waitForTimeout(2500);
