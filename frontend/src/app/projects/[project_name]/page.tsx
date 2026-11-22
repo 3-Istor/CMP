@@ -9,6 +9,7 @@ import { ImportsList } from "@/components/imports/ImportsList";
 import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { PlacementPanel } from "@/components/placement/PlacementPanel";
 import { MoveBanner } from "@/components/projects/ProjectLocation";
 import { OpenAppMenu } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
@@ -352,6 +353,8 @@ export default function ProjectPage() {
           )}
 
           <GettingStarted />
+
+          <PlacementPanel />
         </div>
       </PageBody>
 

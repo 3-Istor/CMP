@@ -27,7 +27,8 @@
       "skipToContent": "Skip to content",
       "access": "Elevated access",
       "accessReviews": "Access reviews",
-      "issueReports": "Assistant reports"
+      "issueReports": "Assistant reports",
+      "placement": "Placement"
     },
     "home": {
       "fallbackName": "Developer",
@@ -4019,5 +4020,71 @@
     "markExported": "Mark exported",
     "close": "Close",
     "reopen": "Reopen"
+  },
+  "placement": {
+    "title": "Placement",
+    "admin": "Admin",
+    "live": "Live",
+    "runsOn": "Runs on",
+    "cutover": "Cut-over",
+    "cutoverHint": "apps stopped to healthy",
+    "ready": "Ready on target",
+    "readyHint": "pods",
+    "database": "Database",
+    "generation": "generation",
+    "pods": "{count, plural, one {pod} other {pods}} of {project}",
+    "source": "Source",
+    "target": "Target",
+    "empty": "Nothing here",
+    "arriving": "Waiting for Argo CD",
+    "state": {
+      "up": "Up",
+      "down": "Down",
+      "starting": "Starting",
+      "unknown": "Unknown",
+      "unreachable": "Unreachable"
+    },
+    "console": {
+      "onprem": "Argo CD",
+      "aws": "EKS console",
+      "gcp": "GKE console"
+    },
+    "pod": "Pod",
+    "namespace": "Namespace",
+    "node": "Node",
+    "status": "Status",
+    "close": "Close",
+    "openIn": "Open in {console}",
+    "backups": "Backups · Ceph RGW",
+    "bucket": "bucket {name}",
+    "claim": "OBC {name}",
+    "events": "Move events",
+    "noEvents": "No move running",
+    "data": "Data",
+    "dbName": "Database",
+    "wal": "Last WAL archived",
+    "onCluster": "Runs on",
+    "moving": "Moving",
+    "movingTo": "Moving to {cloud}",
+    "arrivingBadge": "Arriving",
+    "running": "Running",
+    "emptyProject": "Empty",
+    "clustersUp": "Clusters up",
+    "projects": "Projects",
+    "movingNow": "Moving now",
+    "memory": "Memory requested",
+    "nodes": "{count, plural, one {# node} other {# nodes}}",
+    "unread": "n/a",
+    "apps": "{count, plural, =0 {no app} one {# app} other {# apps}}",
+    "loadFailed": "Could not read the placement",
+    "podStatus": {
+      "Running": "Running",
+      "Pending": "Pending",
+      "Starting": "Starting",
+      "Terminating": "Terminating",
+      "Failed": "Failed",
+      "Succeeded": "Succeeded"
+    },
+    "step": "Step {n} of {total} · {name}"
   }
 }

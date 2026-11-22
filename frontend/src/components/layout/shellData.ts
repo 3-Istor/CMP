@@ -12,6 +12,7 @@ import {
   History,
   Home,
   KeyRound,
+  Map as MapIcon,
   MessageSquareWarning,
   Shield,
   UserCheck,
@@ -32,7 +33,8 @@ export type PageKey =
   | "assistants"
   | "access"
   | "accessReviews"
-  | "issueReports";
+  | "issueReports"
+  | "placement";
 
 export interface PageEntry {
   key: PageKey;
@@ -122,6 +124,13 @@ export const PLATFORM_PAGES: PageEntry[] = [
     href: "/issue-reports",
     icon: MessageSquareWarning,
     isActive: (pathname) => pathname.startsWith("/issue-reports"),
+    platformRoles: ["infra"],
+  },
+  {
+    key: "placement",
+    href: "/placement",
+    icon: MapIcon,
+    isActive: (pathname) => pathname.startsWith("/placement"),
     platformRoles: ["infra"],
   },
 ];
