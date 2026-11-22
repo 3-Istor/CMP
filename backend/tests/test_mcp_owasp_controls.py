@@ -117,6 +117,23 @@ OPERATIONS_WRITE_TOOLS = {
     "database_backup",
     "database_restore",
 }
+# AI landing zone: each write goes through one CMP route the audit
+# middleware journals, proven in test_ai_mcp.
+AI_WRITE_TOOLS = {
+    "set_project_ai",
+    "enable_app_ai",
+    "create_agent",
+    "update_agent",
+    "suspend_agent",
+    "delete_agent",
+}
+AI_READ_TOOLS = {
+    "get_project_ai",
+    "get_ai_usage",
+    "list_agent_templates",
+    "list_agents",
+    "get_agent",
+}
 OPERATIONS_READ_TOOLS = {
     "get_app_config",
     "get_environments",
@@ -161,6 +178,8 @@ REVIEWED_TOOLS = (
     }
     | OPERATIONS_WRITE_TOOLS
     | OPERATIONS_READ_TOOLS
+    | AI_WRITE_TOOLS
+    | AI_READ_TOOLS
 )
 OBSERVABILITY_TOOLS = {
     "get_app_metrics",
@@ -650,6 +669,7 @@ def test_every_tool_that_can_change_something_is_in_the_journal_test():
         | WRITES_NOTHING
         | CONFIRMED_IN_CMP
         | OPERATIONS_WRITE_TOOLS
+        | AI_WRITE_TOOLS
     )
 
 

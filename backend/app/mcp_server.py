@@ -85,6 +85,10 @@ How to work:
   security_scan, request_security_exception. Data: list_backups,
   database_backup, database_restore (dry_run first). Alert rules:
   get_alert_rules. Read before you change.
+- AI on a project and hosted agents: get_project_ai, set_project_ai,
+  enable_app_ai, get_ai_usage, list_agent_templates, list_agents, get_agent,
+  create_agent, update_agent, suspend_agent, delete_agent. Read the guide
+  cnp-ai first. Agents are tested in the CMP, on the agent's page.
 - Actions behind a passkey in the CMP (deleting an app or a project,
   starting a promotion to prod, a full canary promote) answer
   "not_allowed_for_assistants": give the user the link.
@@ -2200,3 +2204,4 @@ def weekly_status() -> str:
 # Registers the operations tools on ``mcp``; imported last because it uses
 # the plumbing above.
 import app.mcp_operations  # noqa: E402,F401  # isort: skip  # pylint: disable=wrong-import-position,unused-import,cyclic-import
+import app.mcp_ai  # noqa: E402,F401  # isort: skip  # pylint: disable=wrong-import-position,unused-import,cyclic-import

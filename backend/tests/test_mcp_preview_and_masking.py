@@ -16,6 +16,7 @@ from unittest import mock
 import pytest
 from fastapi.encoders import jsonable_encoder
 
+from app import mcp_ai
 from app import mcp_operations as ops
 from app import mcp_server
 from app.services.agents import internal_api, policy
@@ -231,7 +232,7 @@ def cmp(monkeypatch):
         scopes=store.SCOPES,
         claims={"name": "Alice", "cnp_agent": {"client": "Claude Code"}},
     )
-    for module in (mcp_server, ops):
+    for module in (mcp_server, ops, mcp_ai):
         monkeypatch.setattr(module, "Caller", lambda: caller)
     sandbox = policy.ProjectStake("demo", "sandbox", None)
     monkeypatch.setattr(policy, "project_stake", lambda _project: sandbox)
@@ -354,6 +355,30 @@ WRITE_CALLS = {
         "steps": LOG_LINE,
         "user_confirmed": True,
     },
+    "set_project_ai": {
+        "project": "demo",
+        "enabled": True,
+        "models": ["claude-haiku-5-5"],
+    },
+    "enable_app_ai": {"project": "demo", "app": "shop"},
+    "create_agent": {
+        "project": "demo",
+        "template": "assistant",
+        "name": "helper",
+        "repo_app": "shop",
+        "instructions": "Answer questions.",
+    },
+    "update_agent": {
+        "project": "demo",
+        "agent": "helper",
+        "changes": {"instructions": "Be brief."},
+    },
+    "suspend_agent": {"project": "demo", "agent": "helper"},
+    "delete_agent": {
+        "project": "demo",
+        "agent": "helper",
+        "user_confirmed": True,
+    },
 }
 # A person approves or applies these in the CMP: the call never applies.
 APPROVED_IN_CMP = {"import_repo", "link_apps", "unlink_apps"}
@@ -387,6 +412,11 @@ READ_CALLS = {
     "get_security": {"project": "demo"},
     "list_backups": {"project": "demo", "app": "shop"},
     "get_alert_rules": {"project": "demo"},
+    "get_project_ai": {"project": "demo"},
+    "get_ai_usage": {"project": "demo"},
+    "list_agent_templates": {},
+    "list_agents": {"project": "demo"},
+    "get_agent": {"project": "demo", "agent": "helper"},
     "database_restore": {"project": "demo", "app": "shop", "backup": "b-1"},
 }
 # Same tools, other branches worth a pass with secrets in the answers.

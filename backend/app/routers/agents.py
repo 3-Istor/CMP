@@ -24,6 +24,7 @@ from app.models.agent import AgentConfirmation, AgentGrant
 from app.models.audit import AuditEvent
 from app.models.deployment import Deployment, DeploymentStatus
 from app.services.agents import policy, store
+from app.services.ai import service as ai_service
 from app.services.audit import note
 from app.services.authz import assert_project_role, is_cnp_admin
 from app.services.keycloak_service import get_current_user
@@ -492,11 +493,18 @@ async def update_agent_settings(
     await run_in_threadpool(
         assert_project_role, db, token, project_name, ProjectRole.ADMIN
     )
-    await run_in_threadpool(
-        policy.set_project_stake,
-        project_name,
-        token.get("preferred_username", ""),
-        body.level,
-        body.autonomous_hours,
-    )
+    try:
+        if body.level == "critical":
+            await ai_service.refuse_if_ai_enabled(project_name)
+        await run_in_threadpool(
+            policy.set_project_stake,
+            project_name,
+            token.get("preferred_username", ""),
+            body.level,
+            body.autonomous_hours,
+        )
+        if body.level is not None:
+            await ai_service.sync_stake(project_name, body.level)
+    except ai_service.AiError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     return _settings_view(db, project_name)

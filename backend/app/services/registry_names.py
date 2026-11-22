@@ -54,6 +54,9 @@ PLATFORM_VAULT_ROLES = frozenset(
 PLATFORM_NAMESPACES = frozenset(
     {
         "3istor-sessions",
+        "ai-gateway",
+        "ai-sandbox",
+        "ai-tools",
         "argo-rollouts",
         "argocd",
         "arcl-cmp",
@@ -68,6 +71,7 @@ PLATFORM_NAMESPACES = frozenset(
         "demo-app",
         "dev-sandbox",
         "envoy-gateway-system",
+        "kagent",
         "finops",
         "garage",
         "garage-s3",

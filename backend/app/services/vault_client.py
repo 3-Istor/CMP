@@ -60,6 +60,22 @@ async def write_kv(mount: str, path: str, data: dict[str, Any]) -> None:
         raise VaultError(f"Vault write failed ({response.status_code})")
 
 
+async def delete_kv(mount: str, path: str) -> None:
+    """Every version and the metadata of a secret; absent is fine."""
+    if not vault_auth.is_configured():
+        raise VaultError("Vault is not configured on the CMP.")
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.delete(
+                f"{settings.VAULT_URL}/v1/{mount}/metadata/{path}",
+                headers=await _headers(),
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 204, 404):
+        raise VaultError(f"Vault delete failed ({response.status_code})")
+
+
 async def read_key_names(mount: str, path: str) -> list[str]:
     """
     The names of the keys of a secret, never its values.
