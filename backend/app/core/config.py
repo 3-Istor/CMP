@@ -257,6 +257,25 @@ class Settings(BaseSettings):
     FINOPS_PLATFORM_APP_SLOTS: int = 25
     # Token metrics of the AI gateway (OpenTelemetry GenAI conventions).
     FINOPS_AI_TOKEN_METRIC: str = "gen_ai_client_token_usage_sum"
+
+    # AI landing zone. The gateway holds the provider key: the CMP reaches
+    # models only through it, as the user (token exchange) or as its own
+    # client for the agent draft.
+    AI_GATEWAY_URL: str = "http://ai-gateway.ai-gateway.svc.cluster.local:8080"
+    AI_MODELS: str = "claude-haiku-5-5,claude-sonnet-5-5"
+    AI_DEFAULT_MODEL: str = "claude-haiku-5-5"
+    AI_DRAFT_MODEL: str = "claude-haiku-5-5"
+    AI_CMP_CLIENT_ID: str = "cmp-ai"
+    AI_CMP_CLIENT_SECRET: str = ""
+    # Chantier budget rule: test chats and drafts stay small.
+    AI_TEST_MAX_TOKENS: int = 1500
+    AI_TEST_MAX_STEPS: int = 8
+    AI_TEMPLATES_REPO: str = "app-templates"
+    AI_TEMPLATES_PATH: str = "agents"
+    # Where the gateway's traces land: the platform tenant and its service.
+    AI_TRACES_ACCOUNT: int = 0
+    AI_TRACES_SERVICE: str = "ai-gateway"
+    AI_GRAFANA_TRACES_DATASOURCE: str = "victoriatraces"
     # AWS Data Exports "FOCUS 1.2 with AWS columns" (Parquet). Empty bucket
     # disables the source. The prefix is the export root, i.e. the folder that
     # holds metadata/ and data/ (<prefix>/<export-name>). Credentials come

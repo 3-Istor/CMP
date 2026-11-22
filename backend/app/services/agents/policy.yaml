@@ -31,6 +31,7 @@ actions:
   app.delete:           {sandbox: ask,   demo: ask,   standard: deny,  critical: deny}
   app.restart:          {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   app.sleep:            {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
+  app.pause:            {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   app.config:           {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   staging.manage:       {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
   promotion.policy:     {sandbox: allow, demo: allow, standard: ask,   critical: confirm}
@@ -54,6 +55,14 @@ actions:
   import.apply:         {sandbox: confirm, demo: confirm, standard: confirm, critical: confirm}
   app.link:             {sandbox: confirm, demo: confirm, standard: confirm, critical: confirm}
   app.unlink:           {sandbox: confirm, demo: confirm, standard: confirm, critical: confirm}
+  # AI landing zone. A critical project cannot turn AI on at all. The kill
+  # switch is never slowed down; deleting an agent drops its client and its
+  # values file, and resuming one counts as an update.
+  ai.configure:         {sandbox: allow, demo: allow, standard: ask,   critical: deny}
+  agent.create:         {sandbox: allow, demo: allow, standard: ask,   critical: deny}
+  agent.update:         {sandbox: allow, demo: allow, standard: ask,   critical: deny}
+  agent.suspend:        {sandbox: allow, demo: allow, standard: allow, critical: ask}
+  agent.delete:         {sandbox: ask,   demo: ask,   standard: confirm, critical: confirm}
 
 # While an alert fires on the app, stopping or retrying a release is never
 # slowed down: whoever is putting the fire out goes first.
@@ -64,7 +73,7 @@ incident:
 
 # Never relaxed by an autonomous window: these destroy data or a project, so
 # the project's own level applies, not autonomous_as.
-never_autonomous: [app.delete, project.delete, db.restore]
+never_autonomous: [app.delete, project.delete, db.restore, agent.delete]
 
 # A standard project whose owner opened an autonomous window is treated as
 # this level until the window closes.

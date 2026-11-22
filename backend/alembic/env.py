@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.models.access  # noqa: F401
 import app.models.access_review  # noqa: F401
 import app.models.agent  # noqa: F401
+import app.models.ai  # noqa: F401
 import app.models.deployment  # noqa: F401
 import app.models.environment  # noqa: F401
 import app.models.finops  # noqa: F401

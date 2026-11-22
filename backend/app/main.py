@@ -19,6 +19,7 @@ from app.routers import (
     account,
     activity,
     agents,
+    ai,
     alerting,
     app_icons,
     app_observability,
@@ -432,6 +433,9 @@ app.include_router(access_reviews.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(agents.projects_router, prefix="/api")
+app.include_router(ai.projects, prefix="/api")
+app.include_router(ai.platform, prefix="/api")
+app.include_router(ai.admin, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(alerting.router, prefix="/api")
 app.include_router(app_icons.router, prefix="/api")
