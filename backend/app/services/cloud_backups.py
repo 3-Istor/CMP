@@ -1,4 +1,4 @@
-"""Copies the on-prem backup keys of cloud apps into Vault, then turns backups on."""
+"""Copies the on-prem backup keys of every fullstack app into Vault, then turns pre-migration backups on."""
 
 import asyncio
 import base64
@@ -192,7 +192,7 @@ async def sync_keys(db: Session) -> list[str]:
                 deployment.app_config, deployment.terraform_outputs
             )
             cloud = project_cloud(db, deployment.project_id)
-            if app_type != "fullstack" or cloud == TargetCloud.ONPREM:
+            if app_type != "fullstack":
                 continue
             written += await _sync_deployment(db, deployment, cloud)
             _last_error.pop(deployment.id, None)

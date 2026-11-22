@@ -1,5 +1,5 @@
 """
-A project moving from one public cloud to the other, in idempotent steps.
+A project moving between clusters (on-prem or a public cloud), in idempotent steps.
 
 The database goes by a final CNPG backup on the source, then a restore at
 generation N+1 on the target from the same bucket. The CMP writes to the
@@ -11,6 +11,7 @@ import inspect
 import logging
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -19,7 +20,11 @@ from app.models.project import Project, TargetCloud
 from app.models.project_move import ACTIVE, STEP_NAMES, ProjectMove
 from app.services import project_registry, vault_client
 from app.services.audit import record_system_event
-from app.services.clusters.state import PUBLIC_CLOUDS, fresh_state
+from app.services.clusters.state import (
+    PUBLIC_CLOUDS,
+    fresh_state,
+    pick_public_cloud,
+)
 from app.services.deletion_protection import still_labelled
 from app.services.environments import layout
 from app.services.kube_client import (
@@ -33,6 +38,7 @@ from app.services.kube_client import (
 )
 from app.services.moves import active_move
 from app.services.notifications import notify_project, notify_users
+from app.services.orphans import VAULT_AUTH_MOUNTS
 from app.services.security import restore as restores
 from app.services.security import restore_commit
 
@@ -49,7 +55,7 @@ WORKLOADS = (
 )
 IMPORTED = ("import-service", "import-backing")
 APP_TEMPLATE = "k3s-gitops-app"
-PUBLIC = {c.value for c in PUBLIC_CLOUDS}
+CLUSTERS = {c.value for c in TargetCloud}
 
 
 class MoveRefused(Exception):
@@ -74,23 +80,37 @@ def _named(steps: list[dict], name: str) -> dict:
 
 
 async def start_checks(
-    db: Session, project: Project, confirm_data_loss: bool
+    db: Session,
+    project: Project,
+    confirm_data_loss: bool,
+    target: str = "public",
 ) -> str:
-    """The cloud *project* would move to; MoveRefused if it cannot move now."""
+    """The cluster *project* would move to; MoveRefused if it cannot move now."""
     source = TargetCloud(project.target_cloud)
-    if source not in PUBLIC_CLOUDS:
-        raise MoveRefused(
-            409, "Moves to or from on-prem are not supported yet"
-        )
     if active_move(db, project.project_name):
         raise MoveRefused(409, "This project is already moving.")
-    target = next(c for c in PUBLIC_CLOUDS if c != source)
-    for cloud in (source, target):
-        state = fresh_state(cloud)
+    if target == "onprem":
+        if source == TargetCloud.ONPREM:
+            raise MoveRefused(409, "This project is already on-prem.")
+        destination = TargetCloud.ONPREM
+    elif source == TargetCloud.ONPREM:
+        try:
+            destination = pick_public_cloud(
+                {c: fresh_state(c) for c in PUBLIC_CLOUDS}, None
+            )
+        except HTTPException as exc:
+            raise MoveRefused(exc.status_code, exc.detail) from exc
+    else:
+        destination = next(c for c in PUBLIC_CLOUDS if c != source)
+    # On-prem is up whenever the CMP answers.
+    for cloud in (source, destination):
+        state = fresh_state(cloud) if cloud in PUBLIC_CLOUDS else "up"
         if state != "up":
             raise MoveRefused(
                 409, f"The {cloud.value.upper()} cluster is {state}."
             )
+    if source == TargetCloud.ONPREM:
+        await _check_leaving_onprem(project.project_name, destination)
     # The admission policy refuses to delete protected source namespaces.
     try:
         protected = await project_registry.is_deletion_protected(
@@ -110,7 +130,38 @@ async def start_checks(
         lost = await data_loss(db, project)
         if lost:
             raise MoveRefused(409, f"Data in {', '.join(lost)} will be lost.")
-    return target.value
+    return destination.value
+
+
+async def _check_leaving_onprem(project: str, destination: TargetCloud):
+    # An OBC in an app namespace would be deleted with it, bucket included.
+    for ns in await run_in_threadpool(
+        _app_namespaces, project, TargetCloud.ONPREM
+    ):
+        claims = await run_in_threadpool(
+            kube_list,
+            f"/apis/objectbucket.io/v1alpha1/namespaces/{ns}/objectbucketclaims",
+        )
+        if claims:
+            raise MoveRefused(
+                409,
+                f"Move the backups of {_app_env(project, ns)[0]} "
+                f"to {project}-backups first.",
+            )
+    if destination in PUBLIC_CLOUDS:
+        try:
+            found = await project_registry.read_record(project)
+        except project_registry.RegistryError as exc:
+            raise MoveRefused(
+                502, f"Could not read the project record: {exc}"
+            ) from exc
+        features = ((found or ({},))[0].get("spec") or {}).get(
+            "features"
+        ) or {}
+        if features.get("keycloak"):
+            raise MoveRefused(
+                409, "Projects with their own Keycloak stay on-prem."
+            )
 
 
 async def data_loss(db: Session, project: Project) -> list[str]:
@@ -169,13 +220,18 @@ def new_move(
 
 
 def _namespaces(project: str, cloud: TargetCloud) -> list[dict]:
-    """The project's namespaces on *cloud*; the label is checked here too."""
+    """The project's namespaces on *cloud*, the label checked here too.
+
+    <p>-backups (on-prem, holds the database buckets) is never listed: no
+    caller may stop or delete it.
+    """
     return [
         ns
         for ns in kube_list(
             NAMESPACES, {"labelSelector": f"{LABEL}={project}"}, cloud=cloud
         )
         if (ns["metadata"].get("labels") or {}).get(LABEL) == project
+        and ns["metadata"]["name"] != f"{project}-backups"
     ]
 
 
@@ -241,13 +297,15 @@ def _deployment(db: Session, project: str, app: str) -> Deployment:
 
 
 def _project_apps(project: str) -> list[dict]:
-    """The project's Applications on a public cloud (on-prem ones stay)."""
+    """The project's Applications that move: not <p>-appproject (pinned
+    on-prem) nor the in-cluster ones (image updaters)."""
     return [
         app
         for app in kube_list(
             f"{ARGOCD}/applications", {"labelSelector": f"{LABEL}={project}"}
         )
-        if _destination(app) in PUBLIC
+        if app["metadata"]["name"] != f"{project}-appproject"
+        and _destination(app) in CLUSTERS
     ]
 
 
@@ -316,7 +374,7 @@ def _vault_roles(move: ProjectMove) -> list[str]:
 
 async def _precheck(move: ProjectMove) -> None:
     problems = await run_in_threadpool(_source_problems, move)
-    mount = f"kubernetes-{move.target}"
+    mount = VAULT_AUTH_MOUNTS[TargetCloud(move.target)]
     missing = [
         role
         for role in await run_in_threadpool(_vault_roles, move)
