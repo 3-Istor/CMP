@@ -4183,7 +4183,8 @@
       "noAgentsBody": "Décrivez votre agent en une phrase ou partez d'un des six modèles.",
       "enableFirst": "Activez l'accès à l'IA pour créer un agent.",
       "assistantsTitle": "Assistants connectés",
-      "assistantsHint": "Claude, ChatGPT et les autres assistants qui agissent sur le projet par le serveur MCP de la CMP."
+      "assistantsHint": "Claude, ChatGPT et les autres assistants qui agissent sur le projet par le serveur MCP de la CMP.",
+      "usageUnavailable": "Consommation indisponible : la gateway IA ne répond pas encore."
     },
     "backend": {
       "ok": "En ligne",

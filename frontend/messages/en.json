@@ -4183,7 +4183,8 @@
       "noAgentsBody": "Describe your agent in one sentence or start from one of the six templates.",
       "enableFirst": "Enable AI access to create an agent.",
       "assistantsTitle": "Connected assistants",
-      "assistantsHint": "Claude, ChatGPT and other assistants acting on the project through the CMP MCP server."
+      "assistantsHint": "Claude, ChatGPT and other assistants acting on the project through the CMP MCP server.",
+      "usageUnavailable": "Usage unavailable: the AI gateway does not answer yet."
     },
     "backend": {
       "ok": "Online",
