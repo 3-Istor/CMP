@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from ruamel.yaml import YAML
 
 from app.core.config import settings
+from app.services.ai import reconcile as ai_reconcile
 from app.services.github_service import (
     FileNotInRepoError,
     GitHubAppError,
@@ -78,7 +79,7 @@ async def commit_record_change(
                     )
                 files = await change(record, head)
                 files[path] = dump_yaml(record)
-                return await commit_files(
+                sha = await commit_files(
                     token,
                     repo,
                     files,
@@ -86,6 +87,8 @@ async def commit_record_change(
                     parent_sha=head,
                     branch=branch,
                 )
+                ai_reconcile.request(project)
+                return sha
             except GitHubAppError as exc:
                 if not _retryable(exc):
                     raise RegistryError(

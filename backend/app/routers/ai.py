@@ -33,9 +33,7 @@ from app.services.ai import (
     identity,
 )
 from app.services.ai import registry as ai_registry
-from app.services.ai import (
-    service,
-)
+from app.services.ai import service
 from app.services.ai import usage as ai_usage
 from app.services.ai.declaration import ProjectAi, client_id
 from app.services.authz import (
@@ -113,6 +111,12 @@ class AppAiBody(BaseModel):
     enabled: bool = True
     # 0 is an app without model access (an MCP server only).
     daily_token_budget: int = Field(default=50_000, ge=0, le=1_000_000_000)
+
+
+class ReconcileBody(BaseModel):
+    # Deleting the clients the record no longer names is never the default:
+    # a record edited by mistake must not cut a running agent off.
+    prune: bool = False
 
 
 class Trigger(BaseModel):
@@ -228,6 +232,22 @@ async def enable_app_ai(
     try:
         return await service.enable_app(
             db, ctx.project_name, app, body.model_dump(), ctx.username
+        )
+    except FAILURES as exc:
+        raise _fail(exc) from exc
+
+
+@projects.post("/ai/reconcile")
+async def reconcile_project_ai(
+    ctx: RequireAdmin,
+    body: ReconcileBody | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Clients and secrets of every agent and AI app of the record, made
+    to match it; agents declared in Git get theirs here."""
+    try:
+        return await service.reconcile_ai(
+            db, ctx.project_name, (body or ReconcileBody()).prune
         )
     except FAILURES as exc:
         raise _fail(exc) from exc

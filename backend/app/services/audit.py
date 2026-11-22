@@ -189,6 +189,7 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/catalog/sync"): "catalog.sync",
     ("PUT", "/api/projects/{project_name}/ai"): "ai.configure",
     ("POST", "/api/projects/{project_name}/ai/apps/{app}"): "ai.app",
+    ("POST", "/api/projects/{project_name}/ai/reconcile"): "ai.reconcile",
     ("POST", "/api/projects/{project_name}/agents"): "ai.agent.create",
     (
         "PATCH",

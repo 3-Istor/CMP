@@ -8,7 +8,7 @@ import type { Agent } from "@/types/ai";
 import { ArrowUpRight, Bot } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { AgentStatusBadge, BarGauge, IsolationBadge, Sparkline, useAiFormat } from "./shared";
+import { AgentStatusBadge, BarGauge, IsolationBadge, ProvisionBadge, Sparkline, useAiFormat } from "./shared";
 
 export function agentHref(project: string, agent: string, tab = "") {
   const base = `${projectHref(project, "ai")}/agents/${encodeURIComponent(agent)}`;
@@ -56,6 +56,7 @@ export function AgentCard({ agent }: { agent: Agent }) {
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <AgentStatusBadge status={agent.status} />
+        {agent.credentials === "missing" && <ProvisionBadge />}
         <IsolationBadge isolation={agent.isolation} />
         <span className="text-xs text-muted-foreground">
           {tTrigger(agent.trigger.type)} · <span className="font-mono">{agent.model}</span>

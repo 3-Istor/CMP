@@ -86,8 +86,9 @@ How to work:
   database_backup, database_restore (dry_run first). Alert rules:
   get_alert_rules. Read before you change.
 - AI on a project and hosted agents: get_project_ai, set_project_ai,
-  enable_app_ai, get_ai_usage, list_agent_templates, list_agents, get_agent,
-  create_agent, update_agent, suspend_agent, delete_agent. Read the guide
+  enable_app_ai, reconcile_project_ai, get_ai_usage, list_agent_templates,
+  list_agents, get_agent, create_agent, update_agent, suspend_agent,
+  delete_agent. Read the guide
   cnp-ai first. Agents are tested in the CMP, on the agent's page.
 - Actions behind a passkey in the CMP (deleting an app or a project,
   starting a promotion to prod, a full canary promote) answer

@@ -165,6 +165,22 @@ async def store_client_secret(
         )
 
 
+async def client_secret_in_place(
+    db: Session, project: str, app: str, client_id: str, secret: str
+) -> bool:
+    """What :func:`store_client_secret` writes is there, secret included."""
+    current = await vault_client.read_kv(
+        secret_mount(project), secret_path(app)
+    )
+    if current != {"client_id": client_id, "client_secret": secret}:
+        return False
+    role = generate.app_role_name(project, app)
+    for mount in _auth_mounts(db, project):
+        if not await vault_client.app_role_exists(mount, role):
+            return False
+    return True
+
+
 async def drop_client_secret(db: Session, project: str, app: str) -> None:
     await vault_client.delete_kv(secret_mount(project), secret_path(app))
     for mount in _auth_mounts(db, project):

@@ -361,6 +361,7 @@ WRITE_CALLS = {
         "models": ["claude-haiku-5-5"],
     },
     "enable_app_ai": {"project": "demo", "app": "shop"},
+    "reconcile_project_ai": {"project": "demo"},
     "create_agent": {
         "project": "demo",
         "template": "assistant",

@@ -2013,6 +2013,21 @@ export const grantAppAi = (
     body: JSON.stringify(body),
   });
 
+export interface AiReconcileReport {
+  project: string;
+  changed: boolean;
+  items: { kind: "agent" | "app"; name: string; client_id: string; changes: string[]; error: string | null }[];
+  orphans: string[];
+  deleted: string[];
+  errors: number;
+}
+
+export const reconcileProjectAi = (project: string) =>
+  request<AiReconcileReport>(`${projectPath(project)}/ai/reconcile`, {
+    method: "POST",
+    body: JSON.stringify({ prune: false }),
+  });
+
 export const getProjectAiUsage = (project: string, period: "1d" | "7d" | "30d" = "1d") =>
   request<import("@/types/ai").AiUsage>(`${projectPath(project)}/ai/usage?period=${period}`);
 

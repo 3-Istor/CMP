@@ -268,6 +268,7 @@ class Settings(BaseSettings):
     AI_CMP_CLIENT_ID: str = "cmp-ai"
     AI_CMP_CLIENT_SECRET: str = ""
     # Chantier budget rule: test chats and drafts stay small.
+    AI_RECONCILE_INTERVAL_SECONDS: int = 900
     AI_TEST_MAX_TOKENS: int = 1500
     AI_TEST_MAX_STEPS: int = 8
     AI_TEMPLATES_REPO: str = "app-templates"

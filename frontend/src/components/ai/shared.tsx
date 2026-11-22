@@ -75,6 +75,17 @@ export function AgentStatusBadge({ status, className }: { status: AgentStatus; c
   );
 }
 
+/** An agent declared in Git whose Keycloak client is not provisioned yet. */
+export function ProvisionBadge() {
+  const t = useTranslations("ai.provision");
+  return (
+    <Badge variant="secondary" className={STATUS_CLASS.pending}>
+      <KeyRound aria-hidden />
+      {t("state")}
+    </Badge>
+  );
+}
+
 const ISOLATION_ICON: Record<AgentIsolation, LucideIcon> = {
   runc: Box,
   gvisor: ShieldHalf,
