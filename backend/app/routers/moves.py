@@ -1,6 +1,8 @@
-"""Moving a project from one public cloud to the other."""
+"""Moving a project between clusters."""
 
 from datetime import datetime
+
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/projects/{project_name}", tags=["moves"])
 
 class MoveStart(BaseModel):
     confirm_data_loss: bool = False
+    target: Literal["onprem", "public"] = "public"
 
 
 class MoveRead(BaseModel):
@@ -70,7 +73,7 @@ async def start_move(
     async with project_lock(ctx.project_name):
         try:
             target = await steps.start_checks(
-                db, project, body.confirm_data_loss
+                db, project, body.confirm_data_loss, body.target
             )
         except steps.MoveRefused as exc:
             raise _refused(exc) from exc

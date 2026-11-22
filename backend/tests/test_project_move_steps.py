@@ -322,8 +322,20 @@ def _backend(kube):
 # ── start_checks ────────────────────────────────────────────────────────────
 
 
-def _checks(db, states=None, confirm=False, protected=False, labels=False):
+def _checks(
+    db,
+    states=None,
+    confirm=False,
+    protected=False,
+    labels=False,
+    target="public",
+    source=None,
+    record=None,
+):
     states = states or {AWS: "up", GCP: "up"}
+    if source:
+        db.query(Project).one().target_cloud = source
+        db.commit()
     with (
         mock.patch.object(steps, "fresh_state", lambda c: states[c]),
         mock.patch.object(
@@ -332,21 +344,69 @@ def _checks(db, states=None, confirm=False, protected=False, labels=False):
             mock.AsyncMock(return_value=protected),
         ),
         mock.patch.object(steps, "still_labelled", return_value=labels),
+        mock.patch.object(
+            project_registry,
+            "read_record",
+            mock.AsyncMock(return_value=(record or {"spec": {}}, "sha")),
+        ),
     ):
         return asyncio.run(
-            steps.start_checks(db, db.query(Project).one(), confirm)
+            steps.start_checks(db, db.query(Project).one(), confirm, target)
         )
 
 
-def test_start_refuses_on_prem(db):
-    db.query(Project).one().target_cloud = ONPREM
-    db.commit()
+def test_target_public_from_aws_is_gcp(db, world):
+    assert _checks(db) == "gcp"
+
+
+def test_target_onprem_from_aws(db, world):
+    # fresh_state would raise KeyError for on-prem: it is never asked.
+    assert _checks(db, target="onprem") == "onprem"
+
+
+def test_target_public_from_onprem_picks_up_cloud(db, world):
+    assert _checks(db, {AWS: "down", GCP: "up"}, source=ONPREM) == "gcp"
 
     with pytest.raises(steps.MoveRefused) as exc:
-        _checks(db)
+        _checks(db, {AWS: "down", GCP: "down"}, source=ONPREM)
+    assert exc.value.status_code == 409
+
+
+def test_target_onprem_from_onprem_refused(db, world):
+    with pytest.raises(steps.MoveRefused) as exc:
+        _checks(db, target="onprem", source=ONPREM)
 
     assert exc.value.status_code == 409
-    assert exc.value.detail == "Moves to or from on-prem are not supported yet"
+
+
+def test_refuses_obc_in_app_namespace(db, world):
+    world.kube.add(ONPREM, NAMESPACES, _ns("alpha-optispace"))
+    world.kube.add(
+        ONPREM,
+        "/apis/objectbucket.io/v1alpha1/namespaces/alpha-optispace"
+        "/objectbucketclaims",
+        {"metadata": {"name": "db-backup"}},
+    )
+
+    with pytest.raises(steps.MoveRefused) as exc:
+        _checks(db, source=ONPREM)
+
+    assert exc.value.status_code == 409
+    assert (
+        exc.value.detail
+        == "Move the backups of optispace to alpha-backups first."
+    )
+    world.set_move.assert_not_called()
+
+
+def test_refuses_keycloak_to_public(db, world):
+    record = {"spec": {"features": {"keycloak": True}}}
+
+    with pytest.raises(steps.MoveRefused) as exc:
+        _checks(db, source=ONPREM, record=record)
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "Projects with their own Keycloak stay on-prem."
 
 
 @pytest.mark.parametrize(
