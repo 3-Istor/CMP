@@ -650,7 +650,8 @@ def test_prepare_fails_while_a_source_app_is_unhealthy(db, world):
     assert move.status == "failed"
     assert "alpha-shop-backend" in _step(move, "prepare")["detail"]
     assert _step(move, "stop_source")["status"] == "pending"
-    assert not [e for e in world.log if e[0] == "patch"]
+    # Only the ApplicationSet refresh (on-prem), no workload patched.
+    assert not [e for e in world.log if e[0] == "patch" and e[1] != ONPREM]
     asyncio.run(steps.cancel(db, move))
     assert move.status == "cancelling"
 
