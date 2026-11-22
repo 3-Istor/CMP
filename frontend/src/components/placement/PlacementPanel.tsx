@@ -2,7 +2,6 @@
 
 import { CLOUD_META } from "@/components/finops/format";
 import { useProjectContext } from "@/components/projects/ProjectContext";
-import { MoveActions, MoveButtons } from "@/components/projects/ProjectLocation";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -131,11 +130,9 @@ export function PlacementPanel() {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <MoveButtons />
           {move?.status === "cancelling" && (
             <span className="text-sm text-muted-foreground">{tLocation("cancelling")}</span>
           )}
-          <MoveActions />
           {data?.clusters.map((c) => (
             <a key={c.cloud} href={c.console_url} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <Swatch cloud={c.cloud} />

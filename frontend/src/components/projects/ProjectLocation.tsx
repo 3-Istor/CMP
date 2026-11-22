@@ -176,9 +176,37 @@ export function MoveActions() {
   );
 }
 
+/** Steps of the current move with Retry / Cancel; nothing without a move. */
+export function MoveProgress() {
+  const t = useTranslations("projectSettings.location");
+  const { move } = useProjectContext();
+  if (!move) return null;
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <p className="text-sm font-medium">
+        {move.status === "cancelling" ? t("cancelling") : t("moving", { cloud: cloudName(move.target) })}
+      </p>
+      <ol className="space-y-1.5 text-sm">
+        {move.steps.map((s) => (
+          <li key={s.name} className="flex items-center gap-2">
+            <StepIcon status={s.status} />
+            <span>{t(`steps.${s.name}`)}</span>
+            <span className="ml-auto font-mono text-xs text-muted-foreground">
+              {time(s.started_at)}
+              {s.finished_at ? ` - ${time(s.finished_at)}` : ""}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {move.detail && <p className="text-sm text-destructive">{move.detail}</p>}
+      <MoveActions />
+    </div>
+  );
+}
+
 export function ProjectLocation() {
   const t = useTranslations("projectSettings.location");
-  const { targetCloud, move } = useProjectContext();
+  const { targetCloud } = useProjectContext();
   if (!targetCloud) return null;
 
   return (
@@ -194,27 +222,7 @@ export function ProjectLocation() {
           <MoveButtons />
         </div>
 
-        {move && (
-          <div className="space-y-3 border-t pt-4">
-            <p className="text-sm font-medium">
-              {move.status === "cancelling" ? t("cancelling") : t("moving", { cloud: cloudName(move.target) })}
-            </p>
-            <ol className="space-y-1.5 text-sm">
-              {move.steps.map((s) => (
-                <li key={s.name} className="flex items-center gap-2">
-                  <StepIcon status={s.status} />
-                  <span>{t(`steps.${s.name}`)}</span>
-                  <span className="ml-auto font-mono text-xs text-muted-foreground">
-                    {time(s.started_at)}
-                    {s.finished_at ? ` - ${time(s.finished_at)}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ol>
-            {move.detail && <p className="text-sm text-destructive">{move.detail}</p>}
-            <MoveActions />
-          </div>
-        )}
+        <MoveProgress />
       </CardContent>
     </Card>
   );
