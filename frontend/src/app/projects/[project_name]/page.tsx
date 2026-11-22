@@ -10,7 +10,7 @@ import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { PlacementPanel } from "@/components/placement/PlacementPanel";
-import { MoveBanner } from "@/components/projects/ProjectLocation";
+import { MoveBanner, MoveButtons } from "@/components/projects/ProjectLocation";
 import { OpenAppMenu } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
@@ -178,6 +178,7 @@ export default function ProjectPage() {
                   {tNav(`cloud.${targetCloud}`)}
                 </Badge>
               )}
+              <MoveButtons />
               <Badge variant="outline" className="font-mono text-xs">
                 {t("appCount", { count: apps.length })}
               </Badge>

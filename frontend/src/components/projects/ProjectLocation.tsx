@@ -46,7 +46,9 @@ export function MoveBanner() {
         )}
         {move.status === "failed"
           ? t("bannerFailed", { cloud })
-          : t("banner", { cloud, step: t(`steps.${current.name}`) })}
+          : move.status === "cancelling"
+            ? t("cancelling")
+            : t("banner", { cloud, step: t(`steps.${current.name}`) })}
       </span>
       <Link
         href={`/projects/${encodeURIComponent(projectName)}/settings`}
@@ -58,16 +60,16 @@ export function MoveBanner() {
   );
 }
 
-export function ProjectLocation() {
+/** Start-move buttons and their confirmation dialog; nothing while a move is active or without permission. */
+export function MoveButtons() {
   const t = useTranslations("projectSettings.location");
   const { projectName, targetCloud, can, move, setMove } = useProjectContext();
   const { health } = useGlobalHealth(0);
   const [confirming, setConfirming] = useState<MoveTarget | null>(null);
   const [dataLoss, setDataLoss] = useState(false);
   const [lost, setLost] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
 
-  if (!targetCloud) return null;
+  if (!targetCloud || move || !can("project.move")) return null;
 
   const up = (cloud: string) => health?.clusters.some((c) => c.cloud === cloud && c.state === "up") ?? false;
   // From a public cloud the "public" target is the other one; from on-prem, any public cloud that is up.
@@ -87,16 +89,6 @@ export function ProjectLocation() {
           { target: "public", label: t("move", { cloud: cloudName(other) }), enabled: up(other), down: cloudName(other) },
         ];
   const confirmName = confirming === "onprem" ? cloudName("onprem") : targetCloud === "onprem" ? t("publicName") : cloudName(other);
-  const canMove = can("project.move");
-
-  const act = (action: "retry" | "cancel") => {
-    if (!move) return;
-    setBusy(true);
-    moveAction(projectName, move.id, action)
-      .then((m: ProjectMove) => setMove(m))
-      .catch((err) => toast.error(errorMessage(err)))
-      .finally(() => setBusy(false));
-  };
 
   const start = async () => {
     setMove(await startMove(projectName, dataLoss, confirming ?? "public"));
@@ -104,75 +96,27 @@ export function ProjectLocation() {
 
   return (
     <>
-      <Card>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              {t("runsOn", { cloud: cloudName(targetCloud) })}
-              <Badge variant="outline" className="text-xs">
-                {cloudName(targetCloud)}
-              </Badge>
-            </div>
-            {canMove && !move && (
-              <div className="flex items-center gap-3">
-                {options.map((o) => (
-                  <Button
-                    key={o.target}
-                    variant="outline"
-                    disabled={!o.enabled}
-                    title={health && !o.enabled ? t("notUp", { cloud: o.down ?? "" }) : undefined}
-                    onClick={() => {
-                      setDataLoss(false);
-                      setLost([]);
-                      setConfirming(o.target);
-                      // On failure the move request itself names what would be lost.
-                      getMoveDataLoss(projectName)
-                        .then(setLost)
-                        .catch(() => setLost([]));
-                    }}
-                  >
-                    {o.label}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {move && (
-            <div className="space-y-3 border-t pt-4">
-              <p className="text-sm font-medium">{t("moving", { cloud: cloudName(move.target) })}</p>
-              <ol className="space-y-1.5 text-sm">
-                {move.steps.map((s) => (
-                  <li key={s.name} className="flex items-center gap-2">
-                    <StepIcon status={s.status} />
-                    <span>{t(`steps.${s.name}`)}</span>
-                    <span className="ml-auto font-mono text-xs text-muted-foreground">
-                      {time(s.started_at)}
-                      {s.finished_at ? ` - ${time(s.finished_at)}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              {move.detail && <p className="text-sm text-destructive">{move.detail}</p>}
-              {canMove && (
-                <div className="flex gap-2">
-                  {move.status === "failed" && (
-                    <Button size="sm" disabled={busy} onClick={() => act("retry")}>
-                      {t("retry")}
-                    </Button>
-                  )}
-                  {move.steps.find((s) => s.name === "stop_source")?.status === "pending" && (
-                    <Button size="sm" variant="outline" disabled={busy} onClick={() => act("cancel")}>
-                      {t("cancel")}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
+      <div className="flex items-center gap-3">
+        {options.map((o) => (
+          <Button
+            key={o.target}
+            variant="outline"
+            disabled={!o.enabled}
+            title={health && !o.enabled ? t("notUp", { cloud: o.down ?? "" }) : undefined}
+            onClick={() => {
+              setDataLoss(false);
+              setLost([]);
+              setConfirming(o.target);
+              // On failure the move request itself names what would be lost.
+              getMoveDataLoss(projectName)
+                .then(setLost)
+                .catch(() => setLost([]));
+            }}
+          >
+            {o.label}
+          </Button>
+        ))}
+      </div>
       <ConfirmDialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
@@ -196,5 +140,90 @@ export function ProjectLocation() {
         )}
       </ConfirmDialog>
     </>
+  );
+}
+
+/** Retry / Cancel of the current move; none while it is cancelling. */
+export function MoveActions() {
+  const t = useTranslations("projectSettings.location");
+  const { projectName, can, move, setMove } = useProjectContext();
+  const [busy, setBusy] = useState(false);
+  if (!move || !can("project.move")) return null;
+
+  const act = (action: "retry" | "cancel") => {
+    setBusy(true);
+    moveAction(projectName, move.id, action)
+      .then((m: ProjectMove) => setMove(m))
+      .catch((err) => toast.error(errorMessage(err)))
+      .finally(() => setBusy(false));
+  };
+
+  const canCancel = move.status !== "cancelling" && move.steps.find((s) => s.name === "stop_source")?.status === "pending";
+  if (move.status !== "failed" && !canCancel) return null;
+  return (
+    <div className="flex gap-2">
+      {move.status === "failed" && (
+        <Button size="sm" disabled={busy} onClick={() => act("retry")}>
+          {t("retry")}
+        </Button>
+      )}
+      {canCancel && (
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => act("cancel")}>
+          {t("cancel")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Steps of the current move with Retry / Cancel; nothing without a move. */
+export function MoveProgress() {
+  const t = useTranslations("projectSettings.location");
+  const { move } = useProjectContext();
+  if (!move) return null;
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <p className="text-sm font-medium">
+        {move.status === "cancelling" ? t("cancelling") : t("moving", { cloud: cloudName(move.target) })}
+      </p>
+      <ol className="space-y-1.5 text-sm">
+        {move.steps.map((s) => (
+          <li key={s.name} className="flex items-center gap-2">
+            <StepIcon status={s.status} />
+            <span>{t(`steps.${s.name}`)}</span>
+            <span className="ml-auto font-mono text-xs text-muted-foreground">
+              {time(s.started_at)}
+              {s.finished_at ? ` - ${time(s.finished_at)}` : ""}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {move.detail && <p className="text-sm text-destructive">{move.detail}</p>}
+      <MoveActions />
+    </div>
+  );
+}
+
+export function ProjectLocation() {
+  const t = useTranslations("projectSettings.location");
+  const { targetCloud } = useProjectContext();
+  if (!targetCloud) return null;
+
+  return (
+    <Card>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {t("runsOn", { cloud: cloudName(targetCloud) })}
+            <Badge variant="outline" className="text-xs">
+              {cloudName(targetCloud)}
+            </Badge>
+          </div>
+          <MoveButtons />
+        </div>
+
+        <MoveProgress />
+      </CardContent>
+    </Card>
   );
 }
