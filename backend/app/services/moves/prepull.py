@@ -17,13 +17,9 @@ from app.services.kube_client import (
     kube_get,
     kube_list,
 )
-from app.services.moves.steps import (
-    CNPG,
-    LABEL,
-    NAMESPACES,
-    WORKLOADS,
-    _app_namespaces,
-)
+
+# Module import, not names: steps imports this module at load time.
+from app.services.moves import steps
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +31,9 @@ PULL_ERRORS = ("ErrImagePull", "ImagePullBackOff")
 def _images(project: str, source: TargetCloud) -> dict[str, dict[str, list]]:
     """{namespace: {image: imagePullSecrets}} of what the source runs."""
     found: dict[str, dict[str, list]] = {}
-    for ns in _app_namespaces(project, source):
+    for ns in steps._app_namespaces(project, source):
         images = found.setdefault(ns, {})
-        for collection in WORKLOADS:
+        for collection in steps.WORKLOADS:
             for item in kube_list(collection.format(ns), cloud=source):
                 # A Rollout with workloadRef has no template: the Deployment has.
                 template = (item["spec"].get("template") or {}).get(
@@ -48,7 +44,9 @@ def _images(project: str, source: TargetCloud) -> dict[str, dict[str, list]]:
                     template.get("initContainers") or []
                 ):
                     images.setdefault(c["image"], secrets)
-        for cluster in kube_list(f"{CNPG.format(ns)}/clusters", cloud=source):
+        for cluster in kube_list(
+            f"{steps.CNPG.format(ns)}/clusters", cloud=source
+        ):
             image = (cluster.get("status") or {}).get("image") or (
                 cluster.get("spec") or {}
             ).get("imageName")
@@ -84,7 +82,7 @@ def _pod(move: ProjectMove, ns: str, image: str, node: str, secrets: list):
         "metadata": {
             "name": f"prepull-{move.id}-{digest}",
             "namespace": ns,
-            "labels": {PREPULL: str(move.id), LABEL: move.project},
+            "labels": {PREPULL: str(move.id), steps.LABEL: move.project},
         },
         "spec": {
             "nodeName": node,
@@ -146,10 +144,10 @@ def pending(move: ProjectMove) -> list[str]:
     for ns, images in _images(move.project, source).items():
         if not images:
             continue
-        if not kube_get(f"{NAMESPACES}/{ns}", cloud=target):
+        if not kube_get(f"{steps.NAMESPACES}/{ns}", cloud=target):
             waits.append(f"Waiting for namespace {ns} on {move.target}")
             continue
-        path = f"{NAMESPACES}/{ns}/pods"
+        path = f"{steps.NAMESPACES}/{ns}/pods"
         existing = {
             p["metadata"]["name"]: p
             for p in kube_list(
@@ -185,8 +183,8 @@ def pending(move: ProjectMove) -> list[str]:
 def cleanup(move: ProjectMove) -> None:
     """Delete this move's pre-pull Pods on the target."""
     target = TargetCloud(move.target)
-    for ns in _app_namespaces(move.project, target):
-        path = f"{NAMESPACES}/{ns}/pods"
+    for ns in steps._app_namespaces(move.project, target):
+        path = f"{steps.NAMESPACES}/{ns}/pods"
         for pod in kube_list(
             path, {"labelSelector": f"{PREPULL}={move.id}"}, cloud=target
         ):

@@ -16,7 +16,7 @@ STEP_NAMES = (
     "finish",
 )
 # A failed move still blocks a new one until it is cancelled or retried.
-ACTIVE = {"running", "failed"}
+ACTIVE = {"running", "failed", "cancelling"}
 
 
 class ProjectMove(Base):
@@ -29,7 +29,7 @@ class ProjectMove(Base):
     source: Mapped[str] = mapped_column(String(16))
     target: Mapped[str] = mapped_column(String(16))
     reason: Mapped[str] = mapped_column(String(32), default="button")
-    # running | failed | done | cancelled
+    # running | failed | cancelling | done | cancelled
     status: Mapped[str] = mapped_column(String(24), default="running")
     # [{"name", "status", "detail", "started_at", "finished_at"}]
     steps: Mapped[list] = mapped_column(JSON, default=list)
