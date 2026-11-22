@@ -1,7 +1,6 @@
 """Moving a project between clusters."""
 
 from datetime import datetime
-
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException

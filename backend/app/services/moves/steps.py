@@ -37,8 +37,8 @@ from app.services.kube_client import (
     kube_merge_patch,
 )
 from app.services.moves import active_move
-from app.services.orphans import VAULT_AUTH_MOUNTS
 from app.services.notifications import notify_project, notify_users
+from app.services.orphans import VAULT_AUTH_MOUNTS
 from app.services.security import restore as restores
 from app.services.security import restore_commit
 
