@@ -199,7 +199,7 @@ class TestRetryCancel:
         ):
             response = http.post(f"/api/projects/alpha/moves/{move_id}/cancel")
 
-        assert response.json()["status"] == "cancelled"
+        assert response.json()["status"] == "cancelling"
 
 
 class TestLoop:

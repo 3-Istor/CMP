@@ -3,8 +3,9 @@ A project moving between clusters (on-prem or a public cloud), in idempotent ste
 
 The database goes by a final CNPG backup on the source, then a restore at
 generation N+1 on the target from the same bucket. The CMP writes to the
-clusters only to stop the source apps, take that backup and delete the source
-namespaces once the target is healthy; the rest are registry commits.
+clusters to prepare the target (VaultSecret copies), stop the source apps,
+take that backup and delete the source namespaces once the target is healthy
+(or the target ones, on cancel); the rest are registry commits.
 """
 
 import inspect
@@ -36,7 +37,7 @@ from app.services.kube_client import (
     kube_list,
     kube_merge_patch,
 )
-from app.services.moves import active_move
+from app.services.moves import active_move, prepull
 from app.services.notifications import notify_project, notify_users
 from app.services.orphans import VAULT_AUTH_MOUNTS
 from app.services.security import restore as restores
@@ -56,6 +57,8 @@ WORKLOADS = (
 IMPORTED = ("import-service", "import-backing")
 APP_TEMPLATE = "k3s-gitops-app"
 CLUSTERS = {c.value for c in TargetCloud}
+# The registry ApplicationSets that read status.move.
+APPSETS = ("cnp-project-appprojects", "cnp-project-systems", "cnp-apps")
 
 
 class MoveRefused(Exception):
@@ -443,6 +446,85 @@ def _appprojects_waiting(move: ProjectMove) -> list[str]:
     return waiting
 
 
+def _refresh_appsets() -> None:
+    """Make the git generators re-read the registry now, not at the next poll.
+
+    The annotation bypasses the repo-server revision cache; best effort.
+    """
+    for name in APPSETS:
+        try:
+            kube_merge_patch(
+                f"{ARGOCD}/applicationsets/{name}",
+                {
+                    "metadata": {
+                        "annotations": {
+                            "argocd.argoproj.io/application-set-refresh": "true"
+                        }
+                    }
+                },
+            )
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.warning("applicationset %s: refresh failed", name)
+
+
+def _bootstrap(project: str) -> dict:
+    return kube_get(f"{ARGOCD}/applications/{project}-bootstrap") or {}
+
+
+def _copy_secrets(move: ProjectMove) -> list[str]:
+    """Copy the source VaultSecrets to the target; what is still missing there.
+
+    The bootstrap creates the target namespaces, so a missing one is a wait. The
+    copy carries no Argo CD tracking: the app Application adopts it after the
+    switch.
+    """
+    source, target = TargetCloud(move.source), TargetCloud(move.target)
+    there = {
+        ns["metadata"]["name"] for ns in _namespaces(move.project, target)
+    }
+    waiting = []
+    for ns in _app_namespaces(move.project, source):
+        path = VAULT_SECRETS.format(ns)
+        found = kube_list(path, cloud=source)
+        if found and ns not in there:
+            waiting.append(f"namespace {ns}")
+            continue
+        for secret in found:
+            meta = secret["metadata"]
+            name = meta["name"]
+            if kube_get(f"{path}/{name}", cloud=target) is None:
+                labels = {
+                    k: v
+                    for k, v in (meta.get("labels") or {}).items()
+                    # Set by Argo CD when it tracks by label.
+                    if k != "app.kubernetes.io/instance"
+                }
+                body = {
+                    "apiVersion": "ricoberger.de/v1alpha1",
+                    "kind": "VaultSecret",
+                    "metadata": {"name": name, "namespace": ns},
+                    "spec": secret.get("spec") or {},
+                }
+                if labels:
+                    body["metadata"]["labels"] = labels
+                kube_create(path, body, cloud=target)
+            # The operator names the Secret after its VaultSecret.
+            if (
+                kube_get(f"{NAMESPACES}/{ns}/secrets/{name}", cloud=target)
+                is None
+            ):
+                waiting.append(f"Secret {ns}/{name}")
+    return waiting
+
+
+def _target_prepared(move: ProjectMove) -> list[str]:
+    """What the target still lacks before the switch; empty once ready."""
+    waiting = _copy_secrets(move)
+    if not _ready_on(_bootstrap(move.project), move.target):
+        waiting.append(f"{move.project}-bootstrap on {move.target}")
+    return waiting
+
+
 async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
     if step["status"] == "pending":
         await project_registry.set_move(
@@ -454,6 +536,7 @@ async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
                 "step": "prepare",
             },
         )
+        await run_in_threadpool(_refresh_appsets)
     waiting = await run_in_threadpool(_appprojects_waiting, move)
     if waiting:
         step["detail"] = (
@@ -463,6 +546,15 @@ async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
     # Last step a cancel can undo: refuse here what would strand the move.
     await _precheck(move)
     await _ensure_restores(db, move)
+    waiting = await run_in_threadpool(_target_prepared, move)
+    if waiting:
+        step["detail"] = f"Waiting for {', '.join(waiting)}"
+        return False
+    waiting = await run_in_threadpool(prepull.pending, move)
+    if waiting:
+        step["detail"] = "; ".join(waiting)
+        return False
+    await run_in_threadpool(prepull.cleanup, move)
     step["detail"] = None
     return True
 
@@ -534,6 +626,7 @@ async def switch(db: Session, move: ProjectMove, _step, _steps) -> bool:
             "restores": move.restores,
         },
     )
+    await run_in_threadpool(_refresh_appsets)
     project = (
         db.query(Project)
         .filter(Project.project_name == move.project)
@@ -748,9 +841,11 @@ async def _fail(
 
 async def advance(db: Session, move: ProjectMove) -> ProjectMove:
     """
-    Take a running move as far as it goes now. Safe to call often: each step
+    Take a running (or cancelling) move as far as it goes now. Safe to call often: each step
     is idempotent, and a step that waits leaves the rest pending.
     """
+    if move.status == "cancelling":
+        return await _cancelling(db, move)
     if move.status != "running":
         return move
     steps = [dict(step) for step in move.steps]
@@ -787,16 +882,47 @@ async def advance(db: Session, move: ProjectMove) -> ProjectMove:
     return move
 
 
+def _undo_target(move: ProjectMove) -> str | None:
+    """Delete what prepare left on the target; None once nothing is left."""
+    if _destination(_bootstrap(move.project)) != move.source:
+        return f"Waiting for {move.project}-bootstrap to target {move.source}"
+    cloud = TargetCloud(move.target)
+    left = _namespaces(move.project, cloud)
+    for ns in left:
+        # A terminating namespace answers 409 to a second DELETE.
+        if not ns["metadata"].get("deletionTimestamp"):
+            kube_delete(f"{NAMESPACES}/{ns['metadata']['name']}", cloud=cloud)
+    names = [ns["metadata"]["name"] for ns in left]
+    return f"Deleting {', '.join(names)} on {move.target}" if names else None
+
+
+async def _cancelling(db: Session, move: ProjectMove) -> ProjectMove:
+    try:
+        move.detail = await run_in_threadpool(_undo_target, move)
+    except (ClusterNotConnectedError, KubeUnavailableError) as exc:
+        move.detail = str(exc)
+        logger.warning("move %s cancel waits: %s", move.id, exc)
+    if move.detail is None:
+        move.status = "cancelled"
+        move.finished_at = _now()
+    db.commit()
+    return move
+
+
 async def cancel(db: Session, move: ProjectMove) -> ProjectMove:
-    """Drop a move that has not touched the source yet."""
-    if move.status not in ACTIVE:
+    """Drop a move that has not touched the source yet.
+
+    The target is cleaned asynchronously: the loop waits until the bootstrap
+    targets the source again, then deletes the target namespaces.
+    """
+    if move.status not in ACTIVE or move.status == "cancelling":
         raise MoveRefused(409, "This move is over")
     # Once stop_source starts, apps may sit at 0 replicas that nothing restores.
     if _named(move.steps, "stop_source")["status"] != "pending":
         raise MoveRefused(409, "The source is already stopped: retry instead")
     await project_registry.set_move(move.project, None)
-    move.status = "cancelled"
-    move.finished_at = _now()
+    await run_in_threadpool(_refresh_appsets)
+    move.status = "cancelling"
     db.commit()
     return move
 

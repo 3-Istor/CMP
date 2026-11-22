@@ -1,4 +1,4 @@
-"""Advances running project moves, and serializes changes per project."""
+"""Advances running and cancelling project moves, and serializes changes per project."""
 
 import asyncio
 import logging
@@ -29,7 +29,7 @@ async def tick() -> None:
         ids = [
             move_id
             for (move_id,) in db.query(ProjectMove.id).filter(
-                ProjectMove.status == "running"
+                ProjectMove.status.in_(("running", "cancelling"))
             )
         ]
         for move_id in ids:

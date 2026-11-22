@@ -1,6 +1,6 @@
-from datetime import timedelta
 import asyncio
 import json
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest import mock
 
@@ -18,7 +18,7 @@ from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
 )
-from app.services.moves import steps
+from app.services.moves import active_move, prepull, steps
 from app.services.project_registry import RegistryError
 from app.services.security import restore_commit
 
@@ -144,6 +144,10 @@ def _secrets(ns):
     return f"/apis/ricoberger.de/v1alpha1/namespaces/{ns}/vaultsecrets"
 
 
+def _secrets_core(ns):
+    return f"{NAMESPACES}/{ns}/secrets"
+
+
 class Kube:
     """Clusters in memory by (cloud, collection). Label selectors are ignored."""
 
@@ -177,7 +181,11 @@ class Kube:
 
     def merge_patch(self, path, body, cloud=ONPREM):
         self.log.append(("patch", cloud, path))
-        self.get(path, cloud=cloud)["spec"].update(body["spec"])
+        obj = self.get(path, cloud=cloud)
+        obj["spec"].update(body.get("spec", {}))
+        obj["metadata"].setdefault("annotations", {}).update(
+            body.get("metadata", {}).get("annotations", {})
+        )
         return {}
 
     def delete(self, path, cloud=ONPREM):
@@ -227,8 +235,17 @@ def world(db):
         f"{ARGOCD}/applications",
         _app("alpha-appproject", "onprem"),
         _app("alpha-image-updaters", "in-cluster"),
-        _app("alpha-bootstrap", "aws"),
+        _app("alpha-bootstrap", "gcp"),
         _app("alpha-shop-backend", "aws"),
+    )
+    # The bootstrap already runs on the target: prepare has what it waits for.
+    kube.add(GCP, NAMESPACES, _ns("alpha-system"), _ns("alpha-shop"))
+    kube.add(GCP, _secrets("alpha-shop"), _vaultsecret("alpha-shop-role"))
+    kube.add(GCP, _secrets_core("alpha-shop"), {"metadata": {"name": "s"}})
+    kube.add(
+        ONPREM,
+        f"{ARGOCD}/applicationsets",
+        *({"metadata": {"name": n}, "spec": {}} for n in steps.APPSETS),
     )
     _app_row(db, "shop")
 
@@ -249,6 +266,8 @@ def world(db):
         event=mock.Mock(side_effect=lambda *a, **_k: log.append(("event",))),
         notify=mock.Mock(),
         notify_users=mock.Mock(),
+        prepull_pending=mock.Mock(return_value=[]),
+        prepull_cleanup=mock.Mock(),
     )
     with (
         mock.patch.multiple(
@@ -262,6 +281,8 @@ def world(db):
             notify_project=fakes.notify,
             notify_users=fakes.notify_users,
         ),
+        mock.patch.object(prepull, "pending", fakes.prepull_pending),
+        mock.patch.object(prepull, "cleanup", fakes.prepull_cleanup),
         mock.patch.object(project_registry, "set_move", fakes.set_move),
         mock.patch.object(
             project_registry, "switch_cloud", fakes.switch_cloud
@@ -629,9 +650,10 @@ def test_prepare_fails_while_a_source_app_is_unhealthy(db, world):
     assert move.status == "failed"
     assert "alpha-shop-backend" in _step(move, "prepare")["detail"]
     assert _step(move, "stop_source")["status"] == "pending"
-    assert not [e for e in world.log if e[0] == "patch"]
+    # Only the ApplicationSet refresh (on-prem), no workload patched.
+    assert not [e for e in world.log if e[0] == "patch" and e[1] != ONPREM]
     asyncio.run(steps.cancel(db, move))
-    assert move.status == "cancelled"
+    assert move.status == "cancelling"
 
 
 def test_prepare_fails_while_a_database_does_not_archive(db, world):
@@ -987,6 +1009,8 @@ def test_wait_target_waits_for_argo_to_compare_against_the_target(db, world):
     move = _row(db, done=_before("wait_target"))
     # Moved by the ApplicationSet, statuses still those of the stopped source.
     _apps_on(world.kube, "gcp", compared=False)
+    boot = world.kube.get(f"{ARGOCD}/applications/alpha-bootstrap")
+    boot["status"]["sync"]["comparedTo"]["destination"]["name"] = "aws"
 
     advance(db, move)
 
@@ -1120,6 +1144,165 @@ def test_a_project_without_backed_up_data_moves(db, world):
     world.commit.assert_not_awaited()
 
 
+# ── prepare: the target gets ready before the source stops ─────────────────
+
+
+def _bare_target(kube):
+    """The target has its namespaces but nothing of the project's secrets."""
+    kube.items[(GCP, _secrets("alpha-shop"))] = []
+    kube.items[(GCP, _secrets_core("alpha-shop"))] = []
+
+
+def test_prepare_copies_the_vaultsecrets_to_the_target(db, world):
+    kube = world.kube
+    _bare_target(kube)
+    source = {
+        "apiVersion": "ricoberger.de/v1alpha1",
+        "kind": "VaultSecret",
+        "metadata": {
+            "name": "s",
+            "namespace": "alpha-shop",
+            "uid": "x",
+            "resourceVersion": "9",
+            "labels": {
+                "keep": "1",
+                "app.kubernetes.io/instance": "alpha-shop",
+            },
+            "annotations": {"argocd.argoproj.io/tracking-id": "a:b"},
+        },
+        "spec": {"vaultRole": "alpha-shop-role", "path": "kv/x"},
+    }
+    kube.items[(AWS, _secrets("alpha-shop"))] = [source]
+    move = _row(db)
+
+    advance(db, move)
+
+    copied = kube.get(f"{_secrets('alpha-shop')}/s", cloud=GCP)
+    assert copied == {
+        "apiVersion": "ricoberger.de/v1alpha1",
+        "kind": "VaultSecret",
+        "metadata": {
+            "name": "s",
+            "namespace": "alpha-shop",
+            "labels": {"keep": "1"},
+        },
+        "spec": source["spec"],
+    }
+    # Created once; the operator has not written the Secret yet.
+    assert _step(move, "prepare")["status"] == "running"
+    assert "s" in _step(move, "prepare")["detail"]
+    advance(db, move)
+    assert len([e for e in world.log if e[0] == "create"]) == 1
+
+
+def test_prepare_waits_for_the_target_namespace(db, world):
+    world.kube.items[(GCP, NAMESPACES)] = [_ns("alpha-system")]
+    world.kube.items[(GCP, _secrets("alpha-shop"))] = []
+    move = _row(db)
+
+    advance(db, move)
+
+    assert _step(move, "prepare")["status"] == "running"
+    assert "alpha-shop" in _step(move, "prepare")["detail"]
+    assert not [e for e in world.log if e[0] == "create"]
+
+
+def test_prepare_waits_for_the_secrets_then_ends(db, world):
+    kube = world.kube
+    kube.items[(GCP, _secrets_core("alpha-shop"))] = []
+    move = _row(db)
+
+    advance(db, move)
+    assert _step(move, "prepare")["status"] == "running"
+    assert "s" in _step(move, "prepare")["detail"]
+    world.prepull_cleanup.assert_not_called()
+
+    kube.add(GCP, _secrets_core("alpha-shop"), {"metadata": {"name": "s"}})
+    advance(db, move)
+    assert _step(move, "prepare")["status"] == "done"
+    world.prepull_cleanup.assert_called_once_with(move)
+
+
+def test_prepare_waits_for_the_bootstrap_on_the_target(db, world):
+    boot = world.kube.get(f"{ARGOCD}/applications/alpha-bootstrap")
+    boot["status"]["health"]["status"] = "Progressing"
+    move = _row(db)
+
+    advance(db, move)
+
+    assert _step(move, "prepare")["status"] == "running"
+    assert "alpha-bootstrap" in _step(move, "prepare")["detail"]
+
+
+def test_prepare_waits_for_the_prepull(db, world):
+    world.prepull_pending.return_value = ["pulling img on node-1"]
+    move = _row(db)
+
+    advance(db, move)
+
+    assert _step(move, "prepare")["status"] == "running"
+    assert _step(move, "prepare")["detail"] == "pulling img on node-1"
+    world.prepull_cleanup.assert_not_called()
+
+    world.prepull_pending.return_value = []
+    advance(db, move)
+    assert _step(move, "prepare")["status"] == "done"
+
+
+# ── registry ApplicationSets are refreshed after each commit ────────────────
+
+
+def _refreshed(world):
+    return [
+        e[2].rsplit("/", 1)[1]
+        for e in world.log
+        if e[0] == "patch" and "applicationsets" in e[2]
+    ]
+
+
+def test_the_registry_applicationsets_are_refreshed_after_the_commits(
+    db, world
+):
+    move = _row(db, done=("prepare",))
+    world.kube.items[(AWS, _pods("alpha-shop"))] = []
+    advance(db, move)  # stop_source, final_backup waits
+    assert _refreshed(world) == []
+
+    _backend_done = world.kube.get(
+        f"{CNPG}/alpha-shop/backups/alpha-shop-backend-db-move-{move.id}",
+        cloud=AWS,
+    )
+    _backend_done["status"] = {"phase": "completed"}
+    advance(db, move)  # switch
+    assert sorted(_refreshed(world)) == sorted(steps.APPSETS)
+    annotations = world.kube.get(f"{ARGOCD}/applicationsets/cnp-apps")[
+        "metadata"
+    ]["annotations"]
+    assert annotations == {
+        "argocd.argoproj.io/application-set-refresh": "true"
+    }
+
+
+def test_prepare_refreshes_after_its_registry_commit(db, world):
+    move = _row(db)
+
+    advance(db, move)
+
+    names = [e[0] for e in world.log]
+    assert names.index("set_move") < names.index("patch")
+    assert sorted(_refreshed(world)) == sorted(steps.APPSETS)
+
+
+def test_a_failed_refresh_never_fails_the_step(db, world):
+    with mock.patch.object(
+        steps, "kube_merge_patch", side_effect=KubeUnavailableError("no", 403)
+    ):
+        move = _row(db)
+        advance(db, move)
+
+    assert _step(move, "prepare")["status"] == "done"
+
+
 # ── cancel ──────────────────────────────────────────────────────────────────
 
 
@@ -1128,11 +1311,70 @@ def test_cancel_before_the_source_stops(db, world):
 
     asyncio.run(steps.cancel(db, move))
 
-    assert move.status == "cancelled"
+    assert move.status == "cancelling"
+    assert move.finished_at is None
     assert world.set_move.await_args.args == ("alpha", None)
+    assert sorted(_refreshed(world)) == sorted(steps.APPSETS)
+    assert active_move(db, "alpha") is move
     with pytest.raises(steps.MoveRefused):
         asyncio.run(steps.cancel(db, move))
     assert world.set_move.await_count == 1
+
+
+def _cancelling(db):
+    move = _row(db, done=("prepare",))
+    asyncio.run(steps.cancel(db, move))
+    return move
+
+
+def test_cancelling_waits_for_the_bootstrap_to_target_the_source(db, world):
+    move = _cancelling(db)
+
+    advance(db, move)
+
+    assert move.status == "cancelling"
+    assert "alpha-bootstrap" in move.detail
+    assert not [e for e in world.log if e[0] == "delete"]
+
+
+def test_cancelling_deletes_the_target_namespaces_then_ends(db, world):
+    kube = world.kube
+    kube.items[(GCP, NAMESPACES)] = [
+        _ns("alpha-system"),
+        _ns("alpha-shop"),
+        _ns("alpha-old", deleting=True),
+        _ns("alpha-backups"),
+        _ns("other-web", project="other"),
+    ]
+    boot = kube.get(f"{ARGOCD}/applications/alpha-bootstrap")
+    boot["spec"]["destination"]["name"] = "aws"
+    move = _cancelling(db)
+
+    advance(db, move)
+
+    deleted = [e[2] for e in world.log if e[0] == "delete"]
+    assert sorted(deleted) == [
+        f"{NAMESPACES}/alpha-shop",
+        f"{NAMESPACES}/alpha-system",
+    ]
+    assert all(e[1] == GCP for e in world.log if e[0] == "delete")
+    assert move.status == "cancelling"
+
+    kube.items[(GCP, NAMESPACES)] = [_ns("alpha-backups")]
+    advance(db, move)
+    assert move.status == "cancelled"
+    assert move.finished_at is not None
+
+
+def test_cancelling_waits_when_the_cluster_is_out_of_reach(db, world):
+    move = _cancelling(db)
+    with mock.patch.object(
+        steps, "kube_get", side_effect=KubeUnavailableError("down")
+    ):
+        advance(db, move)
+
+    assert move.status == "cancelling"
+    assert move.detail == "down"
 
 
 @pytest.mark.parametrize("status", ["running", "done", "failed"])
