@@ -39,11 +39,11 @@ def _images(project: str, source: TargetCloud) -> dict[str, dict[str, list]]:
                 template = (item["spec"].get("template") or {}).get(
                     "spec"
                 ) or {}
-                secrets = template.get("imagePullSecrets") or []
+                pull_refs = template.get("imagePullSecrets") or []
                 for c in (template.get("containers") or []) + (
                     template.get("initContainers") or []
                 ):
-                    images.setdefault(c["image"], secrets)
+                    images.setdefault(c["image"], pull_refs)
         for cluster in kube_list(
             f"{steps.CNPG.format(ns)}/clusters", cloud=source
         ):
@@ -51,8 +51,8 @@ def _images(project: str, source: TargetCloud) -> dict[str, dict[str, list]]:
                 cluster.get("spec") or {}
             ).get("imageName")
             if image:
-                secrets = cluster["spec"].get("imagePullSecrets") or []
-                images.setdefault(image, secrets)
+                pull_refs = cluster["spec"].get("imagePullSecrets") or []
+                images.setdefault(image, pull_refs)
     return found
 
 
@@ -74,8 +74,8 @@ def _nodes(target: TargetCloud) -> list[str]:
     return names
 
 
-def _pod(move: ProjectMove, ns: str, image: str, node: str, secrets: list):
-    digest = hashlib.sha1(f"{image}{node}".encode()).hexdigest()[:10]
+def _pod(move: ProjectMove, ns: str, image: str, node: str, pull_refs: list):
+    digest = hashlib.sha256(f"{image}{node}".encode()).hexdigest()[:10]
     return {
         "apiVersion": "v1",
         "kind": "Pod",
@@ -89,7 +89,7 @@ def _pod(move: ProjectMove, ns: str, image: str, node: str, secrets: list):
             "restartPolicy": "Never",
             "automountServiceAccountToken": False,
             "enableServiceLinks": False,
-            "imagePullSecrets": secrets,
+            "imagePullSecrets": pull_refs,
             "securityContext": {
                 "runAsNonRoot": True,
                 "runAsUser": 65534,
@@ -154,9 +154,9 @@ def pending(move: ProjectMove) -> list[str]:
                 path, {"labelSelector": f"{PREPULL}={move.id}"}, cloud=target
             )
         }
-        for image, secrets in images.items():
+        for image, pull_refs in images.items():
             for node in nodes:
-                pod = _pod(move, ns, image, node, secrets)
+                pod = _pod(move, ns, image, node, pull_refs)
                 name = pod["metadata"]["name"]
                 if name not in existing:
                     try:
