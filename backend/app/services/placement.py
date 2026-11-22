@@ -1,12 +1,13 @@
 """Where a project's pods run, per cluster, read live (platform admins only)."""
 
+import re
+
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.models.project import TargetCloud
 from app.services import project_registry
 from app.services.clusters.state import PUBLIC_CLOUDS, fresh_state
-from app.services.imports.estimate import _quantity_mib
 from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
@@ -18,6 +19,20 @@ PROJECT_LABEL = "cnp.3istor.com/project"
 INSTANCE_TYPE = "node.kubernetes.io/instance-type"
 CNPG_CLUSTERS = "/apis/postgresql.cnpg.io/v1/namespaces/{}/clusters"
 OBC = "/apis/objectbucket.io/v1alpha1/namespaces/{}-backups/objectbucketclaims"
+
+
+_UNITS = {
+    "": 1, "m": 1e-3, "k": 1e3, "M": 1e6, "G": 1e9, "T": 1e12,
+    "Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40,
+}  # fmt: skip
+
+
+def quantity_bytes(value: str) -> float:
+    """A Kubernetes memory quantity (6085816Ki, 100M, 1Gi, 1e9, 500m) in bytes."""
+    match = re.fullmatch(r"([0-9.]+(?:[eE][0-9]+)?)([A-Za-z]*)", str(value))
+    if not match or match.group(2) not in _UNITS:
+        raise ValueError(f"unsupported quantity {value}")
+    return float(match.group(1)) * _UNITS[match.group(2)]
 
 
 def pod_status(pod: dict) -> str:
@@ -39,13 +54,44 @@ def pod_kind(pod: dict) -> str:
     name = meta["name"]
     if "cnpg.io/cluster" in labels:
         return "db"
+    if labels.get("cnp.3istor.com/role") == "migration":
+        return "job"
     if "-tunnel-" in name:
         return "tunnel"
-    if "-gatus-" in name:
+    if name.startswith("gatus-") or "-gatus-" in name:
         return "monitor"
-    if labels.get("app.kubernetes.io/component") == "backend":
+    # Staging apps carry a -stg suffix on the instance label.
+    instance = (labels.get("app.kubernetes.io/instance") or "").removesuffix(
+        "-stg"
+    )
+    if instance.endswith("-backend"):
         return "api"
-    return "web"
+    if instance.endswith(("-frontend", "-app")):
+        return "web"
+    return "system"
+
+
+def database(cluster: dict) -> dict:
+    """A CNPG Cluster as shown: generation is the -r<N> restore suffix."""
+    name = cluster["metadata"]["name"]
+    restored = re.search(r"-r(\d+)$", name)
+    archiving = next(
+        (
+            c
+            for c in (cluster.get("status") or {}).get("conditions") or []
+            if c.get("type") == "ContinuousArchiving"
+        ),
+        None,
+    )
+    return {
+        "name": name,
+        "generation": int(restored.group(1)) if restored else 0,
+        "last_archived_wal": (cluster.get("status") or {}).get(
+            "lastArchivedWALTime"
+        )
+        or (archiving or {}).get("lastTransitionTime"),
+        "archiving": archiving and archiving.get("status") == "True",
+    }
 
 
 def console_url(cloud: TargetCloud, project: str | None = None) -> str:
@@ -89,7 +135,7 @@ def _cluster_pods(cloud: TargetCloud, project: str) -> tuple[list, list]:
 
 
 def project_placement(project: str, current: TargetCloud) -> dict:
-    clusters, database = [], None
+    clusters, db = [], None
     for cloud in CLOUDS:
         entry = {
             "cloud": cloud.value,
@@ -101,7 +147,7 @@ def project_placement(project: str, current: TargetCloud) -> dict:
         if entry["state"] != "up":
             continue
         try:
-            nodes = kube_list("/api/v1/nodes", cloud=cloud)
+            nodes = _nodes(cloud)
             pods, dbs = _cluster_pods(cloud, project)
         except (ClusterNotConnectedError, KubeUnavailableError):
             entry["state"] = "unreachable"
@@ -117,8 +163,12 @@ def project_placement(project: str, current: TargetCloud) -> dict:
             for n in nodes
         }
         for pod in pods:
-            node = by_node.get(pod.get("spec", {}).get("nodeName"))
-            if node is not None:
+            node_name = pod.get("spec", {}).get("nodeName")
+            if node_name:
+                node = by_node.setdefault(
+                    node_name,
+                    {"name": node_name, "instance_type": None, "pods": []},
+                )
                 node["pods"].append(
                     {
                         "name": pod["metadata"]["name"],
@@ -129,20 +179,24 @@ def project_placement(project: str, current: TargetCloud) -> dict:
                 )
         # Only nodes that host the project's pods are worth drawing.
         entry["nodes"] = [n for n in by_node.values() if n["pods"]]
-        if dbs and (database is None or cloud == current):
-            db = dbs[0]
-            database = {
-                "name": db["metadata"]["name"],
-                "generation": db["metadata"].get("generation"),
-                "last_archived_wal": (db.get("status") or {}).get(
-                    "lastArchivedWALTime"
-                ),
-            }
+        if dbs and (db is None or cloud == current):
+            db = database(dbs[0])
     return {
+        "current_cloud": current.value,
         "clusters": clusters,
-        "database": database,
+        "database": db,
         "backups": _backups(project),
     }
+
+
+def _nodes(cloud: TargetCloud) -> list[dict]:
+    """Nodes; none when the CMP may not list them (pods are still placed)."""
+    try:
+        return kube_list("/api/v1/nodes", cloud=cloud)
+    except KubeUnavailableError as exc:
+        if exc.status == 403:
+            return []
+        raise
 
 
 def _backups(project: str) -> list[dict]:
@@ -165,11 +219,14 @@ def _memory_requested_pct(cloud: TargetCloud) -> float | None:
         nodes = kube_list("/api/v1/nodes", cloud=cloud)
         pods = kube_list("/api/v1/pods", cloud=cloud)
         allocatable = sum(
-            _quantity_mib(n["status"]["allocatable"]["memory"]) for n in nodes
+            quantity_bytes(n["status"]["allocatable"]["memory"]) for n in nodes
         )
         requested = sum(
-            _quantity_mib(c["resources"]["requests"]["memory"])
+            quantity_bytes(c["resources"]["requests"]["memory"])
             for p in pods
+            # A finished pod holds no memory.
+            if (p.get("status") or {}).get("phase")
+            not in ("Succeeded", "Failed")
             for c in p.get("spec", {}).get("containers", [])
             if (c.get("resources") or {}).get("requests", {}).get("memory")
         )
@@ -220,11 +277,7 @@ async def platform_placement() -> dict:
         nodes, pct = 0, None
         if state == "up":
             try:
-                nodes = len(
-                    await run_in_threadpool(
-                        kube_list, "/api/v1/nodes", None, cloud
-                    )
-                )
+                nodes = len(await run_in_threadpool(_nodes, cloud))
                 pct = await run_in_threadpool(_memory_requested_pct, cloud)
             except (ClusterNotConnectedError, KubeUnavailableError):
                 state = "unreachable"

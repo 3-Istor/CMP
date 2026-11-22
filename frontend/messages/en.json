@@ -4085,6 +4085,8 @@
       "Failed": "Failed",
       "Succeeded": "Succeeded"
     },
-    "step": "Step {n} of {total} · {name}"
+    "step": "Step {n} of {total} · {name}",
+    "archivingOn": "Archiving on",
+    "archivingOff": "Archiving off"
   }
 }

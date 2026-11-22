@@ -50,3 +50,21 @@ export function useTheme(): [Theme, (value: Theme) => void] {
 
   return [theme, choose];
 }
+
+function watchDark(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  return () => observer.disconnect();
+}
+
+/** The theme actually applied (the "dark" class), for libraries with a theme prop. */
+export function useIsDark(): boolean {
+  return useSyncExternalStore(
+    watchDark,
+    () => document.documentElement.classList.contains("dark"),
+    () => false,
+  );
+}

@@ -15,6 +15,7 @@ import {
   type PlacementPod,
   type ProjectPlacement,
 } from "@/lib/api";
+import { useIsDark } from "@/lib/theme";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { pollWhileVisible } from "@/lib/visiblePolling";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,8 @@ const seconds = (from: string | null, to: string | null) =>
 
 export function PlacementPanel() {
   const isAdmin = usePlatformAdmin();
+  const dark = useIsDark();
+  const theme = dark ? "dark" : "light";
   const { projectName, move } = useProjectContext();
   const t = useTranslations("placement");
   const tSteps = useTranslations("projectSettings.location.steps");
@@ -75,7 +78,7 @@ export function PlacementPanel() {
   const dbCloud = data?.clusters.find((c) =>
     c.nodes.some((n) => n.pods.some((p) => p.kind === "db")),
   )?.cloud;
-  const here = target ?? dbCloud;
+  const here = target ?? data?.current_cloud;
   const readyOnHere = (
     data?.clusters.find((c) => c.cloud === here)?.nodes ?? []
   )
@@ -161,7 +164,7 @@ export function PlacementPanel() {
             {cutover > 0 ? <CountUp trigger="load" to={cutover} suffix=" s" /> : "–"}
           </Stat>
           <Stat label={t("ready")} hint={t("readyHint")}>
-            <CountUp trigger="load" to={readyOnHere} />
+            {move ? <CountUp trigger="load" to={readyOnHere} /> : "–"}
           </Stat>
           <Stat label={t("database")} hint={t("generation")}>
             {data?.database?.generation != null ? (
@@ -175,7 +178,7 @@ export function PlacementPanel() {
         {move && (
           <Stepper
             step={stepIndex}
-            theme="light"
+            theme={theme}
             frame={false}
             showFooter={false}
             disableStepIndicators
@@ -237,7 +240,7 @@ export function PlacementPanel() {
                         onClick={() => setSelected({ ...p, node: n.name, cloud: c.cloud })}
                         className="flex w-full items-center gap-2.5 border-t px-2.5 py-2 text-left hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring"
                       >
-                        <span className="grid h-6 w-9 shrink-0 place-items-center rounded-md bg-muted text-[10px] font-semibold uppercase">
+                        <span className="grid h-6 min-w-9 shrink-0 place-items-center rounded-md px-1 bg-muted text-[10px] font-semibold uppercase">
                           {p.kind}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -277,7 +280,10 @@ export function PlacementPanel() {
               <StarBorder
                 as="div"
                 key={c.cloud}
-                theme="light"
+                theme={theme}
+                backgroundColor="var(--card)"
+                textColor="var(--card-foreground)"
+                borderColor="var(--border)"
                 color={CLOUD_META[c.cloud].color}
                 radius={14}
                 className="flex! h-full w-full items-stretch! justify-start! p-0! text-left font-normal"
@@ -324,7 +330,7 @@ export function PlacementPanel() {
             {events.length ? (
               <AnimatedList
                 items={events}
-                theme="light"
+                theme={theme}
                 frame={false}
                 animation="slide"
                 maxHeight={280}
@@ -339,13 +345,15 @@ export function PlacementPanel() {
             <h3 className="text-sm font-semibold">{t("data")}</h3>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("dbName")} value={data?.database?.name ?? "–"} mono />
-              <Field label={t("onCluster")} value={dbCloud ? CLOUD_META[dbCloud].label : "–"} />
+              <Field label={t("onCluster")} value={CLOUD_META[dbCloud ?? data?.current_cloud ?? "onprem"].label} />
               <Field
                 label={t("wal")}
                 value={
                   data?.database?.last_archived_wal
                     ? new Date(data.database.last_archived_wal).toLocaleTimeString()
-                    : "–"
+                    : data?.database?.archiving == null
+                      ? "–"
+                      : t(data.database.archiving ? "archivingOn" : "archivingOff")
                 }
               />
             </div>

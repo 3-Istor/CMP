@@ -4085,6 +4085,8 @@
       "Failed": "En échec",
       "Succeeded": "Terminé"
     },
-    "step": "Étape {n} sur {total} · {name}"
+    "step": "Étape {n} sur {total} · {name}",
+    "archivingOn": "Archivage actif",
+    "archivingOff": "Archivage coupé"
   }
 }

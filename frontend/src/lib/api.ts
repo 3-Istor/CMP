@@ -1937,10 +1937,11 @@ export type PlacementPod = {
   name: string;
   namespace: string;
   status: string;
-  kind: "web" | "api" | "db" | "tunnel" | "monitor";
+  kind: "web" | "api" | "db" | "job" | "tunnel" | "monitor" | "system";
 };
 
 export type ProjectPlacement = {
+  current_cloud: "onprem" | "aws" | "gcp";
   clusters: {
     cloud: "onprem" | "aws" | "gcp";
     state: string;
@@ -1951,6 +1952,7 @@ export type ProjectPlacement = {
     name: string;
     generation: number | null;
     last_archived_wal: string | null;
+    archiving: boolean | null;
   } | null;
   backups: { claim: string; bucket: string | null; uid: string | null }[];
 };
