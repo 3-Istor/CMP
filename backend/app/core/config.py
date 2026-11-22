@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     CNP_REGISTRY_BRANCH: str = "main"
     CNP_REGISTRY_PATH_PREFIX: str = "registry/projects"
 
+    # Console links of the Placement view.
+    EKS_REGION: str = "eu-west-3"
+    EKS_CLUSTER: str = "cnp-eks"
+    GCP_PROJECT_ID: str = "project-94dabc15-3981-4317-8da"
+    ARGOCD_URL: str = "https://argocd.3istor.com"
+
     # OpenStack - loaded from environment (required for deployments)
     OS_AUTH_URL: str = ""
     OS_USERNAME: str = ""
