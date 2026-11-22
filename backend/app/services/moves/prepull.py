@@ -174,8 +174,9 @@ def pending(move: ProjectMove) -> list[str]:
                 if state == "pulling":
                     waits.append(f"Pulling {image} on {node}")
                 elif state == "failed":
+                    # Not the image: CodeQL taints it with the pull secret refs.
                     logger.warning(
-                        "Pre-pull of %s on %s failed: %s", image, node, reason
+                        "Pre-pull Pod %s/%s failed: %s", ns, name, reason
                     )
     return waits
 
