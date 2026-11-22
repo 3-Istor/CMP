@@ -50,12 +50,15 @@ export function MoveBanner() {
             ? t("cancelling")
             : t("banner", { cloud, step: t(`steps.${current.name}`) })}
       </span>
-      <Link
-        href={`/projects/${encodeURIComponent(projectName)}/settings`}
-        className="font-medium text-primary hover:underline"
-      >
-        {t("details")}
-      </Link>
+      <span className="flex items-center gap-3">
+        <MoveActions />
+        <Link
+          href={`/projects/${encodeURIComponent(projectName)}/settings`}
+          className="font-medium text-primary hover:underline"
+        >
+          {t("details")}
+        </Link>
+      </span>
     </div>
   );
 }
