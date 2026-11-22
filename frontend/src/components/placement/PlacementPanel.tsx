@@ -15,6 +15,7 @@ import {
   type PlacementPod,
   type ProjectPlacement,
 } from "@/lib/api";
+import { useIsDark } from "@/lib/theme";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { pollWhileVisible } from "@/lib/visiblePolling";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,8 @@ const seconds = (from: string | null, to: string | null) =>
 
 export function PlacementPanel() {
   const isAdmin = usePlatformAdmin();
+  const dark = useIsDark();
+  const theme = dark ? "dark" : "light";
   const { projectName, move } = useProjectContext();
   const t = useTranslations("placement");
   const tSteps = useTranslations("projectSettings.location.steps");
@@ -75,7 +78,7 @@ export function PlacementPanel() {
   const dbCloud = data?.clusters.find((c) =>
     c.nodes.some((n) => n.pods.some((p) => p.kind === "db")),
   )?.cloud;
-  const here = target ?? dbCloud;
+  const here = target ?? data?.current_cloud;
   const readyOnHere = (
     data?.clusters.find((c) => c.cloud === here)?.nodes ?? []
   )
@@ -175,7 +178,7 @@ export function PlacementPanel() {
         {move && (
           <Stepper
             step={stepIndex}
-            theme="light"
+            theme={theme}
             frame={false}
             showFooter={false}
             disableStepIndicators
@@ -277,7 +280,10 @@ export function PlacementPanel() {
               <StarBorder
                 as="div"
                 key={c.cloud}
-                theme="light"
+                theme={theme}
+                backgroundColor="var(--card)"
+                textColor="var(--card-foreground)"
+                borderColor="var(--border)"
                 color={CLOUD_META[c.cloud].color}
                 radius={14}
                 className="flex! h-full w-full items-stretch! justify-start! p-0! text-left font-normal"
@@ -324,7 +330,7 @@ export function PlacementPanel() {
             {events.length ? (
               <AnimatedList
                 items={events}
-                theme="light"
+                theme={theme}
                 frame={false}
                 animation="slide"
                 maxHeight={280}
@@ -339,7 +345,7 @@ export function PlacementPanel() {
             <h3 className="text-sm font-semibold">{t("data")}</h3>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("dbName")} value={data?.database?.name ?? "–"} mono />
-              <Field label={t("onCluster")} value={dbCloud ? CLOUD_META[dbCloud].label : "–"} />
+              <Field label={t("onCluster")} value={CLOUD_META[dbCloud ?? data?.current_cloud ?? "onprem"].label} />
               <Field
                 label={t("wal")}
                 value={

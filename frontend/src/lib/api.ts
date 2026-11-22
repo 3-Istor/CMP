@@ -1941,6 +1941,7 @@ export type PlacementPod = {
 };
 
 export type ProjectPlacement = {
+  current_cloud: "onprem" | "aws" | "gcp";
   clusters: {
     cloud: "onprem" | "aws" | "gcp";
     state: string;

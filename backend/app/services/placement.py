@@ -8,7 +8,6 @@ from app.core.config import settings
 from app.models.project import TargetCloud
 from app.services import project_registry
 from app.services.clusters.state import PUBLIC_CLOUDS, fresh_state
-from app.services.imports.estimate import _quantity_mib
 from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
@@ -20,6 +19,20 @@ PROJECT_LABEL = "cnp.3istor.com/project"
 INSTANCE_TYPE = "node.kubernetes.io/instance-type"
 CNPG_CLUSTERS = "/apis/postgresql.cnpg.io/v1/namespaces/{}/clusters"
 OBC = "/apis/objectbucket.io/v1alpha1/namespaces/{}-backups/objectbucketclaims"
+
+
+_UNITS = {
+    "": 1, "m": 1e-3, "k": 1e3, "M": 1e6, "G": 1e9, "T": 1e12,
+    "Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40,
+}  # fmt: skip
+
+
+def quantity_bytes(value: str) -> float:
+    """A Kubernetes memory quantity (6085816Ki, 100M, 1Gi, 1e9, 500m) in bytes."""
+    match = re.fullmatch(r"([0-9.]+(?:[eE][0-9]+)?)([A-Za-z]*)", str(value))
+    if not match or match.group(2) not in _UNITS:
+        raise ValueError(f"unsupported quantity {value}")
+    return float(match.group(1)) * _UNITS[match.group(2)]
 
 
 def pod_status(pod: dict) -> str:
@@ -169,6 +182,7 @@ def project_placement(project: str, current: TargetCloud) -> dict:
         if dbs and (db is None or cloud == current):
             db = database(dbs[0])
     return {
+        "current_cloud": current.value,
         "clusters": clusters,
         "database": db,
         "backups": _backups(project),
@@ -205,11 +219,14 @@ def _memory_requested_pct(cloud: TargetCloud) -> float | None:
         nodes = kube_list("/api/v1/nodes", cloud=cloud)
         pods = kube_list("/api/v1/pods", cloud=cloud)
         allocatable = sum(
-            _quantity_mib(n["status"]["allocatable"]["memory"]) for n in nodes
+            quantity_bytes(n["status"]["allocatable"]["memory"]) for n in nodes
         )
         requested = sum(
-            _quantity_mib(c["resources"]["requests"]["memory"])
+            quantity_bytes(c["resources"]["requests"]["memory"])
             for p in pods
+            # A finished pod holds no memory.
+            if (p.get("status") or {}).get("phase")
+            not in ("Succeeded", "Failed")
             for c in p.get("spec", {}).get("containers", [])
             if (c.get("resources") or {}).get("requests", {}).get("memory")
         )

@@ -213,3 +213,172 @@ def test_platform_map_lists_projects_per_cluster(client):
     assert by_cloud["onprem"]["projects"][0]["name"] == "home"
     assert by_cloud["onprem"]["memory_requested_pct"] == 25.0
     assert by_cloud["aws"]["state"] == "unreachable"
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("6085816Ki", 6085816 * 1024),
+        ("1Gi", 2**30),
+        ("100M", 100e6),
+        ("1500k", 1.5e6),
+        ("104857600", 104857600),
+        ("1e9", 1e9),
+        ("500m", 0.5),
+    ],
+)
+def test_quantity_bytes(value, expected):
+    assert placement.quantity_bytes(value) == expected
+
+
+def test_memory_pct_computes_on_gke_shaped_objects(monkeypatch):
+    nodes = [
+        {"status": {"allocatable": {"memory": "6085816Ki"}}},
+        {"status": {"allocatable": {"memory": "6085816Ki"}}},
+    ]
+    pods = [
+        {
+            "spec": {
+                "containers": [{"resources": {"requests": {"memory": "1Gi"}}}]
+            }
+        },
+        {
+            "spec": {
+                "containers": [
+                    {"resources": {"requests": {"memory": "100M"}}},
+                    {"resources": {}},
+                ]
+            }
+        },
+        {  # a finished job holds nothing
+            "status": {"phase": "Succeeded"},
+            "spec": {
+                "containers": [{"resources": {"requests": {"memory": "4Gi"}}}]
+            },
+        },
+    ]
+    monkeypatch.setattr(
+        placement,
+        "kube_list",
+        lambda path, params=None, cloud=None: (
+            nodes if "nodes" in path else pods
+        ),
+    )
+    pct = placement._memory_requested_pct(TargetCloud.GCP)
+    assert pct == round(100 * (2**30 + 100e6) / (2 * 6085816 * 1024), 1)
+
+
+def test_forbidden_nodes_still_count_as_up(client, monkeypatch):
+    kube = FakeKube()
+
+    def read(path, params=None, cloud=TargetCloud.ONPREM):
+        if path == "/api/v1/nodes":
+            raise KubeUnavailableError("forbidden", 403)
+        return kube(path, params, cloud)
+
+    monkeypatch.setattr(placement, "kube_list", read)
+    onprem = next(
+        c
+        for c in client.get("/api/placement").json()["clusters"]
+        if c["cloud"] == "onprem"
+    )
+    assert onprem["state"] == "up"
+    assert onprem["memory_requested_pct"] is None
+
+
+def test_iot_on_prem_project(client, monkeypatch):
+    """An on-prem project: pods on their nodes, both backup claims, db generation 0."""
+
+    def pod(name, node, instance, ns):
+        p = _pod(name, labels={"app.kubernetes.io/instance": instance})
+        p["metadata"]["namespace"] = ns
+        p["spec"]["nodeName"] = node
+        return p
+
+    pods = {
+        "iot-optispace-backend": [
+            pod(
+                "optispace-be-1",
+                "my-k3s-cluster-node",
+                "iot-optispace-backend",
+                "iot-optispace-backend",
+            ),
+        ],
+        "iot-optispace-backend-stg": [
+            pod(
+                "optispace-be-stg-1",
+                "k3s-worker-node",
+                "iot-optispace-backend-stg",
+                "iot-optispace-backend-stg",
+            ),
+        ],
+        "iot-landing": [
+            pod(
+                "landing-1",
+                "k3s-worker-node",
+                "iot-landing-app",
+                "iot-landing",
+            ),
+        ],
+    }
+    db = {
+        "metadata": {"name": "iot-optispace-backend-db", "generation": 3},
+        "status": {
+            "conditions": [{"type": "ContinuousArchiving", "status": "True"}]
+        },
+    }
+    claims = [
+        {
+            "metadata": {
+                "name": "iot-optispace-backend-db-backup",
+                "uid": "u1",
+            },
+            "spec": {"bucketName": "cnpg-iot-optispace-backend-db"},
+        },
+        {
+            "metadata": {
+                "name": "iot-optispace-backend-stg-db-backup",
+                "uid": "u2",
+            },
+            "spec": {"bucketName": "cnpg-iot-optispace-backend-stg-db"},
+        },
+    ]
+
+    def read(path, params=None, cloud=TargetCloud.ONPREM):
+        if cloud != TargetCloud.ONPREM:
+            raise ClusterNotConnectedError(cloud)
+        if path == "/api/v1/nodes":
+            raise KubeUnavailableError("forbidden", 403)
+        if path == "/api/v1/namespaces":
+            return [{"metadata": {"name": n}} for n in pods]
+        if path.endswith("/pods"):
+            return pods[path.split("/")[4]]
+        if path.endswith("/clusters"):
+            return [db] if "iot-optispace-backend/" in path else []
+        if path.endswith("objectbucketclaims"):
+            return claims if "/iot-backups/" in path else []
+        return []
+
+    monkeypatch.setattr(placement, "kube_list", read)
+    monkeypatch.setattr(placement, "fresh_state", lambda cloud: "up")
+    body = client.get("/api/projects/iot/placement").json()
+    onprem = next(c for c in body["clusters"] if c["cloud"] == "onprem")
+
+    assert body["current_cloud"] == "onprem"
+    assert onprem["state"] == "up"
+    on_node = {
+        n["name"]: [p["name"] for p in n["pods"]] for n in onprem["nodes"]
+    }
+    assert on_node == {
+        "my-k3s-cluster-node": ["optispace-be-1"],
+        "k3s-worker-node": ["optispace-be-stg-1", "landing-1"],
+    }
+    assert body["database"]["name"] == "iot-optispace-backend-db"
+    assert body["database"]["generation"] == 0
+    assert [(b["claim"], b["bucket"]) for b in body["backups"]] == [
+        ("iot-optispace-backend-db-backup", "cnpg-iot-optispace-backend-db"),
+        (
+            "iot-optispace-backend-stg-db-backup",
+            "cnpg-iot-optispace-backend-stg-db",
+        ),
+    ]

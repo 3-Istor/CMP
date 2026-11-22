@@ -8,6 +8,7 @@ import CountUp from "@/components/ui/CountUp";
 import ShinyText from "@/components/ui/ShinyText";
 import SpotlightCard from "@/components/ui/SpotlightCard";
 import { getPlatformPlacement, type PlatformPlacement } from "@/lib/api";
+import { useIsDark } from "@/lib/theme";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { pollWhileVisible } from "@/lib/visiblePolling";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ const POLL_MS = 5000;
 export default function PlacementPage() {
   const t = useTranslations("placement");
   const isAdmin = usePlatformAdmin();
+  const theme = useIsDark() ? "dark" : "light";
   const [data, setData] = useState<PlatformPlacement | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -72,10 +74,16 @@ export default function PlacementPage() {
               {clusters.map((c) => (
                 <SpotlightCard
                   key={c.cloud}
-                  theme="light"
+                  theme={theme}
+                  style={
+                    {
+                      "--spotlight-card-surface": "var(--card)",
+                      "--spotlight-card-border": "var(--border)",
+                    } as React.CSSProperties
+                  }
                   spotlightColor={CLOUD_META[c.cloud].color}
                   aria-label={CLOUD_META[c.cloud].label}
-                  className="flex flex-col gap-3.5"
+                  className="flex flex-col gap-3.5 text-card-foreground"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <h2 className="flex items-center gap-2 text-base font-semibold">
