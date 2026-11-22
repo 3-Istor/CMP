@@ -189,9 +189,9 @@ def test_cleanup_deletes_only_this_moves_pods(kube):
     )
 
 
-def test_refused_pod_is_a_wait_not_an_error(kube):
+def test_refused_pod_does_not_block_the_move(kube):
     def refuse(path, body, cloud=ONPREM):
         raise prepull.KubeUnavailableError("POST: HTTP 403", 403)
 
     with mock.patch.object(prepull, "kube_create", refuse):
-        assert len(prepull.pending(MOVE)) == 8
+        assert prepull.pending(MOVE) == []

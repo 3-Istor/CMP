@@ -104,7 +104,7 @@ def _pod(move: ProjectMove, ns: str, image: str, node: str, secrets: list):
                     "image": image,
                     "command": ["sh", "-c", "true"],
                     "resources": {
-                        "requests": {"cpu": "10m", "memory": "16Mi"},
+                        "requests": {"cpu": "10m", "memory": "32Mi"},
                         "limits": {"cpu": "50m", "memory": "32Mi"},
                     },
                     "securityContext": {
@@ -164,10 +164,12 @@ def pending(move: ProjectMove) -> list[str]:
                     try:
                         kube_create(path, pod, cloud=target)
                     except KubeUnavailableError as exc:
-                        # 403: pods quota full or admission refusal; retried next tick.
+                        # 403 (quota full, admission): best effort, so no wait;
+                        # the next tick tries again while prepare still runs.
                         if exc.status != 403:
                             raise
                         logger.warning("Pre-pull Pod refused: %s", exc)
+                        continue
                     waits.append(f"Pulling {image} on {node}")
                     continue
                 state, reason = _state(existing[name])
