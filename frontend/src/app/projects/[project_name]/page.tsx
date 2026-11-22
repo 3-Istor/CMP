@@ -10,7 +10,7 @@ import { AppCard } from "@/components/projects/AppCard";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { PlacementPanel } from "@/components/placement/PlacementPanel";
-import { MoveBanner, MoveButtons, MoveProgress } from "@/components/projects/ProjectLocation";
+import { MoveBanner, MoveButtons } from "@/components/projects/ProjectLocation";
 import { OpenAppMenu } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
@@ -204,7 +204,6 @@ export default function ProjectPage() {
       />
       <PageBody>
         <MoveBanner />
-        <div className="mb-6 rounded-lg border p-4 empty:hidden [&>div]:border-t-0 [&>div]:pt-0"><MoveProgress /></div>
         {canViewObservability && (
           <SecurityAlert
             project={projectName}
