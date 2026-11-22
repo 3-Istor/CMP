@@ -78,6 +78,10 @@ class ImportSource(Base):
     # Set when an automatic rebuild could not run as rebuild_user: an admin
     # confirms it from the CMP.
     rebuild_pending: Mapped[dict | None] = mapped_column(JSON)
+    # The pull request that moves the import to the template model (CNP-303):
+    # deploy/ values and the standard CI in the repository. Once merged and
+    # switched, Argo CD reads the repository and its CI builds the images.
+    standard_repo: Mapped[dict | None] = mapped_column(JSON)
 
     runs: Mapped[list["ImportRun"]] = relationship(
         back_populates="source",
@@ -175,3 +179,24 @@ class ImportWebhookDelivery(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     received_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class ImportRecommendationDismissal(Base):
+    """A recommendation of the analyzer a project chose to ignore (CNP-305)."""
+
+    __tablename__ = "import_recommendation_dismissals"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_name",
+            "recommendation_id",
+            name="uq_import_recommendation_dismissals",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_name: Mapped[str] = mapped_column(String(100), index=True)
+    recommendation_id: Mapped[str] = mapped_column(String(200))
+    dismissed_by: Mapped[str] = mapped_column(String(255))
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )

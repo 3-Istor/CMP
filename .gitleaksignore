@@ -1,0 +1,4 @@
+# Fake secrets the masking tests must recognise; later commits carry gitleaks:allow
+94f936ecc1fbfd7a0565a079a282debbe78e7e71:backend/tests/test_mcp_preview_and_masking.py:jwt:28
+94f936ecc1fbfd7a0565a079a282debbe78e7e71:backend/tests/test_mcp_preview_and_masking.py:generic-api-key:29
+94f936ecc1fbfd7a0565a079a282debbe78e7e71:backend/tests/test_mcp_preview_and_masking.py:generic-api-key:32

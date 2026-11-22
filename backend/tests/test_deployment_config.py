@@ -1,5 +1,6 @@
 import pytest
 
+from app.services import chart_values
 from tests.test_app_security_data import (  # noqa: F401
     FRONTEND_YAML,
     FULLSTACK_FILES,
@@ -202,3 +203,140 @@ def test_patch_config_accepts_user_editable_values(client_factory, payload):
     )
 
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"release": {"strategy": "canary"}},
+        {"migrations": {"enabled": False}},
+        {"db": {"backup": {"enabled": False}}},
+        {"db": {"restore": {"generation": 3}}},
+    ],
+)
+def test_patch_config_sends_values_with_their_own_checks_to_their_tab(
+    client_factory, payload
+):
+    client, repo, deployment_id = client_factory(
+        TEMPLATE_FILES, "admin", "static"
+    )
+
+    response = client.patch(
+        f"/api/deployments/{deployment_id}/config",
+        json={"_sha": SHA, **payload},
+    )
+
+    assert (response.status_code, repo.commits) == (422, [])
+    assert "(use the " in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"secrets": {"keys": ["STRIPE_API_KEY"]}},
+        {"network": {"allowFrom": ["web"]}},
+        {"metrics": {"enabled": True}},
+        {"tracing": {"enabled": True}},
+        {"bucket": {"enabled": True}},
+        {"db": {"pooler": {"enabled": True}}},
+    ],
+)
+def test_patch_config_accepts_settings_the_app_yaml_also_holds(
+    client_factory, payload
+):
+    client, _, deployment_id = client_factory(
+        TEMPLATE_FILES, "admin", "static"
+    )
+
+    response = client.patch(
+        f"/api/deployments/{deployment_id}/config",
+        json={"_sha": SHA, **payload},
+    )
+
+    assert response.status_code == 200
+
+
+def test_patch_config_refuses_what_the_chart_schema_refuses(client_factory):
+    client, repo, deployment_id = client_factory(
+        TEMPLATE_FILES, "admin", "static"
+    )
+
+    response = client.patch(
+        f"/api/deployments/{deployment_id}/config",
+        json={"_sha": SHA, "replicaCount": 50},
+    )
+
+    assert (response.status_code, repo.commits) == (422, [])
+    assert "replicaCount" in response.json()["detail"]
+
+
+def test_patch_config_refuses_a_secret_value_in_the_expected_names(
+    client_factory,
+):
+    client, repo, deployment_id = client_factory(
+        TEMPLATE_FILES, "admin", "static"
+    )
+
+    response = client.patch(
+        f"/api/deployments/{deployment_id}/config",
+        json={"_sha": SHA, "secrets": {"keys": ["API_KEY=sk_live_1"]}},
+    )
+
+    assert (response.status_code, repo.commits) == (422, [])
+
+
+def test_patch_config_names_the_caller_and_each_changed_value_in_the_commit(
+    client_factory,
+):
+    client, repo, deployment_id = client_factory(
+        TEMPLATE_FILES, "admin", "static"
+    )
+
+    client.patch(
+        f"/api/deployments/{deployment_id}/config",
+        json={
+            "_sha": SHA,
+            "replicaCount": 2,
+            "resources": {"requests": {"cpu": "200m"}},
+            "ingress": {"enabled": True},
+        },
+    )
+
+    message = repo.commits[0][1]
+    assert message == (
+        "chore(cmp): update deploy/values.yaml (user-1)\n\n"
+        "- replicaCount\n- resources.requests.cpu\n\n"
+        "CNP-Changed-By: user-1"
+    )
+
+
+def test_patch_config_commits_nothing_when_no_value_changes(client_factory):
+    client, repo, deployment_id = client_factory(
+        TEMPLATE_FILES, "admin", "static"
+    )
+
+    response = client.patch(
+        f"/api/deployments/{deployment_id}/config",
+        json={"_sha": SHA, "replicaCount": 1},
+    )
+
+    assert (response.status_code, repo.commits) == (200, [])
+
+
+def test_patch_config_refuses_to_commit_when_the_chart_cannot_be_read(
+    client_factory, monkeypatch
+):
+    client, repo, deployment_id = client_factory(
+        TEMPLATE_FILES, "admin", "static"
+    )
+
+    async def unreadable(token):
+        raise chart_values.ChartUnavailableError("GitHub is down")
+
+    monkeypatch.setattr(chart_values, "fetch_chart", unreadable)
+    response = client.patch(
+        f"/api/deployments/{deployment_id}/config",
+        json={"_sha": SHA, "replicaCount": 2},
+    )
+
+    assert (response.status_code, repo.commits) == (502, [])

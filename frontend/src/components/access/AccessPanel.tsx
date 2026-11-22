@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { ApiError, decideAccess, getAccessOverview, requestAccess } from "@/lib/api";
 import { useFormat } from "@/lib/useFormat";
 import type { AccessOverview, AccessRequest, AccessStatus } from "@/types";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const POLL_MS = 15_000;
 const DURATIONS = [15, 30, 60, 120, 240];
@@ -89,8 +90,7 @@ export function AccessPanel() {
 
   useEffect(() => {
     load();
-    const id = window.setInterval(load, POLL_MS);
-    return () => window.clearInterval(id);
+    return pollWhileVisible(load, POLL_MS);
   }, [load]);
 
   const act = async (row: AccessRequest, action: Action, reason?: string) => {

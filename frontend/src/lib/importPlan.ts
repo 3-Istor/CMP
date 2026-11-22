@@ -20,6 +20,7 @@ const MAX_APP_NAME = 40;
 const PROBE_PATH = /^\/[A-Za-z0-9._~/-]{0,200}$/;
 const MIN_MEMORY_MIB = 16;
 const SUPPORTED_BACKING = ["mongodb", "redis", "neo4j", "elasticsearch"];
+const MANAGED_BACKING = ["postgres"];
 
 export type PlanEditAction =
   | { type: "rename"; app: string; name: string }
@@ -29,6 +30,8 @@ export type PlanEditAction =
   | { type: "setPort"; app: string; port: number }
   | { type: "setProbe"; app: string; probe: PlanProbe }
   | { type: "toggleLink"; from: string; to: string }
+  | { type: "setPooler"; app: string; value: boolean }
+  | { type: "setOffhours"; app: string; value: boolean }
   | { type: "reset"; edits?: ImportPlanEdits };
 
 export function emptyEdits(): ImportPlanEdits {
@@ -40,7 +43,43 @@ export function emptyEdits(): ImportPlanEdits {
     port: {},
     probe: {},
     drop_links: [],
+    pooler: {},
+    offhours: {},
   };
+}
+
+/** A backing app the platform runs as a managed database (CNPG), not as a container. */
+export function isManaged(backing: ImportPlan["backing"][number]): boolean {
+  return (
+    backing.supported &&
+    !!backing.managed &&
+    MANAGED_BACKING.includes(backing.managed) &&
+    backing.kind === backing.managed
+  );
+}
+
+/**
+ * The managed database a service gets: the managed backing app it alone
+ * links to, by plan name. Backend: generate._attach_databases.
+ */
+export function managedDatabaseOf(
+  plan: ImportPlan,
+  edits: ImportPlanEdits,
+  planName: string,
+): string | null {
+  const kept = plan.links.filter(
+    (l) => !edits.drop_links.some((d) => d.from === l.from && d.to === l.to),
+  );
+  for (const backing of plan.backing) {
+    if (!isManaged(backing) || edits.exclude.includes(backing.name)) continue;
+    const owners = new Set(
+      kept
+        .filter((l) => l.to === backing.name && !edits.exclude.includes(l.from))
+        .map((l) => l.from),
+    );
+    if (owners.size === 1 && owners.has(planName)) return backing.name;
+  }
+  return null;
 }
 
 export function finalName(edits: ImportPlanEdits, planName: string): string {
@@ -129,6 +168,8 @@ export function planEditsReducer(
         memory: moveKey(state.memory, before, after),
         port: moveKey(state.port, before, after),
         probe: moveKey(state.probe, before, after),
+        pooler: moveKey(state.pooler, before, after),
+        offhours: moveKey(state.offhours, before, after),
       };
     }
     case "toggleExclude":
@@ -195,6 +236,24 @@ export function planEditsReducer(
       };
       return { ...state, probe: { ...state.probe, [name]: probe } };
     }
+    case "setPooler": {
+      const name = finalName(state, action.app);
+      return {
+        ...state,
+        pooler: action.value
+          ? { ...state.pooler, [name]: true }
+          : without(state.pooler, name),
+      };
+    }
+    case "setOffhours": {
+      const name = finalName(state, action.app);
+      return {
+        ...state,
+        offhours: action.value
+          ? without(state.offhours, name)
+          : { ...state.offhours, [name]: false },
+      };
+    }
     case "toggleLink": {
       const dropped = state.drop_links.some(
         (l) => l.from === action.from && l.to === action.to,
@@ -218,6 +277,7 @@ export type PlanProblem =
   | { code: "memory"; app: string }
   | { code: "probePath"; app: string }
   | { code: "probePort"; app: string }
+  | { code: "sharedDatabase"; app: string }
   | { code: "nothing" };
 
 /** What the apply endpoint would refuse, found before the step-up. */
@@ -230,6 +290,20 @@ export function planProblems(
   const names: string[] = [];
   for (const backing of plan.backing) {
     if (edits.exclude.includes(backing.name)) continue;
+    if (isManaged(backing)) {
+      const owners = new Set(
+        plan.links
+          .filter(
+            (l) =>
+              l.to === backing.name &&
+              !edits.exclude.includes(l.from) &&
+              !edits.drop_links.some((d) => d.from === l.from && d.to === l.to),
+          )
+          .map((l) => l.from),
+      );
+      if (owners.size > 1) problems.push({ code: "sharedDatabase", app: backing.name });
+      continue;
+    }
     if (!backing.supported || !SUPPORTED_BACKING.includes(backing.kind)) {
       problems.push({ code: "unsupported", app: backing.name });
       continue;
@@ -289,7 +363,7 @@ export function capacityGauge(
   let requested = 0;
   const tooBig: string[] = [];
   for (const backing of plan.backing) {
-    if (edits.exclude.includes(backing.name) || !backing.supported) continue;
+    if (edits.exclude.includes(backing.name) || !backing.supported || isManaged(backing)) continue;
     const mib =
       capacity.backing_requests_mib[backing.kind] ??
       backing.resources.requests_mem_mib;

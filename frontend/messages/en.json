@@ -26,7 +26,8 @@
       "openMenu": "Open the menu",
       "skipToContent": "Skip to content",
       "access": "Elevated access",
-      "accessReviews": "Access reviews"
+      "accessReviews": "Access reviews",
+      "issueReports": "Assistant reports"
     },
     "home": {
       "fallbackName": "Developer",
@@ -3580,8 +3581,15 @@
         "removeLink": "Remove",
         "restoreLink": "Keep",
         "removeLinkOf": "Remove the link from {from} to {to}",
-        "restoreLinkOf": "Keep the link from {from} to {to}"
-      }
+        "restoreLinkOf": "Keep the link from {from} to {to}",
+        "managed": "Provided by the platform: a managed {kind} database (CNPG) in the namespace of the app using it, backed up every night, with a generated password.",
+        "pooler": "Connection pooler (PgBouncer)",
+        "poolerHelp": "The app reaches its database {database} through PgBouncer. Useful when it opens many connections.",
+        "offhours": "Sleep at night",
+        "offhoursHelp": "Stopped from 1 am to 7 am, like apps created from a template. Databases wake before the apps calling them."
+      },
+      "recommendations": "Recommendations",
+      "recommendationsBody": "Services managed by the platform, backed up and lighter, can replace these engines. This is advice: you can import as is."
     },
     "problem": {
       "unsupported": "{app} is not in the catalogue: exclude it.",
@@ -3590,7 +3598,8 @@
       "memory": "{app}: the memory request must be at least 16 MiB and at most the limit.",
       "probePath": "{app}: an HTTP probe needs a path such as /health.",
       "probePort": "{app}: an HTTP probe must use the first port, the one the monitoring checks.",
-      "nothing": "Every app is excluded: there is nothing to import."
+      "nothing": "Every app is excluded: there is nothing to import.",
+      "sharedDatabase": "{app}: a managed database belongs to one app. Remove the links of the other apps."
     },
     "list": {
       "title": "Imported repositories",
@@ -3645,7 +3654,28 @@
         "unknown_user": "the CMP cannot find the account of {user}, who rebuilds it."
       },
       "pendingHelp": "A rebuild runs with the GitHub access of whoever starts it. By confirming, you start it with your access and your passkey; later rebuilds run as you.",
-      "linkGithub": "Link my GitHub account"
+      "linkGithub": "Link my GitHub account",
+      "standard": {
+        "opened": "Pull request opened on {repo}",
+        "openFailed": "Could not open the pull request: {message}",
+        "open": "Open the standard pull request",
+        "view": "Pull request #{number}",
+        "untilMerged": "Until it is merged, these apps run from the platform's copy of their settings and the platform rebuilds them on each push. Once merged, deploy/ in the repository drives them, a vX.Y.Z tag releases a new version through the repository's CI, and the CMP no longer rebuilds them.",
+        "kept": "Kept on the platform (their values file was removed before the merge): {apps}",
+        "state": {
+          "none": "{repo} is not yet deployed like a template app: open its standard pull request to add deploy/ and the CI.",
+          "open": "Standard pull request open on {repo}: merge it to deploy from the repository.",
+          "merged": "Pull request merged: switching {repo} to its deploy/ folder.",
+          "switched": "{repo} deploys from its deploy/ folder: edit deploy/values-*.yaml to change an app, push a vX.Y.Z tag to release a new version.",
+          "closed": "The standard pull request of {repo} was closed without merge: the apps stay on the platform.",
+          "failed": "The standard pull request of {repo} could not be opened."
+        },
+        "conflict": {
+          "replaced": "replaced by the pull request",
+          "deploy": "kept in deploy/: check it is not meant for another deployment",
+          "workflow": "kept: check it does not build or deploy these services too"
+        }
+      }
     },
     "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey.",
     "failure": {
@@ -3760,6 +3790,54 @@
       "appFailuresCaption": "Apps that did not start",
       "problem": "Problem",
       "detail": "Detail"
+    },
+    "recommendations": {
+      "title": "Recommended managed services",
+      "none": "No recommendation for this app.",
+      "target": {
+        "postgres": "to managed Postgres",
+        "bucket": "to a managed S3 bucket"
+      },
+      "level": {
+        "advised": "Advised",
+        "evaluate": "To evaluate"
+      },
+      "effort": {
+        "low": "Low effort",
+        "medium": "Medium effort",
+        "high": "High effort"
+      },
+      "gain": "{mib} MiB less RAM",
+      "dismiss": "Ignore for this project",
+      "restore": "Show again",
+      "dismissedCount": "{count, plural, one {# ignored recommendation} other {# ignored recommendations}}",
+      "failed": "The action failed: {message}",
+      "notBackedUp": "Not backed up",
+      "alternative": "The data of this container is not backed up. Managed, backed up alternative: {target}.",
+      "alternativeGeneric": "The data of this container is not backed up. The platform offers managed, backed up Postgres and S3 buckets."
+    },
+    "estimate": {
+      "title": "Resources and cost",
+      "loading": "Computing resources and cost…",
+      "app": "App",
+      "requests": "Requested",
+      "limits": "Limit",
+      "volume": "Volume",
+      "monthly": "Cost / month",
+      "total": "Total",
+      "estimatedHelp": "Estimate: values guessed by the analysis, to confirm once deployed.",
+      "database": "+ {mib} MiB estimated for its managed database",
+      "costBasis": "Compute cost of the requested resources, at the {cloud} cluster rate of the FinOps tab. Storage, network and platform fee left out.",
+      "noPrices": "Cost unavailable: FinOps has no rate for this cluster.",
+      "rateEstimated": "Provisional rate.",
+      "quota": "{used} MiB requested for the project ({other} MiB by its other imports), out of {max} MiB allowed.",
+      "cluster": "Free room on the cluster: {mem} MiB and {cpu}.",
+      "clusterUnknown": "Free room on the cluster unknown: the cluster does not answer.",
+      "gain": "Following the recommendations would free about {mib} MiB of RAM.",
+      "diffTitle": "Changes against what is deployed",
+      "diffEmpty": "No change.",
+      "added": "{app} will be added.",
+      "removed": "{app} is no longer in the plan: it stays deployed until the import is deleted."
     }
   },
   "obs": {
@@ -3904,5 +3982,40 @@
       "monthly": "{amount} per month",
       "noHints": "Nothing to save: requests fit the usage."
     }
+  },
+  "issueReports": {
+    "title": "Assistant reports",
+    "description": "Difficulties AI assistants met on the platform, sent with their user's consent. Secrets are removed before they are stored.",
+    "loading": "Loading reports",
+    "forbidden": "For platform admins only.",
+    "empty": "No report here.",
+    "filterLabel": "Filter by status",
+    "filters": {
+      "new": "New",
+      "exported": "Exported",
+      "closed": "Closed",
+      "all": "All"
+    },
+    "statuses": {
+      "new": "New",
+      "exported": "Exported to Jira",
+      "closed": "Closed"
+    },
+    "categories": {
+      "missing_tool": "Missing tool",
+      "error": "Unexplained error",
+      "documentation": "Missing documentation",
+      "bug": "Bug",
+      "other": "Other"
+    },
+    "seen": "{count, plural, one {Reported once} other {Reported # times}}, last on {date}",
+    "reportedBy": "Sent by {users} through {assistant}",
+    "unknownAssistant": "an assistant",
+    "project": "project {project}",
+    "copyForJira": "Copy for Jira",
+    "copied": "Copied: paste it into a Jira ticket, then mark the report exported.",
+    "markExported": "Mark exported",
+    "close": "Close",
+    "reopen": "Reopen"
   }
 }

@@ -9,6 +9,7 @@ import {
   CostCard,
   MetricCards,
 } from "@/components/app-overview/MetricCards";
+import { ManagedServicesCard } from "@/components/imports/Recommendations";
 import { useObsCapabilities } from "@/components/observability/shared";
 import { OverviewObservability } from "@/components/observability/OverviewObservability";
 import { useAppContext } from "@/components/projects/AppContext";
@@ -79,6 +80,14 @@ export default function AppOverviewPage() {
       />
 
       <ComponentsCard appId={appId} links={links.data ?? []} />
+
+      {current.template_id.startsWith("import-") && (
+        <ManagedServicesCard
+          projectName={projectName}
+          app={current.name}
+          canManage={can("import.manage")}
+        />
+      )}
 
       <LogsCard
         project={projectName}

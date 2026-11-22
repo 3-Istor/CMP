@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from unittest import mock
+from urllib.parse import parse_qsl
 
 import httpx
 import pytest
@@ -296,48 +297,60 @@ class TestMetrics:
         assert response.status_code == 422
 
 
+def _form(request: httpx.Request) -> dict[str, str]:
+    return dict(parse_qsl(request.content.decode()))
+
+
 class TestLogs:
-    def _loki(self, lines):
+    @pytest.fixture(autouse=True)
+    def _store(self, monkeypatch):
+        monkeypatch.setattr(
+            sources.settings, "OBS_VLOGS_URL", "http://vlogs.test"
+        )
+
+    def _vlogs(self, lines, level=None):
         def handle(_: httpx.Request) -> httpx.Response:
+            rows = [
+                {
+                    "_time": NOW.isoformat().replace("+00:00", "Z"),
+                    "_msg": line,
+                    "pod": f"{FRONTEND}-abc-xyz",
+                    **({"json.level": level} if level else {}),
+                }
+                for line in lines
+            ]
             return httpx.Response(
-                200,
-                json={
-                    "data": {
-                        "result": [
-                            {
-                                "stream": {"pod": f"{FRONTEND}-abc-xyz"},
-                                "values": [
-                                    [str(int(NOW.timestamp() * 1e9)), line]
-                                    for line in lines
-                                ],
-                            }
-                        ]
-                    }
-                },
+                200, text="".join(json.dumps(r) + "\n" for r in rows)
             )
 
         return handle
 
-    def test_reads_only_the_projects_own_loki_tenant(
+    def test_reads_only_the_projects_own_streams(
         self, session_factory, keycloak, monkeypatch
     ):
-        sent = _transport(monkeypatch, sources, self._loki(["hello"]))
+        sent = _transport(monkeypatch, sources, self._vlogs(["hello"]))
         client = _client(session_factory)
 
         client.get("/api/deployments/7/logs")
 
-        request = sent[0]
-        assert (
-            request.url.params["query"].startswith(
-                '{project="shop", namespace="shop-web"'
-            ),
-            request.headers.get("X-Scope-OrgID"),
-        ) == (True, "shop|default")
+        assert _form(sent[0])["extra_stream_filters"] == '{project="shop"}'
+
+    def test_selects_the_apps_namespace(
+        self, session_factory, keycloak, monkeypatch
+    ):
+        sent = _transport(monkeypatch, sources, self._vlogs(["hello"]))
+        client = _client(session_factory)
+
+        client.get("/api/deployments/7/logs")
+
+        assert '{project="shop", namespace="shop-web"' in (
+            _form(sent[0])["query"]
+        )
 
     def test_another_projects_logs_are_never_queried(
         self, session_factory, keycloak, monkeypatch
     ):
-        sent = _transport(monkeypatch, sources, self._loki(["hello"]))
+        sent = _transport(monkeypatch, sources, self._vlogs(["hello"]))
         client = _client(session_factory)
 
         response = client.get("/api/deployments/8/logs")
@@ -347,15 +360,16 @@ class TestLogs:
     def test_a_caller_cannot_inject_another_project_through_the_filters(
         self, session_factory, keycloak, monkeypatch
     ):
-        sent = _transport(monkeypatch, sources, self._loki([]))
+        sent = _transport(monkeypatch, sources, self._vlogs([]))
         client = _client(session_factory)
 
         client.get(
             "/api/deployments/7/logs",
-            params={"q": 'x", project="rival', "component": "backend"},
+            params={"q": 'x"} {project="rival', "component": "backend"},
         )
 
-        selector = sent[0].url.params["query"].split("}")[0]
+        query = _form(sent[0])["query"]
+        selector = query.split("{", 1)[1].split("}", 1)[0]
         assert (selector.count("project="), "rival" in selector) == (1, False)
 
     def test_labels_each_line_with_its_level_as_a_word(
@@ -364,7 +378,7 @@ class TestLogs:
         _transport(
             monkeypatch,
             sources,
-            self._loki(
+            self._vlogs(
                 ["ERROR db down", "level=warn slow", "started", "<b>x</b>"]
             ),
         )
@@ -379,10 +393,22 @@ class TestLogs:
             None,
         ]
 
+    def test_a_json_lines_level_field_wins_over_its_words(
+        self, session_factory, keycloak, monkeypatch
+    ):
+        _transport(
+            monkeypatch, sources, self._vlogs(["no error here"], "info")
+        )
+        client = _client(session_factory)
+
+        body = client.get("/api/deployments/7/logs").json()
+
+        assert body[0]["level"] == "info"
+
     def test_returns_lines_as_plain_text_without_interpreting_them(
         self, session_factory, keycloak, monkeypatch
     ):
-        _transport(monkeypatch, sources, self._loki(["<script>x</script>"]))
+        _transport(monkeypatch, sources, self._vlogs(["<script>x</script>"]))
         client = _client(session_factory)
 
         body = client.get("/api/deployments/7/logs").json()
@@ -392,46 +418,40 @@ class TestLogs:
     def test_filters_by_component_with_the_charts_pod_prefix(
         self, session_factory, keycloak, monkeypatch
     ):
-        sent = _transport(monkeypatch, sources, self._loki([]))
+        sent = _transport(monkeypatch, sources, self._vlogs([]))
         client = _client(session_factory)
 
         client.get("/api/deployments/7/logs?component=backend")
 
-        assert f'pod=~"{BACKEND}-.+"' in sent[0].url.params["query"]
+        assert f'pod=~"{BACKEND}-.+"' in _form(sent[0])["query"]
 
     def test_attaches_the_component_of_the_pod(
         self, session_factory, keycloak, monkeypatch
     ):
-        _transport(monkeypatch, sources, self._loki(["hello"]))
+        _transport(monkeypatch, sources, self._vlogs(["hello"]))
         client = _client(session_factory)
 
         body = client.get("/api/deployments/7/logs").json()
 
         assert body[0]["component"] == "frontend"
 
-    def test_filters_by_level_in_the_query(
+    def test_filters_by_level_on_the_words_or_the_level_field(
         self, session_factory, keycloak, monkeypatch
     ):
-        sent = _transport(monkeypatch, sources, self._loki([]))
+        sent = _transport(monkeypatch, sources, self._vlogs([]))
         client = _client(session_factory)
 
-        client.get("/api/deployments/7/logs?level=error")
+        client.get("/api/deployments/7/logs?level=warn")
 
-        assert "|~" in sent[0].url.params["query"]
+        assert (
+            '(_msg:~"(?i)\\\\b(warn|warning)\\\\b"'
+            ' or json.level:~"(?i)^(warn|warning)$")'
+        ) in _form(sent[0])["query"]
 
     def test_rejects_an_unknown_component(self, session_factory, keycloak):
         client = _client(session_factory)
 
         response = client.get("/api/deployments/7/logs?component=db")
-
-        assert response.status_code == 400
-
-    def test_rejects_a_backtick_in_the_search_text(
-        self, session_factory, keycloak
-    ):
-        client = _client(session_factory)
-
-        response = client.get("/api/deployments/7/logs", params={"q": "a`b"})
 
         assert response.status_code == 400
 
@@ -442,13 +462,21 @@ class TestLogs:
 
         assert response.status_code == 422
 
-    def test_returns_502_when_loki_is_down(
+    def test_returns_502_when_victorialogs_is_down(
         self, session_factory, keycloak, monkeypatch
     ):
         def down(_: httpx.Request) -> httpx.Response:
             return httpx.Response(500, text="boom")
 
         _transport(monkeypatch, sources, down)
+        client = _client(session_factory)
+
+        assert client.get("/api/deployments/7/logs").status_code == 502
+
+    def test_returns_502_when_no_log_store_is_configured(
+        self, session_factory, keycloak, monkeypatch
+    ):
+        monkeypatch.setattr(sources.settings, "OBS_VLOGS_URL", "")
         client = _client(session_factory)
 
         assert client.get("/api/deployments/7/logs").status_code == 502

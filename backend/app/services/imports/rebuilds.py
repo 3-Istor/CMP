@@ -43,7 +43,7 @@ from app.models.imports import (
 from app.services import audit, keycloak_service, notifications
 from app.services.authz import assert_project_role
 from app.services.github_service import GITHUB_API_BASE, GitHubAppError
-from app.services.imports import access, service, watch
+from app.services.imports import access, service, standard_pr, watch
 from app.services.imports.service import ImportRefused
 
 logger = logging.getLogger(__name__)
@@ -447,6 +447,13 @@ async def auto_rebuild(  # pylint: disable=too-many-return-statements
     deferred, skipped or failed. Calling it again for the same head (a
     replayed delivery, the reconciler) does nothing.
     """
+    # A push may be the merge of the standard pull request: the repository's
+    # CI builds that commit, the platform must not build it too.
+    if await standard_pr.refresh(source_id) in (
+        standard_pr.MERGED,
+        standard_pr.SWITCHED,
+    ):
+        return "standard_ci"
     with SessionLocal() as db:
         source = db.get(ImportSource, source_id)
         if source is None or not source.auto_rebuild:
@@ -587,6 +594,7 @@ async def reconcile_once() -> None:
                 await reconcile_source(source_id)
             except Exception:  # pylint: disable=broad-exception-caught
                 logger.exception("Reconcile of import %s failed", source_id)
+        await standard_pr.refresh_all()
 
 
 async def reconcile_loop() -> None:

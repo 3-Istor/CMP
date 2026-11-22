@@ -36,6 +36,7 @@ from app.models.observability import TraceTenant
 from app.routers import agents as agents_router
 from app.routers import app_observability
 from app.routers import deployments as deployments_router
+from app.routers import issue_reports as issue_reports_router
 from app.routers.access import require_platform_admin
 from app.services import audit, keycloak_service
 from app.services.agents import internal_api, policy, ratelimit
@@ -80,6 +81,14 @@ WRITE_TOOLS = {
     "analyze_repo": (
         {"project": "demo", "repo_full_name": "org/shop"},
         "import.create",
+    ),
+    "report_issue": (
+        {
+            "category": "missing_tool",
+            "summary": "No tool to list cron jobs",
+            "user_confirmed": True,
+        },
+        "issue.report",
     ),
 }
 # Approved by a person in the CMP before they run (policy level confirm);
@@ -148,6 +157,7 @@ REVIEWED_TOOLS = (
         "list_app_traces",
         "get_alerts",
         "get_slo",
+        "report_issue",
     }
     | OPERATIONS_WRITE_TOOLS
     | OPERATIONS_READ_TOOLS
@@ -291,6 +301,7 @@ def cmp():
     api.include_router(agents_router.projects_router, prefix="/api")
     # The real observability API: rights and scope are what is tested.
     api.include_router(app_observability.router, prefix="/api")
+    api.include_router(issue_reports_router.router, prefix="/api")
     with factory() as db:
         for app_id, name, project in (
             (1, "shop", "demo"),

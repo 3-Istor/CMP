@@ -19,7 +19,12 @@ import httpx
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
-from app.services import app_inputs, customer_identity, notifications
+from app.services import (
+    app_inputs,
+    aws_tfstate,
+    customer_identity,
+    notifications,
+)
 from app.services.app_repo import is_platform_repo_name, repo_url_for
 from app.services.github_service import (
     GitHubAppError,
@@ -459,12 +464,22 @@ def run_deletion(deployment_id: int) -> None:
                         )
                     )
                 except RegistryError as exc:
-                    logger.error(
-                        "Could not unregister '%s' from the project "
-                        "registry, a stale hostname entry may remain: %s",
-                        deployment.name,
-                        exc,
-                    )
+                    # Marked deleted, the app could not be deleted again and
+                    # its registry entry (namespace, hostname) would stay.
+                    # Failed, a new deletion finds nothing left to destroy
+                    # and retries this step.
+                    raise RuntimeError(
+                        "Resources destroyed, but the app could not be "
+                        f"removed from the project registry: {exc}. Delete "
+                        "the app again to finish."
+                    ) from exc
+
+            if deployment.project_id and settings.TF_BACKEND_S3_BUCKET:
+                # Emptied by the destroy above; kept, they would be the
+                # only trace of the app (CNP-306).
+                aws_tfstate.delete_states(
+                    f"cnp/projects/{deployment.project_id}/{deployment.name}/"
+                )
 
             # The name is free again: another app may now own that repo.
             deployment.github_repo_url = None

@@ -1145,3 +1145,176 @@ def test_a_stuck_run_no_longer_blocks_a_rebuild(client, world):
     response = client.post(f"/api/projects/shop/imports/{source.id}/rebuild")
 
     assert response.status_code == 202
+
+
+NEO4J_TO_POSTGRES = {
+    "id": "neo4j-to-postgres:neo4j",
+    "subject": "neo4j",
+    "rule": "neo4j-to-postgres",
+    "target": "postgres",
+    "level": "advised",
+    "reason": "Le graphe tient dans des tables Postgres.",
+    "gain_mem_mib": 1024,
+    "effort": "medium",
+    "evidence": [
+        {"file": "docker-compose.yml", "line": 50, "kind": "backing_image"}
+    ],
+}
+
+
+def _recommended(world):
+    source = _source(world)
+    _run(
+        world,
+        source,
+        status="succeeded",
+        plan={**PLAN, "recommendations": [NEO4J_TO_POSTGRES]},
+    )
+    _run(
+        world,
+        source,
+        kind="build",
+        status="succeeded",
+        plan={"plan": PLAN, "edits": {"rename": {"neo4j": "graph"}}},
+    )
+    with world.db() as db:
+        db.add(
+            ImportService(
+                source_id=source.id,
+                app_name="graph",
+                kind="backing",
+                spec={"backing_kind": "neo4j"},
+            )
+        )
+        db.commit()
+    return source
+
+
+def test_a_recommendation_is_shown_under_the_deployed_app_name(client, world):
+    _recommended(world)
+
+    body = client.get(
+        "/api/projects/shop/imports/recommendations", params={"app": "graph"}
+    ).json()
+
+    assert [
+        (r["id"], r["app"], r["dismissed"]) for r in body["recommendations"]
+    ] == [("neo4j-to-postgres:neo4j", "graph", False)]
+
+
+def test_a_backing_container_is_not_backed_up_and_names_its_alternative(
+    client, world
+):
+    _recommended(world)
+
+    body = client.get(
+        "/api/projects/shop/imports/recommendations", params={"app": "graph"}
+    ).json()
+
+    assert body["backing"] == [
+        {
+            "app": "graph",
+            "kind": "neo4j",
+            "backed_up": False,
+            "managed_alternative": "postgres",
+        }
+    ]
+
+
+def test_an_ignored_recommendation_stays_ignored_for_the_project(
+    client, world
+):
+    source = _recommended(world)
+
+    client.post(
+        "/api/projects/shop/imports/recommendations/"
+        "neo4j-to-postgres:neo4j/dismiss"
+    )
+    _run(
+        world,
+        source,
+        status="succeeded",
+        plan={**PLAN, "recommendations": [NEO4J_TO_POSTGRES]},
+    )
+
+    body = client.get("/api/projects/shop/imports/recommendations").json()
+    assert {r["dismissed"] for r in body["recommendations"]} == {True}
+    assert body["backing"][0]["managed_alternative"] is None
+
+
+def test_the_plan_view_lists_the_ignored_recommendations(client, world):
+    _recommended(world)
+    client.post(
+        "/api/projects/shop/imports/recommendations/"
+        "neo4j-to-postgres:neo4j/dismiss"
+    )
+    with world.db() as db:
+        run = db.query(ImportRun).filter_by(kind="analyze").first()
+
+    body = client.get(f"/api/projects/shop/imports/runs/{run.id}").json()
+
+    assert body["dismissed_recommendations"] == ["neo4j-to-postgres:neo4j"]
+
+
+def test_a_member_cannot_ignore_a_recommendation(client, world):
+    _recommended(world)
+    world.roles["shop"] = ProjectRole.MEMBER
+
+    response = client.post(
+        "/api/projects/shop/imports/recommendations/"
+        "neo4j-to-postgres:neo4j/dismiss"
+    )
+
+    assert response.status_code == 403
+
+
+def test_an_ignored_recommendation_can_be_shown_again(client, world):
+    _recommended(world)
+    path = (
+        "/api/projects/shop/imports/recommendations/"
+        "neo4j-to-postgres:neo4j/dismiss"
+    )
+    client.post(path)
+
+    client.delete(path)
+
+    body = client.get("/api/projects/shop/imports/recommendations").json()
+    assert body["recommendations"][0]["dismissed"] is False
+
+
+def test_the_estimate_follows_the_edits_of_the_plan(client, world):
+    source = _source(world)
+    run = _run(world, source, status="succeeded", plan=PLAN)
+
+    before = client.post(
+        f"/api/projects/shop/imports/runs/{run.id}/estimate", json={}
+    ).json()
+    after = client.post(
+        f"/api/projects/shop/imports/runs/{run.id}/estimate",
+        json={"exclude": ["search-service", "elasticsearch"]},
+    ).json()
+
+    assert (
+        after["total"]["requests"]["mem_mib"]
+        < before["total"]["requests"]["mem_mib"]
+    )
+
+
+def test_the_run_view_carries_the_estimate_of_the_plan(client, world):
+    source = _source(world)
+    run = _run(world, source, status="succeeded", plan=PLAN)
+
+    body = client.get(f"/api/projects/shop/imports/runs/{run.id}").json()
+
+    assert body["estimate"]["total"]["requests"]["mem_mib"] > 0
+
+
+def test_a_run_without_plan_has_no_estimate(client, world):
+    source = _source(world)
+    run = _run(world, source, kind="build", status="running")
+
+    response = client.post(
+        f"/api/projects/shop/imports/runs/{run.id}/estimate", json={}
+    )
+
+    assert response.status_code == 409

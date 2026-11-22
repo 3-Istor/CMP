@@ -5,6 +5,7 @@ import {
   Ban,
   Gauge,
   KeyRound,
+  Lightbulb,
   Loader2,
   RotateCcw,
   ShieldCheck,
@@ -15,6 +16,8 @@ import { useCallback, useId, useMemo, useState } from "react";
 import { TopologyCanvas } from "@/components/topology/TopologyCanvas";
 import { TopologyLegend } from "@/components/topology/TopologyLegend";
 import { SELECT_CLASS } from "@/components/topology/LinkDialog";
+import { EstimatePanel } from "@/components/imports/EstimatePanel";
+import { NotBackedUp, RecommendationItem } from "@/components/imports/Recommendations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +26,8 @@ import {
   capacityGauge,
   effectiveService,
   finalName,
+  isManaged,
+  managedDatabaseOf,
   planProblems,
   type PlanEditAction,
 } from "@/lib/importPlan";
@@ -35,7 +40,7 @@ import {
   type GraphNode,
 } from "@/lib/topology";
 import { cn } from "@/lib/utils";
-import type { ImportCapacity, ImportPlan, ImportPlanEdits, Topology } from "@/types";
+import type { ImportCapacity, ImportEstimate, ImportPlan, ImportPlanEdits, Topology } from "@/types";
 
 function Panel({
   title,
@@ -125,11 +130,14 @@ function AppEditor({
     requests: useId(),
     limits: useId(),
     public: useId(),
+    pooler: useId(),
+    offhours: useId(),
   };
   const service = effectiveService(plan, edits, planName);
   const backing = plan.backing.find((b) => b.name === planName);
   const excluded = edits.exclude.includes(planName);
   const links = plan.links.filter((l) => l.from === planName || l.to === planName);
+  const database = service ? managedDatabaseOf(plan, edits, planName) : null;
   const [nameDraft, setNameDraft] = useState(finalName(edits, planName));
 
   return (
@@ -160,9 +168,40 @@ function AppEditor({
         />
       </div>
 
+      {!(backing && isManaged(backing)) && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor={ids.offhours}>{t("offhours")}</Label>
+            <Switch
+              id={ids.offhours}
+              checked={edits.offhours[finalName(edits, planName)] ?? true}
+              disabled={excluded}
+              onCheckedChange={(value: boolean) => dispatch({ type: "setOffhours", app: planName, value })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">{t("offhoursHelp")}</p>
+        </div>
+      )}
+
+      {backing && backing.supported && !isManaged(backing) && (
+        <NotBackedUp
+          backing={{
+            app: planName,
+            kind: backing.kind,
+            backed_up: false,
+            managed_alternative:
+              plan.recommendations?.find((r) => r.subject === planName)?.target ?? null,
+          }}
+        />
+      )}
+
       {backing && (
         <p className="text-sm text-muted-foreground">
-          {backing.supported ? t("catalogue", { kind: backing.kind }) : t("notCatalogue", { kind: backing.kind })}
+          {isManaged(backing)
+            ? t("managed", { kind: backing.kind })
+            : backing.supported
+              ? t("catalogue", { kind: backing.kind })
+              : t("notCatalogue", { kind: backing.kind })}
         </p>
       )}
 
@@ -177,6 +216,20 @@ function AppEditor({
               onCheckedChange={(value: boolean) => dispatch({ type: "setPublic", app: planName, value })}
             />
           </div>
+          {database && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={ids.pooler}>{t("pooler")}</Label>
+                <Switch
+                  id={ids.pooler}
+                  checked={edits.pooler[service.name] ?? false}
+                  disabled={excluded}
+                  onCheckedChange={(value: boolean) => dispatch({ type: "setPooler", app: planName, value })}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">{t("poolerHelp", { database })}</p>
+            </div>
+          )}
           {service.ports.length > 0 && (
             <div className="space-y-1.5">
               <Label htmlFor={ids.port}>{t("port")}</Label>
@@ -358,7 +411,13 @@ export function PlanReview({
   applying,
   onApply,
   onAbandon,
+  dismissedRecommendations,
+  onDismissRecommendation,
+  runId,
+  estimate,
 }: {
+  runId: string;
+  estimate: ImportEstimate | null;
   projectName: string;
   plan: ImportPlan;
   edits: ImportPlanEdits;
@@ -366,6 +425,8 @@ export function PlanReview({
   capacity: ImportCapacity;
   live: Topology | null;
   applying: boolean;
+  dismissedRecommendations: string[];
+  onDismissRecommendation: (id: string) => Promise<void>;
   onApply: () => void;
   onAbandon: () => void;
 }) {
@@ -384,6 +445,9 @@ export function PlanReview({
     [live],
   );
   const problems = planProblems(plan, edits, taken);
+  const recommendations = (plan.recommendations ?? []).filter(
+    (r) => !dismissedRecommendations.includes(r.id),
+  );
   const gauge = capacityGauge(plan, edits, capacity);
   const blocked = problems.length > 0 || gauge.over || gauge.tooBig.length > 0;
 
@@ -466,6 +530,24 @@ export function PlanReview({
           </div>
         </aside>
       </div>
+
+      <EstimatePanel projectName={projectName} runId={runId} edits={edits} initial={estimate} />
+
+      {recommendations.length > 0 && (
+        <Panel title={t("recommendations")} icon={Lightbulb}>
+          <p className="text-sm text-muted-foreground">{t("recommendationsBody")}</p>
+          <ul className="divide-y">
+            {recommendations.map((r) => (
+              <RecommendationItem
+                key={r.id}
+                item={r}
+                app={finalName(edits, r.subject)}
+                onDismiss={() => onDismissRecommendation(r.id)}
+              />
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <CapacityPanel plan={plan} edits={edits} capacity={capacity} />

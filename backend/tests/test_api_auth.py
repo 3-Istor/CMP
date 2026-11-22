@@ -180,30 +180,24 @@ class TestDeploymentsAuthorization:
         assert [d.project_id for d in result] == ["alpha"]
 
     def test_member_reads_a_deployment_of_their_project(self, db, roles):
-        result = asyncio.run(
-            deployments_router.get_deployment(
-                _deployment_id(db, "alpha"), _user("u2"), db
-            )
+        result = deployments_router.get_deployment(
+            _deployment_id(db, "alpha"), _user("u2"), db
         )
 
         assert result.project_id == "alpha"
 
     def test_refuses_a_deployment_of_another_project(self, db, roles):
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(
-                deployments_router.get_deployment(
-                    _deployment_id(db, "beta"), _user("u1"), db
-                )
+            deployments_router.get_deployment(
+                _deployment_id(db, "beta"), _user("u1"), db
             )
 
         assert exc.value.status_code == 403
 
     def test_refuses_outputs_of_another_project(self, db, roles):
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(
-                deployments_router.get_deployment_outputs(
-                    _deployment_id(db, "beta"), _user("u2"), db
-                )
+            deployments_router.get_deployment_outputs(
+                _deployment_id(db, "beta"), _user("u2"), db
             )
 
         assert exc.value.status_code == 403

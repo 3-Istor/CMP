@@ -36,8 +36,9 @@ class AuditEvent(Base):
 
 class ActivityRecord(Base):
     """
-    An audit event read from Loki or Argo CD by the activity collector, kept
-    here so the Activity tab reads a table instead of scanning days of logs.
+    An audit event read from VictoriaLogs or Argo CD by the activity
+    collector, kept here so the Activity tab reads a table instead of
+    scanning days of logs.
     """
 
     __tablename__ = "activity_events"
@@ -60,7 +61,7 @@ class ActivityRecord(Base):
 
 
 class ActivityCursor(Base):
-    """How far each Loki source has been read."""
+    """How far each audit source has been read from VictoriaLogs."""
 
     __tablename__ = "activity_cursors"
 

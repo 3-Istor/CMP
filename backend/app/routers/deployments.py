@@ -27,7 +27,7 @@ from app.models.project import Project, TargetCloud
 from app.schemas.deployment import DeploymentCreate, DeploymentRead
 from app.services import app_config_policy, app_inputs, app_repo
 from app.services import app_security_data as security_data
-from app.services import audit, terraform_orchestrator
+from app.services import audit, chart_values, terraform_orchestrator
 from app.services.authz import (
     assert_project_role,
     is_auditor,
@@ -325,7 +325,7 @@ async def create_deployment(
 
 
 @router.get("/{deployment_id}", response_model=DeploymentRead)
-async def get_deployment(
+def get_deployment(
     deployment_id: int,
     token: CurrentUser,
     db: Session = Depends(get_db),
@@ -336,7 +336,7 @@ async def get_deployment(
 
 
 @router.get("/{deployment_id}/outputs")
-async def get_deployment_outputs(
+def get_deployment_outputs(
     deployment_id: int,
     token: CurrentUser,
     db: Session = Depends(get_db),
@@ -381,7 +381,7 @@ def _still_running(deployment_id: int) -> bool:
 
 
 @router.get("/{deployment_id}/logs/stream")
-async def stream_deployment_logs(
+def stream_deployment_logs(
     deployment_id: int,
     request: Request,
     token: CurrentUser,
@@ -679,7 +679,12 @@ async def update_deployment_config(
       GitHub uses this to prevent concurrent write conflicts (409 Conflict).
     - Any other keys to merge into the YAML file (supports nested objects).
       Only the values in ``app_config_policy.EDITABLE_PREFIXES`` may change;
-      the others (project_name, secrets.*, ...) may only be echoed unchanged.
+      the others (project_name, secrets.vault*, ...) may only be echoed
+      unchanged. The merged file must fit the chart's values.schema.json,
+      as in the app's CI and in Argo CD.
+
+    **Commit**: one commit on ``main`` naming the file, the caller and each
+    changed value (``CNP-Changed-By`` trailer); none when nothing changes.
 
     **Merge strategy**: deep merge, existing keys not mentioned in the
     payload are preserved, including YAML comments.
@@ -693,8 +698,9 @@ async def update_deployment_config(
         403, Caller is not an admin of the application's project.
         404, Deployment not found.
         409, SHA conflict (another commit was pushed in between) or repo not linked.
-        422, The payload changes a value the platform manages.
-        502, GitHub API error.
+        422, The payload changes a value the platform manages, or the chart's
+             schema refuses the result.
+        502, GitHub API error, or the chart could not be read.
     """
     deployment = _get_kubernetes_deployment_or_404(
         deployment_id, db, token, ProjectRole.ADMIN
@@ -761,8 +767,34 @@ async def update_deployment_config(
             ),
         )
 
+    changed = [
+        ".".join(path)
+        for path in app_config_policy.changed_paths(parsed, payload)
+    ]
+    if not changed:
+        return {
+            "message": "These values are already in the file: no commit.",
+            "repo": repo,
+            "file_path": file_path,
+            "commit_sha": "",
+            "changed_keys": [],
+        }
+
     audit.note(request, file=file_path, changes=audit.changes(parsed, payload))
     _deep_merge(parsed, payload)
+
+    try:
+        refused = await chart_values.refusals(gh_token, parsed)
+    except chart_values.ChartUnavailableError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if refused:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "The platform chart refuses these values, the app's CI and "
+                f"Argo CD would too: {'; '.join(refused)}."
+            ),
+        )
 
     # Serialise back to a YAML string
     out = StringIO()
@@ -770,11 +802,11 @@ async def update_deployment_config(
     updated_content = out.getvalue()
 
     # ── 3. Commit to GitHub ───────────────────────────────────────────────
-    # Build a descriptive commit message listing the top-level keys changed
-    changed_keys = ", ".join(str(k) for k in payload)
+    actor = token.get("preferred_username") or token.get("sub") or "unknown"
     commit_message = (
-        f"chore: update app configuration via CMP\n\n"
-        f"Modified keys: {changed_keys}"
+        f"chore(cmp): update {file_path} ({actor})\n\n"
+        + "\n".join(f"- {path}" for path in changed)
+        + f"\n\nCNP-Changed-By: {actor}"
     )
 
     try:
@@ -797,7 +829,7 @@ async def update_deployment_config(
         "repo": repo,
         "file_path": file_path,
         "commit_sha": commit_sha,
-        "changed_keys": list(payload.keys()),
+        "changed_keys": changed,
     }
 
 

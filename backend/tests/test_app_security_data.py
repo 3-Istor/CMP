@@ -14,7 +14,7 @@ from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.routers import deployments as deployments_router
 from app.services import app_security_data as sd
-from app.services import keycloak_service
+from app.services import chart_values, keycloak_service
 from app.services.keycloak_service import get_current_user
 
 FRONTEND_YAML = """\
@@ -170,6 +170,28 @@ def add_deployment(factory, app_type: str) -> int:
         return row.id
 
 
+# A slice of infra-templates values.schema.json, enough to see the CMP apply it.
+CHART_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "replicaCount": {"type": "integer", "minimum": 0, "maximum": 10},
+        "secrets": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$",
+                    },
+                }
+            },
+        },
+    },
+}
+CHART_DEFAULTS = {"replicaCount": 1, "secrets": {"enabled": False, "keys": []}}
+
+
 def make_client(session_factory, repo: FakeRepo, role: str | None):
     app = FastAPI()
     app.include_router(deployments_router.router, prefix="/api")
@@ -194,6 +216,11 @@ def make_client(session_factory, repo: FakeRepo, role: str | None):
         ),
         mock.patch.object(
             keycloak_service, "get_project_role", lambda user, project: role
+        ),
+        mock.patch.object(
+            chart_values,
+            "fetch_chart",
+            mock.AsyncMock(return_value=(CHART_SCHEMA, CHART_DEFAULTS)),
         ),
     ]
     for patch in patches:

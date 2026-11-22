@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 POLL_SECONDS = 10
 TEMPLATE_KIND = {"service": "import-service", "backing": "import-backing"}
+DB_USER = "app"
 BACKING_TITLE = {
     "mongodb": "MongoDB",
     "redis": "Redis",
@@ -106,14 +107,21 @@ def _auth_mounts(db: Session, project: str) -> list[str]:
 async def _ensure_app_roles(
     db: Session, project: str, specs: list[AppSpec]
 ) -> None:
-    """The Vault role each app with a secret syncs it with (read-only)."""
-    for mount in _auth_mounts(db, project):
-        for spec in specs:
-            if generate.needs_secret(spec):
+    """
+    The Vault role each app with a secret syncs it with, bound to a policy
+    reading that app's secrets only, on every auth mount the project can run
+    on. Written over a role that still carries the project-wide read policy.
+    """
+    mounts = _auth_mounts(db, project)
+    for spec in specs:
+        if generate.needs_secret(spec):
+            policy = generate.app_policy_name(project, spec.name)
+            await vault_client.write_policy(
+                policy, generate.app_policy(project, spec.name)
+            )
+            for mount in mounts:
                 await vault_client.write_app_role(
-                    mount,
-                    generate.app_role_name(project, spec.name),
-                    f"project-{project}-read-policy",
+                    mount, generate.app_role_name(project, spec.name), policy
                 )
 
 
@@ -132,9 +140,11 @@ async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
             await vault_client.write_kv(mount, path, {"NEO4J_AUTH": auth})
         passwords[spec.name] = auth.split("/", 1)[1]
     for spec in specs:
-        if not spec.secret_env:
+        if not (spec.secret_env or spec.database):
             continue
         data = {}
+        if spec.database:
+            data.update(await _database_credential(mount, spec))
         for item in spec.secret_env:
             if item["key"] == "url":
                 data[item["env"]] = item["value"]
@@ -145,6 +155,20 @@ async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
         await vault_client.write_kv(
             mount, generate.secret_path(spec.name), data
         )
+
+
+async def _database_credential(mount: str, spec: AppSpec) -> dict[str, str]:
+    """
+    The CNPG initdb secret of the app's database, generated once: CNPG sets
+    the password only at creation, a new one would lock the app out.
+    """
+    current = await vault_client.read_kv(
+        mount, generate.secret_path(spec.name)
+    )
+    password = str(current.get("password") or "")
+    if current.get("username") != DB_USER or not password:
+        password = secrets.token_hex(24)
+    return {"username": DB_USER, "password": password}
 
 
 def import_fields(project: str, service: ImportService) -> dict:
@@ -453,12 +477,17 @@ async def _deploy(db: Session, run: ImportRun, progress: _Progress) -> None:
             source.repo_full_name,
             run.sha,
             settings.IMPORT_IMAGE_PREFIX,
+            cloud,
+            wake_order,
         )
 
     commit = ""
     states: dict[str, str] = {}
     failures = progress.failures
     waves = deploy_waves(deployable)
+    wake_order = {
+        spec.name: number for number, wave in enumerate(waves) for spec in wave
+    }
     for number, wave in enumerate(waves, start=1):
         committed.extend(wave)
         since = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -519,6 +548,17 @@ async def _deploy(db: Session, run: ImportRun, progress: _Progress) -> None:
         commit=commit,
         failed=[f["app"] for f in failures],
     )
+    if not failures:
+        # Imported here: standard_pr builds on this module.
+        from app.services.imports import (  # pylint: disable=C0415
+            standard_pr,
+        )
+
+        _spawn(
+            standard_pr.open_after_deploy(
+                source.id, run.approved_by or run.requested_by
+            )
+        )
 
 
 def _image_ref(project: str, spec: AppSpec, digests: dict[str, str]) -> str:
@@ -704,14 +744,18 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
                 )
             except dns.DnsError as exc:
                 logger.warning("DNS cleanup of %s failed: %s", app, exc)
-    for mount in _auth_mounts(db, project):
-        for app in sorted(removed):
-            try:
+    mounts = _auth_mounts(db, project)
+    for app in sorted(removed):
+        try:
+            for mount in mounts:
                 await vault_client.delete_app_role(
                     mount, generate.app_role_name(project, app)
                 )
-            except vault_client.VaultError as exc:
-                logger.warning("Vault role cleanup of %s failed: %s", app, exc)
+            await vault_client.delete_policy(
+                generate.app_policy_name(project, app)
+            )
+        except vault_client.VaultError as exc:
+            logger.warning("Vault role cleanup of %s failed: %s", app, exc)
     for service in source.services:
         if service.deployment_id:
             row = db.get(Deployment, service.deployment_id)

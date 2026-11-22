@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { useProjects } from "@/lib/hooks";
 import { errorMessage, relativeTime } from "./labels";
 import { RestoreDialog } from "./RestoreDialog";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const POLL_WHILE_BUSY_MS = 15_000;
 
@@ -64,10 +65,10 @@ export function BackupsCard({
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const poll = settling ? setInterval(load, POLL_WHILE_BUSY_MS) : undefined;
+    const stop = settling ? pollWhileVisible(load, POLL_WHILE_BUSY_MS) : undefined;
     return () => {
       clearTimeout(first);
-      clearInterval(poll);
+      stop?.();
     };
   }, [load, settling]);
 

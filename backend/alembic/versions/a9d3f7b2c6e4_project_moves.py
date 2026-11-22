@@ -1,7 +1,7 @@
 """project_moves
 
 Revision ID: a9d3f7b2c6e4
-Revises: c4f8a2d6e1b9
+Revises: e8c4a1f7d3b5
 Create Date: 2026-11-18 10:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "a9d3f7b2c6e4"
-down_revision: Union[str, Sequence[str], None] = "c4f8a2d6e1b9"
+down_revision: Union[str, Sequence[str], None] = "e8c4a1f7d3b5"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

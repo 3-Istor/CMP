@@ -168,6 +168,40 @@ async def app_role_exists(mount: str, name: str) -> bool:
     return response.status_code == 200
 
 
+def _policy_url(name: str) -> str:
+    if not vault_auth.is_configured():
+        raise VaultError("Vault is not configured on the CMP.")
+    return f"{settings.VAULT_URL}/v1/sys/policies/acl/{name}"
+
+
+async def write_policy(name: str, policy: str) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.put(
+                _policy_url(name),
+                headers=await _headers(),
+                json={"policy": policy},
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 204):
+        raise VaultError(f"Vault policy write failed ({response.status_code})")
+
+
+async def delete_policy(name: str) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.delete(
+                _policy_url(name), headers=await _headers()
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 204, 404):
+        raise VaultError(
+            f"Vault policy delete failed ({response.status_code})"
+        )
+
+
 async def delete_app_role(mount: str, name: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
@@ -178,3 +212,26 @@ async def delete_app_role(mount: str, name: str) -> None:
         raise VaultError(f"Vault unreachable: {exc}") from exc
     if response.status_code not in (200, 204, 404):
         raise VaultError(f"Vault role delete failed ({response.status_code})")
+
+
+async def list_names(path: str) -> list[str]:
+    """The keys a Vault LIST on *path* returns (auth roles, ACL policies),
+    empty when there is nothing under it."""
+    if not vault_auth.is_configured():
+        raise VaultError("Vault is not configured on the CMP.")
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.request(
+                "LIST",
+                f"{settings.VAULT_URL}/v1/{path}",
+                headers=await _headers(),
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code == 404:
+        return []
+    if response.status_code != 200:
+        raise VaultError(
+            f"Vault list of {path} failed ({response.status_code})"
+        )
+    return list((response.json().get("data") or {}).get("keys") or [])

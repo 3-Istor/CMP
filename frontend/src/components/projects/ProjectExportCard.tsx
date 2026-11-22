@@ -13,6 +13,7 @@ import { Download, Loader2, PackageOpen } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const ACTIVE = ["pending", "running"];
 const DOWNLOADABLE = ["ready", "partial"];
@@ -56,8 +57,7 @@ export function ProjectExportCard({ project }: { project: string }) {
   const running = exports?.some((e) => ACTIVE.includes(e.status)) ?? false;
   useEffect(() => {
     if (!running) return;
-    const timer = setInterval(load, POLL_MS);
-    return () => clearInterval(timer);
+    return pollWhileVisible(load, POLL_MS);
   }, [running, load]);
 
   const start = async () => {

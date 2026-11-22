@@ -83,6 +83,7 @@ EXPORTED_TABLES: dict[str, TableSpec] = {
     "import_sources": TableSpec(_by("project_name")),
     "import_runs": TableSpec(_by_import_source),
     "import_services": TableSpec(_by_import_source),
+    "import_recommendation_dismissals": TableSpec(_by("project_name")),
 }
 
 PLATFORM = "platform"
@@ -97,6 +98,15 @@ EXCLUDED_TABLES: dict[str, tuple[str, str]] = {
         "does not.",
     ),
     "user_preferences": (PERSONAL, "One person's UI settings."),
+    "issue_reports": (
+        PLATFORM,
+        "Feedback to the platform team about the platform itself, not "
+        "about a project's apps.",
+    ),
+    "issue_report_submissions": (
+        PERSONAL,
+        "When each person sent a report, kept for the daily quota.",
+    ),
     "user_github_installations": (
         PERSONAL,
         "A person's link to their own GitHub account.",

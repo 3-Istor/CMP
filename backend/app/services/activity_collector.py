@@ -1,5 +1,5 @@
 """
-Reads the audit sources out of Loki a minute at a time and keeps them in the
+Reads the audit sources out of VictoriaLogs a minute at a time and keeps them in the
 CMP database, attributed to their project.
 """
 
@@ -29,7 +29,7 @@ from app.services.observability import trace_routing, trace_tenants
 logger = logging.getLogger(__name__)
 
 TICK = 60
-# Lines reach Loki a few seconds after they happen.
+# Lines reach VictoriaLogs a few seconds after they happen.
 LAG = timedelta(seconds=60)
 CHUNK = timedelta(hours=1)
 PAGE = 5000
@@ -122,8 +122,8 @@ async def collect_source(source: str, ns_projects: dict[str, str]) -> int:
     added = 0
     while start < end:
         stop = min(start + CHUNK, end)
-        lines = await src.loki_lines(
-            QUERIES[source], start, stop, PAGE, direction="forward"
+        lines = await src.log_lines(
+            QUERIES[source], start, stop, PAGE, oldest_first=True
         )
         if len(lines) == PAGE:
             # More than a page in this chunk: resume after the newest line read.
@@ -170,7 +170,7 @@ async def collect_once() -> None:
                 logger.info(
                     "Activity collector: %d new %s events", added, source
                 )
-        except src.LokiUnavailableError as exc:
+        except src.LogsUnavailableError as exc:
             logger.warning(
                 "Activity collector: %s unavailable: %s", source, exc
             )

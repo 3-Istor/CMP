@@ -1694,6 +1694,37 @@ export const rebuildImport = (project: string, sourceId: string) =>
     { method: "POST" },
   ).then((r) => r.run);
 
+export const openStandardPr = (project: string, sourceId: string) =>
+  request<import("@/types").ImportSourceView>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/standard-pr`,
+    { method: "POST" },
+  );
+
+export const estimateImport = (
+  project: string,
+  runId: string,
+  edits: import("@/types").ImportPlanEdits,
+) =>
+  request<import("@/types").ImportEstimate>(
+    `${projectPath(project)}/imports/runs/${encodeURIComponent(runId)}/estimate`,
+    { method: "POST", body: JSON.stringify(edits) },
+  );
+
+export const getManagedServices = (project: string, app?: string) =>
+  request<import("@/types").ManagedServicesView>(
+    `${projectPath(project)}/imports/recommendations` +
+      (app ? `?app=${encodeURIComponent(app)}` : ""),
+  );
+
+const recommendationPath = (project: string, id: string) =>
+  `${projectPath(project)}/imports/recommendations/${encodeURIComponent(id)}/dismiss`;
+
+export const dismissRecommendation = (project: string, id: string) =>
+  request<void>(recommendationPath(project, id), { method: "POST" });
+
+export const restoreRecommendation = (project: string, id: string) =>
+  request<void>(recommendationPath(project, id), { method: "DELETE" });
+
 export const deleteImport = (project: string, sourceId: string) =>
   request<{ message: string }>(
     `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}`,
@@ -1880,4 +1911,19 @@ export const moveAction = (
 ) =>
   request<ProjectMove>(`/projects/${project}/moves/${id}/${action}`, {
     method: "POST",
+  });
+
+// Platform issue reports sent by assistants (platform admins only)
+export const getIssueReports = (status?: import("@/types/issueReport").IssueReportStatus) =>
+  request<import("@/types/issueReport").IssueReport[]>(
+    status ? `/issue-reports?status=${status}` : "/issue-reports",
+  );
+
+export const setIssueReportStatus = (
+  id: number,
+  status: import("@/types/issueReport").IssueReportStatus,
+) =>
+  request<import("@/types/issueReport").IssueReport>(`/issue-reports/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
   });

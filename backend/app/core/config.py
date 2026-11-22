@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     EXPORT_S3_INTERNAL_ENDPOINT: str = ""
     EXPORT_RETENTION_DAYS: int = 30
     EXPORT_LINK_MAX_SECONDS: int = 7 * 24 * 3600
-    # Log history exported, bounded by the Loki retention anyway.
+    # Log history exported, bounded by the VictoriaLogs retention anyway.
     EXPORT_LOG_DAYS: int = 30
 
     # Keycloak (for user profile management and project group resolution)
@@ -168,22 +168,12 @@ class Settings(BaseSettings):
     # Days the journal of changes made through the CMP is kept.
     AUDIT_RETENTION_DAYS: int = 30
 
-    # Loki, through its authenticating gateway (Activity tab).
-    LOKI_URL: str = "http://loki-gateway.observability.svc.cluster.local"
-    LOKI_USERNAME: str = "cmp"
-    LOKI_PASSWORD: str = ""
-    LOKI_TENANT: str = "default"
-    # Credential of every project Grafana org's Loki datasource.
-    LOKI_GRAFANA_PROJECTS_PASSWORD: str = ""
     # Key the per-project vmauth passwords are derived from.
     METRICS_PROJECT_KEY: str = ""
-    # Days of audit history read from Loki the first time the collector runs.
+    # Days of audit history read from VictoriaLogs the first time the
+    # collector runs.
     ACTIVITY_BACKFILL_DAYS: int = 7
     ALERTMANAGER_URL: str = "http://alertmanager.observability.svc:9093"
-    # Where log-derived metrics come from (CNP-185 V2): "loki" reads Alloy's
-    # loki_process_custom_* counters, "vl" the VictoriaLogs recording rules
-    # cnp_log_*:count1m. Switch once vlogs-project-counters records.
-    LOGS_BACKEND: str = "loki"
 
     # CNP-185 wave V3: per-app SLO rules and per-project alert routing,
     # written as operator objects. Off until the VictoriaMetrics operator,
@@ -336,6 +326,11 @@ class Settings(BaseSettings):
     # posts its plan: GitHub's 6 h job ceiling.
     IMPORT_BUILD_TIMEOUT_MINUTES: int = 360
     IMPORT_IMAGE_PREFIX: str = "ghcr.io/3-istor/imports"
+    # Standard pull request of an import (CNP-303): deploy/ values and the
+    # template CI in the repository, which Argo CD then reads. Off until the
+    # registry schema, the cnp-apps ApplicationSet and the AppProjects accept
+    # a repoURL on imported apps: a switched record would not render before.
+    IMPORT_STANDARD_PR_ENABLED: bool = False
     # Platform repositories nobody imports, owner/name, comma separated.
     IMPORT_DENY_REPOS: str = (
         "3-Istor/K3s,3-Istor/CMP,3-Istor/Cloud,3-Istor/cnp-projects,"

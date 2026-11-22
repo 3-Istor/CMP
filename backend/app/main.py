@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app import mcp_server
+from app.core import loop_watchdog
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.routers import (
@@ -29,10 +30,12 @@ from app.routers import (
     finops_finance,
     imports,
     infra,
+    issue_reports,
     links,
     moves,
     notifications,
     observability,
+    orphans,
     power,
     project_export,
     projects,
@@ -280,6 +283,8 @@ async def lifespan(app: FastAPI):
         ).start()
     project_export_runner.fail_interrupted()
 
+    loop_watchdog.start()
+
     import_reconcile_task = None
     if settings.IMPORT_ENABLED:
         from app.services.imports.deploy import resume_interrupted
@@ -437,10 +442,12 @@ app.include_router(imports.router, prefix="/api")
 app.include_router(imports.worker, prefix="/api")
 app.include_router(imports.webhooks, prefix="/api")
 app.include_router(infra.router, prefix="/api")
+app.include_router(issue_reports.router, prefix="/api")
 app.include_router(links.projects, prefix="/api")
 app.include_router(links.deployments, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
+app.include_router(orphans.router, prefix="/api")
 app.include_router(project_export.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(moves.router, prefix="/api")

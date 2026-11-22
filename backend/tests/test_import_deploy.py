@@ -41,6 +41,7 @@ class Cluster:
         self.vault: dict[tuple[str, str], dict] = {}
         self.vault_writes: list[tuple[str, str]] = []
         self.roles: dict[tuple[str, str], str] = {}
+        self.policies: dict[str, str] = {}
         self.commits: list[dict] = []
         self.cnames: list[str] = []
         self.argo: dict[str, str] = {}
@@ -65,6 +66,12 @@ class Cluster:
 
     async def delete_app_role(self, mount, name):
         self.roles.pop((mount, name), None)
+
+    async def write_policy(self, name, policy):
+        self.policies[name] = policy
+
+    async def delete_policy(self, name):
+        self.policies.pop(name, None)
 
     async def commit(self, project, change, message):
         record = json.loads(json.dumps(self.record))
@@ -122,6 +129,12 @@ def world(monkeypatch):
     monkeypatch.setattr(
         deploy.vault_client, "delete_app_role", cluster.delete_app_role
     )
+    monkeypatch.setattr(
+        deploy.vault_client, "write_policy", cluster.write_policy
+    )
+    monkeypatch.setattr(
+        deploy.vault_client, "delete_policy", cluster.delete_policy
+    )
     monkeypatch.setattr(deploy, "commit_record_change", cluster.commit)
     monkeypatch.setattr(deploy, "list_records", cluster.records)
     monkeypatch.setattr(deploy.dns, "ensure_cname", cluster.cname)
@@ -142,8 +155,8 @@ def world(monkeypatch):
     return Session, cluster
 
 
-def _published_run(Session) -> str:
-    specs = generate.resolve(PLAN)
+def _published_run(Session, plan: dict = PLAN) -> str:
+    specs = generate.resolve(plan)
     with Session() as db:
         source = db.query(ImportSource).first()
         if source is None:
@@ -241,7 +254,7 @@ def test_neo4j_password_is_generated_once_and_copied_to_its_consumer(world):
     }
 
 
-def test_each_app_with_a_secret_gets_its_own_read_only_vault_role(world):
+def test_each_app_with_a_secret_gets_a_role_reading_only_its_own_path(world):
     Session, cluster = world
 
     _deploy(_published_run(Session))
@@ -254,7 +267,9 @@ def test_each_app_with_a_secret_gets_its_own_read_only_vault_role(world):
         }
     assert with_secret >= {"neo4j", "social-graph-service"}
     assert cluster.roles == {
-        ("kubernetes", f"epitweet-{app}-role"): "project-epitweet-read-policy"
+        ("kubernetes", f"epitweet-{app}-role"): (
+            f"project-epitweet-app-{app}-policy"
+        )
         for app in with_secret
     }
 
@@ -282,6 +297,21 @@ def test_a_public_project_gets_its_roles_on_both_public_mounts(world):
     assert mounts == {"kubernetes-aws", "kubernetes-gcp"}
     names = {name for _, name in cluster.roles}
     assert {("kubernetes-aws", n) for n in names} <= set(cluster.roles)
+
+
+def test_the_policy_of_an_app_does_not_reach_another_app_of_its_project(
+    world,
+):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    policy = cluster.policies[
+        "project-epitweet-app-social-graph-service-policy"
+    ]
+    assert 'path "project-epitweet/data/social-graph-service/*"' in policy
+    assert 'path "project-epitweet/metadata/social-graph-service/*"' in policy
+    assert "neo4j" not in policy and "project-epitweet/data/*" not in policy
 
 
 def test_deploy_creates_one_app_row_per_imported_app(world):
@@ -782,7 +812,7 @@ def test_removal_deletes_the_vault_roles_of_the_apps_it_took_out(removal):
 
     _remove(Session)
 
-    assert cluster.roles == {}
+    assert cluster.roles == {} and cluster.policies == {}
 
 
 def test_removal_deletes_the_roles_on_both_public_mounts(removal):
@@ -970,3 +1000,59 @@ def test_cleanup_marks_each_app_deleted_once_its_namespace_is_deleted(
             db.get(Deployment, rows[a]).status for a in (first, second)
         } == {DeploymentStatus.DELETED}
         assert db.query(ImportSource).count() == 0
+
+
+def test_the_managed_database_password_is_generated_once_for_cnpg(world):
+    Session, cluster = world
+    plan = json.loads(json.dumps(PLAN))
+    plan["backing"].append(
+        {
+            "name": "postgres",
+            "kind": "postgres",
+            "image": "postgres:16",
+            "supported": True,
+            "managed": "postgres",
+            "port": 5432,
+            "resources": {
+                "requests_mem_mib": 256,
+                "limits_mem_mib": 512,
+                "cpu": "100m",
+            },
+        }
+    )
+    plan["links"].append(
+        {
+            "from": "social-graph-service",
+            "to": "postgres",
+            "port": 5432,
+            "alias": "postgres",
+            "evidence": [],
+        }
+    )
+    _deploy(_published_run(Session, plan))
+    first = cluster.vault[("project-epitweet", "social-graph-service/imports")]
+
+    _deploy(_published_run(Session, plan))
+
+    second = cluster.vault[
+        ("project-epitweet", "social-graph-service/imports")
+    ]
+    assert first["username"] == "app"
+    assert len(first["password"]) == 48
+    assert second == first
+    assert "QUARKUS_NEO4J_AUTHENTICATION_PASSWORD" in second
+
+
+def test_deploy_wakes_backing_apps_before_the_services_calling_them(world):
+    Session, cluster = world
+
+    _deploy(_published_run(Session))
+
+    files = cluster.commits[-1]["files"]
+    wake = {
+        path.split("/")[2]: YAML(typ="safe").load(text)["offhours"]["wakeAt"]
+        for path, text in files.items()
+        if path.endswith("values.yaml")
+    }
+    assert wake["mongodb"] == "0 7 * * *"
+    assert wake["user-service"] != "0 7 * * *"

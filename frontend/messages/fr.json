@@ -26,7 +26,8 @@
       "openMenu": "Ouvrir le menu",
       "skipToContent": "Aller au contenu",
       "access": "Accès élevés",
-      "accessReviews": "Revues d'accès"
+      "accessReviews": "Revues d'accès",
+      "issueReports": "Retours des assistants"
     },
     "home": {
       "fallbackName": "Développeur",
@@ -3580,8 +3581,15 @@
         "removeLink": "Retirer",
         "restoreLink": "Garder",
         "removeLinkOf": "Retirer le lien de {from} vers {to}",
-        "restoreLinkOf": "Garder le lien de {from} vers {to}"
-      }
+        "restoreLinkOf": "Garder le lien de {from} vers {to}",
+        "managed": "Fournie par la plateforme : une base {kind} gérée (CNPG) dans le namespace de l'app qui l'utilise, sauvegardée chaque nuit, avec un mot de passe généré.",
+        "pooler": "Pooler de connexions (PgBouncer)",
+        "poolerHelp": "L'app joint sa base {database} par PgBouncer. Utile si elle ouvre beaucoup de connexions.",
+        "offhours": "Veille la nuit",
+        "offhoursHelp": "Arrêtée de 1 h à 7 h, comme les apps créées depuis un modèle. Les bases se réveillent avant les apps qui les appellent."
+      },
+      "recommendations": "Recommandations",
+      "recommendationsBody": "Des services gérés par la plateforme, sauvegardés et plus légers, peuvent remplacer ces moteurs. Ce sont des conseils : vous pouvez importer tel quel."
     },
     "problem": {
       "unsupported": "{app} n'est pas dans le catalogue : excluez-la.",
@@ -3590,7 +3598,8 @@
       "memory": "{app} : la mémoire demandée doit valoir au moins 16 Mio et au plus la limite.",
       "probePath": "{app} : une sonde HTTP a besoin d'un chemin, par exemple /health.",
       "probePort": "{app} : une sonde HTTP doit utiliser le premier port, celui que la supervision vérifie.",
-      "nothing": "Toutes les apps sont exclues : il n'y a rien à importer."
+      "nothing": "Toutes les apps sont exclues : il n'y a rien à importer.",
+      "sharedDatabase": "{app} : une base gérée appartient à une seule app. Retirez les liens des autres apps."
     },
     "list": {
       "title": "Repos importés",
@@ -3645,7 +3654,28 @@
         "unknown_user": "le CMP ne trouve pas le compte de {user}, qui le reconstruit."
       },
       "pendingHelp": "Une reconstruction s'exécute avec l'accès GitHub de la personne qui la lance. En confirmant, vous la lancez avec votre accès et votre passkey ; les suivantes se feront en votre nom.",
-      "linkGithub": "Lier mon compte GitHub"
+      "linkGithub": "Lier mon compte GitHub",
+      "standard": {
+        "opened": "Pull request ouverte sur {repo}",
+        "openFailed": "Impossible d'ouvrir la pull request : {message}",
+        "open": "Ouvrir la pull request standard",
+        "view": "Pull request #{number}",
+        "untilMerged": "Tant qu'elle n'est pas fusionnée, ces apps tournent avec la copie de leurs réglages gardée par la plateforme, qui les reconstruit à chaque push. Une fois fusionnée, le dossier deploy/ du dépôt les pilote, un tag vX.Y.Z publie une nouvelle version via la CI du dépôt, et le CMP ne les reconstruit plus.",
+        "kept": "Restées sur la plateforme (leur fichier de valeurs a été retiré avant la fusion) : {apps}",
+        "state": {
+          "none": "{repo} n'est pas encore déployé comme une app de template : ouvrez sa pull request standard pour ajouter deploy/ et la CI.",
+          "open": "Pull request standard ouverte sur {repo} : fusionnez-la pour déployer depuis le dépôt.",
+          "merged": "Pull request fusionnée : bascule de {repo} sur son dossier deploy/.",
+          "switched": "{repo} se déploie depuis son dossier deploy/ : modifiez deploy/values-*.yaml pour changer une app, poussez un tag vX.Y.Z pour publier une nouvelle version.",
+          "closed": "La pull request standard de {repo} a été fermée sans fusion : les apps restent sur la plateforme.",
+          "failed": "La pull request standard de {repo} n'a pas pu être ouverte."
+        },
+        "conflict": {
+          "replaced": "remplacé par la pull request",
+          "deploy": "conservé dans deploy/ : vérifiez qu'il ne sert pas à un autre déploiement",
+          "workflow": "conservé : vérifiez qu'il ne construit ni ne déploie aussi ces services"
+        }
+      }
     },
     "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey.",
     "failure": {
@@ -3760,6 +3790,54 @@
       "appFailuresCaption": "Apps qui n'ont pas démarré",
       "problem": "Problème",
       "detail": "Détail"
+    },
+    "recommendations": {
+      "title": "Services gérés recommandés",
+      "none": "Aucune recommandation pour cette app.",
+      "target": {
+        "postgres": "vers Postgres géré",
+        "bucket": "vers un bucket S3 géré"
+      },
+      "level": {
+        "advised": "Conseillé",
+        "evaluate": "À évaluer"
+      },
+      "effort": {
+        "low": "Effort faible",
+        "medium": "Effort moyen",
+        "high": "Effort élevé"
+      },
+      "gain": "{mib} Mio de RAM en moins",
+      "dismiss": "Ignorer pour ce projet",
+      "restore": "Afficher à nouveau",
+      "dismissedCount": "{count, plural, one {# recommandation ignorée} other {# recommandations ignorées}}",
+      "failed": "L'action n'a pas abouti : {message}",
+      "notBackedUp": "Non sauvegardé",
+      "alternative": "Les données de ce conteneur ne sont pas sauvegardées. Alternative gérée et sauvegardée : {target}.",
+      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées. La plateforme propose Postgres et des buckets S3 gérés, sauvegardés."
+    },
+    "estimate": {
+      "title": "Ressources et coût",
+      "loading": "Calcul des ressources et du coût…",
+      "app": "App",
+      "requests": "Demandé",
+      "limits": "Limite",
+      "volume": "Volume",
+      "monthly": "Coût / mois",
+      "total": "Total",
+      "estimatedHelp": "Estimation : valeurs devinées par l'analyse, à confirmer après déploiement.",
+      "database": "+ {mib} Mio estimés pour sa base gérée",
+      "costBasis": "Coût de calcul des ressources demandées, au tarif du cluster {cloud} de l'onglet FinOps. Hors stockage, réseau et forfait plateforme.",
+      "noPrices": "Coût indisponible : la FinOps n'a pas de tarif pour ce cluster.",
+      "rateEstimated": "Tarif provisoire.",
+      "quota": "{used} Mio demandés pour le projet (dont {other} Mio par ses autres imports), sur {max} Mio autorisés.",
+      "cluster": "Place libre sur le cluster : {mem} Mio et {cpu}.",
+      "clusterUnknown": "Place libre sur le cluster inconnue : le cluster ne répond pas.",
+      "gain": "Suivre les recommandations libérerait environ {mib} Mio de RAM.",
+      "diffTitle": "Changements par rapport au déploiement actuel",
+      "diffEmpty": "Aucun changement.",
+      "added": "{app} sera ajoutée.",
+      "removed": "{app} n'est plus dans le plan : elle reste déployée jusqu'à la suppression de l'import."
     }
   },
   "obs": {
@@ -3904,5 +3982,40 @@
       "monthly": "{amount} par mois",
       "noHints": "Rien à économiser : la réservation colle à l'usage."
     }
+  },
+  "issueReports": {
+    "title": "Retours des assistants",
+    "description": "Difficultés que les assistants IA ont rencontrées sur la plateforme, envoyées avec l'accord de leur utilisateur. Les secrets en sont retirés avant l'enregistrement.",
+    "loading": "Chargement des retours",
+    "forbidden": "Réservé aux administrateurs de la plateforme.",
+    "empty": "Aucun retour ici.",
+    "filterLabel": "Filtrer par statut",
+    "filters": {
+      "new": "Nouveaux",
+      "exported": "Exportés",
+      "closed": "Fermés",
+      "all": "Tous"
+    },
+    "statuses": {
+      "new": "Nouveau",
+      "exported": "Exporté vers Jira",
+      "closed": "Fermé"
+    },
+    "categories": {
+      "missing_tool": "Outil manquant",
+      "error": "Erreur incomprise",
+      "documentation": "Documentation absente",
+      "bug": "Bug",
+      "other": "Autre"
+    },
+    "seen": "{count, plural, one {Signalé une fois} other {Signalé # fois}}, dernier le {date}",
+    "reportedBy": "Envoyé par {users} via {assistant}",
+    "unknownAssistant": "un assistant",
+    "project": "projet {project}",
+    "copyForJira": "Copier pour Jira",
+    "copied": "Texte copié : collez-le dans un ticket Jira, puis marquez le retour comme exporté.",
+    "markExported": "Marquer exporté",
+    "close": "Fermer",
+    "reopen": "Rouvrir"
   }
 }

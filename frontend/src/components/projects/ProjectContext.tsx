@@ -14,6 +14,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { toast } from "sonner";
+import { pollWhileVisible } from "@/lib/visiblePolling";
 
 const IN_PROGRESS = [
   "pending",
@@ -78,10 +79,7 @@ export function ProjectProvider({
 
   useEffect(() => {
     if (!hasActiveDeployments) return;
-    const interval = setInterval(() => {
-      refreshApps();
-    }, 3000);
-    return () => clearInterval(interval);
+    return pollWhileVisible(refreshApps, 3000);
   }, [hasActiveDeployments, refreshApps]);
 
   useEffect(() => {

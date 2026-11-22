@@ -1,8 +1,10 @@
 """
 ImportPlan, vendored from 3-Istor/extern-project-analyzer cnp_analyzer/model.py
-at 70ddf701a1f4b5da5a90a76907edf136fe4d40e1 (CNP-237). The worker API
-validates plans with it; copy the file again, unchanged, when the analyzer
-changes its schema_version.
+at 70ddf701a1f4b5da5a90a76907edf136fe4d40e1 (CNP-237), plus the optional
+BackingPlan.managed and ImportPlan.recommendations of CNP-301 and CNP-305,
+added ahead of the analyzer: models forbid extra fields, so a plan of the new
+analyzer would otherwise be refused. The worker API validates plans with it;
+copy the file again, unchanged, when the analyzer changes its schema_version.
 """
 
 import re
@@ -113,6 +115,9 @@ class BackingPlan(_Model):
     port: PortNumber | None = None
     resources: Resources
     credentials_found: list[str] = Field(default_factory=list)
+    # "postgres": the platform runs it as a CNPG database of the app that
+    # links to it (db.enabled), not as a backing container.
+    managed: Literal["postgres"] | None = None
 
 
 class Evidence(_Model):
@@ -156,6 +161,24 @@ class Capacity(_Model):
     limits_mem_mib: int
 
 
+class RecommendationEvidence(_Model):
+    file: str
+    line: int
+    kind: str
+
+
+class Recommendation(_Model):
+    id: str
+    subject: AppName
+    rule: str
+    target: Literal["postgres", "bucket"]
+    level: Literal["advised", "evaluate"]
+    reason: str
+    gain_mem_mib: int | None = None
+    effort: Literal["low", "medium", "high"]
+    evidence: list[RecommendationEvidence] = Field(default_factory=list)
+
+
 class ImportPlan(_Model):
     schema_version: Literal["1"] = SCHEMA_VERSION
     source: Source
@@ -166,6 +189,7 @@ class ImportPlan(_Model):
     secrets_found: list[SecretFinding]
     warnings: list[str]
     capacity: Capacity
+    recommendations: list[Recommendation] = Field(default_factory=list)
 
     def to_json(self) -> str:
         return self.model_dump_json(by_alias=True, indent=2)

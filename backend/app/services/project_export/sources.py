@@ -1,11 +1,11 @@
 """
 Adapters between the export and the live platform: the cluster, GitHub,
-CloudNativePG, the project's buckets, Vault, Keycloak and Loki.
+CloudNativePG, the project's buckets, Vault, Keycloak and VictoriaLogs.
 
 Each is a small class behind a Protocol, so tests and the restore drill run
 the export against fakes, or against a kind cluster and a Garage container,
 without platform credentials. All of them are blocking except the Vault and
-Loki readers; the collectors call the blocking ones off the event loop.
+log readers; the collectors call the blocking ones off the event loop.
 """
 
 import base64
@@ -679,7 +679,7 @@ def export_store_configured() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Vault, Keycloak, Loki
+# Vault, Keycloak, VictoriaLogs
 # ---------------------------------------------------------------------------
 
 
@@ -706,11 +706,11 @@ class KeycloakIdentityReader:
         return keycloak_service.list_project_members(project)
 
 
-LOKI_PAGE = 5000
+LOG_PAGE = 5000
 _DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 
 
-class LokiLogReader:
+class VictoriaLogsReader:
     """The project's log lines, oldest first, a page at a time."""
 
     async def pages(
@@ -725,16 +725,16 @@ class LokiLogReader:
         # nothing in them needs escaping in the regex.
         if not namespaces or not all(_DNS_LABEL.match(n) for n in namespaces):
             raise ValueError(f"not namespace names: {namespaces!r}")
-        query = f'{{namespace=~"{"|".join(namespaces)}"}}'
+        streams = f'{{namespace=~"{"|".join(namespaces)}"}}'
         seen_at_start: set[tuple] = set()
         while start < end:
-            lines = await activity_sources.loki_lines(
-                query,
+            lines = await activity_sources.log_lines(
+                streams,
                 start,
                 end,
-                LOKI_PAGE,
-                direction="forward",
-                tenant=activity_sources.project_tenants(project),
+                LOG_PAGE,
+                oldest_first=True,
+                streams=streams,
             )
             lines.sort(key=lambda entry: entry[0])
             fresh = [
@@ -748,10 +748,10 @@ class LokiLogReader:
                     {"time": when, "labels": labels, "line": line}
                     for when, labels, line in fresh
                 ]
-            if len(lines) < LOKI_PAGE:
+            if len(lines) < LOG_PAGE:
                 return
-            # Loki's start is inclusive: restart at the last timestamp and
-            # skip what was already written at it.
+            # The time filter's start is inclusive: restart at the last
+            # timestamp and skip what was already written at it.
             last = lines[-1][0]
             seen_at_start = {
                 (when, tuple(sorted(labels.items())), line)

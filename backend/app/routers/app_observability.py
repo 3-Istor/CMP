@@ -287,8 +287,7 @@ async def get_capabilities(
     """Which tabs have a store behind them."""
     _, scope = _member_app(db, token, deployment_id)
     caps = stores.capabilities()
-    # Fluent Bit ships only the on-prem cluster's logs to VictoriaLogs;
-    # a cloud app's logs are in Loki.
+    # Fluent Bit ships only the on-prem cluster's logs to VictoriaLogs.
     caps["logs"] = caps["logs"] and scope.cloud == "onprem"
     try:
         org = await alerts_grafana.org_id(scope.project)

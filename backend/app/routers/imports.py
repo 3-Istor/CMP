@@ -12,7 +12,9 @@ import json
 import logging
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import Path as FastApiPath
+from fastapi import Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -24,7 +26,15 @@ from app.services import audit
 from app.services.agents import policy
 from app.services.authz import RequireAdmin, RequireMember
 from app.services.github_service import GitHubAppError
-from app.services.imports import access, deploy, rebuilds, service
+from app.services.imports import (
+    access,
+    deploy,
+    estimate,
+    rebuilds,
+    recommendations,
+    service,
+    standard_pr,
+)
 from app.services.imports.oidc import WorkerTokenError, verify_worker_token
 from app.services.imports.service import ImportRefused
 from app.services.project_registry import RegistryError
@@ -88,6 +98,8 @@ class PlanEdits(BaseModel):
     port: dict[str, int] = Field(default_factory=dict)
     probe: dict[str, ProbeEdit] = Field(default_factory=dict)
     drop_links: list[LinkRef] = Field(default_factory=list, max_length=200)
+    pooler: dict[str, bool] = Field(default_factory=dict)
+    offhours: dict[str, bool] = Field(default_factory=dict)
 
 
 class SourceSettings(BaseModel):
@@ -149,7 +161,7 @@ async def create_import(
 
 
 @router.get("/{project_name}/imports")
-async def list_imports(ctx: RequireMember, db: DbSession):
+def list_imports(ctx: RequireMember, db: DbSession):
     _enabled()
     service.expire_stale(project=ctx.project_name)
     sources = (
@@ -168,11 +180,97 @@ async def get_import_run(run_id: str, ctx: RequireMember, db: DbSession):
         run = service.get_run(db, ctx.project_name, run_id)
     except ImportRefused as exc:
         raise _refused(exc) from exc
+    estimated = (
+        await run_in_threadpool(estimate.for_run, db, run, None)
+        if _is_plan(run)
+        else None
+    )
     return {
         **service.run_view(run),
+        "estimate": estimated,
         "capacity": service.capacity_view(db, ctx.project_name, run.source),
         "services": [service.service_view(s) for s in run.source.services],
+        "dismissed_recommendations": sorted(
+            recommendations.dismissed_ids(db, ctx.project_name)
+        ),
     }
+
+
+def _is_plan(run) -> bool:
+    return (
+        run.kind == service.RunKind.ANALYZE.value
+        and run.status == service.RunStatus.SUCCEEDED.value
+        and bool(run.plan)
+    )
+
+
+@router.post("/{project_name}/imports/runs/{run_id}/estimate")
+async def estimate_import_run(
+    run_id: str, edits: PlanEdits, ctx: RequireMember, db: DbSession
+):
+    """RAM, CPU, cost, quota, free capacity and diff of the edited plan."""
+    _enabled()
+    try:
+        run = service.get_run(db, ctx.project_name, run_id)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    if not _is_plan(run):
+        raise HTTPException(409, "This run is not a finished analysis")
+    return await run_in_threadpool(
+        estimate.for_run,
+        db,
+        run,
+        edits.model_dump(mode="json", by_alias=True),
+    )
+
+
+@router.get("/{project_name}/imports/recommendations")
+def list_recommendations(
+    ctx: RequireMember,
+    db: DbSession,
+    app: Annotated[str | None, Query(max_length=63)] = None,
+):
+    """Managed services to move to, and the backing apps not backed up."""
+    _enabled()
+    return recommendations.for_project(db, ctx.project_name, app)
+
+
+RecommendationId = Annotated[str, FastApiPath(max_length=200)]
+
+
+@router.post(
+    "/{project_name}/imports/recommendations/{recommendation_id}/dismiss",
+    status_code=204,
+)
+def dismiss_recommendation(
+    recommendation_id: RecommendationId,
+    ctx: RequireAdmin,
+    db: DbSession,
+    request: Request,
+):
+    """Ignore a recommendation for the whole project, later analyses too."""
+    _enabled()
+    recommendations.dismiss(
+        db, ctx.project_name, recommendation_id, ctx.username
+    )
+    audit.note(request, target=recommendation_id)
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/{project_name}/imports/recommendations/{recommendation_id}/dismiss",
+    status_code=204,
+)
+def restore_recommendation(
+    recommendation_id: RecommendationId,
+    ctx: RequireAdmin,
+    db: DbSession,
+    request: Request,
+):
+    _enabled()
+    recommendations.restore(db, ctx.project_name, recommendation_id)
+    audit.note(request, target=recommendation_id)
+    return Response(status_code=204)
 
 
 @router.post("/{project_name}/imports/{source_id}/apply", status_code=202)
@@ -244,8 +342,49 @@ async def rebuild_import(
     return {"run": service.run_view(run)}
 
 
+@router.get("/{project_name}/imports/{source_id}/standard-pr/preview")
+async def preview_standard_pr(
+    source_id: str, ctx: RequireAdmin, db: DbSession
+):
+    """The files the standard pull request adds and what they conflict with."""
+    _enabled()
+    try:
+        standard_pr.ensure_enabled()
+        source = service.get_source(db, ctx.project_name, source_id)
+        return await standard_pr.preview(db, source)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    except GitHubAppError as exc:
+        raise HTTPException(502, f"GitHub could not be read: {exc}") from exc
+
+
+@router.post("/{project_name}/imports/{source_id}/standard-pr")
+async def open_standard_pr(
+    source_id: str, ctx: RequireAdmin, db: DbSession, request: Request
+):
+    """
+    Open the pull request that moves the import to the template model, for
+    an import deployed before it opened on its own (or whose pull request
+    was closed). It writes to the repository: step-up, like a rebuild.
+    """
+    _enabled()
+    assert_step_up(ctx.token)
+    try:
+        standard_pr.ensure_enabled()
+        source = service.get_source(db, ctx.project_name, source_id)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    await _recheck_repository(db, ctx.token, source)
+    try:
+        await standard_pr.open_pr(db, source, ctx.username)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    audit.note(request, target=source.repo_full_name)
+    return service.source_view(source)
+
+
 @router.put("/{project_name}/imports/{source_id}/settings")
-async def update_import_settings(
+def update_import_settings(
     source_id: str,
     body: SourceSettings,
     ctx: RequireAdmin,
@@ -261,6 +400,8 @@ async def update_import_settings(
         assert_step_up(ctx.token)
     try:
         source = service.get_source(db, ctx.project_name, source_id)
+        if body.auto_rebuild:
+            service.refuse_if_repo_managed(source)
     except ImportRefused as exc:
         raise _refused(exc) from exc
     source.auto_rebuild = body.auto_rebuild

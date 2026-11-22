@@ -387,7 +387,9 @@ def test_backing_values_are_the_catalogue_presets():
         _record(), "epitweet", specs, {}, REPO, SHA, PREFIX
     )
 
-    assert _values(files, "mongodb") == generate.load_preset("mongodb")
+    values = _values(files, "mongodb")
+    del values["podLabels"], values["network"], values["offhours"]
+    assert values == generate.load_preset("mongodb")
     assert sorted(files) == [
         "apps/epitweet/elasticsearch/values.yaml",
         "apps/epitweet/mongodb/values.yaml",
@@ -663,3 +665,261 @@ def test_an_edited_probe_overrides_an_unsafe_analyzer_probe():
         "path": "/ok",
         "port": 80,
     }
+
+
+def _postgres_plan(*consumers: str, managed: str | None = "postgres") -> dict:
+    plan = _plan()
+    plan["backing"].append(
+        {
+            "name": "postgres",
+            "kind": "postgres",
+            "image": "postgres:16",
+            "supported": True,
+            "managed": managed,
+            "port": 5432,
+            "resources": {
+                "requests_mem_mib": 256,
+                "limits_mem_mib": 512,
+                "cpu": "100m",
+            },
+            "credentials_found": ["POSTGRES_PASSWORD"],
+        }
+    )
+    for consumer in consumers:
+        plan["links"].append(
+            {
+                "from": consumer,
+                "to": "postgres",
+                "port": 5432,
+                "alias": "postgres",
+                "evidence": [
+                    {"file": "compose.yml", "line": 3, "kind": "env_url"}
+                ],
+            }
+        )
+    service = next(s for s in plan["services"] if s["name"] == consumers[0])
+    service["env"] += [
+        {
+            "name": "DATABASE_URL",
+            "value": None,
+            "from_link": "postgres",
+            "secret": True,
+        },
+        {
+            "name": "QUARKUS_DATASOURCE_JDBC_URL",
+            "value": "jdbc:postgresql://postgres:5432/users",
+            "from_link": "postgres",
+            "secret": False,
+        },
+        {
+            "name": "POSTGRES_PASSWORD",
+            "value": None,
+            "from_link": None,
+            "secret": True,
+        },
+        {"name": "DB_HOST", "value": "postgres", "secret": False},
+    ]
+    return plan
+
+
+def test_a_managed_postgres_becomes_the_database_of_the_app_linking_to_it():
+    specs = {
+        s.name: s for s in generate.resolve(_postgres_plan("user-service"))
+    }
+
+    assert "postgres" not in specs
+    assert specs["user-service"].database == {
+        "backing": "postgres",
+        "pooler": False,
+    }
+    assert "postgres" not in {
+        d["app"] for d in specs["user-service"].depends_on
+    }
+
+
+def test_the_postgres_variables_of_the_code_point_at_the_managed_database():
+    spec = next(
+        s
+        for s in generate.resolve(_postgres_plan("user-service"))
+        if s.name == "user-service"
+    )
+
+    env = {e["name"]: e["value"] for e in spec.env}
+
+    assert env["DATABASE_URL"] == generate.POSTGRES_URL
+    assert env["QUARKUS_DATASOURCE_JDBC_URL"] == generate.JDBC_URL
+    assert env["POSTGRES_PASSWORD"] == "$(DB_PASSWORD)"
+    assert "DB_HOST" not in env
+    assert spec.secret_env == [
+        item
+        for item in spec.secret_env
+        if item["env"] not in ("DATABASE_URL", "POSTGRES_PASSWORD")
+    ]
+
+
+def test_managed_database_values_are_backed_up_and_read_the_app_secret():
+    spec = next(
+        s
+        for s in generate.resolve(
+            _postgres_plan("user-service"),
+            {"pooler": {"user-service": True}},
+        )
+        if s.name == "user-service"
+    )
+
+    values = generate.service_values(
+        "epitweet", spec, PREFIX, _digest(1), generate.TargetCloud.AWS
+    )
+
+    assert values["db"] == {
+        "enabled": True,
+        "name": "user-service",
+        "metrics": True,
+        "backup": {
+            "enabled": True,
+            "bucket": "vault",
+            "endpointURL": generate.backup_patch(
+                generate.BackupUpdate(), generate.TargetCloud.AWS
+            )["db"]["backup"]["endpointURL"],
+        },
+        "pooler": {"enabled": True},
+    }
+    assert values["secrets"]["vaultPath"] == (
+        "project-epitweet/user-service/imports"
+    )
+
+
+def test_a_managed_database_shared_by_two_apps_is_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_postgres_plan("user-service", "post-service"))
+
+    assert "belongs to one app" in str(error.value)
+
+
+def test_a_pooler_on_an_app_without_managed_database_is_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_plan(), {"pooler": {"user-service": True}})
+
+    assert "managed database has a pooler" in str(error.value)
+
+
+def test_a_postgres_the_analyzer_did_not_mark_managed_is_still_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_postgres_plan("user-service", managed=None))
+
+    assert "'postgres' (postgres) is not in the catalogue" in str(error.value)
+
+
+def test_backing_pods_carry_the_backing_role_label():
+    specs = generate.resolve(_plan())
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, {}, REPO, SHA, PREFIX
+    )
+
+    assert _values(files, "redis")["podLabels"] == {
+        "cnp.3istor.com/role": "backing"
+    }
+
+
+def test_an_app_admits_only_the_apps_linking_to_it():
+    specs = generate.resolve(_plan())
+    digests = {name: _digest(i) for i, name in enumerate(_services(specs))}
+    linking_to_mongodb = sorted(
+        s.name
+        for s in specs
+        if any(d["app"] == "mongodb" for d in s.depends_on)
+    )
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, digests, REPO, SHA, PREFIX
+    )
+
+    assert linking_to_mongodb
+    assert _values(files, "mongodb")["network"] == {
+        "allowFrom": linking_to_mongodb
+    }
+    assert _values(files, "frontend")["network"] == {"allowFrom": []}
+
+
+def test_a_template_app_linking_to_an_imported_app_is_admitted():
+    specs = generate.resolve(_plan())
+    record = _record(
+        {"name": "admin", "type": "service", "dependsOn": [{"app": "redis"}]}
+    )
+
+    files = generate.apply_to_record(
+        record, "epitweet", specs, {}, REPO, SHA, PREFIX
+    )
+
+    assert "admin" in _values(files, "redis")["network"]["allowFrom"]
+
+
+def test_allow_from_is_rewritten_with_the_header_kept():
+    text = generate.dump_yaml(
+        {"image": {"tag": "1"}, "network": {"allowFrom": ["a"]}},
+        "# Written by the CMP.\n",
+    )
+
+    rewritten = generate.with_allow_from(text, ["a", "b"])
+
+    assert rewritten.startswith("# Written by the CMP.\n")
+    assert YAML(typ="safe").load(rewritten) == {
+        "image": {"tag": "1"},
+        "network": {"allowFrom": ["a", "b"]},
+    }
+
+
+def test_every_imported_app_sleeps_at_night_like_a_template_app():
+    specs = generate.resolve(_plan())
+    digests = {name: _digest(i) for i, name in enumerate(_services(specs))}
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, digests, REPO, SHA, PREFIX
+    )
+
+    assert all(
+        YAML(typ="safe").load(text)["offhours"]["enabled"]
+        for text in files.values()
+    )
+
+
+def test_an_app_wakes_after_and_sleeps_before_the_apps_it_calls():
+    specs = generate.resolve(_plan())
+    digests = {name: _digest(i) for i, name in enumerate(_services(specs))}
+
+    files = generate.apply_to_record(
+        _record(),
+        "epitweet",
+        specs,
+        digests,
+        REPO,
+        SHA,
+        PREFIX,
+        wake_order={"mongodb": 0, "user-service": 1},
+    )
+
+    backing, service = _values(files, "mongodb"), _values(
+        files, "user-service"
+    )
+    assert backing["offhours"]["wakeAt"] == "0 7 * * *"
+    assert service["offhours"]["wakeAt"] == "5 7 * * *"
+    assert service["offhours"]["sleepAt"] == "25 1 * * *"
+    assert backing["offhours"]["sleepAt"] == "30 1 * * *"
+
+
+def test_an_app_kept_awake_has_no_schedule():
+    specs = generate.resolve(_plan(), {"offhours": {"redis": False}})
+
+    files = generate.apply_to_record(
+        _record(), "epitweet", specs, {}, REPO, SHA, PREFIX
+    )
+
+    assert _values(files, "redis")["offhours"] == {"enabled": False}
+
+
+def test_an_offhours_edit_of_an_unknown_app_is_refused():
+    with pytest.raises(PlanError) as error:
+        generate.resolve(_plan(), {"offhours": {"nope": False}})
+
+    assert "'nope': not an app of the import" in str(error.value)

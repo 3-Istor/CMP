@@ -1458,6 +1458,8 @@ export interface PlanBacking {
   port: number | null;
   resources: { requests_mem_mib: number; limits_mem_mib: number; cpu: string };
   credentials_found: string[];
+  /** Run by the platform as the database of the app linking to it. */
+  managed?: "postgres" | null;
 }
 
 export interface PlanLink {
@@ -1466,6 +1468,36 @@ export interface PlanLink {
   port: number | null;
   alias: string;
   evidence: { file: string; line: number; kind: string }[];
+}
+
+export interface PlanRecommendation {
+  id: string;
+  /** Plan name of the app it applies to. */
+  subject: string;
+  rule: string;
+  target: "postgres" | "bucket";
+  level: "advised" | "evaluate";
+  reason: string;
+  gain_mem_mib: number | null;
+  effort: "low" | "medium" | "high";
+  evidence: { file: string; line: number; kind: string }[];
+}
+
+export interface AppRecommendation extends PlanRecommendation {
+  /** Name of the deployed app. */
+  app: string;
+  repository: string;
+  dismissed: boolean;
+}
+
+export interface ManagedServicesView {
+  recommendations: AppRecommendation[];
+  backing: {
+    app: string;
+    kind: string;
+    backed_up: boolean;
+    managed_alternative: "postgres" | "bucket" | null;
+  }[];
 }
 
 export interface ImportPlan {
@@ -1478,6 +1510,7 @@ export interface ImportPlan {
   secrets_found: { file: string; line: number; kind: string; redacted: string }[];
   warnings: string[];
   capacity: { requests_mem_mib: number; limits_mem_mib: number };
+  recommendations?: PlanRecommendation[];
 }
 
 export interface ImportPlanEdits {
@@ -1488,6 +1521,9 @@ export interface ImportPlanEdits {
   port: Record<string, number>;
   probe: Record<string, PlanProbe>;
   drop_links: { from: string; to: string }[];
+  pooler: Record<string, boolean>;
+  /** false keeps the app awake at night; absent, it sleeps like a template app. */
+  offhours: Record<string, boolean>;
 }
 
 export interface ImportCapacity {
@@ -1597,9 +1633,57 @@ export interface ImportRun {
   updated_at: string;
 }
 
+export interface ResourceAmount {
+  cpu_m: number;
+  mem_mib: number;
+}
+
+export interface ImportEstimateApp {
+  app: string;
+  kind: "service" | "backing";
+  requests: ResourceAmount;
+  limits: ResourceAmount;
+  database_mem_mib: number | null;
+  volume_gib: number;
+  monthly_eur: number | null;
+  estimated: boolean;
+}
+
+export interface ImportEstimate {
+  basis: "requests";
+  cloud: string;
+  currency: "EUR";
+  priced: boolean;
+  rate_estimated: boolean;
+  apps: ImportEstimateApp[];
+  total: {
+    requests: ResourceAmount;
+    limits: ResourceAmount;
+    volume_gib: number;
+    monthly_eur: number | null;
+  };
+  plan_problems: string[];
+  quota: {
+    project_max_mib: number;
+    namespace_max_mib: number;
+    namespace_max_millicpu: number;
+    other_imports_mib: number;
+    problems: string[];
+  };
+  cluster: { allocatable: ResourceAmount; requested: ResourceAmount; free: ResourceAmount } | null;
+  diff: {
+    added: string[];
+    removed: string[];
+    changed: { app: string; field: string; before: unknown; after: unknown }[];
+  } | null;
+  recommendations_gain_mib: number;
+}
+
 export interface ImportRunDetail extends ImportRun {
+  estimate: ImportEstimate | null;
   capacity: ImportCapacity;
   services: ImportServiceView[];
+  dismissed_recommendations: string[];
 }
 
 export interface ImportRebuildPending {
@@ -1610,6 +1694,23 @@ export interface ImportRebuildPending {
   apps: string[] | null;
 }
 
+export interface ImportStandardRepoConflict {
+  path: string;
+  kind: "replaced" | "deploy" | "workflow";
+}
+
+/** The pull request moving an import to deploy/ and CI in its repo (CNP-303). */
+export interface ImportStandardRepo {
+  state: "open" | "merged" | "switched" | "closed" | "failed";
+  url?: string;
+  number?: number;
+  apps?: string[];
+  conflicts?: ImportStandardRepoConflict[];
+  excluded?: Record<string, string>;
+  kept?: string[];
+  error?: string;
+}
+
 export interface ImportSourceView {
   id: string;
   repo_full_name: string;
@@ -1618,6 +1719,7 @@ export interface ImportSourceView {
   created_at: string;
   auto_rebuild: boolean;
   rebuild_pending: ImportRebuildPending | null;
+  standard_repo: ImportStandardRepo | null;
   runs: ImportRun[];
   services: ImportServiceView[];
 }
