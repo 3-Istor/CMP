@@ -92,6 +92,32 @@ def restore_patch(values: dict, target: RestoreTarget) -> dict:
     }
 
 
+def current_cluster(values: dict, names: list[str]) -> str | None:
+    """The one cluster of the values' generation; None when it is not clear."""
+    # Generation 0 is the chart's own cluster, N the -db-r<N> recovered one.
+    generation = current_generation(values)
+    suffix = f"-db-r{generation}" if generation else "-db"
+    current = [n for n in names if n.endswith(suffix)]
+    return current[0] if len(current) == 1 else None
+
+
+def backup_body(name: str, cluster: str) -> dict:
+    """An on-demand CNPG Backup of *cluster* through the barman-cloud plugin."""
+    return {
+        "apiVersion": "postgresql.cnpg.io/v1",
+        "kind": "Backup",
+        "metadata": {
+            "name": name,
+            "labels": {"cnp.3istor.com/requested-by": "cmp"},
+        },
+        "spec": {
+            "cluster": {"name": cluster},
+            "method": "plugin",
+            "pluginConfiguration": {"name": PLUGIN},
+        },
+    }
+
+
 def latest_patch(values: dict, source_server: str) -> dict:
     """Recover the next generation from the archive, all WAL replayed."""
     return {

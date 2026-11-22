@@ -2782,7 +2782,9 @@
       "access_review_terraform_task": "Retirer {user} de {group} dans le Terraform K3s",
       "access_review_inactive": "{user} ne s'est pas connecté depuis {days} jours",
       "access_review_disabled": "{user} a été désactivé après {days} jours sans connexion",
-      "import_rebuild_pending": "Une reconstruction de {repo} attend un admin"
+      "import_rebuild_pending": "Une reconstruction de {repo} attend un admin",
+      "move_done": "{project} tourne maintenant sur {cloud}",
+      "move_failed": "Le déplacement de {project} vers {cloud} a échoué"
     }
   },
   "secretsPresence": {
@@ -2906,6 +2908,34 @@
     "security": {
       "title": "Sécurité",
       "description": "La politique CI appliquée à chaque app, et où partent les nouveaux problèmes de sécurité."
+    },
+    "location": {
+      "title": "Emplacement",
+      "description": "Le cloud sur lequel tourne le projet.",
+      "runsOn": "Tourne sur {cloud}",
+      "move": "Déplacer vers {cloud}",
+      "onprem": "Le déplacement des projets on-prem n'est pas encore disponible.",
+      "notUp": "{cloud} n'est pas up.",
+      "confirmTitle": "Déplacer {name} vers {cloud} ?",
+      "confirmDescription": "Les apps s'arrêtent jusqu'à ce que le projet tourne sur {cloud}.",
+      "confirmLabel": "Déplacer",
+      "dataLoss": "Les données de {names} seront perdues",
+      "moving": "Déplacement vers {cloud}",
+      "banner": "Déplacement vers {cloud} · {step}",
+      "bannerFailed": "Le déplacement vers {cloud} a échoué",
+      "details": "Détails",
+      "retry": "Réessayer",
+      "cancel": "Annuler le déplacement",
+      "steps": {
+        "prepare": "Préparer la cible",
+        "stop_source": "Arrêter les apps",
+        "final_backup": "Sauvegarde finale",
+        "switch": "Basculer le cloud",
+        "wait_target": "Attendre les apps",
+        "persist_restores": "Enregistrer la restauration",
+        "cleanup_source": "Nettoyer la source",
+        "finish": "Terminer"
+      }
     },
     "danger": {
       "title": "Zone de danger",

@@ -13,6 +13,7 @@ from app.services.clusters.state import project_cloud
 from app.services.environments import gitops
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
+from app.services.moves import assert_not_moving
 
 router = APIRouter(prefix="/deployments", tags=["Power"])
 
@@ -71,6 +72,7 @@ async def _move(
     minimum: ProjectRole = ProjectRole.MEMBER,
 ) -> dict[str, int]:
     deployment = _kubernetes_app(db, token, deployment_id, minimum)
+    assert_not_moving(db, deployment.project_id)
     cloud = project_cloud(db, deployment.project_id)
     try:
         moved = await asyncio.to_thread(
@@ -128,6 +130,7 @@ async def restart_deployment(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> dict[str, list[str]]:
     deployment = _kubernetes_app(db, token, deployment_id)
+    assert_not_moving(db, deployment.project_id)
     cloud = project_cloud(db, deployment.project_id)
     try:
         restarted = await asyncio.to_thread(

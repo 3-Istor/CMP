@@ -1538,7 +1538,8 @@ export type NotificationKind =
   | "member_added"
   | "approval_request"
   | "access"
-  | "access_review";
+  | "access_review"
+  | "move";
 
 export interface AppNotification {
   id: number;
@@ -1869,6 +1870,48 @@ export const projectExportLink = (project: string, exportId: string) =>
     `/projects/${encodeURIComponent(project)}/exports/${encodeURIComponent(exportId)}/link`,
     { method: "POST" },
   );
+
+export type MoveStep = {
+  name: string;
+  status: "pending" | "running" | "done" | "failed";
+  detail: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type ProjectMove = {
+  id: number;
+  source: string;
+  target: string;
+  status: "running" | "failed" | "done" | "cancelled";
+  steps: MoveStep[];
+  detail: string | null;
+  actor: string;
+  created_at: string;
+  finished_at: string | null;
+};
+
+export const getCurrentMove = (project: string) =>
+  request<ProjectMove | null>(`/projects/${project}/moves/current`);
+
+/** Apps whose data would start empty on the other cloud. */
+export const getMoveDataLoss = (project: string) =>
+  request<string[]>(`/projects/${project}/moves/data-loss`);
+
+export const startMove = (project: string, confirm_data_loss: boolean) =>
+  request<ProjectMove>(`/projects/${project}/move`, {
+    method: "POST",
+    body: JSON.stringify({ confirm_data_loss }),
+  });
+
+export const moveAction = (
+  project: string,
+  id: number,
+  action: "retry" | "cancel",
+) =>
+  request<ProjectMove>(`/projects/${project}/moves/${id}/${action}`, {
+    method: "POST",
+  });
 
 // Platform issue reports sent by assistants (platform admins only)
 export const getIssueReports = (status?: import("@/types/issueReport").IssueReportStatus) =>

@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from unittest import mock
 
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.project_move import ProjectMove
 from app.routers import power as router
 from app.services import power
 from app.services.environments import observe
@@ -231,3 +233,29 @@ class TestPause:
 
         assert response.status_code == 403
         kube.patch.assert_not_called()
+
+
+def _moving(db):
+    db.add(
+        ProjectMove(
+            project="shop",
+            source="aws",
+            target="gcp",
+            status="running",
+            steps=[],
+            actor="hugo",
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
+
+
+@pytest.mark.parametrize("action", ["sleep", "wake", "restart"])
+def test_power_waits_for_a_move(client, kube, db, action):
+    _moving(db)
+
+    response = client("dev").post(f"/api/deployments/7/{action}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This project is moving."
+    kube.patch.assert_not_called()

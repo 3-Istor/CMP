@@ -155,6 +155,19 @@ async def write_app_role(mount: str, name: str, policy: str) -> None:
         raise VaultError(f"Vault role write failed ({response.status_code})")
 
 
+async def app_role_exists(mount: str, name: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.get(
+                _role_url(mount, name), headers=await _headers()
+            )
+    except httpx.HTTPError as exc:
+        raise VaultError(f"Vault unreachable: {exc}") from exc
+    if response.status_code not in (200, 404):
+        raise VaultError(f"Vault role read failed ({response.status_code})")
+    return response.status_code == 200
+
+
 def _policy_url(name: str) -> str:
     if not vault_auth.is_configured():
         raise VaultError("Vault is not configured on the CMP.")

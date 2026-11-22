@@ -20,7 +20,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.observability import TraceTenant
-from app.models.project import Project
+from app.models.project import Project, TargetCloud
 from app.models.release import ReleaseEvent
 from app.routers import app_observability as router
 from app.services import authz, keycloak_service
@@ -444,6 +444,9 @@ def test_capabilities_say_what_is_configured(make):
 def test_logs_capability_is_off_for_a_cloud_app(make, factory):
     with factory() as db:
         db.get(Deployment, SHOP).app_config = '{"target_cloud": "aws"}'
+        db.query(Project).filter_by(project_name="shop").one().target_cloud = (
+            TargetCloud.AWS
+        )
         db.commit()
     client = make("member")
 

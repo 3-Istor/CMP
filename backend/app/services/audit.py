@@ -35,6 +35,15 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("DELETE", "/api/projects/{project_name}"): "project.delete",
     ("POST", "/api/projects/{project_name}/members"): "project.member.add",
     ("POST", "/api/projects/{project_name}/export"): "project.export",
+    ("POST", "/api/projects/{project_name}/move"): "project.move",
+    (
+        "POST",
+        "/api/projects/{project_name}/moves/{move_id}/retry",
+    ): "project.move.retry",
+    (
+        "POST",
+        "/api/projects/{project_name}/moves/{move_id}/cancel",
+    ): "project.move.cancel",
     (
         "POST",
         "/api/projects/{project_name}/exports/{export_id}/link",
@@ -280,6 +289,7 @@ def match_action(method: str, path: str) -> tuple[str | None, dict]:
 # A change worth a second look, shown with a badge in the activity feed.
 NOTABLE = {
     "project.delete",
+    "project.move",
     "project.member.add",
     "project.member.remove",
     "project.deletion_protection.update",

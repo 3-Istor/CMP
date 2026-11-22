@@ -30,6 +30,7 @@ from app.models.imports import (
 )
 from app.models.project import Project, TargetCloud
 from app.services import kube_client, topology_cache, vault_client
+from app.services.clusters.state import PUBLIC_CLOUDS
 from app.services.imports import diagnosis, dns, generate
 from app.services.imports.generate import AppSpec, PlanError
 from app.services.imports.registry_commit import commit_record_change
@@ -96,11 +97,11 @@ def _target_cloud(db: Session, project: str) -> TargetCloud:
     return TargetCloud((row.target_cloud if row else None) or "onprem")
 
 
-def _auth_mount(db: Session, project: str) -> str:
-    cloud = _target_cloud(db, project)
-    if cloud == TargetCloud.ONPREM:
-        return "kubernetes"
-    return f"kubernetes-{cloud.value}"
+def _auth_mounts(db: Session, project: str) -> list[str]:
+    # Both public mounts for a public project, so a move finds its roles.
+    if _target_cloud(db, project) == TargetCloud.ONPREM:
+        return ["kubernetes"]
+    return [f"kubernetes-{cloud.value}" for cloud in PUBLIC_CLOUDS]
 
 
 async def _ensure_app_roles(
@@ -108,19 +109,20 @@ async def _ensure_app_roles(
 ) -> None:
     """
     The Vault role each app with a secret syncs it with, bound to a policy
-    reading that app's secrets only. Written over a role that still carries
-    the project-wide read policy.
+    reading that app's secrets only, on every auth mount the project can run
+    on. Written over a role that still carries the project-wide read policy.
     """
-    mount = _auth_mount(db, project)
+    mounts = _auth_mounts(db, project)
     for spec in specs:
         if generate.needs_secret(spec):
             policy = generate.app_policy_name(project, spec.name)
             await vault_client.write_policy(
                 policy, generate.app_policy(project, spec.name)
             )
-            await vault_client.write_app_role(
-                mount, generate.app_role_name(project, spec.name), policy
-            )
+            for mount in mounts:
+                await vault_client.write_app_role(
+                    mount, generate.app_role_name(project, spec.name), policy
+                )
 
 
 async def _ensure_credentials(project: str, specs: list[AppSpec]) -> None:
@@ -742,12 +744,13 @@ async def remove(db: Session, user: str, source: ImportSource) -> None:
                 )
             except dns.DnsError as exc:
                 logger.warning("DNS cleanup of %s failed: %s", app, exc)
-    mount = _auth_mount(db, project)
+    mounts = _auth_mounts(db, project)
     for app in sorted(removed):
         try:
-            await vault_client.delete_app_role(
-                mount, generate.app_role_name(project, app)
-            )
+            for mount in mounts:
+                await vault_client.delete_app_role(
+                    mount, generate.app_role_name(project, app)
+                )
             await vault_client.delete_policy(
                 generate.app_policy_name(project, app)
             )

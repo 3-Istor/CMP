@@ -113,6 +113,9 @@ def build_record(
         },
         "spec": {
             "targetCloud": target_cloud.value,
+            "cloudClass": (
+                "onprem" if target_cloud == TargetCloud.ONPREM else "public"
+            ),
             "status": status.value,
             "environments": [{"name": "prod"}],
             "apps": [],
@@ -393,6 +396,52 @@ async def publish_record(
         "Registered project '%s' in the registry on '%s'",
         project_name,
         target_cloud.value,
+    )
+
+
+async def set_move(project_name: str, move: dict | None) -> str:
+    """Set or clear the top-level ``status.move``; returns the commit SHA."""
+    # Local import: registry_commit imports this module.
+    from app.services.imports.registry_commit import commit_record_change
+
+    async def change(record: dict, head: str) -> dict[str, str | None]:
+        if move is None:
+            status = record.get("status")
+            if isinstance(status, dict):
+                status.pop("move", None)
+                if not status:
+                    del record["status"]
+        else:
+            record.setdefault("status", {})["move"] = move
+        return {}
+
+    what = "clear" if move is None else "set"
+    suffix = "" if move is None else f" to {move['target']}"
+    return await commit_record_change(
+        project_name,
+        change,
+        f"feat(registry): {what} move of {project_name}{suffix}",
+    )
+
+
+async def switch_cloud(project_name: str, move: dict) -> str:
+    """
+    Flip ``spec.targetCloud`` and record the switch step in one commit. The
+    only writer allowed to change a project's cloud.
+    """
+    from app.services.imports.registry_commit import commit_record_change
+
+    async def change(record: dict, head: str) -> dict[str, str | None]:
+        spec = record.setdefault("spec", {})
+        spec["targetCloud"] = move["target"]
+        spec.setdefault("cloudClass", "public")
+        record.setdefault("status", {})["move"] = move
+        return {}
+
+    return await commit_record_change(
+        project_name,
+        change,
+        f"feat(registry): switch move of {project_name} to {move['target']}",
     )
 
 

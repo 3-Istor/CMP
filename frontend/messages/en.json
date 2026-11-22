@@ -2782,7 +2782,9 @@
       "access_review_terraform_task": "Remove {user} from {group} in the K3s Terraform",
       "access_review_inactive": "{user} has not logged in for {days} days",
       "access_review_disabled": "{user} was disabled after {days} days without login",
-      "import_rebuild_pending": "A rebuild of {repo} waits for an admin"
+      "import_rebuild_pending": "A rebuild of {repo} waits for an admin",
+      "move_done": "{project} now runs on {cloud}",
+      "move_failed": "Move of {project} to {cloud} failed"
     }
   },
   "secretsPresence": {
@@ -2906,6 +2908,34 @@
     "security": {
       "title": "Security",
       "description": "The CI policy applied to every app, and where new security issues are sent."
+    },
+    "location": {
+      "title": "Location",
+      "description": "The cloud the project runs on.",
+      "runsOn": "Runs on {cloud}",
+      "move": "Move to {cloud}",
+      "onprem": "Moving on-prem projects is not available yet.",
+      "notUp": "{cloud} is not up.",
+      "confirmTitle": "Move {name} to {cloud}?",
+      "confirmDescription": "Apps stop until the project runs on {cloud}.",
+      "confirmLabel": "Move",
+      "dataLoss": "Data in {names} will be lost",
+      "moving": "Moving to {cloud}",
+      "banner": "Moving to {cloud} · {step}",
+      "bannerFailed": "Move to {cloud} failed",
+      "details": "Details",
+      "retry": "Retry",
+      "cancel": "Cancel move",
+      "steps": {
+        "prepare": "Prepare target",
+        "stop_source": "Stop apps",
+        "final_backup": "Final backup",
+        "switch": "Switch cloud",
+        "wait_target": "Wait for apps",
+        "persist_restores": "Save restore",
+        "cleanup_source": "Clean up source",
+        "finish": "Finish"
+      }
     },
     "danger": {
       "title": "Danger zone",

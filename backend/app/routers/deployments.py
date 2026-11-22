@@ -52,6 +52,7 @@ from app.services.keycloak_service import (
     get_project_role,
     get_user_id_from_token,
 )
+from app.services.moves import assert_not_moving
 from app.services.project_registry import (
     NameCollisionError,
     RegistryError,
@@ -228,6 +229,7 @@ async def create_deployment(
             payload.project_id,
             ProjectRole.ADMIN,
         )
+    assert_not_moving(db, payload.project_id)
 
     # Validate template exists
     template = get_template_by_id(payload.template_id)
@@ -436,6 +438,7 @@ async def delete_deployment(
     """
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.ADMIN)
     assert_step_up(token)
+    assert_not_moving(db, deployment.project_id)
     if deployment.template_id.startswith("import-"):
         # Its values live in cnp-projects and its namespace outlives Argo CD:
         # only removing the import cleans both up.

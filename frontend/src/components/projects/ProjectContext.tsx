@@ -5,7 +5,8 @@ import { projectHref } from "@/components/layout/projectSections";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCan, useProjectApps, useProjects } from "@/lib/hooks";
+import { useCan, useCurrentMove, useProjectApps, useProjects } from "@/lib/hooks";
+import type { ProjectMove } from "@/lib/api";
 import type { Capability } from "@/lib/permissions";
 import type { Deployment, ProjectRole, TargetCloud } from "@/types";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -34,6 +35,8 @@ interface ProjectContextValue {
   appsError: string | null;
   refreshApps: () => Promise<void>;
   hasActiveDeployments: boolean;
+  move: ProjectMove | null;
+  setMove: (move: ProjectMove | null) => void;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -54,7 +57,8 @@ export function ProjectProvider({
   const router = useRouter();
   const t = useTranslations("projects.context");
 
-  const { projects } = useProjects();
+  const { projects, refresh: refreshProjects } = useProjects();
+  const { move, setMove } = useCurrentMove(projectName, refreshProjects);
   const isBeingDeleted = projects.some(
     (p) => p.name === projectName && p.status === "decommissioning",
   );
@@ -101,6 +105,8 @@ export function ProjectProvider({
       appsError,
       refreshApps,
       hasActiveDeployments,
+      move,
+      setMove,
     }),
     [
       projectName,
@@ -113,6 +119,8 @@ export function ProjectProvider({
       appsError,
       refreshApps,
       hasActiveDeployments,
+      move,
+      setMove,
     ],
   );
 
