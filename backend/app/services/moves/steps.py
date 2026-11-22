@@ -57,8 +57,6 @@ WORKLOADS = (
 IMPORTED = ("import-service", "import-backing")
 APP_TEMPLATE = "k3s-gitops-app"
 CLUSTERS = {c.value for c in TargetCloud}
-# The registry ApplicationSets that read status.move.
-APPSETS = ("cnp-project-appprojects", "cnp-project-systems", "cnp-apps")
 
 
 class MoveRefused(Exception):
@@ -446,27 +444,6 @@ def _appprojects_waiting(move: ProjectMove) -> list[str]:
     return waiting
 
 
-def _refresh_appsets() -> None:
-    """Make the git generators re-read the registry now, not at the next poll.
-
-    The annotation bypasses the repo-server revision cache; best effort.
-    """
-    for name in APPSETS:
-        try:
-            kube_merge_patch(
-                f"{ARGOCD}/applicationsets/{name}",
-                {
-                    "metadata": {
-                        "annotations": {
-                            "argocd.argoproj.io/application-set-refresh": "true"
-                        }
-                    }
-                },
-            )
-        except Exception:  # pylint: disable=broad-exception-caught
-            logger.warning("applicationset %s: refresh failed", name)
-
-
 def _bootstrap(project: str) -> dict:
     return kube_get(f"{ARGOCD}/applications/{project}-bootstrap") or {}
 
@@ -536,7 +513,6 @@ async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
                 "step": "prepare",
             },
         )
-        await run_in_threadpool(_refresh_appsets)
     waiting = await run_in_threadpool(_appprojects_waiting, move)
     if waiting:
         step["detail"] = (
@@ -626,7 +602,6 @@ async def switch(db: Session, move: ProjectMove, _step, _steps) -> bool:
             "restores": move.restores,
         },
     )
-    await run_in_threadpool(_refresh_appsets)
     project = (
         db.query(Project)
         .filter(Project.project_name == move.project)
@@ -921,7 +896,6 @@ async def cancel(db: Session, move: ProjectMove) -> ProjectMove:
     if _named(move.steps, "stop_source")["status"] != "pending":
         raise MoveRefused(409, "The source is already stopped: retry instead")
     await project_registry.set_move(move.project, None)
-    await run_in_threadpool(_refresh_appsets)
     move.status = "cancelling"
     db.commit()
     return move

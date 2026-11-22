@@ -242,11 +242,6 @@ def world(db):
     kube.add(GCP, NAMESPACES, _ns("alpha-system"), _ns("alpha-shop"))
     kube.add(GCP, _secrets("alpha-shop"), _vaultsecret("alpha-shop-role"))
     kube.add(GCP, _secrets_core("alpha-shop"), {"metadata": {"name": "s"}})
-    kube.add(
-        ONPREM,
-        f"{ARGOCD}/applicationsets",
-        *({"metadata": {"name": n}, "spec": {}} for n in steps.APPSETS),
-    )
     _app_row(db, "shop")
 
     def logged(name):
@@ -1252,57 +1247,6 @@ def test_prepare_waits_for_the_prepull(db, world):
 # ── registry ApplicationSets are refreshed after each commit ────────────────
 
 
-def _refreshed(world):
-    return [
-        e[2].rsplit("/", 1)[1]
-        for e in world.log
-        if e[0] == "patch" and "applicationsets" in e[2]
-    ]
-
-
-def test_the_registry_applicationsets_are_refreshed_after_the_commits(
-    db, world
-):
-    move = _row(db, done=("prepare",))
-    world.kube.items[(AWS, _pods("alpha-shop"))] = []
-    advance(db, move)  # stop_source, final_backup waits
-    assert _refreshed(world) == []
-
-    _backend_done = world.kube.get(
-        f"{CNPG}/alpha-shop/backups/alpha-shop-backend-db-move-{move.id}",
-        cloud=AWS,
-    )
-    _backend_done["status"] = {"phase": "completed"}
-    advance(db, move)  # switch
-    assert sorted(_refreshed(world)) == sorted(steps.APPSETS)
-    annotations = world.kube.get(f"{ARGOCD}/applicationsets/cnp-apps")[
-        "metadata"
-    ]["annotations"]
-    assert annotations == {
-        "argocd.argoproj.io/application-set-refresh": "true"
-    }
-
-
-def test_prepare_refreshes_after_its_registry_commit(db, world):
-    move = _row(db)
-
-    advance(db, move)
-
-    names = [e[0] for e in world.log]
-    assert names.index("set_move") < names.index("patch")
-    assert sorted(_refreshed(world)) == sorted(steps.APPSETS)
-
-
-def test_a_failed_refresh_never_fails_the_step(db, world):
-    with mock.patch.object(
-        steps, "kube_merge_patch", side_effect=KubeUnavailableError("no", 403)
-    ):
-        move = _row(db)
-        advance(db, move)
-
-    assert _step(move, "prepare")["status"] == "done"
-
-
 # ── cancel ──────────────────────────────────────────────────────────────────
 
 
@@ -1314,7 +1258,6 @@ def test_cancel_before_the_source_stops(db, world):
     assert move.status == "cancelling"
     assert move.finished_at is None
     assert world.set_move.await_args.args == ("alpha", None)
-    assert sorted(_refreshed(world)) == sorted(steps.APPSETS)
     assert active_move(db, "alpha") is move
     with pytest.raises(steps.MoveRefused):
         asyncio.run(steps.cancel(db, move))
