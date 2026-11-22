@@ -834,6 +834,59 @@ def test_cleanup_deletes_only_labelled_namespaces_on_the_source(db, world):
     assert _step(move, "cleanup_source")["status"] == "running"
 
 
+def test_cleanup_keeps_backups_namespace_on_onprem_source(db, world):
+    kube = world.kube
+    kube.add(ONPREM, NAMESPACES, _ns("alpha-system"), _ns("alpha-shop"))
+    kube.add(ONPREM, NAMESPACES, _ns("alpha-backups"))
+    _apps_on(kube, "gcp")
+    move = _row(db, done=_before("cleanup_source"))
+    move.source = "onprem"
+    db.commit()
+
+    advance(db, move)
+
+    deleted = [(e[1], e[2]) for e in world.log if e[0] == "delete"]
+    assert deleted == [
+        (ONPREM, f"{NAMESPACES}/alpha-system"),
+        (ONPREM, f"{NAMESPACES}/alpha-shop"),
+    ]
+
+
+def test_stop_source_ignores_backups_namespace(world):
+    world.kube.add(ONPREM, NAMESPACES, _ns("alpha-shop"), _ns("alpha-backups"))
+
+    assert steps._app_namespaces("alpha", ONPREM) == ["alpha-shop"]
+
+
+def test_project_apps_excludes_appproject_only(world):
+    apps = world.kube.items[(ONPREM, f"{ARGOCD}/applications")]
+    apps[:] = [
+        _app("alpha-appproject", "onprem"),
+        _app("alpha-bootstrap", "onprem"),
+        _app("alpha-shop-app", "onprem"),
+    ]
+
+    names = [a["metadata"]["name"] for a in steps._project_apps("alpha")]
+
+    assert names == ["alpha-bootstrap", "alpha-shop-app"]
+
+
+def test_precheck_reads_onprem_mount(db, world):
+    for name in ("alpha-platform", "alpha"):
+        world.kube.get(f"{ARGOCD}/appprojects/{name}")["spec"][
+            "destinations"
+        ].append({"name": "onprem", "namespace": "x"})
+    move = _row(db)
+    move.target = "onprem"
+    db.commit()
+
+    advance(db, move)
+
+    assert {c.args[0] for c in world.role_exists.await_args_list} == {
+        "kubernetes"
+    }
+
+
 def test_cleanup_never_runs_before_the_target_is_healthy(db, world):
     done = [n for n in _before("cleanup_source") if n != "wait_target"]
     move = _row(db, done=done)

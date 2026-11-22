@@ -32,6 +32,7 @@ from app.services.kube_client import (
     kube_merge_patch,
 )
 from app.services.moves import active_move
+from app.services.orphans import VAULT_AUTH_MOUNTS
 from app.services.notifications import notify_project, notify_users
 from app.services.security import restore as restores
 from app.services.security import restore_commit
@@ -49,7 +50,7 @@ WORKLOADS = (
 )
 IMPORTED = ("import-service", "import-backing")
 APP_TEMPLATE = "k3s-gitops-app"
-PUBLIC = {c.value for c in PUBLIC_CLOUDS}
+CLUSTERS = {c.value for c in TargetCloud}
 
 
 class MoveRefused(Exception):
@@ -169,13 +170,18 @@ def new_move(
 
 
 def _namespaces(project: str, cloud: TargetCloud) -> list[dict]:
-    """The project's namespaces on *cloud*; the label is checked here too."""
+    """The project's namespaces on *cloud*, the label checked here too.
+
+    <p>-backups (on-prem, holds the database buckets) is never listed: no
+    caller may stop or delete it.
+    """
     return [
         ns
         for ns in kube_list(
             NAMESPACES, {"labelSelector": f"{LABEL}={project}"}, cloud=cloud
         )
         if (ns["metadata"].get("labels") or {}).get(LABEL) == project
+        and ns["metadata"]["name"] != f"{project}-backups"
     ]
 
 
@@ -241,13 +247,15 @@ def _deployment(db: Session, project: str, app: str) -> Deployment:
 
 
 def _project_apps(project: str) -> list[dict]:
-    """The project's Applications on a public cloud (on-prem ones stay)."""
+    """The project's Applications that move: not <p>-appproject (pinned
+    on-prem) nor the in-cluster ones (image updaters)."""
     return [
         app
         for app in kube_list(
             f"{ARGOCD}/applications", {"labelSelector": f"{LABEL}={project}"}
         )
-        if _destination(app) in PUBLIC
+        if app["metadata"]["name"] != f"{project}-appproject"
+        and _destination(app) in CLUSTERS
     ]
 
 
@@ -316,7 +324,7 @@ def _vault_roles(move: ProjectMove) -> list[str]:
 
 async def _precheck(move: ProjectMove) -> None:
     problems = await run_in_threadpool(_source_problems, move)
-    mount = f"kubernetes-{move.target}"
+    mount = VAULT_AUTH_MOUNTS[TargetCloud(move.target)]
     missing = [
         role
         for role in await run_in_threadpool(_vault_roles, move)
