@@ -162,6 +162,36 @@ def scopes_for(tools: list[str], catalogue: dict[str, list[str]]) -> list[str]:
     return wanted
 
 
+def _create(
+    client_id: str, project: str, description: str, enabled: bool
+) -> dict:
+    _admin(
+        "POST",
+        "/clients",
+        {
+            "clientId": client_id,
+            "name": client_id,
+            "description": description[:255],
+            "enabled": enabled,
+            "protocol": "openid-connect",
+            "publicClient": False,
+            "serviceAccountsEnabled": True,
+            "standardFlowEnabled": False,
+            "implicitFlowEnabled": False,
+            "directAccessGrantsEnabled": False,
+            "attributes": {
+                "standard.token.exchange.enabled": "true",
+                "access.token.lifespan": TOKEN_LIFESPAN,
+            },
+            "protocolMappers": _mappers(client_id, project),
+        },
+    )
+    created = _find(client_id)
+    if created is None:
+        raise IdentityError(502, f"Client {client_id} was not created")
+    return created
+
+
 def ensure_client(
     client_id: str, project: str, description: str, scopes: list[str]
 ) -> str:
@@ -172,30 +202,7 @@ def ensure_client(
     """
     existing = _find(client_id)
     if existing is None:
-        _admin(
-            "POST",
-            "/clients",
-            {
-                "clientId": client_id,
-                "name": client_id,
-                "description": description[:255],
-                "enabled": True,
-                "protocol": "openid-connect",
-                "publicClient": False,
-                "serviceAccountsEnabled": True,
-                "standardFlowEnabled": False,
-                "implicitFlowEnabled": False,
-                "directAccessGrantsEnabled": False,
-                "attributes": {
-                    "standard.token.exchange.enabled": "true",
-                    "access.token.lifespan": TOKEN_LIFESPAN,
-                },
-                "protocolMappers": _mappers(client_id, project),
-            },
-        )
-        existing = _find(client_id)
-        if existing is None:
-            raise IdentityError(502, f"Client {client_id} was not created")
+        existing = _create(client_id, project, description, enabled=True)
     elif not existing.get("enabled", True):
         set_enabled(client_id, True)
     available = _scope_ids()
@@ -273,6 +280,125 @@ def delete_client(client_id: str) -> None:
     if found is not None:
         _admin("DELETE", f"/clients/{found['id']}")
     _client_tokens.pop(client_id, None)
+
+
+# ---------------------------------------------------------------------------
+# Reconcile: read first, write only what differs, so a second run writes
+# nothing
+# ---------------------------------------------------------------------------
+
+MANAGED_SCOPES = (READ_SCOPE, WRITE_SCOPE, WEB_SEARCH_SCOPE)
+PAGE = 100
+
+
+def reconcile_client(  # pylint: disable=too-many-arguments
+    client_id: str,
+    project: str,
+    description: str,
+    scopes: list[str],
+    enabled: bool,
+    test_audience: bool,
+) -> list[str]:
+    """
+    Bring the client to the rights: present, *enabled* or not, its claims,
+    exactly the gateway scopes *scopes* ask for among those the CMP manages
+    (a right taken away is removed), in its project group and, for an agent,
+    reachable by the test chat. Returns what was changed.
+    """
+    changes = []
+    existing = _find(client_id)
+    if existing is None:
+        existing = _create(client_id, project, description, enabled)
+        changes.append("client_created")
+    elif bool(existing.get("enabled", True)) != enabled:
+        set_enabled(client_id, enabled)
+        changes.append("enabled" if enabled else "disabled")
+    internal = existing["id"]
+    has = {m.get("name") for m in existing.get("protocolMappers") or []}
+    lacking = [m for m in _mappers(client_id, project) if m["name"] not in has]
+    for mapper in lacking:
+        _admin("POST", f"/clients/{internal}/protocol-mappers/models", mapper)
+    if lacking:
+        changes.append("claims")
+    available = _scope_ids()
+    wanted = {s for s in (*BASE_SCOPES, *scopes) if s in available}
+    current = {
+        s["name"]
+        for s in _admin("GET", f"/clients/{internal}/default-client-scopes")
+        or []
+    }
+    extra = (current & set(MANAGED_SCOPES)) - wanted
+    for scope in sorted(wanted - current):
+        _admin(
+            "PUT",
+            f"/clients/{internal}/default-client-scopes/{available[scope]}",
+        )
+    for scope in sorted(extra):
+        _admin(
+            "DELETE",
+            f"/clients/{internal}/default-client-scopes/{available[scope]}",
+        )
+    if wanted - current or extra:
+        changes.append("scopes")
+    if not _in_project_group(internal, project):
+        _join_project_group(internal, project)
+        changes.append("project_group")
+    if test_audience and not _has_test_audience(client_id, available):
+        ensure_test_audience(client_id)
+        changes.append("test_audience")
+    return changes
+
+
+def _in_project_group(internal_id: str, project: str) -> bool:
+    user = _admin("GET", f"/clients/{internal_id}/service-account-user")
+    groups = _admin("GET", f"/users/{user['id']}/groups") or []
+    return any(g.get("path") == f"/{PROJECTS_GROUP}/{project}" for g in groups)
+
+
+def _has_test_audience(agent_client: str, available: dict[str, str]) -> bool:
+    name = test_scope(agent_client)
+    cmp = _find(settings.KEYCLOAK_CLIENT_ID)
+    if name not in available or cmp is None:
+        return False
+    optional = _admin("GET", f"/clients/{cmp['id']}/optional-client-scopes")
+    return any(s.get("name") == name for s in optional or [])
+
+
+def _claimed_project(client: dict) -> str | None:
+    for mapper in client.get("protocolMappers") or []:
+        if mapper.get("name") == "project":
+            return (mapper.get("config") or {}).get("claim.value")
+    return None
+
+
+def project_clients(project: str) -> dict[str, dict]:
+    """
+    The agent and app clients named after *project*: ``{client_id:
+    {"enabled", "project"}}``, ``project`` being the claim the client
+    carries (None without one). ``agent-shop-a-b`` may be agent ``a-b`` of
+    ``shop`` or agent ``b`` of ``shop-a``: only the claim tells.
+    """
+    prefixes = (f"agent-{project}-", f"app-{project}-")
+    found: dict[str, dict] = {}
+    first = 0
+    while True:
+        page = (
+            _admin(
+                "GET",
+                f"/clients?clientId={quote(f'-{project}-', safe='')}"
+                f"&search=true&first={first}&max={PAGE}",
+            )
+            or []
+        )
+        for client in page:
+            if client["clientId"].startswith(prefixes):
+                found[client["clientId"]] = {
+                    "enabled": bool(client.get("enabled", True)),
+                    "project": _claimed_project(client),
+                }
+        if len(page) < PAGE:
+            return found
+        first += PAGE
 
 
 # ---------------------------------------------------------------------------

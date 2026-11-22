@@ -16,9 +16,16 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.ai import AiAgent
-from app.services import project_registry
+from app.services import project_registry, vault_client
 from app.services.agents import policy
-from app.services.ai import catalog, declaration, gateway, gitops, identity
+from app.services.ai import (
+    catalog,
+    declaration,
+    gateway,
+    gitops,
+    identity,
+    reconcile,
+)
 from app.services.ai import usage as ai_usage
 from app.services.ai.declaration import (
     AgentSpec,
@@ -91,7 +98,10 @@ def _summary(
     row: AiAgent | None,
     badges: dict[str, list[str]],
     today: dict[str, dict],
+    clients: dict[str, dict] | None = None,
 ) -> dict[str, Any]:
+    """``credentials``: whether Keycloak has the agent's client, None when
+    unknown; "missing" for an agent declared in Git and not reconciled yet."""
     name = rights["name"]
     declared = (row.declaration if row else None) or {}
     tools = list(rights.get("tools") or [])
@@ -116,6 +126,11 @@ def _summary(
         "calls": list(rights.get("calls") or []),
         "daily_token_budget": rights.get("dailyTokenBudget"),
         "client_id": client_id(project, name),
+        "credentials": (
+            None
+            if clients is None
+            else "ok" if client_id(project, name) in clients else "missing"
+        ),
         "repo": row.repo if row else None,
         "values_path": (
             row.values_path if row else declaration.values_path(name)
@@ -218,8 +233,11 @@ async def list_agents(
     rows = _mirror_rows(db, project)
     badges = catalog.badges_by_name(await catalog.tools(record))
     today = await _today(project)
+    clients = await reconcile.credentials(project)
     return [
-        _summary(project, rights, rows.get(rights["name"]), badges, today)
+        _summary(
+            project, rights, rows.get(rights["name"]), badges, today, clients
+        )
         for rights in project_ai.agents
     ]
 
@@ -249,7 +267,14 @@ async def get_agent(db: Session, project: str, name: str) -> dict:
             row.pull_request = await gitops.pull_state(row.pull_request)
         db.commit()
     badges = catalog.badges_by_name(await catalog.tools(record))
-    summary = _summary(project, rights, row, badges, await _today(project))
+    summary = _summary(
+        project,
+        rights,
+        row,
+        badges,
+        await _today(project),
+        await reconcile.credentials(project),
+    )
     return {
         **summary,
         "declaration": declared or {},
@@ -909,6 +934,16 @@ async def delete_agent(
         db.commit()
     await gitops.refresh_project(project)
     return {"deleted": name, "pull_request": _public_pull(pull)}
+
+
+async def reconcile_ai(db: Session, project: str, prune: bool) -> dict:
+    record = await record_of(project)
+    try:
+        return await reconcile.reconcile_project(db, project, record, prune)
+    except identity.IdentityError as exc:
+        raise AiError(502, f"Keycloak: {exc}") from exc
+    except vault_client.VaultError as exc:
+        raise AiError(502, f"Vault: {exc}") from exc
 
 
 async def admin_agents(db: Session) -> list[dict]:

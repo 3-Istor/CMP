@@ -17,6 +17,7 @@ WRITES = {
         "ai.configure",
     ),
     "enable_app_ai": ({"project": "demo", "app": "shop"}, "ai.configure"),
+    "reconcile_project_ai": ({"project": "demo"}, "ai.configure"),
     "create_agent": (
         {
             "project": "demo",

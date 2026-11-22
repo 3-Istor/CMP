@@ -122,6 +122,7 @@ OPERATIONS_WRITE_TOOLS = {
 AI_WRITE_TOOLS = {
     "set_project_ai",
     "enable_app_ai",
+    "reconcile_project_ai",
     "create_agent",
     "update_agent",
     "suspend_agent",

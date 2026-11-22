@@ -6,7 +6,7 @@ import { useProjectContext } from "@/components/projects/ProjectContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getAgent, getProjectAiTools, resumeAgent, suspendAgent } from "@/lib/api";
+import { getAgent, getProjectAiTools, reconcileProjectAi, resumeAgent, suspendAgent } from "@/lib/api";
 import { answersFromTools, riskProfile } from "@/lib/ai/risk";
 import { useCardData } from "@/lib/useCardData";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ import { useTranslations } from "next-intl";
 import { createContext, useCallback, useContext, useState } from "react";
 import { toast } from "sonner";
 import { agentHref } from "./AgentCard";
-import { AgentStatusBadge, IsolationBadge } from "./shared";
+import { AgentStatusBadge, IsolationBadge, ProvisionBadge } from "./shared";
 
 interface AgentContextValue {
   project: string;
@@ -102,6 +102,43 @@ function KillSwitch({ agent, onChange }: { agent: Agent; onChange: (agent: Agent
   );
 }
 
+/**
+ * An agent declared in Git before its credentials existed. Provisioning runs
+ * the project reconcile, which also covers its other agents and AI apps.
+ */
+function ProvisionBanner({ agent, canProvision, onDone }: { agent: Agent; canProvision: boolean; onDone: () => void }) {
+  const t = useTranslations("ai.provision");
+  const [busy, setBusy] = useState(false);
+  const provision = async () => {
+    setBusy(true);
+    try {
+      const report = await reconcileProjectAi(agent.project);
+      const mine = report.items.find((i) => i.kind === "agent" && i.name === agent.name);
+      if (mine?.error) throw new Error(mine.error);
+      toast.success(t("done", { name: agent.name }));
+      onDone();
+    } catch (err) {
+      toast.error(t("failed"), { description: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="border-b border-primary/30 bg-primary/5">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-6 py-2.5 text-sm">
+        <KeyRound className="size-4 shrink-0 text-primary" aria-hidden />
+        <p className="min-w-0 flex-1">{t("banner")}</p>
+        {canProvision && (
+          <Button size="sm" onClick={() => void provision()} disabled={busy}>
+            {busy ? <Loader2 className="animate-spin" aria-hidden /> : <KeyRound aria-hidden />}
+            {busy ? t("running") : t("action")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function AgentFrame({ agentName, children }: { agentName: string; children: React.ReactNode }) {
   const t = useTranslations("ai.agentPage");
   const tNav = useTranslations("projectNav");
@@ -166,6 +203,7 @@ export function AgentFrame({ agentName, children }: { agentName: string; childre
         >
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <AgentStatusBadge status={agent.status} />
+            {agent.credentials === "missing" && <ProvisionBadge />}
             {agent.pull_request?.state === "open" && (
               <a
                 href={agent.pull_request.url}
@@ -193,6 +231,13 @@ export function AgentFrame({ agentName, children }: { agentName: string; childre
             <span className="font-mono">{agent.model}</span>
           </div>
         </PageHeader>
+        {agent.credentials === "missing" && (
+          <ProvisionBanner
+            agent={agent}
+            canProvision={can("ai.configure")}
+            onDone={() => setAgent({ ...agent, credentials: "ok" })}
+          />
+        )}
         {agent.status === "suspended" && (
           <div className="border-b border-amber-500/30 bg-amber-500/10">
             <p className="mx-auto flex max-w-7xl items-center gap-2 px-6 py-2.5 text-sm text-amber-900 dark:text-amber-200">

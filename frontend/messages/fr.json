@@ -4514,6 +4514,14 @@
     "appBadge": {
       "label": "Accès IA",
       "title": "Budget : {budget} tokens par jour"
+    },
+    "provision": {
+      "state": "À provisionner",
+      "banner": "Cet agent est déclaré dans Git mais n'a pas encore ses identifiants (client Keycloak et secret Vault) : il ne peut pas tourner.",
+      "action": "Provisionner",
+      "running": "Provisionnement en cours",
+      "done": "Identifiants de {name} provisionnés.",
+      "failed": "Le provisionnement n'a pas abouti"
     }
   }
 }

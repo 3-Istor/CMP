@@ -152,6 +152,48 @@ async def enable_app_ai(  # pylint: disable=too-many-arguments
     return {"ok": True, **result}
 
 
+@mcp.tool(annotations=WRITE)
+@tool_errors
+async def reconcile_project_ai(  # pylint: disable=too-many-arguments
+    project: str,
+    prune: Annotated[
+        bool,
+        Field(
+            description="true also deletes the agent and app clients the "
+            "project record no longer names"
+        ),
+    ] = False,
+    user_confirmed: bool = False,
+    confirmation_id: str | None = None,
+    preview: PREVIEW = False,
+) -> dict:
+    """Make the Keycloak clients and Vault secrets of every agent and AI
+    app match the project record: what was declared in Git gets its
+    credentials, a suspended agent its client disabled. Running it again
+    changes nothing. Orphan clients are listed, deleted only with prune.
+    Project admins only."""
+    caller = Caller()
+    stop = await _project_gate(
+        caller,
+        project,
+        "ai.configure",
+        minimum=ProjectRole.ADMIN,
+        tool="reconcile_project_ai",
+        arguments={"project": project, "prune": prune},
+        summary=f"Provision the AI credentials of '{project}' from its "
+        f"record{' and delete orphan clients' if prune else ''}?",
+        user_confirmed=user_confirmed,
+        confirmation_id=confirmation_id,
+        preview=preview,
+    )
+    if stop:
+        return stop
+    result = await caller.api(
+        "POST", f"/api/projects/{project}/ai/reconcile", json={"prune": prune}
+    )
+    return {"ok": True, **result}
+
+
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 async def get_ai_usage(

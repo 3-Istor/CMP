@@ -69,6 +69,8 @@ export interface Agent {
   calls: string[];
   daily_token_budget: number;
   client_id?: string;
+  /** "missing": declared in Git, its Keycloak client not provisioned yet. */
+  credentials?: "ok" | "missing" | null;
   repo?: string | null;
   values_path?: string | null;
   pull_request?: PullRequestRef | null;

@@ -55,6 +55,7 @@ from app.services.access.grants import access_sweep_loop
 from app.services.access_review.jobs import access_review_loop
 from app.services.activity_collector import activity_collector_loop
 from app.services.agents import internal_api
+from app.services.ai import reconcile as ai_reconcile
 from app.services.audit import AuditMiddleware, audit_retention_loop
 from app.services.cloud_backups import cloud_backups_loop
 from app.services.clusters.state import not_connected_response
@@ -334,6 +335,7 @@ async def lifespan(app: FastAPI):
     # Runs once, after startup: Grafana being down only logs.
     grafana_sync_task = asyncio.create_task(sync_all_project_orgs())
     grafana_platform_task = asyncio.create_task(platform_org_sync_loop())
+    ai_reconcile_task = asyncio.create_task(ai_reconcile.reconcile_loop())
 
     # Last, so it only gets the paths no router claimed: /mcp, the OAuth
     # endpoints (/authorize, /token, /register, /revoke) and their
@@ -365,6 +367,7 @@ async def lifespan(app: FastAPI):
     export_retention_task.cancel()
     grafana_sync_task.cancel()
     grafana_platform_task.cancel()
+    ai_reconcile_task.cancel()
     if import_reconcile_task:
         import_reconcile_task.cancel()
     for task in (
@@ -382,6 +385,7 @@ async def lifespan(app: FastAPI):
         export_retention_task,
         grafana_sync_task,
         grafana_platform_task,
+        ai_reconcile_task,
     ):
         try:
             await task

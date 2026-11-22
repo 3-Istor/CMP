@@ -189,6 +189,7 @@ def world(monkeypatch):
     monkeypatch.setattr(identity, "client_secret", lambda _c: "s3cret")
     monkeypatch.setattr(identity, "set_enabled", world.set_enabled)
     monkeypatch.setattr(identity, "delete_client", world.delete_client)
+    monkeypatch.setattr(identity, "project_clients", lambda _p: {})
     monkeypatch.setattr(
         identity,
         "is_enabled",
@@ -567,6 +568,31 @@ def test_an_agent_declared_in_yaml_only_shows_up_in_the_list(world, db):
     assert [(i["name"], i["source"], i["risk"]["count"]) for i in items] == [
         ("manual", "yaml", 2)
     ]
+
+
+def test_an_agent_without_a_client_is_listed_as_missing_credentials(
+    world, db, monkeypatch
+):
+    world.record["spec"]["ai"]["agents"] = [
+        {"name": "manual", "tools": [], "models": ["claude-haiku-5-5"]},
+        {"name": "known", "tools": [], "models": ["claude-haiku-5-5"]},
+    ]
+    service.reconcile._runs.credentials.clear()  # pylint: disable=protected-access
+    monkeypatch.setattr(
+        identity,
+        "project_clients",
+        lambda _p: {
+            "agent-alpha-known": {"enabled": True, "project": "alpha"}
+        },
+    )
+
+    items = run(service.list_agents(db, "alpha"))
+
+    assert [(i["name"], i["credentials"]) for i in items] == [
+        ("manual", "missing"),
+        ("known", "ok"),
+    ]
+    service.reconcile._runs.credentials.clear()  # pylint: disable=protected-access
 
 
 def test_turning_ai_on_mirrors_the_stake_level_in_the_record(world, db):

@@ -4514,6 +4514,14 @@
     "appBadge": {
       "label": "AI access",
       "title": "Budget: {budget} tokens per day"
+    },
+    "provision": {
+      "state": "To provision",
+      "banner": "This agent is declared in Git but has no credentials yet (Keycloak client and Vault secret): it cannot run.",
+      "action": "Provision",
+      "running": "Provisioning",
+      "done": "Credentials of {name} provisioned.",
+      "failed": "Provisioning failed"
     }
   }
 }
