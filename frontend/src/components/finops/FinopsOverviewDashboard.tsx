@@ -1,5 +1,6 @@
 "use client";
 
+import { AiFinopsCard } from "@/components/ai/AiFinopsCard";
 import { AppCostTable } from "@/components/finops/AppCostTable";
 import { CostCharts } from "@/components/finops/CostCharts";
 import {
@@ -161,6 +162,11 @@ export function FinopsOverviewDashboard({
             granularity={filters.granularity}
             anomalies={anomalies}
             meta={meta}
+          />
+
+          <AiFinopsCard
+            projects={filters.project ? [filters.project] : projects.map((p) => p.name)}
+            period={filters.period}
           />
 
           <Card>

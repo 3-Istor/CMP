@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { AI_ROUTES } from "./ai";
 import access from "./access.json";
 import activity from "./activity.json";
 import agentsSummary from "./agents-summary.json";
@@ -77,6 +78,7 @@ const ROUTES: Record<string, unknown> = {
   "/projects/demo/import/repos": importRepos,
   "/account/github/repos": importRepos,
   "/projects/demo/imports/runs/r1": importRun,
+  ...Object.fromEntries(Object.entries(AI_ROUTES).map(([path, answer]) => [path, answer.json])),
 };
 
 export const unmockedRequests = new Set<string>();

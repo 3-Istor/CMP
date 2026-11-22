@@ -1,12 +1,12 @@
 import type { Capability } from "@/lib/permissions";
 import {
   BellRing,
-  Bot,
   Settings,
   History,
   LayoutDashboard,
   Network,
   Shield,
+  Sparkles,
   Users,
   Wallet,
   type LucideIcon,
@@ -20,7 +20,7 @@ export type ProjectSectionKey =
   | "security"
   | "activity"
   | "alerts"
-  | "assistants"
+  | "ai"
   | "settings";
 
 export interface ProjectSectionEntry {
@@ -68,7 +68,7 @@ export const PROJECT_SECTIONS: Record<ProjectSectionKey, ProjectSectionEntry> = 
     icon: BellRing,
     capability: "app.viewObservability",
   },
-  assistants: { key: "assistants", segment: "assistants", icon: Bot },
+  ai: { key: "ai", segment: "ai", icon: Sparkles },
   settings: {
     key: "settings",
     segment: "settings",

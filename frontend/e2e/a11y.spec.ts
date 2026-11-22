@@ -23,6 +23,12 @@ const PAGES = [
   "/projects/demo/apps/1/delivery",
   "/projects/demo/apps/1/settings",
   "/projects/demo/apps/1/costs",
+  "/projects/demo/ai",
+  "/projects/demo/ai/new",
+  "/projects/demo/ai/agents/grok-reader",
+  "/projects/demo/ai/agents/grok-reader/test",
+  "/projects/demo/ai/agents/grok-reader/capabilities",
+  "/agents",
 ];
 const THEMES = ["light", "dark"] as const;
 const VIEWPORT_WIDTHS = [1280, 400];

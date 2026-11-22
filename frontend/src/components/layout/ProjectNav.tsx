@@ -190,7 +190,7 @@ export function ProjectNav({
       {renderSection(PROJECT_SECTIONS.security)}
       {renderSection(PROJECT_SECTIONS.activity)}
       {renderSection(PROJECT_SECTIONS.alerts)}
-      {renderSection(PROJECT_SECTIONS.assistants)}
+      {renderSection(PROJECT_SECTIONS.ai)}
 
       <div className="mx-2 my-2 border-t" role="separator" />
 
