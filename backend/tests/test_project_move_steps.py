@@ -1,3 +1,4 @@
+from datetime import timedelta
 import asyncio
 import json
 from types import SimpleNamespace
@@ -698,7 +699,7 @@ def test_an_unreachable_cluster_is_a_wait(db, world, status):
     assert _step(move, "cleanup_source")["status"] == "running"
 
 
-@pytest.mark.parametrize("status", [403, 404, 422])
+@pytest.mark.parametrize("status", [404, 422])
 def test_a_refusing_cluster_fails_the_move(db, world, status):
     _apps_on(world.kube, "gcp")
     move = _row(db, done=_before("cleanup_source"))
@@ -711,6 +712,46 @@ def test_a_refusing_cluster_fails_the_move(db, world, status):
 
     assert move.status == "failed"
     assert f"HTTP {status}" in _step(move, "cleanup_source")["detail"]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_an_api_server_refusing_while_it_restarts_is_a_wait(db, world, status):
+    _apps_on(world.kube, "gcp")
+    move = _row(db, done=_before("cleanup_source"))
+
+    def refuse(path, cloud=ONPREM):
+        raise KubeUnavailableError(f"DELETE {path}: HTTP {status}", status)
+
+    with mock.patch.object(steps, "kube_delete", refuse):
+        advance(db, move)
+        assert move.status == "running"
+        assert _step(move, "cleanup_source")["status"] == "running"
+
+        # Still refused once the grace is over: a real refusal.
+        cleanup = next(s for s in move.steps if s["name"] == "cleanup_source")
+        since = steps._now() - steps.REFUSAL_GRACE - timedelta(seconds=1)
+        move.steps = [
+            {**s, "refused_since": since.isoformat()} if s is cleanup else s
+            for s in move.steps
+        ]
+        advance(db, move)
+
+    assert move.status == "failed"
+    assert f"HTTP {status}" in _step(move, "cleanup_source")["detail"]
+
+
+def test_a_step_that_answers_again_forgets_the_refusal(db, world):
+    _apps_on(world.kube, "gcp")
+    move = _row(db, done=_before("cleanup_source"))
+
+    def refuse(path, cloud=ONPREM):
+        raise KubeUnavailableError(f"DELETE {path}: HTTP 403", 403)
+
+    with mock.patch.object(steps, "kube_delete", refuse):
+        advance(db, move)
+    advance(db, move)
+
+    assert "refused_since" not in _step(move, "cleanup_source")
 
 
 def test_a_failed_backup_fails_the_move(db, world):
