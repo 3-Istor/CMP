@@ -28,7 +28,8 @@
       "access": "Accès élevés",
       "accessReviews": "Revues d'accès",
       "issueReports": "Retours des assistants",
-      "placement": "Placement"
+      "placement": "Placement",
+      "agents": "Agents"
     },
     "home": {
       "fallbackName": "Développeur",
@@ -1475,7 +1476,6 @@
     "security": "Sécurité",
     "activity": "Activité",
     "alerts": "Alertes",
-    "assistants": "Assistants IA",
     "seeAll": "Voir tout",
     "noApps": "Aucune application",
     "expandApps": "Afficher les applications",
@@ -1501,7 +1501,8 @@
     "appFilter": "Application",
     "allApps": "Toutes les applications",
     "settings": "Paramètres",
-    "topology": "Topologie"
+    "topology": "Topologie",
+    "ai": "IA"
   },
   "catalog": {
     "iconAlt": "Icône de {name}",
@@ -4088,5 +4089,429 @@
     "step": "Étape {n} sur {total} · {name}",
     "archivingOn": "Archivage actif",
     "archivingOff": "Archivage coupé"
+  },
+  "ai": {
+    "status": {
+      "active": "Actif",
+      "suspended": "Suspendu",
+      "error": "En erreur",
+      "pending": "En création"
+    },
+    "isolation": {
+      "runc": "Conteneur",
+      "gvisor": "gVisor",
+      "kata": "Kata (microVM)",
+      "runcHint": "Conteneur standard, sans exécution de code",
+      "gvisorHint": "Noyau en espace utilisateur : le code exécuté ne touche pas le noyau de l'hôte",
+      "kataHint": "Machine virtuelle légère par tâche : isolation la plus forte"
+    },
+    "risk": {
+      "untrusted_content": "Lit du contenu non fiable",
+      "private_data": "Accède à des données privées",
+      "writes": "Écrit",
+      "external_send": "Sort vers Internet",
+      "executes_code": "Exécute du code"
+    },
+    "ruleOfTwo": {
+      "lampsLabel": "Risques de la Rule of Two",
+      "untrusted_content": "Contenu non fiable",
+      "private_data": "Données privées",
+      "external": "Sortie vers l'extérieur",
+      "on": "allumé",
+      "off": "éteint",
+      "verdict": "{count} sur 3",
+      "laneLabel": "Capacités de {name}",
+      "unnamed": "nouvel-agent",
+      "reads": "Lit",
+      "acts": "Agit",
+      "noSource": "Aucune source",
+      "noAction": "Aucune action",
+      "blocked": "Les trois risques sont cumulés : la création est bloquée. Coupez la tâche en deux agents, un lecteur sans données privées et un acteur avec un seul outil d'écriture.",
+      "a2a": "A2A · sortie structurée",
+      "fromReader": "Sortie structurée de {name}"
+    },
+    "agentCard": {
+      "tokensToday": "tokens aujourd'hui sur {budget}",
+      "budgetLabel": "Budget du jour de {name}",
+      "costToday": "{cost} aujourd'hui"
+    },
+    "trigger": {
+      "chat": "Chat",
+      "event": "Événement",
+      "schedule": "Planifié",
+      "a2a": "Appelé par un agent",
+      "chatHint": "Répond quand un membre lui écrit",
+      "eventHint": "Déclenché par un événement de l'app",
+      "scheduleHint": "Tourne selon un horaire cron",
+      "a2aHint": "Appelé par un autre agent en A2A"
+    },
+    "tab": {
+      "accessSection": "Accès aux modèles",
+      "accessHint": "Modèles, budget et apps du projet qui parlent à la gateway IA.",
+      "loadError": "Impossible de lire la configuration IA du projet.",
+      "accessTitle": "Accès à l'IA",
+      "accessBody": "Les prompts sont envoyés à Anthropic, après masquage des secrets et des données personnelles. Aucune app n'a de clé : la gateway la garde.",
+      "criticalBody": "Un projet critical ne peut pas activer l'IA.",
+      "enabled": "Activé",
+      "disabled": "Désactivé",
+      "enabledToast": "IA activée pour le projet",
+      "disabledToast": "IA désactivée pour le projet",
+      "modelsTitle": "Modèles autorisés",
+      "budgetGauge": "Tokens consommés aujourd'hui",
+      "budgetValue": "{used} sur {budget} tokens",
+      "today": "aujourd'hui",
+      "budgetTitle": "Budget du projet",
+      "tokens": "tokens",
+      "thisMonth": "ce mois, au tarif public d'Anthropic",
+      "alertAt": "Alerte à {pct} % du budget du jour",
+      "appsTitle": "Apps avec accès IA",
+      "appsHint": "Chaque app a son client et son budget du jour ; elle n'a jamais de clé de fournisseur.",
+      "grant": "Donner l'accès IA à une app",
+      "noApps": "Aucune app n'a encore accès à l'IA.",
+      "colApp": "App",
+      "colClient": "Client",
+      "colTokens": "Tokens du jour",
+      "colRefused": "Refus",
+      "colCost": "Coût du jour",
+      "appBudget": "Budget du jour de {app}",
+      "agentsTitle": "Agents hébergés",
+      "agentsHint": "Des agents qui tournent sur la plateforme, avec leur identité, leurs outils et leur isolation.",
+      "createAgent": "Créer un agent",
+      "agentsError": "Impossible de lire les agents du projet.",
+      "noAgents": "Aucun agent pour l'instant",
+      "noAgentsBody": "Décrivez votre agent en une phrase ou partez d'un des six modèles.",
+      "enableFirst": "Activez l'accès à l'IA pour créer un agent.",
+      "assistantsTitle": "Assistants connectés",
+      "assistantsHint": "Claude, ChatGPT et les autres assistants qui agissent sur le projet par le serveur MCP de la CMP."
+    },
+    "backend": {
+      "ok": "En ligne",
+      "unavailable": "Service indisponible",
+      "spend_limit_reached": "Plafond de dépenses atteint",
+      "unknown": "État du backend inconnu",
+      "spend": "Dépensé ce mois : {spent} sur {limit}",
+      "spendLabel": "Dépense du mois de {name}"
+    },
+    "grant": {
+      "title": "Donner l'accès IA à une app",
+      "body": "La CMP crée un client Keycloak pour l'app, range son secret dans Vault et ajoute l'URL de la gateway à ses values.",
+      "none": "Toutes les apps du projet ont déjà accès à l'IA.",
+      "app": "App",
+      "budget": "Budget de tokens par jour",
+      "submit": "Donner l'accès",
+      "done": "Accès donné : client {client}"
+    },
+    "templates": {
+      "pair": "Crée deux agents : lecteur et acteur"
+    },
+    "wizard": {
+      "pageTitle": "Créer un agent",
+      "steps": {
+        "label": "Étapes de la création",
+        "start": "Départ",
+        "identity": "Identité",
+        "model": "Modèle et effort",
+        "tools": "Outils",
+        "risk": "Risque",
+        "summary": "Résumé",
+        "done": "terminée"
+      },
+      "titles": {
+        "start": "Point de départ",
+        "identity": "Identité de l'agent",
+        "model": "Modèle, effort et déclencheur",
+        "tools": "Outils du registre",
+        "risk": "Risque et isolation",
+        "summary": "Ce qui va être créé"
+      },
+      "start": {
+        "describe": "Décrivez votre agent en une phrase",
+        "placeholder": "Par exemple : un bot qui répond aux mentions @grok en vérifiant les faits sur le web",
+        "hint": "La CMP rédige un brouillon complet : modèle, outils, consignes. Vous relisez chaque étape avant de créer.",
+        "draft": "Rédiger",
+        "drafting": "Rédaction",
+        "draftError": "Le brouillon n'a pas pu être rédigé. Réessayez ou partez d'un modèle.",
+        "orTemplate": "Ou partez d'un modèle",
+        "drafted": "Brouillon prêt : relisez chaque étape"
+      },
+      "identity": {
+        "name": "Nom",
+        "nameHint": "Minuscules, chiffres et tirets, 3 à 32 caractères. Il nomme le client et le namespace.",
+        "description": "Description",
+        "owner": "Propriétaire",
+        "ownerPlaceholder": "Vous, par défaut",
+        "instructions": "Consignes",
+        "actorTitle": "Agent acteur",
+        "actorHint": "Le modèle Bot d'app crée deux agents, suffixés -reader et -actor. L'acteur a un seul outil d'écriture et ne voit que la sortie structurée du lecteur.",
+        "repoApp": "Dépôt qui reçoit la PR",
+        "repoAppHint": "L'app du projet dont le dépôt GitHub reçoit le fichier values de l'agent.",
+        "noApp": "Aucune app dans le projet",
+        "actorInstructions": "Consignes de l'acteur"
+      },
+      "model": {
+        "model": "Modèle",
+        "haiku": "Rapide et économique, par défaut",
+        "sonnet": "Plus capable, pour le raisonnement long",
+        "effort": "Effort",
+        "efforts": {
+          "low": "Faible",
+          "medium": "Moyen",
+          "high": "Élevé"
+        },
+        "effortHints": {
+          "low": "Réponses directes, peu de tokens",
+          "medium": "Réfléchit avant d'agir",
+          "high": "Raisonnement approfondi, plus coûteux"
+        },
+        "trigger": "Déclencheur",
+        "cron": "Horaire cron",
+        "maxSteps": "Étapes maximum par tâche",
+        "budget": "Budget de tokens par jour",
+        "actorBudget": "Budget de l'acteur par jour"
+      },
+      "tools": {
+        "platform": "Plateforme",
+        "error": "Impossible de lire le registre des outils.",
+        "hint": "Chaque badge dit ce que l'outil apporte comme risque. La carte à côté se met à jour à chaque choix.",
+        "label": "Outils de l'agent",
+        "reader": "Outils du lecteur {name}",
+        "actor": "Outils de l'acteur {name}"
+      },
+      "risk": {
+        "hint": "Préremplies à partir des outils choisis. Corrigez si l'agent fait plus que ses outils ne le disent.",
+        "fromTools": "d'après les outils",
+        "questions": {
+          "code": "Exécute-t-il du code ?",
+          "untrusted": "Lit-il du contenu non fiable ?",
+          "private": "Accède-t-il à des données privées ?",
+          "external": "Envoie-t-il des données vers l'extérieur ?"
+        },
+        "isolation": "Isolation",
+        "minimum": "minimum",
+        "split": "Trois risques cumulés : coupez la tâche en deux agents avec le modèle Bot d'app, lecteur et acteur.",
+        "isolationResult": "Isolation retenue :"
+      },
+      "summary": {
+        "pr": "Pull request",
+        "prBody": "sur le dépôt de {app}, avec",
+        "client": "Client Keycloak",
+        "namespace": "Namespace",
+        "budget": "Budget",
+        "perDay": "{tokens} tokens par jour",
+        "rights": "Les droits (modèles, outils, budget, isolation) vont dans spec.ai du ProjectRecord. La gateway ne laisse jamais un agent dépasser ces droits.",
+        "yaml": "Voir le YAML proposé"
+      },
+      "created": {
+        "title": "Agent en cours de création",
+        "body": "La PR est ouverte. Une fois fusionnée, Argo CD déploie l'agent et il apparaît actif dans l'onglet IA.",
+        "pr": "Voir la PR n°{number}",
+        "open": "Ouvrir l'agent"
+      },
+      "back": "Retour",
+      "next": "Suivant",
+      "create": "Créer l'agent",
+      "createPair": "Créer les deux agents",
+      "mapLabel": "Carte des capacités",
+      "mapTitle": "Carte des capacités",
+      "live": "en direct",
+      "stepAnnounce": "Étape {n} sur {total} : {title}",
+      "cancel": "Annuler et revenir à l'onglet IA"
+    },
+    "killSwitch": {
+      "suspend": "Couper l'agent",
+      "suspendShort": "Couper",
+      "resume": "Réactiver",
+      "suspending": "Coupure en cours",
+      "resuming": "Réactivation en cours",
+      "suspended": "{name} est coupé. Ses jetons expirent en 5 minutes au plus.",
+      "resumed": "{name} est réactivé.",
+      "failed": "L'action n'a pas abouti",
+      "suspendNamed": "Couper {name}",
+      "resumeNamed": "Réactiver {name}"
+    },
+    "agentPage": {
+      "tabs": {
+        "overview": "Aperçu",
+        "test": "Tester",
+        "traces": "Traces",
+        "capabilities": "Capacités",
+        "access": "Outils et accès",
+        "journal": "Journal"
+      },
+      "tabsLabel": "Sections de l'agent",
+      "loadError": "Agent introuvable ou inaccessible.",
+      "owner": "Propriétaire : {owner}",
+      "suspendedBanner": "Agent suspendu : son client Keycloak est désactivé et il tourne à zéro réplica. Réactivez-le pour le tester.",
+      "prOpen": "PR n°{number} en attente"
+    },
+    "test": {
+      "title": "Chat de test",
+      "hint": "Passe par la gateway, comme en production ; les tokens comptent dans le budget de l'agent.",
+      "session": "Session : {tokens} tokens · {cost}",
+      "reset": "Nouvelle conversation",
+      "conversation": "Conversation de test",
+      "emptyTitle": "Testez {name}",
+      "sampleEvent": "Rejouer un événement d'exemple",
+      "suggestions": {
+        "capabilities": "Que sais-tu faire ?",
+        "tools": "Quels outils peux-tu utiliser ?",
+        "limits": "Qu'est-ce que tu refuses de faire ?"
+      },
+      "thinking": "Réflexion",
+      "working": "Au travail",
+      "answered": "Réponse terminée",
+      "stopped": "Arrêté",
+      "failed": "La réponse a échoué",
+      "showSteps": "{count, plural, one {# étape} other {# étapes}}",
+      "inputLabel": "Message à l'agent",
+      "placeholder": "Écrivez un message",
+      "suspended": "Agent suspendu",
+      "stop": "Arrêter",
+      "send": "Envoyer",
+      "stepsTitle": "Étapes en direct",
+      "openTrace": "Ouvrir la trace",
+      "noSteps": "Les appels de modèle, d'outils et le code exécuté apparaissent ici pendant la réponse.",
+      "stepsOf": "Étapes de la réponse à : {question}",
+      "thisMessage": "Ce message",
+      "tokensInOut": "{in} entrée · {out} sortie",
+      "artifactAlt": "Image produite par l'agent : {name}",
+      "steps": {
+        "model": "Appel du modèle",
+        "tokens": "{in} tokens en entrée, {out} en sortie",
+        "tool": "Outil",
+        "running": "en cours",
+        "args": "Arguments",
+        "result": "Résultat",
+        "resultError": "Erreur",
+        "sandbox": "Code exécuté dans le bac à sable",
+        "exit": "code {code}",
+        "code": "Code Python",
+        "stdout": "Sortie standard",
+        "stderr": "Erreurs",
+        "refusal": "Refusé : {reason}",
+        "serverTool": "côté Anthropic",
+        "timeout": "interrompu"
+      },
+      "loadingArtifact": "Chargement du fichier produit",
+      "maxSteps": "Plafond d'étapes atteint : la réponse s'arrête là."
+    },
+    "refusal": {
+      "budget": "budget atteint",
+      "policy": "politique de la plateforme",
+      "ratelimit": "trop de requêtes",
+      "guardrail": "garde-fou"
+    },
+    "overview": {
+      "error": "Impossible de lire la consommation de l'agent.",
+      "budget": "Budget du jour",
+      "budgetValue": "{used} sur {budget} tokens",
+      "ofBudget": "du budget",
+      "tokensPerDay": "tokens par jour",
+      "hardCap": "Plafond dur, appliqué par la gateway : au-delà, refus 429.",
+      "activity": "Activité sur 24 h",
+      "costToday": "Coût du jour",
+      "costMonth": "Coût du mois",
+      "requests": "Requêtes",
+      "errorRate": "Taux d'erreur",
+      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}"
+    },
+    "traces": {
+      "error": "Impossible de lire les traces.",
+      "empty": "Aucune tâche pour l'instant.",
+      "caption": "Dernières tâches de l'agent",
+      "when": "Quand",
+      "task": "Tâche",
+      "status": "Statut",
+      "duration": "Durée",
+      "statuses": {
+        "ok": "Réussie",
+        "error": "En erreur",
+        "refused": "Refusée"
+      },
+      "grafana": "Explorer les traces dans Grafana",
+      "spans": "Spans",
+      "traceId": "Trace",
+      "errors": "{count, plural, one {# erreur} other {# erreurs}}"
+    },
+    "capabilities": {
+      "hint": "Carte en lecture seule, calculée depuis les outils déclarés : ce que l'agent lit, ce qu'il peut faire, et les trois risques de la Rule of Two.",
+      "calls": "Appelle en A2A :"
+    },
+    "access": {
+      "tools": "Outils autorisés",
+      "callers": "Qui peut l'appeler",
+      "client": "Client :",
+      "agentCard": "Agent Card"
+    },
+    "journal": {
+      "error": "Impossible de lire le journal.",
+      "empty": "Aucune entrée pour l'instant.",
+      "failed": "échec",
+      "actions": {
+        "ai.agent.create": "Agent créé",
+        "ai.agent.update": "Réglages modifiés",
+        "ai.agent.delete": "Agent supprimé",
+        "ai.agent.suspend": "Agent coupé",
+        "ai.agent.resume": "Agent réactivé",
+        "ai.agent.test": "Test depuis la CMP"
+      }
+    },
+    "agents": {
+      "title": "Agents",
+      "description": "Les agents des projets dont vous êtes membre.",
+      "descriptionAdmin": "Tous les agents de la plateforme, les serveurs MCP et les modèles.",
+      "tabMine": "Mes agents",
+      "tabAll": "Tous les agents",
+      "tabMcp": "Outils MCP",
+      "tabModels": "Modèles",
+      "globalBudget": "Budget IA de la plateforme",
+      "globalValue": "{spent} dépensés sur {cap}",
+      "globalHint": "Plafond cumulé, appliqué par la gateway",
+      "globalWarn": "Plus de 80 % du plafond consommé",
+      "globalExhausted": "Plafond atteint : la gateway refuse les appels",
+      "noneTitle": "Aucun agent",
+      "noneBody": "Créez un agent depuis l'onglet IA d'un de vos projets.",
+      "error": "Impossible de lire ces données.",
+      "kpiAgents": "Agents",
+      "kpiActive": "Actifs",
+      "kpiTokens": "Tokens aujourd'hui",
+      "kpiCost": "Coût du jour",
+      "search": "Rechercher un agent, un projet, un propriétaire",
+      "tableCaption": "Inventaire des agents",
+      "colAgent": "Agent",
+      "colProject": "Projet",
+      "colOwner": "Propriétaire",
+      "colIsolation": "Isolation",
+      "colTokens": "Tokens / budget",
+      "colStatus": "Statut",
+      "colLast": "Mis à jour",
+      "colActions": "Actions",
+      "budgetOf": "Budget du jour de {name}",
+      "never": "jamais",
+      "killHint": "Couper désactive le client Keycloak de l'agent et le ramène à zéro réplica ; ses jetons expirent en 5 minutes au plus.",
+      "serverProject": "projet {project}",
+      "serverPlatform": "plateforme",
+      "serverStatus": {
+        "approved": "Approuvé",
+        "pending": "En attente",
+        "retired": "Retiré"
+      }
+    },
+    "finops": {
+      "title": "IA",
+      "total": "{tokens} tokens · {cost} sur {days} jours",
+      "caption": "Tokens et coût par agent ou app",
+      "who": "Agent ou app",
+      "project": "Projet",
+      "tokens": "Tokens",
+      "cost": "Coût",
+      "agent": "agent",
+      "app": "app",
+      "other": "autre"
+    },
+    "appBadge": {
+      "label": "Accès IA",
+      "title": "Budget : {budget} tokens par jour"
+    }
   }
 }

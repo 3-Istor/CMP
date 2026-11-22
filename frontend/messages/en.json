@@ -28,7 +28,8 @@
       "access": "Elevated access",
       "accessReviews": "Access reviews",
       "issueReports": "Assistant reports",
-      "placement": "Placement"
+      "placement": "Placement",
+      "agents": "Agents"
     },
     "home": {
       "fallbackName": "Developer",
@@ -1475,7 +1476,6 @@
     "security": "Security",
     "activity": "Activity",
     "alerts": "Alerts",
-    "assistants": "AI assistants",
     "seeAll": "See all",
     "noApps": "No applications",
     "expandApps": "Show applications",
@@ -1501,7 +1501,8 @@
     "appFilter": "Application",
     "allApps": "All applications",
     "settings": "Settings",
-    "topology": "Topology"
+    "topology": "Topology",
+    "ai": "AI"
   },
   "catalog": {
     "iconAlt": "{name} icon",
@@ -4088,5 +4089,429 @@
     "step": "Step {n} of {total} · {name}",
     "archivingOn": "Archiving on",
     "archivingOff": "Archiving off"
+  },
+  "ai": {
+    "status": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "error": "Failing",
+      "pending": "Being created"
+    },
+    "isolation": {
+      "runc": "Container",
+      "gvisor": "gVisor",
+      "kata": "Kata (microVM)",
+      "runcHint": "Standard container, no code execution",
+      "gvisorHint": "User-space kernel: executed code never touches the host kernel",
+      "kataHint": "One lightweight VM per task: the strongest isolation"
+    },
+    "risk": {
+      "untrusted_content": "Reads untrusted content",
+      "private_data": "Reads private data",
+      "writes": "Writes",
+      "external_send": "Reaches the Internet",
+      "executes_code": "Runs code"
+    },
+    "ruleOfTwo": {
+      "lampsLabel": "Rule of Two risks",
+      "untrusted_content": "Untrusted content",
+      "private_data": "Private data",
+      "external": "Sends outside",
+      "on": "on",
+      "off": "off",
+      "verdict": "{count} of 3",
+      "laneLabel": "Capabilities of {name}",
+      "unnamed": "new-agent",
+      "reads": "Reads",
+      "acts": "Acts",
+      "noSource": "No source",
+      "noAction": "No action",
+      "blocked": "All three risks are combined: creation is blocked. Split the task into two agents, a reader without private data and an actor with a single write tool.",
+      "a2a": "A2A · structured output",
+      "fromReader": "Structured output of {name}"
+    },
+    "agentCard": {
+      "tokensToday": "tokens today of {budget}",
+      "budgetLabel": "Daily budget of {name}",
+      "costToday": "{cost} today"
+    },
+    "trigger": {
+      "chat": "Chat",
+      "event": "Event",
+      "schedule": "Scheduled",
+      "a2a": "Called by an agent",
+      "chatHint": "Answers when a member writes to it",
+      "eventHint": "Triggered by an app event",
+      "scheduleHint": "Runs on a cron schedule",
+      "a2aHint": "Called by another agent over A2A"
+    },
+    "tab": {
+      "accessSection": "Model access",
+      "accessHint": "Models, budget and the project's apps that talk to the AI gateway.",
+      "loadError": "Could not read the project's AI settings.",
+      "accessTitle": "AI access",
+      "accessBody": "Prompts are sent to Anthropic after secrets and personal data are masked. No app holds a key: the gateway keeps it.",
+      "criticalBody": "A critical project cannot enable AI.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "enabledToast": "AI enabled for the project",
+      "disabledToast": "AI disabled for the project",
+      "modelsTitle": "Allowed models",
+      "budgetGauge": "Tokens used today",
+      "budgetValue": "{used} of {budget} tokens",
+      "today": "today",
+      "budgetTitle": "Project budget",
+      "tokens": "tokens",
+      "thisMonth": "this month, at Anthropic list price",
+      "alertAt": "Alert at {pct} % of the daily budget",
+      "appsTitle": "Apps with AI access",
+      "appsHint": "Each app has its own client and daily budget; it never holds a provider key.",
+      "grant": "Give an app AI access",
+      "noApps": "No app has AI access yet.",
+      "colApp": "App",
+      "colClient": "Client",
+      "colTokens": "Tokens today",
+      "colRefused": "Refused",
+      "colCost": "Cost today",
+      "appBudget": "Daily budget of {app}",
+      "agentsTitle": "Hosted agents",
+      "agentsHint": "Agents running on the platform, each with its identity, tools and isolation.",
+      "createAgent": "Create an agent",
+      "agentsError": "Could not read the project's agents.",
+      "noAgents": "No agent yet",
+      "noAgentsBody": "Describe your agent in one sentence or start from one of the six templates.",
+      "enableFirst": "Enable AI access to create an agent.",
+      "assistantsTitle": "Connected assistants",
+      "assistantsHint": "Claude, ChatGPT and other assistants acting on the project through the CMP MCP server."
+    },
+    "backend": {
+      "ok": "Online",
+      "unavailable": "Service unavailable",
+      "spend_limit_reached": "Spend limit reached",
+      "unknown": "Backend state unknown",
+      "spend": "Spent this month: {spent} of {limit}",
+      "spendLabel": "Monthly spend of {name}"
+    },
+    "grant": {
+      "title": "Give an app AI access",
+      "body": "The CMP creates a Keycloak client for the app, stores its secret in Vault and adds the gateway URL to its values.",
+      "none": "Every app of the project already has AI access.",
+      "app": "App",
+      "budget": "Daily token budget",
+      "submit": "Give access",
+      "done": "Access given: client {client}"
+    },
+    "templates": {
+      "pair": "Creates two agents: reader and actor"
+    },
+    "wizard": {
+      "pageTitle": "Create an agent",
+      "steps": {
+        "label": "Creation steps",
+        "start": "Start",
+        "identity": "Identity",
+        "model": "Model and effort",
+        "tools": "Tools",
+        "risk": "Risk",
+        "summary": "Summary",
+        "done": "done"
+      },
+      "titles": {
+        "start": "Starting point",
+        "identity": "Agent identity",
+        "model": "Model, effort and trigger",
+        "tools": "Tools from the registry",
+        "risk": "Risk and isolation",
+        "summary": "What will be created"
+      },
+      "start": {
+        "describe": "Describe your agent in one sentence",
+        "placeholder": "For example: a bot that answers @grok mentions and fact-checks on the web",
+        "hint": "The CMP drafts everything: model, tools, instructions. You review each step before creating.",
+        "draft": "Draft",
+        "drafting": "Drafting",
+        "draftError": "The draft could not be written. Try again or start from a template.",
+        "orTemplate": "Or start from a template",
+        "drafted": "Draft ready: review each step"
+      },
+      "identity": {
+        "name": "Name",
+        "nameHint": "Lowercase letters, digits and dashes, 3 to 32 characters. It names the client and the namespace.",
+        "description": "Description",
+        "owner": "Owner",
+        "ownerPlaceholder": "You, by default",
+        "instructions": "Instructions",
+        "actorTitle": "Actor agent",
+        "actorHint": "The App bot template creates two agents, suffixed -reader and -actor. The actor has a single write tool and only sees the reader's structured output.",
+        "repoApp": "Repository that receives the PR",
+        "repoAppHint": "The project app whose GitHub repository receives the agent's values file.",
+        "noApp": "No app in the project",
+        "actorInstructions": "Actor instructions"
+      },
+      "model": {
+        "model": "Model",
+        "haiku": "Fast and cheap, the default",
+        "sonnet": "More capable, for long reasoning",
+        "effort": "Effort",
+        "efforts": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        },
+        "effortHints": {
+          "low": "Direct answers, few tokens",
+          "medium": "Thinks before acting",
+          "high": "Deep reasoning, costs more"
+        },
+        "trigger": "Trigger",
+        "cron": "Cron schedule",
+        "maxSteps": "Maximum steps per task",
+        "budget": "Daily token budget",
+        "actorBudget": "Actor daily budget"
+      },
+      "tools": {
+        "platform": "Platform",
+        "error": "Could not read the tool registry.",
+        "hint": "Each badge says what risk the tool brings. The map next to it updates with every choice.",
+        "label": "Agent tools",
+        "reader": "Tools of the reader {name}",
+        "actor": "Tools of the actor {name}"
+      },
+      "risk": {
+        "hint": "Prefilled from the chosen tools. Correct them if the agent does more than its tools say.",
+        "fromTools": "from the tools",
+        "questions": {
+          "code": "Does it run code?",
+          "untrusted": "Does it read untrusted content?",
+          "private": "Does it read private data?",
+          "external": "Does it send data outside?"
+        },
+        "isolation": "Isolation",
+        "minimum": "minimum",
+        "split": "Three risks combined: split the task into two agents with the App bot template, reader and actor.",
+        "isolationResult": "Chosen isolation:"
+      },
+      "summary": {
+        "pr": "Pull request",
+        "prBody": "on the repository of {app}, with",
+        "client": "Keycloak client",
+        "namespace": "Namespace",
+        "budget": "Budget",
+        "perDay": "{tokens} tokens per day",
+        "rights": "Rights (models, tools, budget, isolation) go into spec.ai of the ProjectRecord. The gateway never lets an agent exceed them.",
+        "yaml": "Show the proposed YAML"
+      },
+      "created": {
+        "title": "Agent being created",
+        "body": "The PR is open. Once merged, Argo CD deploys the agent and it shows as active in the AI tab.",
+        "pr": "Open PR #{number}",
+        "open": "Open the agent"
+      },
+      "back": "Back",
+      "next": "Next",
+      "create": "Create the agent",
+      "createPair": "Create both agents",
+      "mapLabel": "Capability map",
+      "mapTitle": "Capability map",
+      "live": "live",
+      "stepAnnounce": "Step {n} of {total}: {title}",
+      "cancel": "Cancel and go back to the AI tab"
+    },
+    "killSwitch": {
+      "suspend": "Kill the agent",
+      "suspendShort": "Kill",
+      "resume": "Resume",
+      "suspending": "Killing",
+      "resuming": "Resuming",
+      "suspended": "{name} is killed. Its tokens expire within 5 minutes.",
+      "resumed": "{name} is resumed.",
+      "failed": "The action failed",
+      "suspendNamed": "Kill {name}",
+      "resumeNamed": "Resume {name}"
+    },
+    "agentPage": {
+      "tabs": {
+        "overview": "Overview",
+        "test": "Test",
+        "traces": "Traces",
+        "capabilities": "Capabilities",
+        "access": "Tools and access",
+        "journal": "Journal"
+      },
+      "tabsLabel": "Agent sections",
+      "loadError": "Agent not found or not accessible.",
+      "owner": "Owner: {owner}",
+      "suspendedBanner": "Agent suspended: its Keycloak client is disabled and it runs at zero replicas. Resume it to test it.",
+      "prOpen": "PR #{number} pending"
+    },
+    "test": {
+      "title": "Test chat",
+      "hint": "Goes through the gateway like production; tokens count against the agent's budget.",
+      "session": "Session: {tokens} tokens · {cost}",
+      "reset": "New conversation",
+      "conversation": "Test conversation",
+      "emptyTitle": "Test {name}",
+      "sampleEvent": "Replay a sample event",
+      "suggestions": {
+        "capabilities": "What can you do?",
+        "tools": "Which tools can you use?",
+        "limits": "What do you refuse to do?"
+      },
+      "thinking": "Thinking",
+      "working": "Working",
+      "answered": "Answer complete",
+      "stopped": "Stopped",
+      "failed": "The answer failed",
+      "showSteps": "{count, plural, one {# step} other {# steps}}",
+      "inputLabel": "Message to the agent",
+      "placeholder": "Write a message",
+      "suspended": "Agent suspended",
+      "stop": "Stop",
+      "send": "Send",
+      "stepsTitle": "Live steps",
+      "openTrace": "Open the trace",
+      "noSteps": "Model calls, tool calls and executed code show up here while the agent answers.",
+      "stepsOf": "Steps of the answer to: {question}",
+      "thisMessage": "This message",
+      "tokensInOut": "{in} in · {out} out",
+      "artifactAlt": "Image produced by the agent: {name}",
+      "steps": {
+        "model": "Model call",
+        "tokens": "{in} input tokens, {out} output",
+        "tool": "Tool",
+        "running": "running",
+        "args": "Arguments",
+        "result": "Result",
+        "resultError": "Error",
+        "sandbox": "Code run in the sandbox",
+        "exit": "exit {code}",
+        "code": "Python code",
+        "stdout": "Standard output",
+        "stderr": "Errors",
+        "refusal": "Refused: {reason}",
+        "serverTool": "Anthropic side",
+        "timeout": "interrupted"
+      },
+      "loadingArtifact": "Loading the produced file",
+      "maxSteps": "Step limit reached: the answer stops here."
+    },
+    "refusal": {
+      "budget": "budget reached",
+      "policy": "platform policy",
+      "ratelimit": "too many requests",
+      "guardrail": "guardrail"
+    },
+    "overview": {
+      "error": "Could not read the agent's usage.",
+      "budget": "Daily budget",
+      "budgetValue": "{used} of {budget} tokens",
+      "ofBudget": "of budget",
+      "tokensPerDay": "tokens per day",
+      "hardCap": "Hard cap enforced by the gateway: beyond it, 429.",
+      "activity": "Activity over 24 h",
+      "costToday": "Cost today",
+      "costMonth": "Cost this month",
+      "requests": "Requests",
+      "errorRate": "Error rate",
+      "refusals": "{count, plural, =0 {No refusal} one {# refusal} other {# refusals}}"
+    },
+    "traces": {
+      "error": "Could not read the traces.",
+      "empty": "No task yet.",
+      "caption": "Latest tasks of the agent",
+      "when": "When",
+      "task": "Task",
+      "status": "Status",
+      "duration": "Duration",
+      "statuses": {
+        "ok": "Succeeded",
+        "error": "Failed",
+        "refused": "Refused"
+      },
+      "grafana": "Explore the traces in Grafana",
+      "spans": "Spans",
+      "traceId": "Trace",
+      "errors": "{count, plural, one {# error} other {# errors}}"
+    },
+    "capabilities": {
+      "hint": "Read-only map computed from the declared tools: what the agent reads, what it can do, and the three Rule of Two risks.",
+      "calls": "Calls over A2A:"
+    },
+    "access": {
+      "tools": "Allowed tools",
+      "callers": "Who can call it",
+      "client": "Client:",
+      "agentCard": "Agent Card"
+    },
+    "journal": {
+      "error": "Could not read the journal.",
+      "empty": "No entry yet.",
+      "failed": "failed",
+      "actions": {
+        "ai.agent.create": "Agent created",
+        "ai.agent.update": "Settings changed",
+        "ai.agent.delete": "Agent deleted",
+        "ai.agent.suspend": "Agent killed",
+        "ai.agent.resume": "Agent resumed",
+        "ai.agent.test": "Tested from the CMP"
+      }
+    },
+    "agents": {
+      "title": "Agents",
+      "description": "Agents of the projects you belong to.",
+      "descriptionAdmin": "Every agent of the platform, the MCP servers and the models.",
+      "tabMine": "My agents",
+      "tabAll": "All agents",
+      "tabMcp": "MCP tools",
+      "tabModels": "Models",
+      "globalBudget": "Platform AI budget",
+      "globalValue": "{spent} spent of {cap}",
+      "globalHint": "Cumulative cap enforced by the gateway",
+      "globalWarn": "Over 80 % of the cap used",
+      "globalExhausted": "Cap reached: the gateway refuses calls",
+      "noneTitle": "No agent",
+      "noneBody": "Create an agent from the AI tab of one of your projects.",
+      "error": "Could not read this data.",
+      "kpiAgents": "Agents",
+      "kpiActive": "Active",
+      "kpiTokens": "Tokens today",
+      "kpiCost": "Cost today",
+      "search": "Search an agent, a project, an owner",
+      "tableCaption": "Agent inventory",
+      "colAgent": "Agent",
+      "colProject": "Project",
+      "colOwner": "Owner",
+      "colIsolation": "Isolation",
+      "colTokens": "Tokens / budget",
+      "colStatus": "Status",
+      "colLast": "Updated",
+      "colActions": "Actions",
+      "budgetOf": "Daily budget of {name}",
+      "never": "never",
+      "killHint": "Kill disables the agent's Keycloak client and scales it to zero; its tokens expire within 5 minutes.",
+      "serverProject": "project {project}",
+      "serverPlatform": "platform",
+      "serverStatus": {
+        "approved": "Approved",
+        "pending": "Pending",
+        "retired": "Retired"
+      }
+    },
+    "finops": {
+      "title": "AI",
+      "total": "{tokens} tokens · {cost} over {days} days",
+      "caption": "Tokens and cost per agent or app",
+      "who": "Agent or app",
+      "project": "Project",
+      "tokens": "Tokens",
+      "cost": "Cost",
+      "agent": "agent",
+      "app": "app",
+      "other": "other"
+    },
+    "appBadge": {
+      "label": "AI access",
+      "title": "Budget: {budget} tokens per day"
+    }
   }
 }

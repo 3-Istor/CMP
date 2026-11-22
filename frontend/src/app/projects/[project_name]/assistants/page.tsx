@@ -1,21 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { ProjectAgentPanel } from "@/components/agents/ProjectAgentPanel";
-import {
-  ProjectSection,
-  useProjectContext,
-} from "@/components/projects/ProjectContext";
-import { useTranslations } from "next-intl";
-
-export default function ProjectAssistantsPage() {
-  const t = useTranslations("projectNav");
-  const { projectName, can } = useProjectContext();
-  return (
-    <ProjectSection title={t("assistants")}>
-      <ProjectAgentPanel
-        project={projectName}
-        canConfigure={can("agents.configure")}
-      />
-    </ProjectSection>
-  );
+export default async function ProjectAssistantsPage({
+  params,
+}: {
+  params: Promise<{ project_name: string }>;
+}) {
+  const { project_name } = await params;
+  redirect(`/projects/${encodeURIComponent(project_name)}/ai`);
 }

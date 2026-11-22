@@ -1980,3 +1980,165 @@ export const getProjectPlacement = (project: string) =>
 
 export const getPlatformPlacement = () =>
   request<PlatformPlacement>("/placement");
+
+// AI landing zone: model access, hosted agents
+
+const agentPath = (project: string, agent: string) =>
+  `${projectPath(project)}/agents/${encodeURIComponent(agent)}`;
+
+export const getProjectAi = (project: string) =>
+  request<import("@/types/ai").ProjectAi>(`${projectPath(project)}/ai`);
+
+export const putProjectAi = (
+  project: string,
+  body: { enabled: boolean; models: string[]; web_search: boolean; daily_token_budget: number },
+) =>
+  request<import("@/types/ai").ProjectAi>(`${projectPath(project)}/ai`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+
+export const grantAppAi = (
+  project: string,
+  app: string,
+  body: { enabled: boolean; daily_token_budget: number },
+) =>
+  request<{
+    client_id: string;
+    gateway_url: string;
+    secret_ref: string;
+    pull_request: import("@/types/ai").PullRequestRef | null;
+  }>(`${projectPath(project)}/ai/apps/${encodeURIComponent(app)}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const getProjectAiUsage = (project: string, period: "1d" | "7d" | "30d" = "1d") =>
+  request<import("@/types/ai").AiUsage>(`${projectPath(project)}/ai/usage?period=${period}`);
+
+export const getProjectAiTools = (project: string) =>
+  request<import("@/types/ai").Items<import("@/types/ai").AiTool>>(`${projectPath(project)}/ai/tools`).then(
+    (answer) => answer.items,
+  );
+
+export const getAiBackends = () =>
+  request<import("@/types/ai").Items<import("@/types/ai").AiBackend>>("/ai/backends");
+
+export const getAiBudget = () => request<import("@/types/ai").AiGlobalBudget>("/ai/budget");
+
+export const getAgentTemplates = () =>
+  request<import("@/types/ai").Items<import("@/types/ai").AgentTemplate>>("/ai/templates").then(
+    (answer) => answer.items,
+  );
+
+export const draftAgent = (project: string, prompt: string) =>
+  request<import("@/types/ai").AgentDraft>("/ai/draft-agent", {
+    method: "POST",
+    body: JSON.stringify({ project, prompt }),
+  });
+
+export const getProjectAgents = (project: string) =>
+  request<import("@/types/ai").Items<import("@/types/ai").Agent>>(`${projectPath(project)}/agents`).then(
+    (answer) => answer.items,
+  );
+
+export const getAdminAgents = () =>
+  request<import("@/types/ai").Items<import("@/types/ai").Agent>>("/admin/agents").then((answer) => answer.items);
+
+export const getAdminMcpServers = () =>
+  request<import("@/types/ai").Items<import("@/types/ai").AdminMcpServer>>("/admin/mcp-servers").then(
+    (answer) => answer.items,
+  );
+
+export const createAgent = (project: string, body: import("@/types/ai").CreateAgentRequest) =>
+  request<import("@/types/ai").CreateAgentResult>(`${projectPath(project)}/agents`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const getAgent = (project: string, agent: string) =>
+  request<import("@/types/ai").AgentDetail>(agentPath(project, agent));
+
+export const suspendAgent = (project: string, agent: string) =>
+  request<import("@/types/ai").Agent>(`${agentPath(project, agent)}/suspend`, { method: "POST" });
+
+export const resumeAgent = (project: string, agent: string) =>
+  request<import("@/types/ai").Agent>(`${agentPath(project, agent)}/resume`, { method: "POST" });
+
+export const getAgentUsage = (project: string, agent: string, period: "1d" | "7d" | "30d" = "1d") =>
+  request<import("@/types/ai").AgentUsage>(`${agentPath(project, agent)}/usage?period=${period}`);
+
+export const getAgentTraces = (project: string, agent: string) =>
+  request<import("@/types/ai").AgentTraces>(`${agentPath(project, agent)}/traces?limit=20`);
+
+/**
+ * An artifact the agent produced, as an object URL: the backend serves it
+ * behind the Bearer header, which an <img src> cannot send.
+ */
+export async function fetchAgentArtifact(url: string, signal: AbortSignal): Promise<string> {
+  if (/^(data|blob):/.test(url)) return url;
+  const token = await getAccessToken();
+  const absolute = /^https?:/.test(url) ? url : `${BASE.replace(/\/api\/?$/, "")}${url}`;
+  const res = await fetch(absolute, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.text());
+  return URL.createObjectURL(await res.blob());
+}
+
+/**
+ * Run one test turn and hand each SSE frame to `onEvent` until the server
+ * closes the stream or `signal` aborts. fetch, not EventSource: the request is
+ * a POST with a Bearer header. The frame's `event:` line names its type.
+ */
+export async function streamAgentTest(
+  project: string,
+  agent: string,
+  body: { message: string; history: { role: "user" | "assistant"; content: string }[] },
+  onEvent: (event: import("@/types/ai").AgentTestEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}${agentPath(project, agent)}/test`, {
+    method: "POST",
+    headers: {
+      Accept: "text/event-stream",
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new ApiError(
+      res.status,
+      res.ok ? "empty stream" : errorBody(res.status, res.headers.get("content-type"), await res.text()),
+    );
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += value.replace(/\r\n?/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const lines = buffer.slice(0, boundary).split("\n");
+      buffer = buffer.slice(boundary + 2);
+      const type = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
+      const data = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n");
+      if (data) {
+        const payload = JSON.parse(data);
+        onEvent({ ...payload, type: type ?? payload.type });
+      }
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+}

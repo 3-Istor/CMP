@@ -45,6 +45,8 @@ export type Capability =
   | "finops.act"
   | "finops.editBudget"
   | "agents.configure"
+  | "ai.configure"
+  | "agent.manage"
   | "topology.view"
   | "topology.link"
   | "import.manage"
@@ -81,6 +83,9 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "finops.act": "admin",
   "finops.editBudget": "owner",
   "agents.configure": "admin",
+  // Mirrors the ai.configure, agent.create/update/suspend/delete stake actions.
+  "ai.configure": "admin",
+  "agent.manage": "admin",
   // Mirrors backend routers/topology.py and routers/imports.py.
   "topology.view": "member",
   "topology.link": "admin",

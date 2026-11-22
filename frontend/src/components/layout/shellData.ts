@@ -14,6 +14,7 @@ import {
   KeyRound,
   Map as MapIcon,
   MessageSquareWarning,
+  Plug,
   Shield,
   UserCheck,
   Wallet,
@@ -30,6 +31,7 @@ export type PageKey =
   | "security"
   | "activity"
   | "alerts"
+  | "agents"
   | "assistants"
   | "access"
   | "accessReviews"
@@ -99,9 +101,15 @@ export const PLATFORM_PAGES: PageEntry[] = [
     isActive: (pathname) => pathname.startsWith("/alerts"),
   },
   {
+    key: "agents",
+    href: "/agents",
+    icon: Bot,
+    isActive: (pathname) => pathname === "/agents" || pathname.includes("/ai/agents/"),
+  },
+  {
     key: "assistants",
     href: "/connect-ai",
-    icon: Bot,
+    icon: Plug,
     isActive: (pathname) => pathname.startsWith("/connect-ai"),
   },
   {

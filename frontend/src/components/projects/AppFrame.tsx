@@ -1,5 +1,6 @@
 "use client";
 
+import { AiAccessBadge } from "@/components/ai/AiAccessBadge";
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { Breadcrumbs } from "@/components/layout/PageHeader";
 import { projectHref } from "@/components/layout/projectSections";
@@ -343,6 +344,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                     </span>
                   )}
                   <ScoreBadge card={scoreCard} />
+                  <AiAccessBadge project={projectName} app={current.name} />
                   <FavoriteToggle kind="app" id={current.id} />
                 </div>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
