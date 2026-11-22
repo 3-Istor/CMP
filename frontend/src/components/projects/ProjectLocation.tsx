@@ -15,7 +15,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const cloudName = (cloud: string) => cloud.toUpperCase();
+const cloudName = (cloud: string) => (cloud === "onprem" ? "On-prem" : cloud.toUpperCase());
+
+type MoveTarget = "onprem" | "public";
 
 function StepIcon({ status }: { status: string }) {
   if (status === "done") return <CircleCheck className="h-4 w-4 text-emerald-600" aria-hidden />;
@@ -60,19 +62,31 @@ export function ProjectLocation() {
   const t = useTranslations("projectSettings.location");
   const { projectName, targetCloud, can, move, setMove } = useProjectContext();
   const { health } = useGlobalHealth(0);
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<MoveTarget | null>(null);
   const [dataLoss, setDataLoss] = useState(false);
   const [lost, setLost] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   if (!targetCloud) return null;
-  if (targetCloud === "onprem") {
-    return <p className="text-sm text-muted-foreground">{t("onprem")}</p>;
-  }
 
-  const target = targetCloud === "aws" ? "gcp" : "aws";
-  const targetName = cloudName(target);
-  const targetUp = health?.clusters.some((c) => c.cloud === target && c.state === "up") ?? false;
+  const up = (cloud: string) => health?.clusters.some((c) => c.cloud === cloud && c.state === "up") ?? false;
+  // From a public cloud the "public" target is the other one; from on-prem, any public cloud that is up.
+  const other = targetCloud === "aws" ? "gcp" : "aws";
+  const options: { target: MoveTarget; label: string; enabled: boolean; down?: string }[] =
+    targetCloud === "onprem"
+      ? [
+          {
+            target: "public",
+            label: t("movePublic"),
+            enabled: up("aws") || up("gcp"),
+            down: t("publicName"),
+          },
+        ]
+      : [
+          { target: "onprem", label: t("moveOnprem"), enabled: true },
+          { target: "public", label: t("move", { cloud: cloudName(other) }), enabled: up(other), down: cloudName(other) },
+        ];
+  const confirmName = confirming === "onprem" ? cloudName("onprem") : targetCloud === "onprem" ? t("publicName") : cloudName(other);
   const canMove = can("project.move");
 
   const act = (action: "retry" | "cancel") => {
@@ -85,7 +99,7 @@ export function ProjectLocation() {
   };
 
   const start = async () => {
-    setMove(await startMove(projectName, dataLoss));
+    setMove(await startMove(projectName, dataLoss, confirming ?? "public"));
   };
 
   return (
@@ -101,24 +115,25 @@ export function ProjectLocation() {
             </div>
             {canMove && !move && (
               <div className="flex items-center gap-3">
-                {health && !targetUp && (
-                  <span className="text-sm text-muted-foreground">{t("notUp", { cloud: targetName })}</span>
-                )}
-                <Button
-                  variant="outline"
-                  disabled={!targetUp}
-                  onClick={() => {
-                    setDataLoss(false);
-                    setLost([]);
-                    setConfirming(true);
-                    // On failure the move request itself names what would be lost.
-                    getMoveDataLoss(projectName)
-                      .then(setLost)
-                      .catch(() => setLost([]));
-                  }}
-                >
-                  {t("move", { cloud: targetName })}
-                </Button>
+                {options.map((o) => (
+                  <Button
+                    key={o.target}
+                    variant="outline"
+                    disabled={!o.enabled}
+                    title={health && !o.enabled ? t("notUp", { cloud: o.down ?? "" }) : undefined}
+                    onClick={() => {
+                      setDataLoss(false);
+                      setLost([]);
+                      setConfirming(o.target);
+                      // On failure the move request itself names what would be lost.
+                      getMoveDataLoss(projectName)
+                        .then(setLost)
+                        .catch(() => setLost([]));
+                    }}
+                  >
+                    {o.label}
+                  </Button>
+                ))}
               </div>
             )}
           </div>
@@ -159,11 +174,11 @@ export function ProjectLocation() {
       </Card>
 
       <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
         level={2}
-        title={t("confirmTitle", { name: projectName, cloud: targetName })}
-        description={t("confirmDescription", { cloud: targetName })}
+        title={t("confirmTitle", { name: projectName, cloud: confirmName })}
+        description={t("confirmDescription", { cloud: confirmName })}
         expectedName={projectName}
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
