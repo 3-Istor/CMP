@@ -769,8 +769,8 @@ async def persist_restores(
 
 
 def _delete_source_namespace(name: str, cloud: TargetCloud):
-    """Delete a namespace of a cluster the project no longer lives on (after
-    the registry switch). The annotation lets the delete through a protected one.
+    """Delete a namespace of a cluster the project does not live on (after
+    the registry switch, or the target of a cancel). The annotation lets the delete through a protected one.
     """
     kube_merge_patch(
         f"{NAMESPACES}/{name}",
@@ -1031,7 +1031,8 @@ def _undo_target(move: ProjectMove) -> str | None:
     for ns in left:
         # A terminating namespace answers 409 to a second DELETE.
         if not ns["metadata"].get("deletionTimestamp"):
-            kube_delete(f"{NAMESPACES}/{ns['metadata']['name']}", cloud=cloud)
+            # Prepare gave them the protection label; the project lives on the source.
+            _delete_source_namespace(ns["metadata"]["name"], cloud)
     names = [ns["metadata"]["name"] for ns in left]
     return f"Deleting {', '.join(names)} on {move.target}" if names else None
 

@@ -1579,3 +1579,19 @@ def test_cleanup_marks_the_namespace_before_deleting_it(db, world):
     assert ns["metadata"]["annotations"][steps.MOVE_CLEANUP] == "true"
     kinds = [e[0] for e in world.log if e[2].endswith("/alpha-shop")]
     assert kinds == ["patch", "delete"]
+
+
+def test_a_cancel_marks_the_target_namespace_before_deleting_it(db, world):
+    kube = world.kube
+    kube.add(ONPREM, f"{ARGOCD}/applications", _app("alpha-bootstrap", "aws"))
+    kube.items[(ONPREM, f"{ARGOCD}/applications")] = [
+        _app("alpha-bootstrap", "aws")
+    ]
+    move = _row(db, status="cancelling")
+
+    advance(db, move)
+
+    ns = kube.get(f"{NAMESPACES}/alpha-shop", cloud=GCP)
+    assert ns["metadata"]["annotations"][steps.MOVE_CLEANUP] == "true"
+    kinds = [e[0] for e in world.log if e[2].endswith("/alpha-shop")]
+    assert kinds == ["patch", "delete"]
