@@ -4205,6 +4205,19 @@
       "submit": "Donner l'accès",
       "done": "Accès donné : client {client}"
     },
+    "templateGallery": {
+      "tools": "Outils suggérés",
+      "noTools": "Aucun outil suggéré",
+      "ruleOfTwo": "Rule of Two",
+      "use": "Utiliser ce modèle",
+      "pickTitle": "Utiliser le modèle {template}",
+      "pickHint": "Choisissez le projet qui accueillera l'agent : l'assistant de création s'ouvre prérempli.",
+      "project": "Projet",
+      "noProject": "Vous n'êtes membre d'aucun projet.",
+      "cancel": "Annuler",
+      "open": "Ouvrir l'assistant",
+      "error": "Impossible de lire les modèles d'agents."
+    },
     "templates": {
       "pair": "Crée deux agents : lecteur et acteur"
     },
@@ -4468,7 +4481,8 @@
       "tabMine": "Mes agents",
       "tabAll": "Tous les agents",
       "tabMcp": "Outils MCP",
-      "tabModels": "Modèles",
+      "tabModels": "Fournisseurs IA",
+      "tabTemplates": "Modèles",
       "globalBudget": "Budget IA de la plateforme",
       "globalValue": "{spent} dépensés sur {cap}",
       "globalHint": "Plafond cumulé, appliqué par la gateway",

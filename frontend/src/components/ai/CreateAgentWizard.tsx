@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CapabilityMap, type CapabilityNode } from "./CapabilityMap";
@@ -59,7 +60,7 @@ import { agentHref } from "./AgentCard";
 import { IsolationBadge, RiskBadge, useAiFormat } from "./shared";
 
 // Lucide names used by app-templates agents/*.yaml `icon`.
-const TEMPLATE_ICON: Record<string, LucideIcon> = {
+export const TEMPLATE_ICON: Record<string, LucideIcon> = {
   sparkles: Sparkles,
   "book-open-text": BookOpenText,
   "chart-column": ChartColumn,
@@ -68,7 +69,7 @@ const TEMPLATE_ICON: Record<string, LucideIcon> = {
   "git-pull-request": GitPullRequest,
 };
 
-function templateBadges(template: AgentTemplate): ToolRisk[] {
+export function templateBadges(template: AgentTemplate): ToolRisk[] {
   return [...new Set(template.suggested_tools.flatMap((tool) => tool.badges ?? []))];
 }
 
@@ -648,6 +649,17 @@ export function CreateAgentWizard() {
     );
     go(1);
   };
+  const asked = useSearchParams().get("template");
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !asked || !templates.data || step !== 0) return;
+    const template = templates.data.find((tpl) => tpl.id === asked);
+    if (!template) return;
+    prefilled.current = true;
+    pickTemplate(template);
+    // pickTemplate is recreated every render; the ref makes this run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked, templates.data, step]);
   const pickDraft = (draft: AgentDraft) => {
     setState((s) => ({ ...fromBlock(s, draft.template, draft.agent, draft.actor), name: draft.name ?? "" }));
     toast.success(t("start.drafted"));

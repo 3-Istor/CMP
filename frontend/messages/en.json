@@ -4205,6 +4205,19 @@
       "submit": "Give access",
       "done": "Access given: client {client}"
     },
+    "templateGallery": {
+      "tools": "Suggested tools",
+      "noTools": "No suggested tool",
+      "ruleOfTwo": "Rule of Two",
+      "use": "Use this template",
+      "pickTitle": "Use the {template} template",
+      "pickHint": "Pick the project that will host the agent: the creation wizard opens prefilled.",
+      "project": "Project",
+      "noProject": "You are not a member of any project.",
+      "cancel": "Cancel",
+      "open": "Open the wizard",
+      "error": "Could not read the agent templates."
+    },
     "templates": {
       "pair": "Creates two agents: reader and actor"
     },
@@ -4468,7 +4481,8 @@
       "tabMine": "My agents",
       "tabAll": "All agents",
       "tabMcp": "MCP tools",
-      "tabModels": "Models",
+      "tabModels": "AI providers",
+      "tabTemplates": "Templates",
       "globalBudget": "Platform AI budget",
       "globalValue": "{spent} spent of {cap}",
       "globalHint": "Cumulative cap enforced by the gateway",
