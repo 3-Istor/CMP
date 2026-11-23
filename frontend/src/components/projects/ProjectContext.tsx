@@ -24,7 +24,7 @@ const IN_PROGRESS = [
   "deleting",
 ];
 
-interface ProjectContextValue {
+export interface ProjectContextValue {
   projectName: string;
   role: ProjectRole | null;
   targetCloud: TargetCloud | null;
@@ -39,7 +39,7 @@ interface ProjectContextValue {
   setMove: (move: ProjectMove | null) => void;
 }
 
-const ProjectContext = createContext<ProjectContextValue | null>(null);
+export const ProjectContext = createContext<ProjectContextValue | null>(null);
 
 export function useProjectContext(): ProjectContextValue {
   const value = useContext(ProjectContext);

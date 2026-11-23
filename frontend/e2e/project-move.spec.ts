@@ -52,7 +52,7 @@ test("admin moves the project once, with the name typed", async ({ page }) => {
   await shot(page, "2-confirm-dialog");
   await page.getByRole("button", { name: "Move", exact: true }).click();
   await expect.poll(() => posts.length).toBe(1);
-  expect(posts[0]).toEqual({ confirm_data_loss: false });
+  expect(posts[0]).toEqual({ confirm_data_loss: false, target: "public" });
 });
 
 test("data that starts empty needs the data loss box", async ({ page }) => {
@@ -71,7 +71,7 @@ test("data that starts empty needs the data loss box", async ({ page }) => {
   await page.getByLabel("Data in demo-app, shop (staging) will be lost").check();
   await page.getByLabel(/Type/).fill("demo");
   await page.getByRole("button", { name: "Move", exact: true }).click();
-  await expect.poll(() => body).toEqual({ confirm_data_loss: true });
+  await expect.poll(() => body).toEqual({ confirm_data_loss: true, target: "public" });
 });
 
 test("a member has no move button", async ({ page }) => {
@@ -86,7 +86,7 @@ test("the button is disabled while the other cloud is down", async ({ page }) =>
   await installMockApi(page, { ...VARIANTS.aws, "/infra/health": { json: health }, "/projects/demo/moves/current": { json: null } });
   await page.goto("/projects/demo/settings");
   await expect(page.getByRole("button", { name: "Move to GCP" })).toBeDisabled();
-  await expect(page.getByText("GCP is not up.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Move to GCP" })).toHaveAttribute("title", "GCP is not up.");
 });
 
 test("an active move shows the banner and the steps", async ({ page }) => {
@@ -139,11 +139,10 @@ test("a failed move offers Retry", async ({ page }) => {
   await shot(page, "5-failed");
 });
 
-test("an on-prem project cannot move", async ({ page }) => {
-  await installMockApi(page, { "/projects/demo/moves/current": { json: null } });
+test("an on-prem project moves to a public cloud", async ({ page }) => {
+  await installMockApi(page, { ...nothingLost, "/projects/demo/moves/current": { json: null } });
   await page.goto("/projects/demo/settings");
-  await expect(page.getByText("Moving on-prem projects is not available yet.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Move to/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Move to public cloud" })).toBeVisible();
   await shot(page, "6-onprem");
 });
 
@@ -168,4 +167,44 @@ test("a done move shows in the notifications", async ({ page }) => {
   await page.goto("/projects/demo/settings");
   await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
   await expect(page.getByText("demo now runs on GCP")).toBeVisible();
+});
+
+test("a source that is not up still moves, with the last WAL of each database first", async ({ page }) => {
+  const health = { openstack_hypervisors: [], clusters: [{ cloud: "aws", state: "degraded" }, { cloud: "gcp", state: "up" }] };
+  await installMockApi(page, {
+    ...VARIANTS.aws,
+    "/infra/health": { json: health },
+    ...nothingLost,
+    "/projects/demo/moves/last-wal": { json: [{ database: "demo-db", last_wal_at: "2026-11-23T14:02:00Z", reason: null }] },
+    "/projects/demo/moves/current": { json: null },
+  });
+  await page.goto("/projects/demo/settings");
+  await page.getByRole("button", { name: "Move to GCP" }).click();
+  await expect(page.getByText("What will be lost")).toBeVisible();
+  await expect(page.getByText(/Data written after .* will be lost \(demo-db\)/)).toBeVisible();
+  await shot(page, "3-source-down-dialog");
+});
+
+test("the overview moves the project in two clicks", async ({ page }) => {
+  const posts: unknown[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/api/projects/demo/move")) posts.push(r.postDataJSON());
+  });
+  await installMockApi(page, { ...VARIANTS.aws, ...nothingLost, "/projects/demo/moves/current": { json: null }, "/projects/demo/move": accepted });
+  await page.goto("/projects/demo");
+  await expect(page.getByRole("article", { name: "AWS" })).toBeVisible();
+  await page.getByRole("button", { name: "Move", exact: true }).click();
+  await shot(page, "7-popover");
+  await page.getByRole("button", { name: /GCP/ }).click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0]).toEqual({ confirm_data_loss: false, target: "public" });
+});
+
+test("a down target is listed but cannot be picked", async ({ page }) => {
+  const health = { openstack_hypervisors: [], clusters: [{ cloud: "aws", state: "up" }, { cloud: "gcp", state: "down" }] };
+  await installMockApi(page, { ...VARIANTS.aws, "/infra/health": { json: health }, "/projects/demo/moves/current": { json: null } });
+  await page.goto("/projects/demo");
+  await page.getByRole("button", { name: "Move", exact: true }).click();
+  await expect(page.getByRole("button", { name: /GCP/ })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("GCP is not up.")).toBeVisible();
 });

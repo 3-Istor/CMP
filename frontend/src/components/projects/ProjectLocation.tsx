@@ -1,15 +1,16 @@
 "use client";
 
 import { errorMessage } from "@/components/activity/labels";
+import { ClusterGlyph, type GlyphCloud } from "@/components/cluster/ClusterGlyph";
+import { useClusterStates } from "@/components/cluster/useClusterStates";
 import { useProjectContext } from "@/components/projects/ProjectContext";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
-import { type ProjectMove, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
+import { type LastWal, type ProjectMove, getLastWal, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
 import { useGlobalHealth } from "@/lib/hooks";
-import { CircleAlert, CircleCheck, Circle, Loader2 } from "lucide-react";
+import { ArrowRight, CircleAlert, CircleCheck, Circle, Loader2, SkipForward } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,9 +20,21 @@ const cloudName = (cloud: string) => (cloud === "onprem" ? "On-prem" : cloud.toU
 
 type MoveTarget = "onprem" | "public";
 
+/** Source and target as glyphs; the state ring only on the source, the target of a "public" move being picked by the platform. */
+function Route({ from, to, fromState }: { from: GlyphCloud; to: GlyphCloud; fromState?: string }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <ClusterGlyph cloud={from} state={fromState} size="sm" className="mx-1" />
+      <ArrowRight aria-hidden className="size-4 text-muted-foreground" />
+      <ClusterGlyph cloud={to} size="sm" />
+    </span>
+  );
+}
+
 function StepIcon({ status }: { status: string }) {
   if (status === "done") return <CircleCheck className="h-4 w-4 text-emerald-600" aria-hidden />;
   if (status === "running") return <Loader2 className="h-4 w-4 animate-spin" aria-hidden />;
+  if (status === "skipped") return <SkipForward className="h-4 w-4 text-muted-foreground" aria-hidden />;
   if (status === "failed") return <CircleAlert className="h-4 w-4 text-destructive" aria-hidden />;
   return <Circle className="h-4 w-4 text-muted-foreground" aria-hidden />;
 }
@@ -34,7 +47,7 @@ export function MoveBanner() {
   const t = useTranslations("projectSettings.location");
   const { projectName, move } = useProjectContext();
   if (!move) return null;
-  const current = move.steps.find((s) => s.status !== "done") ?? move.steps[move.steps.length - 1];
+  const current = move.steps.find((s) => s.status !== "done" && s.status !== "skipped") ?? move.steps[move.steps.length - 1];
   const cloud = cloudName(move.target);
   return (
     <div role="status" className="mb-6 flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-sm">
@@ -71,10 +84,13 @@ export function MoveButtons() {
   const [confirming, setConfirming] = useState<MoveTarget | null>(null);
   const [dataLoss, setDataLoss] = useState(false);
   const [lost, setLost] = useState<string[]>([]);
+  const [wal, setWal] = useState<LastWal[]>([]);
 
   if (!targetCloud || move || !can("project.move")) return null;
 
   const up = (cloud: string) => health?.clusters.some((c) => c.cloud === cloud && c.state === "up") ?? false;
+  // On-prem is not in the cluster health list; only a public source can be reported not up.
+  const sourceDown = targetCloud !== "onprem" && !!health && !up(targetCloud);
   // From a public cloud the "public" target is the other one; from on-prem, any public cloud that is up.
   const other = targetCloud === "aws" ? "gcp" : "aws";
   const options: { target: MoveTarget; label: string; enabled: boolean; down?: string }[] =
@@ -91,10 +107,12 @@ export function MoveButtons() {
           { target: "onprem", label: t("moveOnprem"), enabled: true },
           { target: "public", label: t("move", { cloud: cloudName(other) }), enabled: up(other), down: cloudName(other) },
         ];
+  const confirmGlyph: GlyphCloud = confirming === "onprem" ? "onprem" : targetCloud === "onprem" ? "public" : other;
   const confirmName = confirming === "onprem" ? cloudName("onprem") : targetCloud === "onprem" ? t("publicName") : cloudName(other);
 
   const start = async () => {
-    setMove(await startMove(projectName, dataLoss, confirming ?? "public"));
+    // With a source that is not up, the typed project name confirms the loss shown in the dialog.
+    setMove(await startMove(projectName, dataLoss || sourceDown, confirming ?? "public"));
   };
 
   return (
@@ -114,6 +132,8 @@ export function MoveButtons() {
               getMoveDataLoss(projectName)
                 .then(setLost)
                 .catch(() => setLost([]));
+              setWal([]);
+              if (sourceDown) getLastWal(projectName).then(setWal).catch(() => setWal([]));
             }}
           >
             {o.label}
@@ -126,10 +146,21 @@ export function MoveButtons() {
         level={2}
         title={t("confirmTitle", { name: projectName, cloud: confirmName })}
         description={t("confirmDescription", { cloud: confirmName })}
+        destructive={sourceDown}
+        consequences={
+          sourceDown
+            ? wal.map((w) =>
+                w.last_wal_at
+                  ? t("lastWal", { time: new Date(w.last_wal_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }), database: w.database })
+                  : t(w.reason ? "lastWalUnknown" : "lastWalNone", { database: w.database }),
+              )
+            : undefined
+        }
         expectedName={projectName}
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
       >
+        <Route from={targetCloud} to={confirmGlyph} fromState={health?.clusters.find((c) => c.cloud === targetCloud)?.state ?? "up"} />
         {lost.length > 0 && (
           <div className="flex items-center gap-2">
             <input
@@ -186,14 +217,18 @@ export function MoveProgress() {
   if (!move) return null;
   return (
     <div className="space-y-3 border-t pt-4">
-      <p className="text-sm font-medium">
-        {move.status === "cancelling" ? t("cancelling") : t("moving", { cloud: cloudName(move.target) })}
+      <p className="flex items-center gap-3 text-sm font-medium">
+        <Route from={move.source as GlyphCloud} to={move.target as GlyphCloud} />
+        <span>{move.status === "cancelling" ? t("cancelling") : t("moving", { cloud: cloudName(move.target) })}</span>
       </p>
       <ol className="space-y-1.5 text-sm">
         {move.steps.map((s) => (
           <li key={s.name} className="flex items-center gap-2">
             <StepIcon status={s.status} />
-            <span>{t(`steps.${s.name}`)}</span>
+            <span className={s.status === "skipped" ? "text-muted-foreground" : undefined}>{t(`steps.${s.name}`)}</span>
+            {s.status === "skipped" && (
+              <span className="text-xs text-muted-foreground">{s.detail ?? t("skipped")}</span>
+            )}
             <span className="ml-auto font-mono text-xs text-muted-foreground">
               {time(s.started_at)}
               {s.finished_at ? ` - ${time(s.finished_at)}` : ""}
@@ -210,17 +245,16 @@ export function MoveProgress() {
 export function ProjectLocation() {
   const t = useTranslations("projectSettings.location");
   const { targetCloud } = useProjectContext();
+  const { states } = useClusterStates();
   if (!targetCloud) return null;
 
   return (
     <Card>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex items-center gap-3 text-sm font-medium">
+            <ClusterGlyph cloud={targetCloud} state={states?.[targetCloud] ?? "unknown"} className="mx-1" />
             {t("runsOn", { cloud: cloudName(targetCloud) })}
-            <Badge variant="outline" className="text-xs">
-              {cloudName(targetCloud)}
-            </Badge>
           </div>
           <MoveButtons />
         </div>

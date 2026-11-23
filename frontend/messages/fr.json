@@ -29,6 +29,7 @@
       "accessReviews": "Revues d'accès",
       "issueReports": "Retours des assistants",
       "placement": "Placement",
+      "emergency": "Urgence",
       "agents": "Agents"
     },
     "home": {
@@ -142,6 +143,7 @@
       "nameHint": "Minuscules, avec des tirets. Par exemple <code>platform-team</code>",
       "clusterState": {
         "checking": "Vérification…",
+        "degraded": "Dégradé",
         "down": "Arrêté",
         "starting": "Démarrage",
         "unknown": "Indisponible"
@@ -2930,6 +2932,10 @@
       "cancelling": "Annulation…",
       "details": "Détails",
       "retry": "Réessayer",
+      "lastWal": "Les données écrites après {time} seront perdues ({database})",
+      "lastWalNone": "Aucun WAL archivé trouvé ({database})",
+      "lastWalUnknown": "Dernier WAL illisible ({database})",
+      "skipped": "Ignoré",
       "cancel": "Annuler le déplacement",
       "steps": {
         "prepare": "Préparer la cible",
@@ -3007,6 +3013,7 @@
       "cloud": {
         "up": "en ligne",
         "down": "éteint",
+        "degraded": "dégradé",
         "starting": "démarrage",
         "unknown": "inconnu"
       }
@@ -4023,6 +4030,33 @@
     "close": "Fermer",
     "reopen": "Rouvrir"
   },
+  "emergency": {
+    "title": "Urgence",
+    "loadFailed": "Impossible de charger la vue d'urgence",
+    "clustersDown": "Clusters hors service",
+    "projectsAffected": "Projets touchés",
+    "movesActive": "Bascules en cours",
+    "movesFailed": "Bascules en échec",
+    "favoritesAffected": "Prioritaires touchés",
+    "actNow": "À traiter",
+    "actNowEmpty": "Aucun projet touché",
+    "movesTitle": "Bascules",
+    "movesEmpty": "Aucune bascule récente",
+    "clustersTitle": "Clusters",
+    "allUp": "Tous les clusters sont up",
+    "healthy": "Clusters sains",
+    "priority": "Prioritaire",
+    "protected": "Protégé",
+    "auto": "Auto",
+    "manual": "Manuel",
+    "apps": "{count, plural, =0 {Aucune app} one {# app} other {# apps}}",
+    "project": "Projet",
+    "route": "Trajet",
+    "step": "Étape",
+    "status": "Statut",
+    "started": "Début",
+    "trigger": "Origine"
+  },
   "placement": {
     "title": "Placement",
     "admin": "Admin",
@@ -4041,6 +4075,7 @@
     "arriving": "En attente d'Argo CD",
     "state": {
       "up": "Actif",
+      "degraded": "Dégradé",
       "down": "Arrêté",
       "starting": "Démarrage",
       "unknown": "Inconnu",
@@ -4540,5 +4575,21 @@
       "done": "Identifiants de {name} provisionnés.",
       "failed": "Le provisionnement n'a pas abouti"
     }
+  },
+  "cluster": {
+    "memory": "Mémoire {pct} %",
+    "room": "Mémoire {pct} %",
+    "unreachable": "API injoignable",
+    "noProject": "Aucun projet",
+    "favorite": "Favori",
+    "protected": "Protégé",
+    "moving": "Bascule en cours",
+    "move": "Déplacer",
+    "moveTitle": "Déplacer {project}",
+    "moveTo": "Déplacer {project} vers {cloud}",
+    "publicCloud": "Cloud public",
+    "sourceIs": "{cloud} est {state}.",
+    "back": "Retour",
+    "runsOn": "Tourne sur"
   }
 }

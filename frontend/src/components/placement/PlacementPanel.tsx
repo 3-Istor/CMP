@@ -1,7 +1,9 @@
 "use client";
 
+import { ClusterGlyph } from "@/components/cluster/ClusterGlyph";
 import { CLOUD_META } from "@/components/finops/format";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -91,7 +93,7 @@ export function PlacementPanel() {
       .reduce((sum, s) => sum + seconds(s.started_at, s.finished_at), 0),
   );
   const stepIndex = move
-    ? (move.steps.findIndex((s) => s.status !== "done") + 1 ||
+    ? (move.steps.findIndex((s) => s.status !== "done" && s.status !== "skipped") + 1 ||
         move.steps.length + 1)
     : 1;
   const events = (move?.steps ?? [])
@@ -205,14 +207,12 @@ export function PlacementPanel() {
             const lane = (
               <div className="flex h-full w-full min-w-0 flex-col gap-3 rounded-xl bg-card p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="flex items-center gap-2 font-semibold">
-                    <Swatch cloud={c.cloud} />
+                  <span className="flex items-center gap-3 font-semibold">
+                    <ClusterGlyph cloud={c.cloud} state={c.state} className="mx-0.5" />
                     {CLOUD_META[c.cloud].label}
                   </span>
                   <span className="flex flex-col items-end gap-1">
-                    <Badge variant={c.state === "up" ? "secondary" : "destructive"}>
-                      {t.has(`state.${c.state}`) ? t(`state.${c.state}`) : c.state}
-                    </Badge>
+                    <CloudStateBadge state={c.state}>{t.has(`state.${c.state}`) ? t(`state.${c.state}`) : c.state}</CloudStateBadge>
                     {(isSource || isTarget) && (
                       <span className="text-xs font-medium text-muted-foreground">
                         {isSource ? t("source") : t("target")}

@@ -205,3 +205,18 @@
   .ai-lamp-on, .ai-caret::after { animation: none; }
   [class*="ai-flow-"] { animation: none !important; }
 }
+
+/* Animated dash of an in-progress move on the emergency map. */
+@keyframes cluster-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+.cluster-flow {
+  animation: cluster-flow 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cluster-flow {
+    animation: none;
+  }
+}

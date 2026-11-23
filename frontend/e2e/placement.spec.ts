@@ -72,6 +72,6 @@ test("platform map lists projects per cluster", async ({ page }) => {
   });
   await page.goto("/placement");
   await expect(page.getByRole("link", { name: /iot/ })).toBeVisible();
-  await expect(page.getByText("71.9 %")).toBeVisible();
+  await expect(page.getByText("72 %")).toBeVisible();
   if (process.env.PLACEMENT_SHOT) await page.screenshot({ path: process.env.PLACEMENT_SHOT.replace(".png", "-map.png") });
 });

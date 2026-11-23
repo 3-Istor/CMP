@@ -29,6 +29,7 @@
       "accessReviews": "Access reviews",
       "issueReports": "Assistant reports",
       "placement": "Placement",
+      "emergency": "Emergency",
       "agents": "Agents"
     },
     "home": {
@@ -142,6 +143,7 @@
       "nameHint": "Lowercase, with hyphens. For example <code>platform-team</code>",
       "clusterState": {
         "checking": "Checking…",
+        "degraded": "Degraded",
         "down": "Stopped",
         "starting": "Starting",
         "unknown": "Unavailable"
@@ -2930,6 +2932,10 @@
       "cancelling": "Cancelling…",
       "details": "Details",
       "retry": "Retry",
+      "lastWal": "Data written after {time} will be lost ({database})",
+      "lastWalNone": "No archived WAL found ({database})",
+      "lastWalUnknown": "Last WAL unreadable ({database})",
+      "skipped": "Skipped",
       "cancel": "Cancel move",
       "steps": {
         "prepare": "Prepare target",
@@ -3007,6 +3013,7 @@
       "cloud": {
         "up": "up",
         "down": "down",
+        "degraded": "degraded",
         "starting": "starting",
         "unknown": "unknown"
       }
@@ -4023,6 +4030,33 @@
     "close": "Close",
     "reopen": "Reopen"
   },
+  "emergency": {
+    "title": "Emergency",
+    "loadFailed": "Could not load the emergency view",
+    "clustersDown": "Clusters not up",
+    "projectsAffected": "Projects affected",
+    "movesActive": "Moves running",
+    "movesFailed": "Moves failed",
+    "favoritesAffected": "Priority affected",
+    "actNow": "Act now",
+    "actNowEmpty": "No project is affected",
+    "movesTitle": "Moves",
+    "movesEmpty": "No recent move",
+    "clustersTitle": "Clusters",
+    "allUp": "All clusters are up",
+    "healthy": "Healthy clusters",
+    "priority": "Priority",
+    "protected": "Protected",
+    "auto": "Auto",
+    "manual": "Manual",
+    "apps": "{count, plural, =0 {No apps} one {# app} other {# apps}}",
+    "project": "Project",
+    "route": "Route",
+    "step": "Step",
+    "status": "Status",
+    "started": "Started",
+    "trigger": "Trigger"
+  },
   "placement": {
     "title": "Placement",
     "admin": "Admin",
@@ -4041,6 +4075,7 @@
     "arriving": "Waiting for Argo CD",
     "state": {
       "up": "Up",
+      "degraded": "Degraded",
       "down": "Down",
       "starting": "Starting",
       "unknown": "Unknown",
@@ -4540,5 +4575,21 @@
       "done": "Credentials of {name} provisioned.",
       "failed": "Provisioning failed"
     }
+  },
+  "cluster": {
+    "memory": "Memory {pct} %",
+    "room": "Memory {pct} %",
+    "unreachable": "API unreachable",
+    "noProject": "No project",
+    "favorite": "Favorite",
+    "protected": "Protected",
+    "moving": "Moving",
+    "move": "Move",
+    "moveTitle": "Move {project}",
+    "moveTo": "Move {project} to {cloud}",
+    "publicCloud": "Public cloud",
+    "sourceIs": "{cloud} is {state}.",
+    "back": "Back",
+    "runsOn": "Runs on"
   }
 }
