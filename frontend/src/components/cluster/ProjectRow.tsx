@@ -44,9 +44,9 @@ export function ProjectRow({
             {t("moving")}
           </span>
         )}
-        {total}
         <span className="ml-auto">{action}</span>
       </div>
+      {total && <div className="-mt-1">{total}</div>}
       {apps && <div className="flex flex-wrap gap-1.5">{apps}</div>}
     </div>
   );
