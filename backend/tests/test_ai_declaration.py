@@ -200,6 +200,26 @@ def test_app_mcp_tools_are_prefixed_and_badged():
     ]
 
 
+def test_tools_declared_with_their_final_names_are_not_prefixed_twice():
+    tools = catalog.mcp_tools(
+        "epitweet-mcp",
+        {
+            "mcp": {
+                "enabled": True,
+                "tools": [
+                    "epitweet-mcp__get_thread",
+                    "epitweet-mcp__reply_as_grok",
+                ],
+            }
+        },
+    )
+
+    assert [(t["name"], t["badges"]) for t in tools] == [
+        ("epitweet-mcp__get_thread", ["untrusted_content"]),
+        ("epitweet-mcp__reply_as_grok", ["writes", "external_send"]),
+    ]
+
+
 def test_private_app_data_is_badged_private():
     tools = catalog.mcp_tools(
         "crm",
