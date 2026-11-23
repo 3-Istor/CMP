@@ -33,7 +33,7 @@ def _move(project, status="running", reason="button", day=1):
     )
 
 
-def test_projects_sorted_down_first_then_protected_then_favorite():
+def test_projects_sorted_favorites_then_down():
     states = {"onprem": "up", "aws": "degraded", "gcp": "down"}
     records = [
         _rec("fine", "onprem"),
@@ -44,25 +44,26 @@ def test_projects_sorted_down_first_then_protected_then_favorite():
     ]
     body = emergency.build(states, records, [], {"b-fav"})
     assert [p["name"] for p in body["projects"]] == [
-        "c-prot",
         "b-fav",
+        "c-prot",
         "d-plain",
         "a-plain",
     ]
-    assert body["projects"][1]["favorite"] is True
-    assert body["projects"][0]["protected"] is True
+    assert body["projects"][0]["favorite"] is True
+    assert body["projects"][1]["protected"] is True
 
 
 def test_moves_active_and_auto_first_with_current_step():
     moves = [
         _move("old", status="done", day=3),
         _move("manual", day=1),
+        _move("broken", status="failed", day=4),
         _move("auto", reason="outage", day=2),
     ]
     rows = emergency.build({}, [], moves, set())["moves"]
-    assert [m["project"] for m in rows] == ["auto", "manual", "old"]
-    assert rows[0]["auto"] is True and rows[1]["auto"] is False
-    assert rows[0]["step"] == "stop_source"
+    assert [m["project"] for m in rows] == ["broken", "auto", "manual", "old"]
+    assert rows[1]["auto"] is True and rows[2]["auto"] is False
+    assert rows[1]["step"] == "stop_source"
 
 
 def test_requires_platform_admin():

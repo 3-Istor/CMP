@@ -6,7 +6,9 @@ from app.models.project import TargetCloud
 from app.models.project_move import ACTIVE, ProjectMove
 from app.models.user_preference import UserPreference
 from app.services import project_registry
+from app.services.authz import PLATFORM_ADMIN_GROUP
 from app.services.clusters.state import PUBLIC_CLOUDS, cached_state
+from app.services.keycloak_service import list_group_usernames
 
 CLOUDS = (TargetCloud.ONPREM, *PUBLIC_CLOUDS)
 FINISHED_SHOWN = 10
@@ -41,7 +43,7 @@ def build(
     moves: list[ProjectMove],
     favorites: set[str],
 ) -> dict:
-    """Aggregate; projects of clusters that are not up come first-sorted."""
+    """Aggregate: favorites first, then projects on a down cluster."""
     projects = []
     for record in records:
         spec = record.get("spec") or {}
@@ -62,15 +64,15 @@ def build(
         )
     projects.sort(
         key=lambda p: (
-            p["cloud_state"] != "down",
-            not p["protected"],
             not p["favorite"],
+            p["cloud_state"] != "down",
             p["name"],
         )
     )
     rows = sorted(
         (_move_row(m) for m in moves),
         key=lambda m: (
+            m["status"] != "failed",
             m["status"] not in ACTIVE,
             not m["auto"],
             m["started_at"],
@@ -83,13 +85,28 @@ def build(
     }
 
 
-async def overview(db: Session, user_key: str) -> dict:
-    record = (
+def admin_favorites(db: Session, user_key: str) -> set[str]:
+    """Starred projects of every platform admin; the caller's alone if
+    Keycloak cannot list the group."""
+    try:
+        admins = list_group_usernames(PLATFORM_ADMIN_GROUP)
+    except Exception:  # pylint: disable=broad-exception-caught
+        admins = set()
+    admins.add(user_key)
+    records = (
         db.query(UserPreference)
-        .filter(UserPreference.user_sub == user_key)
-        .first()
+        .filter(UserPreference.user_sub.in_(admins))
+        .all()
     )
-    favorites = set(((record and record.favorites) or {}).get("projects", []))
+    return {
+        name
+        for r in records
+        for name in (r.favorites or {}).get("projects", [])
+    }
+
+
+async def overview(db: Session, user_key: str) -> dict:
+    favorites = admin_favorites(db, user_key)
     newest = ProjectMove.created_at.desc()
     active = db.query(ProjectMove).filter(ProjectMove.status.in_(ACTIVE))
     finished = (
