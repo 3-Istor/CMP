@@ -26,6 +26,7 @@ from app.routers import (
     app_overview,
     catalog,
     deployments,
+    emergency,
     environments,
     finops,
     finops_finance,
@@ -457,6 +458,7 @@ app.include_router(links.deployments, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
 app.include_router(orphans.router, prefix="/api")
+app.include_router(emergency.router, prefix="/api")
 app.include_router(placement.router, prefix="/api")
 app.include_router(project_export.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")

@@ -1981,6 +1981,32 @@ export const getProjectPlacement = (project: string) =>
 export const getPlatformPlacement = () =>
   request<PlatformPlacement>("/placement");
 
+export type EmergencyMove = {
+  id: number;
+  project: string;
+  source: string;
+  target: string;
+  step: string | null;
+  status: string;
+  started_at: string;
+  auto: boolean;
+};
+
+export type Emergency = {
+  clusters: { cloud: string; state: string }[];
+  projects: {
+    name: string;
+    cloud: string;
+    cloud_state: string;
+    apps: string[];
+    protected: boolean;
+    favorite: boolean;
+  }[];
+  moves: EmergencyMove[];
+};
+
+export const getEmergency = () => request<Emergency>("/emergency");
+
 // AI landing zone: model access, hosted agents
 
 const agentPath = (project: string, agent: string) =>

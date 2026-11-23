@@ -29,6 +29,7 @@
       "accessReviews": "Access reviews",
       "issueReports": "Assistant reports",
       "placement": "Placement",
+      "emergency": "Emergency",
       "agents": "Agents"
     },
     "home": {
@@ -4022,6 +4023,25 @@
     "markExported": "Mark exported",
     "close": "Close",
     "reopen": "Reopen"
+  },
+  "emergency": {
+    "title": "Emergency",
+    "loadFailed": "Could not load the emergency view",
+    "clusters": "Clusters",
+    "projects": "Projects on clusters not up",
+    "moves": "Moves",
+    "none": "None",
+    "protected": "Protected",
+    "favorite": "Favorite",
+    "auto": "Auto",
+    "manual": "Manual",
+    "apps": "{count, plural, one {# app} other {# apps}}",
+    "project": "Project",
+    "route": "Route",
+    "step": "Step",
+    "status": "Status",
+    "started": "Started",
+    "trigger": "Trigger"
   },
   "placement": {
     "title": "Placement",

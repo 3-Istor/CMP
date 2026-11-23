@@ -29,6 +29,7 @@
       "accessReviews": "Revues d'accès",
       "issueReports": "Retours des assistants",
       "placement": "Placement",
+      "emergency": "Urgence",
       "agents": "Agents"
     },
     "home": {
@@ -4022,6 +4023,25 @@
     "markExported": "Marquer exporté",
     "close": "Fermer",
     "reopen": "Rouvrir"
+  },
+  "emergency": {
+    "title": "Urgence",
+    "loadFailed": "Impossible de charger la vue d'urgence",
+    "clusters": "Clusters",
+    "projects": "Projets sur clusters hors service",
+    "moves": "Bascules",
+    "none": "Aucun",
+    "protected": "Protégé",
+    "favorite": "Favori",
+    "auto": "Auto",
+    "manual": "Manuel",
+    "apps": "{count, plural, one {# app} other {# apps}}",
+    "project": "Projet",
+    "route": "Trajet",
+    "step": "Étape",
+    "status": "Statut",
+    "started": "Début",
+    "trigger": "Origine"
   },
   "placement": {
     "title": "Placement",
