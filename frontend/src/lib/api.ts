@@ -1912,13 +1912,16 @@ export type LastWal = {
 export const getLastWal = (project: string) =>
   request<LastWal[]>(`/projects/${project}/moves/last-wal`);
 
-/** Target room against the project's need; `estimated` when the source cannot be read. */
+/** Target room against the project's need; `basis` says where the need comes from when the source cannot be read live. */
 export type MoveCapacity = {
   target: string;
   need_cpu: number;
   need_memory_bytes: number;
   free_cpu: number | null;
   free_memory_bytes: number | null;
+  basis: "live" | "cache" | "estimate";
+  /** ISO time of the oldest cached measure; null unless basis is "cache". */
+  measured_at: string | null;
   estimated: boolean;
   fits: boolean;
 };
@@ -2020,6 +2023,19 @@ export type EmergencyMove = {
   auto: boolean;
 };
 
+export type AppFootprint = {
+  project: string;
+  app: string;
+  cloud: string;
+  cpu: number;
+  memory_bytes: number;
+  pods: number;
+  measured_at: string;
+};
+
+export const getProjectFootprint = (project: string) =>
+  request<AppFootprint[]>(`/projects/${encodeURIComponent(project)}/moves/footprint`);
+
 export type Emergency = {
   clusters: { cloud: string; state: string }[];
   projects: {
@@ -2028,6 +2044,7 @@ export type Emergency = {
     cloud_state: string;
     apps: string[];
     favorite_apps: string[];
+    footprint: AppFootprint[];
     protected: boolean;
     favorite: boolean;
   }[];

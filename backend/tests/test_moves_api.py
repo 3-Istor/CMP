@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models.project import Project, TargetCloud
+from app.models.project_footprint import ProjectFootprint
 from app.models.project_move import ProjectMove
 from app.routers import moves
 from app.services import keycloak_service
@@ -172,6 +173,23 @@ class TestStart:
             response = http.get("/api/projects/alpha/moves/last-wal")
 
         assert response.json() == found
+
+    def test_footprint_lists_the_project_apps_only(self, env):
+        http, _, db = env
+        at = datetime(2026, 11, 23, 14, 32, tzinfo=timezone.utc)
+        for project in ("alpha", "beta"):
+            db.add(
+                ProjectFootprint(
+                    project=project, app="shop", cloud="aws", cpu=0.1,
+                    memory_bytes=2**27, pods=1, measured_at=at,
+                )
+            )  # fmt: skip
+        db.commit()
+
+        rows = http.get("/api/projects/alpha/moves/footprint").json()
+
+        assert [(r["project"], r["app"]) for r in rows] == [("alpha", "shop")]
+        assert rows[0]["measured_at"].startswith("2026-11-23T14:32")
 
     def test_admin_starts_one_move_and_a_second_is_refused(self, env):
         http, _, db = env

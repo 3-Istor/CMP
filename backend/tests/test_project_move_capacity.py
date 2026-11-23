@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from unittest import mock
 
 import pytest
@@ -9,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
+from app.models.project_footprint import ProjectFootprint
 from app.services.kube_client import KubeUnavailableError
 from app.services.moves import capacity, steps
 from app.services.security import restore_commit
@@ -67,7 +69,7 @@ def test_free_is_allocatable_minus_live_requests():
 
 def test_check_reports_need_free_and_fit():
     with _cluster([_node("2", "4Gi")], [_pod("1200m", "1Gi")]):
-        check = capacity.check((1.2, 2.5 * GIB), GCP, estimated=False)
+        check = capacity.check((1.2, 2.5 * GIB), GCP)
 
     assert check == {
         "target": "gcp",
@@ -75,6 +77,8 @@ def test_check_reports_need_free_and_fit():
         "need_memory_bytes": 2.5 * GIB,
         "free_cpu": 0.8,
         "free_memory_bytes": 3 * GIB,
+        "basis": "live",
+        "measured_at": None,
         "estimated": False,
         "fits": False,
     }
@@ -85,13 +89,13 @@ def test_check_reports_need_free_and_fit():
 
 def test_enough_room_or_an_unknown_target_fits():
     with _cluster([_node("4", "8Gi")], []):
-        assert capacity.check((1, GIB), GCP, False)["fits"] is True
+        assert capacity.check((1, GIB), GCP)["fits"] is True
 
     def forbidden(*_a, **_k):
         raise KubeUnavailableError("nodes", 403)
 
     with mock.patch.object(capacity, "kube_list", forbidden):
-        unknown = capacity.check((99, 99 * GIB), GCP, False)
+        unknown = capacity.check((99, 99 * GIB), GCP)
 
     assert unknown["fits"] is True and unknown["free_cpu"] is None
 
@@ -149,8 +153,8 @@ def test_a_two_app_project_estimate_with_its_system_part():
 
 def test_an_estimate_over_the_room_warns_and_a_real_need_refuses():
     with _cluster([_node("1", "2Gi")], []):
-        estimated = capacity.check((2, GIB), GCP, estimated=True)
-        real = capacity.check((2, GIB), GCP, estimated=False)
+        estimated = capacity.check((2, GIB), GCP, "estimate")
+        real = capacity.check((2, GIB), GCP)
 
     assert estimated["fits"] is False and estimated["estimated"] is True
     assert "estimated" in capacity.message(estimated)
@@ -183,6 +187,55 @@ def test_a_lost_source_is_estimated_from_the_values_and_only_warns(db):
         result = asyncio.run(steps.capacity_check(db, "alpha", AWS, GCP))
         full, warning = asyncio.run(steps._no_room(db, "alpha", AWS, GCP))
 
-    assert result["estimated"] is True and result["fits"] is False
+    assert result["basis"] == "estimate" and result["fits"] is False
     assert round(result["need_cpu"], 3) == round(0.25 + capacity.SYSTEM_CPU, 3)
     assert full is None and "estimated" in warning
+
+
+def _lost_source(db, rows=()):
+    for row in rows:
+        db.add(row)
+    db.commit()
+
+    def lost(*_a, **_k):
+        raise KubeUnavailableError("down")
+
+    return mock.patch.object(steps, "_app_namespaces", lost)
+
+
+def test_a_lost_source_uses_the_cached_footprint_and_only_warns(db):
+    seen = datetime(2026, 11, 23, 14, 32, tzinfo=timezone.utc)
+    rows = [
+        ProjectFootprint(
+            project="alpha", app=app, cloud="aws", cpu=0.6,
+            memory_bytes=GIB, pods=2, measured_at=seen,
+        )
+        for app in ("system", "shop")
+    ]  # fmt: skip
+    with (
+        _lost_source(db, rows),
+        _cluster([_node("1", "8Gi")], [_pod("100m", "1Gi")]),
+    ):
+        result = asyncio.run(steps.capacity_check(db, "alpha", AWS, GCP))
+        full, warning = asyncio.run(steps._no_room(db, "alpha", AWS, GCP))
+
+    assert result["basis"] == "cache" and result["fits"] is False
+    assert result["measured_at"].startswith("2026-11-23T14:32")
+    assert (result["need_cpu"], result["need_memory_bytes"]) == (1.2, 2 * GIB)
+    assert full is None and "last seen" in warning
+
+
+def test_the_cache_of_another_cloud_is_not_used(db):
+    row = ProjectFootprint(
+        project="alpha", app="shop", cloud="gcp", cpu=9, memory_bytes=GIB,
+        pods=1, measured_at=datetime.now(timezone.utc),
+    )  # fmt: skip
+    read = mock.AsyncMock(return_value=[{}])
+    with (
+        _lost_source(db, [row]),
+        mock.patch.object(restore_commit, "read_components", read),
+        _cluster([_node("4", "8Gi")], []),
+    ):
+        result = asyncio.run(steps.capacity_check(db, "alpha", AWS, GCP))
+
+    assert result["basis"] == "estimate" and result["measured_at"] is None

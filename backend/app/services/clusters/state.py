@@ -191,6 +191,12 @@ async def _refresh() -> None:
             logger.info("%s is up, resynced %s", cloud.value, names)
         except (KubeUnavailableError, ValueError) as exc:
             logger.warning("%s is up, resync failed: %s", cloud.value, exc)
+    # Imported here: moves import this module.
+    from app.services.moves import footprint  # pylint: disable=C0415
+
+    # On-prem is up whenever the CMP answers.
+    up = [TargetCloud.ONPREM] + [c for c in PUBLIC_CLOUDS if _cache[c] == "up"]
+    await run_in_threadpool(footprint.refresh_due, up)
 
 
 async def cluster_states() -> dict[TargetCloud, str]:

@@ -39,7 +39,7 @@ from app.services.kube_client import (
     kube_list,
     kube_merge_patch,
 )
-from app.services.moves import active_move, capacity, prepull, wal
+from app.services.moves import active_move, capacity, footprint, prepull, wal
 from app.services.notifications import notify_project, notify_users
 from app.services.orphans import VAULT_AUTH_MOUNTS
 from app.services.security import restore as restores
@@ -168,14 +168,20 @@ async def capacity_check(
     db: Session, project: str, source: TargetCloud, target: TargetCloud
 ) -> dict:
     """The target's room against what the project requests: read on the
-    source, else estimated from the declared values."""
+    source, else its last measured requests, else estimated from the values."""
+    measured_at = None
     try:
         need = await run_in_threadpool(_read_need, project, source)
-        estimated = False
+        basis = "live"
     except (ClusterNotConnectedError, KubeUnavailableError):
-        need = await _estimated_need(db, project)
-        estimated = True
-    return await run_in_threadpool(capacity.check, need, target, estimated)
+        seen = footprint.cached(db, project, source)
+        if seen:
+            (need, measured_at), basis = seen, "cache"
+        else:
+            need, basis = await _estimated_need(db, project), "estimate"
+    return await run_in_threadpool(
+        capacity.check, need, target, basis, measured_at
+    )
 
 
 async def _no_room(

@@ -10,6 +10,7 @@ from app.services import project_registry
 from app.services.authz import PLATFORM_ADMIN_GROUP
 from app.services.clusters.state import PUBLIC_CLOUDS, cached_state
 from app.services.keycloak_service import list_group_usernames
+from app.services.moves import footprint
 
 CLOUDS = (TargetCloud.ONPREM, *PUBLIC_CLOUDS)
 FINISHED_SHOWN = 10
@@ -44,6 +45,7 @@ def build(
     moves: list[ProjectMove],
     favorites: set[str],
     favorite_apps: frozenset[tuple[str, str]] = frozenset(),
+    footprints: list[dict] | None = None,
 ) -> dict:
     """Aggregate: favorites first, then projects on a down cluster."""
     projects = []
@@ -62,6 +64,12 @@ def build(
                 "cloud": cloud,
                 "cloud_state": state,
                 "apps": apps,
+                # Last requests measured on the project's cluster, per app.
+                "footprint": [
+                    f
+                    for f in footprints or []
+                    if f["project"] == name and f["cloud"] == cloud
+                ],
                 "favorite_apps": starred,
                 "protected": spec.get("deletionProtection") is True,
                 "favorite": name in favorites or bool(starred),
@@ -134,4 +142,5 @@ async def overview(db: Session, user_key: str) -> dict:
         [*active.all(), *finished.all()],
         favorites,
         favorite_apps,
+        footprint.rows(db),
     )

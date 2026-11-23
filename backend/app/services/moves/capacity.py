@@ -2,6 +2,7 @@
 the free allocatable CPU and memory of the target nodes."""
 
 import logging
+from datetime import datetime
 
 from app.models.project import TargetCloud
 from app.services.kube_client import (
@@ -9,6 +10,7 @@ from app.services.kube_client import (
     KubeUnavailableError,
     kube_list,
 )
+from app.services.moves import footprint
 from app.services.placement import quantity_bytes
 
 logger = logging.getLogger(__name__)
@@ -85,15 +87,7 @@ def estimate(apps: list[list[dict]]) -> tuple[float, float]:
 
 
 def _requests(pods: list[dict]) -> tuple[float, float]:
-    cpu = memory = 0.0
-    for pod in pods:
-        # A finished pod holds nothing.
-        if (pod.get("status") or {}).get("phase") in ("Succeeded", "Failed"):
-            continue
-        for c in (pod.get("spec") or {}).get("containers") or []:
-            asked = (c.get("resources") or {}).get("requests") or {}
-            cpu += quantity_bytes(asked.get("cpu", "0"))
-            memory += quantity_bytes(asked.get("memory", "0"))
+    cpu, memory, _ = footprint.pod_requests(pods)
     return cpu, memory
 
 
@@ -136,10 +130,14 @@ def free(cloud: TargetCloud) -> tuple[float, float] | None:
 
 
 def check(
-    needed: tuple[float, float], cloud: TargetCloud, estimated: bool
+    needed: tuple[float, float],
+    cloud: TargetCloud,
+    basis: str = "live",
+    measured_at: datetime | None = None,
 ) -> dict:
-    """What *cloud* can take of *needed*. An unknown room fits: the move is
-    not blocked on a guess."""
+    """What *cloud* can take of *needed*; *basis* is live (read on the source),
+    cache (last values seen) or estimate (declared values). An unknown room
+    fits: the move is not blocked on a guess."""
     room = free(cloud)
     fits = room is None or (needed[0] <= room[0] and needed[1] <= room[1])
     return {
@@ -148,15 +146,20 @@ def check(
         "need_memory_bytes": needed[1],
         "free_cpu": None if room is None else max(room[0], 0),
         "free_memory_bytes": None if room is None else max(room[1], 0),
-        "estimated": estimated,
+        "basis": basis,
+        "measured_at": measured_at.isoformat() if measured_at else None,
+        "estimated": basis != "live",
         "fits": fits,
     }
+
+
+_TAG = {"live": "", "cache": " (last seen)", "estimate": " (estimated)"}
 
 
 def message(result: dict) -> str:
     return (
         f"Not enough room on {result['target'].upper()}"
-        f"{' (estimated)' if result['estimated'] else ''}: needs "
+        f"{_TAG[result['basis']]}: needs "
         f"{result['need_cpu']:.1f} CPU / "
         f"{result['need_memory_bytes'] / GIB:.1f} GiB, free "
         f"{result['free_cpu']:.1f} / {result['free_memory_bytes'] / GIB:.1f}"
@@ -164,11 +167,17 @@ def message(result: dict) -> str:
 
 
 def refusal(result: dict) -> str | None:
-    """Only a need read on the source refuses."""
-    return None if result["fits"] or result["estimated"] else message(result)
+    """Only a need read live on the source refuses."""
+    return (
+        None
+        if result["fits"] or result["basis"] != "live"
+        else message(result)
+    )
 
 
 def warning(result: dict) -> str | None:
     return (
-        message(result) if not result["fits"] and result["estimated"] else None
+        message(result)
+        if not result["fits"] and result["basis"] != "live"
+        else None
     )
