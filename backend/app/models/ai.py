@@ -38,6 +38,13 @@ class AiAgent(Base):
     rights: Mapped[dict] = mapped_column(JSON, default=dict)
     declaration: Mapped[dict] = mapped_column(JSON, default=dict)
     pull_request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    settings_status: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
+    settings_read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    credentials: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

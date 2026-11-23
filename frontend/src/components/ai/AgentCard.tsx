@@ -51,15 +51,20 @@ export function AgentCard({ agent }: { agent: Agent }) {
               aria-hidden
             />
           </div>
-          <p className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</p>
+          {agent.settings?.message ? (
+            <p className="text-xs text-amber-700 dark:text-amber-300">{t("settingsMissing")}</p>
+          ) : (
+            <p className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</p>
+          )}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <AgentStatusBadge status={agent.status} />
         {agent.credentials === "missing" && <ProvisionBadge />}
-        <IsolationBadge isolation={agent.isolation} />
+        {agent.isolation && <IsolationBadge isolation={agent.isolation} />}
         <span className="text-xs text-muted-foreground">
-          {tTrigger(agent.trigger.type)} · <span className="font-mono">{agent.model}</span>
+          {agent.trigger && <>{tTrigger(agent.trigger.type)} · </>}
+          <span className="font-mono">{agent.model}</span>
         </span>
       </div>
       <div className="flex items-end justify-between gap-3">

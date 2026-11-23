@@ -4134,7 +4134,8 @@
     "agentCard": {
       "tokensToday": "tokens aujourd'hui sur {budget}",
       "budgetLabel": "Budget du jour de {name}",
-      "costToday": "{cost} aujourd'hui"
+      "costToday": "{cost} aujourd'hui",
+      "settingsMissing": "Réglages introuvables dans le dépôt"
     },
     "trigger": {
       "chat": "Chat",
@@ -4150,6 +4151,7 @@
       "accessSection": "Accès aux modèles",
       "accessHint": "Modèles, budget et apps du projet qui parlent à la gateway IA.",
       "loadError": "Impossible de lire la configuration IA du projet.",
+      "degraded": "Certaines sources sont injoignables pour le moment : affichage des dernières données connues.",
       "accessTitle": "Accès à l'IA",
       "accessBody": "Les prompts sont envoyés à Anthropic, après masquage des secrets et des données personnelles. Aucune app n'a de clé : la gateway la garde.",
       "criticalBody": "Un projet critical ne peut pas activer l'IA.",
@@ -4202,6 +4204,19 @@
       "budget": "Budget de tokens par jour",
       "submit": "Donner l'accès",
       "done": "Accès donné : client {client}"
+    },
+    "templateGallery": {
+      "tools": "Outils suggérés",
+      "noTools": "Aucun outil suggéré",
+      "ruleOfTwo": "Rule of Two",
+      "use": "Utiliser ce modèle",
+      "pickTitle": "Utiliser le modèle {template}",
+      "pickHint": "Choisissez le projet qui accueillera l'agent : l'assistant de création s'ouvre prérempli.",
+      "project": "Projet",
+      "noProject": "Vous n'êtes membre d'aucun projet.",
+      "cancel": "Annuler",
+      "open": "Ouvrir l'assistant",
+      "error": "Impossible de lire les modèles d'agents."
     },
     "templates": {
       "pair": "Crée deux agents : lecteur et acteur"
@@ -4343,6 +4358,7 @@
       "tabsLabel": "Sections de l'agent",
       "loadError": "Agent introuvable ou inaccessible.",
       "owner": "Propriétaire : {owner}",
+      "settingsMissing": "Réglages introuvables dans le dépôt : {path} manque ou est illisible dans {repo}. Le modèle, le déclencheur et les consignes ne sont pas affichés tant que le fichier n'est pas lu.",
       "suspendedBanner": "Agent suspendu : son client Keycloak est désactivé et il tourne à zéro réplica. Réactivez-le pour le tester.",
       "prOpen": "PR n°{number} en attente"
     },
@@ -4465,7 +4481,8 @@
       "tabMine": "Mes agents",
       "tabAll": "Tous les agents",
       "tabMcp": "Outils MCP",
-      "tabModels": "Modèles",
+      "tabModels": "Fournisseurs IA",
+      "tabTemplates": "Modèles",
       "globalBudget": "Budget IA de la plateforme",
       "globalValue": "{spent} dépensés sur {cap}",
       "globalHint": "Plafond cumulé, appliqué par la gateway",

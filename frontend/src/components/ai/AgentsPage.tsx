@@ -27,6 +27,7 @@ import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AgentCard, agentHref } from "./AgentCard";
 import { AgentStatusBadge, BarGauge, IsolationBadge, RiskBadge, RingGauge, useAiFormat } from "./shared";
+import { TemplatesGallery } from "./TemplatesGallery";
 
 const panel = "rounded-xl bg-card ring-1 ring-foreground/10";
 
@@ -200,7 +201,7 @@ function AllAgents() {
                 </td>
                 <td className="px-4 py-2.5">{agent.project}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{agent.owner}</td>
-                <td className="px-4 py-2.5"><IsolationBadge isolation={agent.isolation} /></td>
+                <td className="px-4 py-2.5">{agent.isolation && <IsolationBadge isolation={agent.isolation} />}</td>
                 <td className="px-4 py-2.5">
                   <div className="space-y-1">
                     <BarGauge value={agent.usage_today?.tokens ?? 0} max={agent.daily_token_budget} label={t("budgetOf", { name: agent.name })} />
@@ -300,22 +301,28 @@ export function AgentsPage() {
         {isAdmin && <div className="mt-4"><GlobalBudget /></div>}
       </PageHeader>
       <PageBody>
-        {isAdmin ? (
-          <Tabs defaultValue="mine">
-            <TabsList className="h-auto flex-wrap">
-              <TabsTrigger value="mine">{t("tabMine")}</TabsTrigger>
-              <TabsTrigger value="all">{t("tabAll")}</TabsTrigger>
-              <TabsTrigger value="mcp">{t("tabMcp")}</TabsTrigger>
-              <TabsTrigger value="models">{t("tabModels")}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="mine" className="pt-4"><MyAgents /></TabsContent>
-            <TabsContent value="all" className="pt-4"><AllAgents /></TabsContent>
-            <TabsContent value="mcp" className="pt-4"><McpServers /></TabsContent>
-            <TabsContent value="models" className="pt-4"><Models /></TabsContent>
-          </Tabs>
-        ) : (
-          <MyAgents />
-        )}
+        <Tabs defaultValue="mine">
+          <TabsList className="h-auto flex-wrap">
+            <TabsTrigger value="mine">{t("tabMine")}</TabsTrigger>
+            <TabsTrigger value="templates">{t("tabTemplates")}</TabsTrigger>
+            {isAdmin && (
+              <>
+                <TabsTrigger value="all">{t("tabAll")}</TabsTrigger>
+                <TabsTrigger value="mcp">{t("tabMcp")}</TabsTrigger>
+                <TabsTrigger value="models">{t("tabModels")}</TabsTrigger>
+              </>
+            )}
+          </TabsList>
+          <TabsContent value="mine" className="pt-4"><MyAgents /></TabsContent>
+          <TabsContent value="templates" className="pt-4"><TemplatesGallery /></TabsContent>
+          {isAdmin && (
+            <>
+              <TabsContent value="all" className="pt-4"><AllAgents /></TabsContent>
+              <TabsContent value="mcp" className="pt-4"><McpServers /></TabsContent>
+              <TabsContent value="models" className="pt-4"><Models /></TabsContent>
+            </>
+          )}
+        </Tabs>
       </PageBody>
     </div>
   );

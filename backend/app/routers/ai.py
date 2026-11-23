@@ -20,6 +20,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core import server_timing
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import ProjectRole
@@ -73,7 +74,7 @@ def _fail(exc: Exception) -> HTTPException:
         return HTTPException(status_code=exc.status, detail=str(exc))
     if isinstance(exc, (gateway.GatewayError, identity.IdentityError)):
         return HTTPException(status_code=502, detail=str(exc))
-    if isinstance(exc, project_registry.RegistryError):
+    if isinstance(exc, (project_registry.RegistryError, GitHubAppError)):
         return HTTPException(status_code=502, detail=str(exc))
     raise exc
 
@@ -85,6 +86,7 @@ FAILURES = (
     gateway.GatewayError,
     identity.IdentityError,
     project_registry.RegistryError,
+    GitHubAppError,
 )
 
 
@@ -202,14 +204,29 @@ class McpDecision(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+async def _timing_start() -> float:
+    """Async so the context variable is set in the request's own task;
+    declared first so the auth dependencies are timed too."""
+    return server_timing.start()
+
+
+Timing = Annotated[float, Depends(_timing_start)]
+
+
 @projects.get("/ai")
 async def get_project_ai(
-    ctx: RequireMember, db: Session = Depends(get_db)
+    started: Timing,
+    response: Response,
+    ctx: RequireMember,
+    db: Session = Depends(get_db),
 ) -> dict:
+    server_timing.lap("auth", started)
     try:
         return await service.project_view(db, ctx.project_name)
     except FAILURES as exc:
         raise _fail(exc) from exc
+    finally:
+        response.headers["Server-Timing"] = server_timing.header(started)
 
 
 @projects.put("/ai")
@@ -289,12 +306,18 @@ async def project_tools(ctx: RequireMember) -> dict:
 
 @projects.get("/agents")
 async def list_agents(
-    ctx: RequireMember, db: Session = Depends(get_db)
+    started: Timing,
+    response: Response,
+    ctx: RequireMember,
+    db: Session = Depends(get_db),
 ) -> dict:
+    server_timing.lap("auth", started)
     try:
         return {"items": await service.list_agents(db, ctx.project_name)}
     except FAILURES as exc:
         raise _fail(exc) from exc
+    finally:
+        response.headers["Server-Timing"] = server_timing.header(started)
 
 
 @projects.post("/agents", status_code=201)
@@ -606,12 +629,18 @@ PlatformAdmin = Annotated[dict, Depends(require_platform_admin)]
 
 @admin.get("/agents")
 async def admin_agents(
-    _token: PlatformAdmin, db: Session = Depends(get_db)
+    started: Timing,
+    response: Response,
+    _token: PlatformAdmin,
+    db: Session = Depends(get_db),
 ) -> dict:
+    server_timing.lap("auth", started)
     try:
         return {"items": await service.admin_agents(db)}
     except FAILURES as exc:
         raise _fail(exc) from exc
+    finally:
+        response.headers["Server-Timing"] = server_timing.header(started)
 
 
 @admin.get("/mcp-servers")

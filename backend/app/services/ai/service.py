@@ -9,16 +9,19 @@ a mirror for fast lists; Git stays the source.
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core import server_timing
 from app.core.config import settings
 from app.models.ai import AiAgent
 from app.services import project_registry, vault_client
 from app.services.agents import policy
 from app.services.ai import (
+    agent_settings,
     catalog,
     declaration,
     gateway,
@@ -33,6 +36,7 @@ from app.services.ai.declaration import (
     ProjectAi,
     client_id,
 )
+from app.services.github_service import GitHubAppError
 from app.services.imports.registry_commit import commit_record_change
 
 logger = logging.getLogger(__name__)
@@ -65,7 +69,35 @@ def _stake(project: str) -> str:
     return policy.project_stake(project).level
 
 
+BACKEND_STATUS_SECONDS = 30.0
+
+
+class _BackendStatus:
+    expires: float = 0.0
+    value: dict[str, Any] | None = None
+
+
+_backend_status = _BackendStatus()
+
+
+def forget_backend_status() -> None:
+    _backend_status.value = None
+
+
 async def backend_status() -> dict[str, Any]:
+    """Cached briefly: every AI page polls it, and it costs a metrics
+    query plus a gateway probe."""
+    if (
+        _backend_status.value is not None
+        and time.monotonic() < _backend_status.expires
+    ):
+        return _backend_status.value
+    _backend_status.value = await _read_backend_status()
+    _backend_status.expires = time.monotonic() + BACKEND_STATUS_SECONDS
+    return _backend_status.value
+
+
+async def _read_backend_status() -> dict[str, Any]:
     try:
         budget = await ai_usage.budget()
     except ai_usage.UsageUnavailable:
@@ -85,27 +117,23 @@ async def backend_status() -> dict[str, Any]:
     }
 
 
-def _mirror_rows(db: Session, project: str) -> dict[str, AiAgent]:
-    return {
-        row.name: row
-        for row in db.query(AiAgent).filter(AiAgent.project == project)
-    }
-
-
 def _summary(
     project: str,
     rights: dict,
     row: AiAgent | None,
-    badges: dict[str, list[str]],
+    badges: dict[str, list[str]] | None,
     today: dict[str, dict],
-    clients: dict[str, dict] | None = None,
 ) -> dict[str, Any]:
-    """``credentials``: whether Keycloak has the agent's client, None when
-    unknown; "missing" for an agent declared in Git and not reconciled yet."""
+    """``credentials``: whether Keycloak had the agent's client at the last
+    reconcile, None before the first one."""
     name = rights["name"]
     declared = (row.declaration if row else None) or {}
-    tools = list(rights.get("tools") or [])
-    risk = declaration.risk_of(tools, badges).view()
+    tools = list(
+        rights["tools"] if "tools" in rights else declared.get("tools") or []
+    )
+    risk = (
+        None if badges is None else declaration.risk_of(tools, badges).view()
+    )
     used = today.get(client_id(project, name))
     return {
         "name": name,
@@ -113,33 +141,36 @@ def _summary(
         "template": declared.get("template")
         or (row.template if row else None),
         "role": row.role if row else None,
-        "description": declared.get("description", ""),
+        "description": declared.get("description"),
         "owner": rights.get("owner"),
         "status": rights.get("status", "active"),
         "source": row.source if row else "yaml",
-        "trigger": declared.get("trigger") or {"type": "chat"},
+        "trigger": declared.get("trigger"),
         "model": declared.get("model") or (rights.get("models") or [None])[0],
+        "effort": declared.get("effort"),
+        "max_steps": declared.get("maxSteps"),
         "models": list(rights.get("models") or []),
         "tools": tools,
-        "isolation": rights.get("isolation") or risk["isolation"],
+        "isolation": rights.get("isolation")
+        or (risk["isolation"] if risk else None),
         "callers": list(rights.get("callers") or []),
-        "calls": list(rights.get("calls") or []),
+        "calls": list(
+            rights["calls"]
+            if "calls" in rights
+            else declared.get("calls") or []
+        ),
         "daily_token_budget": rights.get("dailyTokenBudget"),
         "client_id": client_id(project, name),
-        "credentials": (
-            None
-            if clients is None
-            else "ok" if client_id(project, name) in clients else "missing"
-        ),
+        "credentials": row.credentials if row else None,
         "repo": row.repo if row else None,
-        "values_path": (
-            row.values_path if row else declaration.values_path(name)
-        ),
+        "values_path": (row.values_path if row else None)
+        or declaration.values_path(name),
+        "settings": agent_settings.view(row),
         "pull_request": _public_pull(row.pull_request if row else None),
         "risk": risk,
         "usage_today": (
             {
-                "tokens": used["tokens_in"] + used["tokens_out"],
+                "tokens": used["tokens"],
                 "cost_usd": used["cost_usd"],
                 "cost_eur": used["cost_eur"],
             }
@@ -158,45 +189,44 @@ def _public_pull(pull: dict | None) -> dict | None:
     return {k: pull.get(k) for k in ("number", "url", "state")}
 
 
-async def _today(project: str) -> dict[str, dict]:
+async def _today(project: str | None) -> dict[str, dict] | None:
+    """Today's usage per caller, None when the metrics are unreadable."""
     try:
-        return {
-            item["azp"]: item for item in await ai_usage.usage(project, "1d")
-        }
+        return await ai_usage.today_by_azp(project)
     except ai_usage.UsageUnavailable as exc:
         logger.info("AI usage of %s unavailable: %s", project, exc)
-        return {}
+        return None
 
 
-def _sync_mirror(db: Session, project: str, project_ai: ProjectAi) -> None:
-    """Rights changed in Git without the CMP (or a YAML-first agent):
-    the mirror follows the record."""
-    rows = _mirror_rows(db, project)
-    for rights in project_ai.agents:
-        row = rows.get(rights["name"])
-        if row is None:
-            row = AiAgent(
-                project=project,
-                name=rights["name"],
-                source="yaml",
-                declaration={},
-                created_by=rights.get("owner") or "",
-            )
-            db.add(row)
-        row.rights = rights
-        row.status = rights.get("status", "active")
-    known = {a["name"] for a in project_ai.agents}
-    for name, row in rows.items():
-        if name not in known:
-            db.delete(row)
-    db.commit()
+async def _badges(project: str, record: dict) -> dict[str, list[str]] | None:
+    """The tool badges, None without the catalogue: the risk is then
+    unknown, never guessed."""
+    try:
+        return catalog.badges_by_name(await catalog.tools(record))
+    except GitHubAppError as exc:
+        logger.warning("Tool catalogue of %s unreadable: %s", project, exc)
+        return None
 
 
 async def project_view(db: Session, project: str) -> dict[str, Any]:
-    record = await record_of(project)
+    """Degrades instead of failing: with GitHub, the Vault behind the
+    GitHub App or Keycloak down, the view shows what it still knows and
+    names what is missing in ``degraded``."""
+    degraded = []
+    try:
+        record = await record_of(project)
+    except project_registry.RegistryError:
+        record = project_registry.last_record(project)
+        if record is None:
+            raise
+        degraded.append("registry")
     project_ai = ProjectAi.of(record)
-    stake = await asyncio.to_thread(_stake, project)
-    agents = await list_agents(db, project, record=record)
+    stake, (agents, missing), backend = await asyncio.gather(
+        server_timing.timed("stake", asyncio.to_thread(_stake, project)),
+        _agents_view(db, project, record),
+        server_timing.timed("backend", backend_status()),
+    )
+    degraded.extend(missing)
     return {
         "project": project,
         "enabled": project_ai.enabled,
@@ -217,29 +247,52 @@ async def project_view(db: Session, project: str) -> dict[str, Any]:
         ],
         "agents": agents,
         "backend": {
-            k: v
-            for k, v in (await backend_status()).items()
-            if k in ("name", "status")
+            k: v for k, v in backend.items() if k in ("name", "status")
         },
+        "degraded": degraded,
     }
 
 
 async def list_agents(
     db: Session, project: str, record: dict | None = None
 ) -> list[dict]:
-    record = record or await record_of(project)
+    items, _ = await _agents_view(
+        db, project, record or await record_of(project)
+    )
+    return items
+
+
+async def _agents_view(
+    db: Session, project: str, record: dict
+) -> tuple[list[dict], list[str]]:
+    """The agents from the mirror only (no write, no GitHub read per
+    agent), and the sources that could not be read."""
     project_ai = ProjectAi.of(record)
-    await asyncio.to_thread(_sync_mirror, db, project, project_ai)
-    rows = _mirror_rows(db, project)
-    badges = catalog.badges_by_name(await catalog.tools(record))
-    today = await _today(project)
-    clients = await reconcile.credentials(project)
-    return [
+    rows, badges, today = await asyncio.gather(
+        server_timing.timed(
+            "mirror",
+            asyncio.to_thread(agent_settings.mirror_rows, db, project),
+        ),
+        server_timing.timed("catalog", _badges(project, record)),
+        server_timing.timed("usage", _today(project)),
+    )
+    if agent_settings.needs_refresh(rows, project_ai):
+        reconcile.request(project)
+    degraded = [
+        name
+        for name, missing in (
+            ("github", badges is None),
+            ("metrics", today is None),
+        )
+        if missing
+    ]
+    items = [
         _summary(
-            project, rights, rows.get(rights["name"]), badges, today, clients
+            project, rights, rows.get(rights["name"]), badges, today or {}
         )
         for rights in project_ai.agents
     ]
+    return items, degraded
 
 
 async def get_agent(db: Session, project: str, name: str) -> dict:
@@ -248,47 +301,35 @@ async def get_agent(db: Session, project: str, name: str) -> dict:
     rights = project_ai.agent(name)
     if rights is None:
         raise AiError(404, f"Agent '{name}' not found in project '{project}'.")
-    await asyncio.to_thread(_sync_mirror, db, project, project_ai)
-    row = _mirror_rows(db, project).get(name)
-    source = "main"
-    declared = None
-    repo = row.repo if row else _agent_repo(record, name)
-    if repo:
-        values = await gitops.read_values(repo, declaration.values_path(name))
-        declared = (values or {}).get("agent") if values else None
-    if declared is None and row and row.declaration:
-        declared, source = row.declaration, "pull_request"
-    if row is not None:
-        if declared is not None and source == "main":
-            row.declaration = declared
-        if row.repo is None and repo:
-            row.repo = repo
-        if row.pull_request and row.pull_request.get("state") == "open":
-            row.pull_request = await gitops.pull_state(row.pull_request)
-        db.commit()
-    badges = catalog.badges_by_name(await catalog.tools(record))
-    summary = _summary(
-        project,
-        rights,
-        row,
-        badges,
-        await _today(project),
-        await reconcile.credentials(project),
+    await asyncio.to_thread(agent_settings.sync_rows, db, project, project_ai)
+    row = agent_settings.mirror_rows(db, project)[name]
+    if row.pull_request and row.pull_request.get("state") == "open":
+        row.pull_request = await gitops.pull_state(row.pull_request)
+    await agent_settings.read(row, record)
+    db.commit()
+    declared = row.declaration or None
+    pending = bool(
+        row.pull_request and row.pull_request.get("state") == "open"
     )
+    source = (
+        "pull_request"
+        if pending and row.settings_status != agent_settings.OK
+        else "main"
+    )
+    badges, today = await asyncio.gather(
+        _badges(project, record), _today(project)
+    )
+    summary = _summary(project, rights, row, badges, today or {})
     return {
         **summary,
+        "instructions": (declared or {}).get("instructions"),
+        "output": (declared or {}).get("output"),
         "declaration": declared or {},
         "declaration_source": source if declared else None,
-        "capabilities": declaration.capabilities(summary["tools"], badges),
+        "capabilities": declaration.capabilities(
+            summary["tools"], badges or {}
+        ),
     }
-
-
-def _agent_repo(record: dict, name: str) -> str | None:
-    entry = next(
-        (a for a in declaration.record_apps(record) if a.get("name") == name),
-        None,
-    )
-    return catalog.github_repo((entry or {}).get("repoURL"))
 
 
 # ---------------------------------------------------------------------------
@@ -706,7 +747,7 @@ async def create_agents(
 
     names = ", ".join(p.spec.name for p in planned)
     await _commit(project, change, f"declare agents {names}")
-    stale = _mirror_rows(db, project)
+    stale = agent_settings.mirror_rows(db, project)
     for item in planned:
         row = stale.get(item.spec.name) or AiAgent(
             project=project, name=item.spec.name, created_by=username
@@ -731,7 +772,7 @@ async def create_agents(
         f"feat(agents): declare {names}",
         _pr_body(project, planned, username),
     )
-    for row in _mirror_rows(db, project).values():
+    for row in agent_settings.mirror_rows(db, project).values():
         if row.name in {p.spec.name for p in planned}:
             row.pull_request = pull
     db.commit()
@@ -815,10 +856,12 @@ async def update_agent(
             )
         except identity.IdentityError as exc:
             raise AiError(502, f"Keycloak: {exc}") from exc
-    row = _mirror_rows(db, project).get(name)
+    row = agent_settings.mirror_rows(db, project).get(name)
     pull = None
     if spec.declaration != current["declaration"]:
-        repo = (row.repo if row else None) or _agent_repo(record, name)
+        repo = (row.repo if row else None) or agent_settings.agent_repo(
+            record, name
+        )
         if repo is None:
             raise AiError(
                 409, f"Agent '{name}' has no repository to write to."
@@ -875,7 +918,7 @@ async def set_status(
             await asyncio.to_thread(identity.set_enabled, agent_client, True)
         except identity.IdentityError as exc:
             raise AiError(502, f"Keycloak: {exc}") from exc
-    row = _mirror_rows(db, project).get(name)
+    row = agent_settings.mirror_rows(db, project).get(name)
     if row is not None:
         row.status = status
         db.commit()
@@ -890,8 +933,10 @@ async def delete_agent(
     record = await record_of(project)
     if ProjectAi.of(record).agent(name) is None:
         raise AiError(404, f"Agent '{name}' not found in project '{project}'.")
-    row = _mirror_rows(db, project).get(name)
-    repo = (row.repo if row else None) or _agent_repo(record, name)
+    row = agent_settings.mirror_rows(db, project).get(name)
+    repo = (row.repo if row else None) or agent_settings.agent_repo(
+        record, name
+    )
     pull = None
     if repo:
         path = declaration.values_path(name)
@@ -947,18 +992,44 @@ async def reconcile_ai(db: Session, project: str, prune: bool) -> dict:
 
 
 async def admin_agents(db: Session) -> list[dict]:
-    """Every agent of the platform, from the records."""
+    """Every agent of the platform, from the records and the mirror."""
+    records = [
+        (project, record)
+        for record in await server_timing.timed(
+            "records", project_registry.list_records_cached()
+        )
+        if (project := (record.get("metadata") or {}).get("name"))
+        and ProjectAi.of(record).agents
+    ]
+
+    def all_rows() -> dict[str, dict[str, AiAgent]]:
+        found: dict[str, dict[str, AiAgent]] = {}
+        for row in db.query(AiAgent):
+            found.setdefault(row.project, {})[row.name] = row
+        return found
+
+    rows, today, *badges = await asyncio.gather(
+        server_timing.timed("mirror", asyncio.to_thread(all_rows)),
+        server_timing.timed("usage", _today(None)),
+        *(
+            server_timing.timed("catalog", _badges(project, record))
+            for project, record in records
+        ),
+    )
     items = []
-    for record in await project_registry.list_records():
-        project = (record.get("metadata") or {}).get("name")
+    for (project, record), project_badges in zip(records, badges):
         project_ai = ProjectAi.of(record)
-        if not project or not project_ai.agents:
-            continue
-        await asyncio.to_thread(_sync_mirror, db, project, project_ai)
-        rows = _mirror_rows(db, project)
-        badges = catalog.badges_by_name(await catalog.tools(record))
+        project_rows = rows.get(project, {})
+        if agent_settings.needs_refresh(project_rows, project_ai):
+            reconcile.request(project)
         items.extend(
-            _summary(project, rights, rows.get(rights["name"]), badges, {})
+            _summary(
+                project,
+                rights,
+                project_rows.get(rights["name"]),
+                project_badges,
+                today or {},
+            )
             for rights in project_ai.agents
         )
     return items

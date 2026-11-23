@@ -333,6 +333,36 @@ def _vector(*samples):
     }
 
 
+def test_today_usage_of_every_agent_is_one_query(monkeypatch):
+    reader = "agent-alpha-reader"
+    queries = []
+
+    def handler(request):
+        queries.append(request.url.params["query"])
+        return httpx.Response(
+            200,
+            json=_vector(
+                ({"azp": reader, "__name__": ai_usage.TOKENS}, 1200),
+                ({"azp": reader, "__name__": ai_usage.COST}, 0.22),
+            ),
+        )
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(
+        ai_usage.httpx,
+        "AsyncClient",
+        lambda **kw: real(transport=httpx.MockTransport(handler), **kw),
+    )
+    monkeypatch.setattr(ai_usage, "usd_per_eur", lambda: 1.1)
+
+    found = asyncio.run(ai_usage.today_by_azp("alpha"))
+
+    assert (len(queries), found[reader]) == (
+        1,
+        {"tokens": 1200, "cost_usd": 0.22, "cost_eur": 0.2},
+    )
+
+
 def test_usage_folds_the_recorded_series_per_caller(monkeypatch):
     reader = "agent-alpha-reader"
     answers = {

@@ -12,6 +12,7 @@ import base64
 import io
 import json
 import logging
+import time
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -85,10 +86,21 @@ def generate_jwt() -> str:
         raise GitHubAppError(f"Failed to generate JWT: {exc}") from exc
 
 
+# Reusing an installation token (1 h) keeps the JWT signing and the
+# exchange off the request path; a margin so no caller gets one about to die.
+INSTALLATION_TOKEN_MARGIN_SECONDS = 5 * 60
+_installation_tokens: dict[str, tuple[float, str]] = {}
+
+
+def forget_installation_tokens() -> None:
+    _installation_tokens.clear()
+
+
 async def _get_installation_token(installation_id: str) -> str:
     """
     Exchange the GitHub App JWT for an installation token with every
-    permission the app holds on every repository of the installation.
+    permission the app holds on every repository of the installation,
+    reused until shortly before it expires.
 
     Only for the 3-Istor org installation, through
     ``get_org_installation_token``. A user's installation must go through
@@ -97,7 +109,15 @@ async def _get_installation_token(installation_id: str) -> str:
     Raises:
         GitHubAppError: If the token exchange fails
     """
-    return await _request_installation_token(installation_id, None)
+    cached = _installation_tokens.get(installation_id)
+    if cached and time.monotonic() < cached[0]:
+        return cached[1]
+    token, lifetime = await _exchange_installation_token(installation_id, None)
+    _installation_tokens[installation_id] = (
+        time.monotonic() + lifetime - INSTALLATION_TOKEN_MARGIN_SECONDS,
+        token,
+    )
+    return token
 
 
 async def get_org_installation_token() -> str:
@@ -200,6 +220,23 @@ async def get_repository_id_scoped_token(
 async def _request_installation_token(
     installation_id: str, body: dict | None
 ) -> str:
+    return (await _exchange_installation_token(installation_id, body))[0]
+
+
+def _lifetime_seconds(expires_at: str | None) -> float:
+    """Seconds left on a token from GitHub's ``expires_at``; 1 h, GitHub's
+    documented lifetime, when it is absent or malformed."""
+    try:
+        end = datetime.fromisoformat((expires_at or "").replace("Z", "+00:00"))
+    except ValueError:
+        return 3600.0
+    return max((end - datetime.now(timezone.utc)).total_seconds(), 0.0)
+
+
+async def _exchange_installation_token(
+    installation_id: str, body: dict | None
+) -> tuple[str, float]:
+    """The token and its lifetime in seconds."""
     app_jwt = generate_jwt()
 
     url = (
@@ -228,7 +265,7 @@ async def _request_installation_token(
                 "Successfully obtained installation token for installation %s",
                 installation_id,
             )
-            return token
+            return token, _lifetime_seconds(data.get("expires_at"))
 
     except httpx.HTTPStatusError as exc:
         logger.error(

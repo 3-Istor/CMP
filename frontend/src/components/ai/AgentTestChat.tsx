@@ -398,7 +398,7 @@ export function AgentTestChat() {
                 <p className="text-sm text-muted-foreground">{agent.description}</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
-                {(agent.trigger.type === "event" ? [t("sampleEvent"), ...suggestions.slice(0, 2)] : suggestions).map((s) => (
+                {(agent.trigger?.type === "event" ? [t("sampleEvent"), ...suggestions.slice(0, 2)] : suggestions).map((s) => (
                   <Button key={s} variant="outline" size="sm" onClick={() => void send(s)} disabled={suspended}>
                     {s}
                   </Button>

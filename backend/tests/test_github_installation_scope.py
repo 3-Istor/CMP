@@ -336,3 +336,45 @@ class TestScopedInstallationToken:
                 )
 
         request.assert_not_called()
+
+
+def test_the_org_installation_token_is_reused_until_it_nears_expiry(
+    monkeypatch,
+):
+    # Arrange
+    minted = mock.AsyncMock(
+        side_effect=[("ghs_first", 3600.0), ("ghs_second", 3600.0)]
+    )
+    monkeypatch.setattr(github_service, "_exchange_installation_token", minted)
+    monkeypatch.setattr(
+        github_service.settings, "GITHUB_INSTALLATION_ID", "42"
+    )
+
+    # Act
+    tokens = [
+        asyncio.run(github_service.get_org_installation_token())
+        for _ in range(3)
+    ]
+
+    # Assert
+    assert (tokens, minted.await_count) == (["ghs_first"] * 3, 1)
+
+
+def test_an_installation_token_close_to_expiry_is_minted_again(monkeypatch):
+    # Arrange
+    minted = mock.AsyncMock(
+        side_effect=[("ghs_first", 200.0), ("ghs_second", 3600.0)]
+    )
+    monkeypatch.setattr(github_service, "_exchange_installation_token", minted)
+    monkeypatch.setattr(
+        github_service.settings, "GITHUB_INSTALLATION_ID", "42"
+    )
+
+    # Act
+    tokens = [
+        asyncio.run(github_service.get_org_installation_token())
+        for _ in range(2)
+    ]
+
+    # Assert
+    assert tokens == ["ghs_first", "ghs_second"]

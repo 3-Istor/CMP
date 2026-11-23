@@ -14,6 +14,7 @@ import type { Agent, AgentDetail, AiTool } from "@/types/ai";
 import {
   Activity,
   Bot,
+  FileWarning,
   FlaskConical,
   GitPullRequest,
   KeyRound,
@@ -215,7 +216,7 @@ export function AgentFrame({ agentName, children }: { agentName: string; childre
                 {t("prOpen", { number: agent.pull_request.number })}
               </a>
             )}
-            <IsolationBadge isolation={agent.isolation} />
+            {agent.isolation && <IsolationBadge isolation={agent.isolation} />}
             <Badge
               variant="secondary"
               className={riskCount >= 2 ? "bg-amber-500/15 text-amber-800 dark:text-amber-300" : ""}
@@ -237,6 +238,14 @@ export function AgentFrame({ agentName, children }: { agentName: string; childre
             canProvision={can("ai.configure")}
             onDone={() => setAgent({ ...agent, credentials: "ok" })}
           />
+        )}
+        {agent.settings?.message && (
+          <div className="border-b border-amber-500/30 bg-amber-500/10">
+            <p className="mx-auto flex max-w-7xl items-center gap-2 px-6 py-2.5 text-sm text-amber-900 dark:text-amber-200">
+              <FileWarning className="size-4 shrink-0" aria-hidden />
+              {t("settingsMissing", { path: agent.values_path ?? "", repo: agent.repo ?? "" })}
+            </p>
+          </div>
         )}
         {agent.status === "suspended" && (
           <div className="border-b border-amber-500/30 bg-amber-500/10">

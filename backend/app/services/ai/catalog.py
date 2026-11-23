@@ -68,6 +68,16 @@ def _cached(key: str) -> Any:
     return None
 
 
+def _last_known(key: str, exc: Exception) -> Any:
+    """GitHub (or the Vault behind the App key) is down: the last value
+    read, however old, rather than an error page."""
+    hit = _cache.get(key)
+    if hit is None:
+        raise exc
+    logger.warning("Serving the last %s read: %s", key, exc)
+    return hit[1]
+
+
 def _load_yaml(text: str) -> Any:
     try:
         return YAML(typ="safe").load(text)
@@ -155,22 +165,30 @@ async def templates() -> list[dict]:
     if cached is not None:
         return cached
     async with _lock:
-        token = await get_org_installation_token()
-        repo = f"{settings.GITHUB_ORG}/{settings.AI_TEMPLATES_REPO}"
-        path = settings.AI_TEMPLATES_PATH.strip("/")
-        found = []
-        for name in await list_directory(token, repo, path):
-            if not name.endswith((".yaml", ".yml")):
-                continue
-            text, _ = await get_file_content(token, repo, f"{path}/{name}")
-            item = _template(_load_yaml(text))
-            if item is None:
-                logger.warning("Skipping invalid agent template %s", name)
-                continue
-            found.append(item)
-        found.sort(key=lambda t: t["id"])
+        try:
+            found = await _read_templates()
+        except GitHubAppError as exc:
+            return _last_known("templates", exc)
         _cache["templates"] = (time.monotonic(), found)
         return found
+
+
+async def _read_templates() -> list[dict]:
+    token = await get_org_installation_token()
+    repo = f"{settings.GITHUB_ORG}/{settings.AI_TEMPLATES_REPO}"
+    path = settings.AI_TEMPLATES_PATH.strip("/")
+    found = []
+    for name in await list_directory(token, repo, path):
+        if not name.endswith((".yaml", ".yml")):
+            continue
+        text, _ = await get_file_content(token, repo, f"{path}/{name}")
+        item = _template(_load_yaml(text))
+        if item is None:
+            logger.warning("Skipping invalid agent template %s", name)
+            continue
+        found.append(item)
+    found.sort(key=lambda t: t["id"])
+    return found
 
 
 async def template(template_id: str) -> dict | None:
@@ -225,18 +243,20 @@ def mcp_tools(app_name: str, values: Any) -> list[dict]:
     return tools
 
 
-async def _app_values(token: str, project: str, app: dict) -> Any:
+def _values_location(project: str, app: dict) -> tuple[str, str]:
     """The app's values: in its repository, or in cnp-projects while it
     has none (imported apps before their switch, mcp apps)."""
     repo = github_repo(app.get("repoURL"))
-    path = values_file_of(app)
     if repo is None:
-        repo = settings.CNP_REGISTRY_REPO
-        path = f"apps/{project}/{app['name']}/values.yaml"
+        return (
+            settings.CNP_REGISTRY_REPO,
+            f"apps/{project}/{app['name']}/values.yaml",
+        )
+    return repo, values_file_of(app)
+
+
+async def _app_values(token: str, app: dict, repo: str, path: str) -> Any:
     key = f"values:{repo}:{path}"
-    cached = _cached(key)
-    if cached is not None:
-        return cached
     try:
         text, _ = await get_file_content(token, repo, path)
     except FileNotInRepoError:
@@ -250,7 +270,23 @@ async def _app_values(token: str, project: str, app: dict) -> Any:
 
 
 async def tools(record: dict) -> list[dict]:
-    """Every tool an agent of the project may be given, with its badges."""
+    """
+    Every tool an agent of the project may be given, with its badges.
+
+    Raises:
+        GitHubAppError: GitHub unreachable and the project never read.
+    """
+    project = (record.get("metadata") or {}).get("name", "")
+    key = f"tools:{project}"
+    try:
+        found = await _read_tools(project, record)
+    except GitHubAppError as exc:
+        return _last_known(key, exc)
+    _cache[key] = (time.monotonic(), found)
+    return found
+
+
+async def _read_tools(project: str, record: dict) -> list[dict]:
     found = [
         {"name": name, "source": "platform", **about}
         for name, about in PLATFORM_TOOLS.items()
@@ -258,14 +294,20 @@ async def tools(record: dict) -> list[dict]:
     apps = [
         a for a in declaration.record_apps(record) if a.get("type") != "agent"
     ]
-    if not apps:
-        return found
-    token = await get_org_installation_token()
-    project = (record.get("metadata") or {}).get("name", "")
-    for app in apps:
-        found.extend(
-            mcp_tools(app["name"], await _app_values(token, project, app))
+    located = [(app, *_values_location(project, app)) for app in apps]
+    values = {
+        app["name"]: _cached(f"values:{repo}:{path}")
+        for app, repo, path in located
+    }
+    stale = [item for item in located if values[item[0]["name"]] is None]
+    if stale:
+        token = await get_org_installation_token()
+        read = await asyncio.gather(
+            *(_app_values(token, app, repo, path) for app, repo, path in stale)
         )
+        values.update({app["name"]: v for (app, _, _), v in zip(stale, read)})
+    for app in apps:
+        found.extend(mcp_tools(app["name"], values[app["name"]]))
     return found
 
 

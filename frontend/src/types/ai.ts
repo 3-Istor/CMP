@@ -56,15 +56,18 @@ export interface Agent {
   project: string;
   template: AgentTemplateId | null;
   role?: "reader" | "actor" | null;
-  description: string;
+  /** Null when the values file in the repository could not be read. */
+  description: string | null;
   owner: string | null;
   status: AgentStatus;
   source?: "cmp" | "yaml";
-  trigger: AgentTrigger;
+  trigger: AgentTrigger | null;
   model: AiModelId;
   models?: AiModelId[];
+  effort?: AgentEffort | null;
+  max_steps?: number | null;
   tools: string[];
-  isolation: AgentIsolation;
+  isolation: AgentIsolation | null;
   callers: string[];
   calls: string[];
   daily_token_budget: number;
@@ -73,10 +76,19 @@ export interface Agent {
   credentials?: "ok" | "missing" | null;
   repo?: string | null;
   values_path?: string | null;
+  settings?: AgentSettingsState;
   pull_request?: PullRequestRef | null;
-  risk?: AgentRisk;
+  /** Null while the tool catalogue cannot be read. */
+  risk?: AgentRisk | null;
   usage_today?: { tokens: number; cost_usd: number; cost_eur: number };
   updated_at?: string | null;
+}
+
+/** Last read of deploy/values-<agent>.yaml; `message` set when nothing usable was found. */
+export interface AgentSettingsState {
+  status: "ok" | "missing" | "unreadable" | null;
+  message: string | null;
+  read_at: string | null;
 }
 
 /** The `agent:` block of deploy/values-<agent>.yaml. */
@@ -93,6 +105,8 @@ export interface AgentBlock {
 }
 
 export interface AgentDetail extends Agent {
+  instructions?: string | null;
+  output?: Record<string, unknown> | null;
   declaration?: { agent?: Partial<AgentBlock> } | Partial<AgentBlock> | null;
   declaration_source?: "main" | "pull_request";
 }
@@ -109,6 +123,8 @@ export interface ProjectAi {
   apps: AiAppAccess[];
   agents?: Agent[];
   backend?: { name: string; status: AiBackendStatus };
+  /** Sources that could not be read: the view shows what it still knows. */
+  degraded?: Array<"registry" | "github" | "metrics">;
 }
 
 export type RefusalReason = "budget" | "policy" | "ratelimit" | "guardrail";

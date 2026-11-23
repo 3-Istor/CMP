@@ -201,6 +201,40 @@ async def read_record_cached(project_name: str) -> tuple[dict, str] | None:
     return copy.deepcopy(cached[1])
 
 
+def last_record(project_name: str) -> dict | None:
+    """The record :func:`read_record_cached` last returned, for views that
+    can show it while GitHub is unreachable."""
+    cached = _records_at_head.get(project_name)
+    return copy.deepcopy(cached[1][0]) if cached and cached[1] else None
+
+
+_all_records_at_head: dict[str, list[dict]] = {}
+
+
+async def list_records_cached() -> list[dict]:
+    """
+    :func:`list_records` at the registry head, downloaded again only when
+    the branch moved. The caller gets its own copy.
+
+    Raises:
+        RegistryError: If the registry is unreachable.
+    """
+    token = await _installation_token()
+    try:
+        head = await get_branch_head(
+            token, settings.CNP_REGISTRY_REPO, settings.CNP_REGISTRY_BRANCH
+        )
+    except GitHubAppError as exc:
+        raise RegistryError(
+            f"Could not read the registry head: {exc}"
+        ) from exc
+    if head not in _all_records_at_head:
+        records = await list_records(ref=head)
+        _all_records_at_head.clear()
+        _all_records_at_head[head] = records
+    return copy.deepcopy(_all_records_at_head[head])
+
+
 async def list_records(ref: str | None = None) -> list[dict]:
     """
     Read every project record in the registry, at *ref* (a commit) or at the

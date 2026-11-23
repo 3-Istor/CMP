@@ -10,12 +10,12 @@ longer names are orphans: reported always, deleted only when asked.
 
 Runs after each record write of the CMP, on a timer for the writes made in
 Git, and on demand (route and MCP tool). Every step reads before it writes,
-so a run over a project already in order writes nothing.
+so a run over a project already in order writes nothing. Each run also reads
+the agents' values files again into the mirror the lists show.
 """
 
 import asyncio
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services import project_registry, vault_client
-from app.services.ai import catalog, gitops, identity
+from app.services.ai import agent_settings, catalog, gitops, identity
 from app.services.ai.declaration import (
     ProjectAi,
     app_client_id,
@@ -33,8 +33,6 @@ from app.services.ai.declaration import (
 )
 
 logger = logging.getLogger(__name__)
-
-CREDENTIALS_TTL = 30.0
 
 
 @dataclass
@@ -50,7 +48,7 @@ class Wanted:
 class _Runs:
     loop: asyncio.AbstractEventLoop | None = None
     locks: dict[str, asyncio.Lock] = {}
-    credentials: dict[str, tuple[float, dict[str, dict]]] = {}
+    pending: set[str] = set()
 
 
 _runs = _Runs()
@@ -182,7 +180,7 @@ async def reconcile_project(
             for client in orphans:
                 await _drop(db, project, client, names)
                 deleted.append(client)
-        _runs.credentials.pop(project, None)
+    await agent_settings.refresh(db, project, record, clients)
     changed = bool(deleted) or any(i["changes"] for i in items)
     if changed:
         logger.info(
@@ -201,22 +199,14 @@ async def reconcile_project(
     }
 
 
-async def credentials(project: str) -> dict[str, dict] | None:
-    """The project's clients for the agent lists, None when Keycloak cannot
-    say. Cached briefly: the lists are polled."""
-    cached = _runs.credentials.get(project)
-    if cached and time.monotonic() < cached[0]:
-        return cached[1]
-    try:
-        found = await asyncio.to_thread(identity.project_clients, project)
-    except identity.IdentityError as exc:
-        logger.info("Clients of %s unreadable: %s", project, exc)
-        return None
-    _runs.credentials[project] = (time.monotonic() + CREDENTIALS_TTL, found)
-    return found
-
-
 async def _quietly(project: str, record: dict | None = None) -> None:
+    try:
+        await _reconcile_quietly(project, record)
+    finally:
+        _runs.pending.discard(project)
+
+
+async def _reconcile_quietly(project: str, record: dict | None) -> None:
     try:
         if record is None:
             found = await project_registry.read_record_cached(project)
@@ -230,19 +220,25 @@ async def _quietly(project: str, record: dict | None = None) -> None:
 
 
 def request(project: str) -> None:
-    """After a record write: reconcile soon, on the app's loop; safe from
-    any thread, a no-op before the loop started."""
+    """After a record write, or a list meeting an agent the mirror has not
+    read: reconcile soon, on the app's loop, once per project at a time;
+    safe from any thread, a no-op before the loop started."""
     loop = _runs.loop
-    if loop is None or loop.is_closed():
+    if loop is None or loop.is_closed() or project in _runs.pending:
         return
+    _runs.pending.add(project)
     asyncio.run_coroutine_threadsafe(_quietly(project), loop)
 
 
 async def reconcile_loop() -> None:
-    """Every project with agents or AI apps, for what was written in Git."""
+    """Every project with agents or AI apps, for what was written in Git;
+    a first pass at start so the mirror is warm before the first list."""
     _runs.loop = asyncio.get_running_loop()
+    first = True
     while True:
-        await asyncio.sleep(settings.AI_RECONCILE_INTERVAL_SECONDS)
+        if not first:
+            await asyncio.sleep(settings.AI_RECONCILE_INTERVAL_SECONDS)
+        first = False
         try:
             records = await project_registry.list_records()
         except project_registry.RegistryError as exc:

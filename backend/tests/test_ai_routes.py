@@ -12,8 +12,10 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.routers import ai as ai_router
 from app.services import keycloak_service
-from app.services.ai import draft, identity, registry, service
+from app.services.agents import policy
+from app.services.ai import catalog, draft, identity, registry, service
 from app.services.ai import usage as ai_usage
+from app.services.github_service import GitHubAppError
 
 ROLES = {("admin1", "alpha"): "admin", ("member1", "alpha"): "member"}
 USERS = {
@@ -23,6 +25,8 @@ USERS = {
     "infra": {"groups": ["/infra"]},
 }
 AGENT_PATH = "/api/projects/alpha/agents/helper"
+REAL_PROJECT_VIEW = service.project_view
+REAL_TOOLS = catalog.tools
 
 # (method, path, json body, minimum: member | admin | platform | user)
 ROUTES = [
@@ -143,6 +147,9 @@ def client(monkeypatch):
         mock.AsyncMock(return_value=(record, "sha")),
     )
     monkeypatch.setattr(ai_usage, "usage", mock.AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        ai_usage, "today_by_azp", mock.AsyncMock(return_value={})
+    )
     monkeypatch.setattr(ai_usage, "series", mock.AsyncMock(return_value=[]))
     monkeypatch.setattr(ai_usage, "budget", mock.AsyncMock(return_value={}))
     monkeypatch.setattr(ai_usage, "usd_per_eur", lambda: 1.1)
@@ -326,3 +333,52 @@ def test_usage_carries_each_callers_budget_from_the_record(
         900,
         0.5,
     )
+
+
+def test_the_project_ai_degrades_when_the_github_token_cannot_be_had(
+    client, monkeypatch
+):
+    record = {
+        "metadata": {"name": "alpha"},
+        "spec": {
+            "apps": [
+                {
+                    "name": "shop",
+                    "type": "service",
+                    "repoURL": "https://github.com/3-Istor/shop",
+                }
+            ],
+            "ai": {"enabled": True, "agents": [{"name": "helper"}]},
+        },
+    }
+    monkeypatch.setattr(service, "project_view", REAL_PROJECT_VIEW)
+    monkeypatch.setattr(
+        service, "record_of", mock.AsyncMock(return_value=record)
+    )
+    monkeypatch.setattr(catalog, "tools", REAL_TOOLS)
+    monkeypatch.setattr(catalog, "_cache", {})
+    monkeypatch.setattr(
+        catalog,
+        "get_org_installation_token",
+        mock.AsyncMock(side_effect=GitHubAppError("Vault is sealed")),
+    )
+    monkeypatch.setattr(
+        policy,
+        "project_stake",
+        lambda project: policy.ProjectStake(project, "standard", None),
+    )
+
+    response = _call(client, "GET", "/api/projects/alpha/ai", None, "member1")
+
+    assert (response.status_code, response.json()["degraded"]) == (
+        200,
+        ["github"],
+    )
+
+
+def test_the_agent_list_carries_a_server_timing_header(client):
+    response = _call(
+        client, "GET", "/api/projects/alpha/agents", None, "member1"
+    )
+
+    assert "total;dur=" in response.headers["Server-Timing"]

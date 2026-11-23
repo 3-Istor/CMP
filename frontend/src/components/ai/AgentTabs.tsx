@@ -166,7 +166,7 @@ export function AgentTraces() {
 export function AgentCapabilities() {
   const t = useTranslations("ai.capabilities");
   const { agent, registry } = useAgentContext();
-  const nodes: CapabilityNode[] = [{ name: agent.name, model: agent.model, tools: agent.tools, isolation: agent.isolation }];
+  const nodes: CapabilityNode[] = [{ name: agent.name, model: agent.model, tools: agent.tools, isolation: agent.isolation ?? undefined }];
   return (
     <div className="space-y-4">
       <p className="max-w-3xl text-sm text-muted-foreground">{t("hint")}</p>
