@@ -1999,6 +1999,7 @@ export type Emergency = {
     cloud: string;
     cloud_state: string;
     apps: string[];
+    favorite_apps: string[];
     protected: boolean;
     favorite: boolean;
   }[];

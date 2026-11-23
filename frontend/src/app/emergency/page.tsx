@@ -2,18 +2,19 @@
 
 import { CLOUD_META } from "@/components/finops/format";
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
-import { ProjectProvider } from "@/components/projects/ProjectContext";
+import { ProjectContext } from "@/components/projects/ProjectContext";
 import { MoveButtons } from "@/components/projects/ProjectLocation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { getEmergency, type Emergency } from "@/lib/api";
+import { getEmergency, type Emergency, type ProjectMove } from "@/lib/api";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { cn } from "@/lib/utils";
 import { pollWhileVisible } from "@/lib/visiblePolling";
 import { CircleCheck, Shield, Siren, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { TargetCloud } from "@/types";
 
 const POLL_MS = 5000;
 
@@ -78,6 +79,35 @@ function Tile({
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-xl font-semibold tabular-nums">{value}</span>
     </a>
+  );
+}
+
+// MoveButtons only needs the project, its cloud and the right to move: the
+// payload and the platform-admin role already give them, no per-row fetch.
+function RowMove({ name, cloud, busy }: { name: string; cloud: string; busy: boolean }) {
+  const [started, setStarted] = useState<ProjectMove | null>(null);
+  const value = useMemo(
+    () => ({
+      projectName: name,
+      role: null,
+      targetCloud: cloud as TargetCloud,
+      roleLoading: false,
+      can: () => true,
+      apps: [],
+      loadingApps: false,
+      appsError: null,
+      refreshApps: async () => {},
+      hasActiveDeployments: false,
+      move: started,
+      setMove: setStarted,
+    }),
+    [name, cloud, started],
+  );
+  if (busy) return null;
+  return (
+    <ProjectContext.Provider value={value}>
+      <MoveButtons />
+    </ProjectContext.Provider>
   );
 }
 
@@ -213,12 +243,28 @@ export default function EmergencyPage() {
                               <StatePill state={p.cloud_state} />
                             </span>
                             <span className="truncate text-xs text-muted-foreground">
-                              {p.apps.length > 0 ? p.apps.join(", ") : t("apps", { count: 0 })}
+                              {p.apps.length === 0
+                                ? t("apps", { count: 0 })
+                                : p.apps.map((a, i) => (
+                                    <span key={a}>
+                                      {i > 0 && ", "}
+                                      {p.favorite_apps.includes(a) && (
+                                        <Star aria-label={t("priority")} className="mr-0.5 inline size-3 fill-current text-foreground" />
+                                      )}
+                                      {a}
+                                    </span>
+                                  ))}
                             </span>
                           </div>
-                          <ProjectProvider projectName={p.name}>
-                            <MoveButtons />
-                          </ProjectProvider>
+                          <RowMove
+                            name={p.name}
+                            cloud={p.cloud}
+                            busy={moves.some(
+                              (m) =>
+                                m.project === p.name &&
+                                ["running", "failed", "cancelling"].includes(m.status),
+                            )}
+                          />
                         </CardContent>
                       </Card>
                     </li>

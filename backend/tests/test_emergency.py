@@ -53,6 +53,16 @@ def test_projects_sorted_favorites_then_down():
     assert body["projects"][1]["protected"] is True
 
 
+def test_a_starred_app_makes_its_project_a_favorite():
+    records = [_rec("shop", "gcp", apps=["web", "api"]), _rec("blog", "gcp")]
+    body = emergency.build(
+        {"gcp": "down"}, records, [], set(), frozenset({("shop", "api")})
+    )
+    first = body["projects"][0]
+    assert (first["name"], first["favorite_apps"]) == ("shop", ["api"])
+    assert first["favorite"] is True
+
+
 def test_moves_active_and_auto_first_with_current_step():
     moves = [
         _move("old", status="done", day=3),
