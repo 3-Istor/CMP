@@ -91,7 +91,7 @@ export function PlacementPanel() {
       .reduce((sum, s) => sum + seconds(s.started_at, s.finished_at), 0),
   );
   const stepIndex = move
-    ? (move.steps.findIndex((s) => s.status !== "done") + 1 ||
+    ? (move.steps.findIndex((s) => s.status !== "done" && s.status !== "skipped") + 1 ||
         move.steps.length + 1)
     : 1;
   const events = (move?.steps ?? [])

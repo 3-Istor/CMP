@@ -38,7 +38,7 @@ type Provider = "auto" | "aws" | "gcp";
 
 const PUBLIC_CLOUDS: Exclude<TargetCloud, "onprem">[] = ["aws", "gcp"];
 // Best non-up state to show on a disabled card.
-const STATE_ORDER: ClusterState[] = ["checking", "starting", "down", "unknown"];
+const STATE_ORDER: ClusterState[] = ["checking", "starting", "degraded", "down", "unknown"];
 // Same cadence as useProjectsLive while a bootstrap runs.
 const WAIT_POLL_MS = 3000;
 

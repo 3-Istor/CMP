@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
-import { type ProjectMove, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
+import { type LastWal, type ProjectMove, getLastWal, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
 import { useGlobalHealth } from "@/lib/hooks";
-import { CircleAlert, CircleCheck, Circle, Loader2 } from "lucide-react";
+import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
+import { CircleAlert, CircleCheck, Circle, Loader2, SkipForward } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
@@ -22,6 +23,7 @@ type MoveTarget = "onprem" | "public";
 function StepIcon({ status }: { status: string }) {
   if (status === "done") return <CircleCheck className="h-4 w-4 text-emerald-600" aria-hidden />;
   if (status === "running") return <Loader2 className="h-4 w-4 animate-spin" aria-hidden />;
+  if (status === "skipped") return <SkipForward className="h-4 w-4 text-muted-foreground" aria-hidden />;
   if (status === "failed") return <CircleAlert className="h-4 w-4 text-destructive" aria-hidden />;
   return <Circle className="h-4 w-4 text-muted-foreground" aria-hidden />;
 }
@@ -34,7 +36,7 @@ export function MoveBanner() {
   const t = useTranslations("projectSettings.location");
   const { projectName, move } = useProjectContext();
   if (!move) return null;
-  const current = move.steps.find((s) => s.status !== "done") ?? move.steps[move.steps.length - 1];
+  const current = move.steps.find((s) => s.status !== "done" && s.status !== "skipped") ?? move.steps[move.steps.length - 1];
   const cloud = cloudName(move.target);
   return (
     <div role="status" className="mb-6 flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-sm">
@@ -71,10 +73,14 @@ export function MoveButtons() {
   const [confirming, setConfirming] = useState<MoveTarget | null>(null);
   const [dataLoss, setDataLoss] = useState(false);
   const [lost, setLost] = useState<string[]>([]);
+  const [wal, setWal] = useState<LastWal[]>([]);
+  const isAdmin = usePlatformAdmin();
 
   if (!targetCloud || move || !can("project.move")) return null;
 
   const up = (cloud: string) => health?.clusters.some((c) => c.cloud === cloud && c.state === "up") ?? false;
+  // On-prem is not in the cluster health list; only a public source can be reported not up.
+  const forced = isAdmin && targetCloud !== "onprem" && !!health && !up(targetCloud);
   // From a public cloud the "public" target is the other one; from on-prem, any public cloud that is up.
   const other = targetCloud === "aws" ? "gcp" : "aws";
   const options: { target: MoveTarget; label: string; enabled: boolean; down?: string }[] =
@@ -94,7 +100,8 @@ export function MoveButtons() {
   const confirmName = confirming === "onprem" ? cloudName("onprem") : targetCloud === "onprem" ? t("publicName") : cloudName(other);
 
   const start = async () => {
-    setMove(await startMove(projectName, dataLoss, confirming ?? "public"));
+    // The typed project name is the data-loss confirmation of a forced move.
+    setMove(await startMove(projectName, dataLoss || forced, confirming ?? "public", forced));
   };
 
   return (
@@ -114,9 +121,11 @@ export function MoveButtons() {
               getMoveDataLoss(projectName)
                 .then(setLost)
                 .catch(() => setLost([]));
+              setWal([]);
+              if (forced) getLastWal(projectName).then(setWal).catch(() => setWal([]));
             }}
           >
-            {o.label}
+            {forced ? t("force", { cloud: o.target === "onprem" ? cloudName("onprem") : (o.down ?? "") }) : o.label}
           </Button>
         ))}
       </div>
@@ -124,12 +133,25 @@ export function MoveButtons() {
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
         level={2}
-        title={t("confirmTitle", { name: projectName, cloud: confirmName })}
-        description={t("confirmDescription", { cloud: confirmName })}
+        title={t(forced ? "forceTitle" : "confirmTitle", { name: projectName, cloud: confirmName })}
+        description={
+          forced
+            ? t("forceDescription", { source: cloudName(targetCloud) })
+            : t("confirmDescription", { cloud: confirmName })
+        }
+        destructive={forced}
         expectedName={projectName}
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
       >
+        {forced &&
+          wal.map((w) => (
+            <p key={w.database} className="text-sm text-destructive">
+              {w.last_wal_at
+                ? t("lastWal", { time: new Date(w.last_wal_at).toLocaleString(), database: w.database })
+                : t(w.reason ? "lastWalUnknown" : "lastWalNone", { database: w.database })}
+            </p>
+          ))}
         {lost.length > 0 && (
           <div className="flex items-center gap-2">
             <input
@@ -194,6 +216,9 @@ export function MoveProgress() {
           <li key={s.name} className="flex items-center gap-2">
             <StepIcon status={s.status} />
             <span>{t(`steps.${s.name}`)}</span>
+            {s.status === "skipped" && (
+              <span className="text-xs text-muted-foreground">{s.detail ?? t("skipped")}</span>
+            )}
             <span className="ml-auto font-mono text-xs text-muted-foreground">
               {time(s.started_at)}
               {s.finished_at ? ` - ${time(s.finished_at)}` : ""}

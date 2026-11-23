@@ -142,6 +142,7 @@
       "nameHint": "Minuscules, avec des tirets. Par exemple <code>platform-team</code>",
       "clusterState": {
         "checking": "Vérification…",
+        "degraded": "Dégradé",
         "down": "Arrêté",
         "starting": "Démarrage",
         "unknown": "Indisponible"
@@ -2930,6 +2931,13 @@
       "cancelling": "Annulation…",
       "details": "Détails",
       "retry": "Réessayer",
+      "force": "Forcer le déplacement vers {cloud}",
+      "forceTitle": "Forcer le déplacement de {name} vers {cloud} ?",
+      "forceDescription": "{source} n'est pas up. Le déplacement saute les étapes côté source et repart de la dernière sauvegarde archivée.",
+      "lastWal": "Les données écrites après {time} seront perdues ({database})",
+      "lastWalNone": "Aucun WAL archivé trouvé ({database})",
+      "lastWalUnknown": "Dernier WAL illisible ({database})",
+      "skipped": "Ignoré",
       "cancel": "Annuler le déplacement",
       "steps": {
         "prepare": "Préparer la cible",
@@ -4041,6 +4049,7 @@
     "arriving": "En attente d'Argo CD",
     "state": {
       "up": "Actif",
+      "degraded": "Dégradé",
       "down": "Arrêté",
       "starting": "Démarrage",
       "unknown": "Inconnu",

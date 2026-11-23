@@ -1873,8 +1873,10 @@ export const projectExportLink = (project: string, exportId: string) =>
 
 export type MoveStep = {
   name: string;
-  status: "pending" | "running" | "done" | "failed";
+  status: "pending" | "running" | "done" | "failed" | "skipped";
   detail: string | null;
+  /** Skipped now, runs when the source cloud is back. */
+  deferred?: boolean;
   started_at: string | null;
   finished_at: string | null;
 };
@@ -1887,6 +1889,7 @@ export type ProjectMove = {
   steps: MoveStep[];
   detail: string | null;
   actor: string;
+  forced?: boolean;
   created_at: string;
   finished_at: string | null;
 };
@@ -1898,14 +1901,25 @@ export const getCurrentMove = (project: string) =>
 export const getMoveDataLoss = (project: string) =>
   request<string[]>(`/projects/${project}/moves/data-loss`);
 
+/** Per prod database: newest archived WAL on the on-prem bucket (admins only). */
+export type LastWal = {
+  database: string;
+  last_wal_at: string | null;
+  reason: string | null;
+};
+
+export const getLastWal = (project: string) =>
+  request<LastWal[]>(`/projects/${project}/moves/last-wal`);
+
 export const startMove = (
   project: string,
   confirm_data_loss: boolean,
   target: "onprem" | "public",
+  force = false,
 ) =>
   request<ProjectMove>(`/projects/${project}/move`, {
     method: "POST",
-    body: JSON.stringify({ confirm_data_loss, target }),
+    body: JSON.stringify({ confirm_data_loss, target, force }),
   });
 
 export const moveAction = (

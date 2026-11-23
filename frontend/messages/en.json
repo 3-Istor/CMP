@@ -142,6 +142,7 @@
       "nameHint": "Lowercase, with hyphens. For example <code>platform-team</code>",
       "clusterState": {
         "checking": "Checking…",
+        "degraded": "Degraded",
         "down": "Stopped",
         "starting": "Starting",
         "unknown": "Unavailable"
@@ -2930,6 +2931,13 @@
       "cancelling": "Cancelling…",
       "details": "Details",
       "retry": "Retry",
+      "force": "Force move to {cloud}",
+      "forceTitle": "Force move {name} to {cloud}?",
+      "forceDescription": "{source} is not up. The move skips its source-side steps and starts from the last archived backup.",
+      "lastWal": "Data written after {time} will be lost ({database})",
+      "lastWalNone": "No archived WAL found ({database})",
+      "lastWalUnknown": "Last WAL unreadable ({database})",
+      "skipped": "Skipped",
       "cancel": "Cancel move",
       "steps": {
         "prepare": "Prepare target",
@@ -4041,6 +4049,7 @@
     "arriving": "Waiting for Argo CD",
     "state": {
       "up": "Up",
+      "degraded": "Degraded",
       "down": "Down",
       "starting": "Starting",
       "unknown": "Unknown",
