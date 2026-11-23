@@ -350,6 +350,8 @@ def _checks(
     target="public",
     source=None,
     record=None,
+    warning=None,
+    full=False,
 ):
     states = states or {AWS: "up", GCP: "up"}
     if source:
@@ -357,16 +359,17 @@ def _checks(
         db.commit()
     with (
         mock.patch.object(steps, "fresh_state", lambda c: states[c]),
-        mock.patch.object(steps, "_no_room", return_value=room),
+        mock.patch.object(steps, "_no_room", return_value=(room, warning)),
         mock.patch.object(
             project_registry,
             "read_record",
             mock.AsyncMock(return_value=(record or {"spec": {}}, "sha")),
         ),
     ):
-        return asyncio.run(
+        result = asyncio.run(
             steps.start_checks(db, db.query(Project).one(), confirm, target)
         )
+    return result if full else result[0]
 
 
 def test_target_public_from_aws_is_gcp(db, world):
@@ -640,7 +643,7 @@ def test_prepare_fails_while_a_vault_role_is_missing_on_the_target(db, world):
 def test_the_owner_and_the_actor_hear_of_a_failed_move(db, world):
     move = _row(db)
 
-    with mock.patch.object(steps, "_no_room", return_value="No room"):
+    with mock.patch.object(steps, "_no_room", return_value=("No room", None)):
         advance(db, move)
 
     users = world.notify_users.call_args.args[0]
@@ -1561,7 +1564,9 @@ def test_a_lost_source_leaves_the_data_loss_to_the_confirmation(db, lost):
 def test_prepare_fails_when_the_target_has_no_room(db, world):
     move = _row(db)
 
-    with mock.patch.object(steps, "_no_room", return_value="Not enough room"):
+    with mock.patch.object(
+        steps, "_no_room", return_value=("Not enough room", None)
+    ):
         advance(db, move)
 
     assert move.status == "failed"

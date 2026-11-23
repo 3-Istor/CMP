@@ -44,6 +44,30 @@ async def _read(deployment: Deployment) -> tuple:
     return token, repo, branch, path, raw, sha, values
 
 
+async def read_components(deployment: Deployment) -> list[dict]:
+    """The values of each component file of the app (frontend, backend or the
+    single one); {} for a file that cannot be read: the chart defaults apply.
+    """
+    app_type = security_data.app_type_of(
+        deployment.app_config, deployment.terraform_outputs
+    )
+    paths = list(dict.fromkeys(security_data.values_files_for(app_type)))
+    try:
+        token, repo = await _github_token(deployment)
+        branch = await get_default_branch(token, repo)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return [{} for _ in paths]
+    found = []
+    for path in paths:
+        try:
+            raw, _ = await get_file_content(token, repo, path, branch)
+            values = _yaml.load(raw)
+        except Exception:  # pylint: disable=broad-exception-caught
+            values = None
+        found.append(values if isinstance(values, dict) else {})
+    return found
+
+
 def _dump(values: dict) -> str:
     out = StringIO()
     _yaml.dump(values, out)

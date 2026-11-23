@@ -185,6 +185,23 @@ test("a source that is not up still moves, with the last WAL of each database fi
   await shot(page, "3-source-down-dialog");
 });
 
+test("an estimated need over the room warns without blocking", async ({ page }) => {
+  const health = { openstack_hypervisors: [], clusters: [{ cloud: "aws", state: "degraded" }, { cloud: "gcp", state: "up" }] };
+  await installMockApi(page, {
+    ...VARIANTS.aws,
+    "/infra/health": { json: health },
+    ...nothingLost,
+    "/projects/demo/moves/last-wal": { json: [] },
+    "/projects/demo/moves/capacity": {
+      json: { target: "gcp", need_cpu: 0.8, need_memory_bytes: 1.1 * 2 ** 30, free_cpu: 0.6, free_memory_bytes: 10.2 * 2 ** 30, estimated: true, fits: false },
+    },
+    "/projects/demo/moves/current": { json: null },
+  });
+  await page.goto("/projects/demo/settings");
+  await page.getByRole("button", { name: "Move to GCP" }).click();
+  await expect(page.getByText("Estimated need 0.8 CPU / 1.1 GiB, free 0.6 / 10.2")).toBeVisible();
+});
+
 test("the overview moves the project in two clicks", async ({ page }) => {
   const posts: unknown[] = [];
   page.on("request", (r) => {

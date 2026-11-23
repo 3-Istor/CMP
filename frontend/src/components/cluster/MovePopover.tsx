@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CLOUD_META } from "@/components/finops/format";
-import { type LastWal, type ProjectMove, getLastWal, getMoveDataLoss, startMove } from "@/lib/api";
+import { type LastWal, type MoveCapacity, type ProjectMove, getLastWal, getMoveCapacity, getMoveDataLoss, startMove } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Popover } from "@base-ui/react/popover";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
+import { CapacityWarning } from "./CapacityWarning";
 import { ClusterGlyph, type GlyphCloud } from "./ClusterGlyph";
 
 type MoveTarget = "onprem" | "public";
@@ -48,6 +49,7 @@ export function MovePopover({
   const [pending, setPending] = useState<Target | null>(null);
   const [lost, setLost] = useState<string[]>([]);
   const [wal, setWal] = useState<LastWal[]>([]);
+  const [room, setRoom] = useState<MoveCapacity | null>(null);
   const [dataLoss, setDataLoss] = useState(false);
   const [typed, setTyped] = useState("");
 
@@ -75,6 +77,7 @@ export function MovePopover({
     setPending(null);
     setLost([]);
     setWal([]);
+    setRoom(null);
     setDataLoss(false);
     setTyped("");
     setError(null);
@@ -99,9 +102,11 @@ export function MovePopover({
     setBusy(true);
     setError(null);
     try {
-      const [loss, last] = await Promise.all([
+      const [loss, last, capacity] = await Promise.all([
         getMoveDataLoss(project).catch(() => [] as string[]),
         sourceDown ? getLastWal(project).catch(() => [] as LastWal[]) : Promise.resolve([] as LastWal[]),
+        // Only a lost source gives an estimate; a refusal on a real need comes from the start request.
+        sourceDown ? getMoveCapacity(project, target.target).catch(() => null) : Promise.resolve(null),
       ]);
       if (!sourceDown && loss.length === 0) {
         await run(target, false);
@@ -109,6 +114,7 @@ export function MovePopover({
       }
       setLost(loss);
       setWal(last);
+      setRoom(capacity);
       setPending(target);
       setBusy(false);
     } catch (err) {
@@ -204,6 +210,7 @@ export function MovePopover({
                     </label>
                   )}
                 </div>
+                <CapacityWarning capacity={room} />
                 <div className="grid gap-1.5">
                   <Label htmlFor={nameId}>{tc("typeToConfirm", { name: project })}</Label>
                   <Input

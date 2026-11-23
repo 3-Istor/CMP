@@ -1,6 +1,7 @@
 "use client";
 
 import { errorMessage } from "@/components/activity/labels";
+import { CapacityWarning } from "@/components/cluster/CapacityWarning";
 import { ClusterGlyph, type GlyphCloud } from "@/components/cluster/ClusterGlyph";
 import { useClusterStates } from "@/components/cluster/useClusterStates";
 import { useProjectContext } from "@/components/projects/ProjectContext";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
-import { type LastWal, type ProjectMove, getLastWal, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
+import { type LastWal, type MoveCapacity, type ProjectMove, getLastWal, getMoveCapacity, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
 import { useGlobalHealth } from "@/lib/hooks";
 import { ArrowRight, CircleAlert, CircleCheck, Circle, Loader2, SkipForward } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -85,6 +86,7 @@ export function MoveButtons() {
   const [dataLoss, setDataLoss] = useState(false);
   const [lost, setLost] = useState<string[]>([]);
   const [wal, setWal] = useState<LastWal[]>([]);
+  const [room, setRoom] = useState<MoveCapacity | null>(null);
 
   if (!targetCloud || move || !can("project.move")) return null;
 
@@ -133,7 +135,12 @@ export function MoveButtons() {
                 .then(setLost)
                 .catch(() => setLost([]));
               setWal([]);
-              if (sourceDown) getLastWal(projectName).then(setWal).catch(() => setWal([]));
+              setRoom(null);
+              if (sourceDown) {
+                getLastWal(projectName).then(setWal).catch(() => setWal([]));
+                // Only a lost source gives an estimate; a real need is refused by the start request.
+                getMoveCapacity(projectName, o.target).then(setRoom).catch(() => setRoom(null));
+              }
             }}
           >
             {o.label}
@@ -161,6 +168,7 @@ export function MoveButtons() {
         onConfirm={start}
       >
         <Route from={targetCloud} to={confirmGlyph} fromState={health?.clusters.find((c) => c.cloud === targetCloud)?.state ?? "up"} />
+        <CapacityWarning capacity={room} />
         {lost.length > 0 && (
           <div className="flex items-center gap-2">
             <input

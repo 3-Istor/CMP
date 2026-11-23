@@ -1891,6 +1891,8 @@ export type ProjectMove = {
   actor: string;
   created_at: string;
   finished_at: string | null;
+  /** Start response only: the target may be short of room (estimated need). */
+  warning?: string | null;
 };
 
 export const getCurrentMove = (project: string) =>
@@ -1909,6 +1911,20 @@ export type LastWal = {
 
 export const getLastWal = (project: string) =>
   request<LastWal[]>(`/projects/${project}/moves/last-wal`);
+
+/** Target room against the project's need; `estimated` when the source cannot be read. */
+export type MoveCapacity = {
+  target: string;
+  need_cpu: number;
+  need_memory_bytes: number;
+  free_cpu: number | null;
+  free_memory_bytes: number | null;
+  estimated: boolean;
+  fits: boolean;
+};
+
+export const getMoveCapacity = (project: string, target: "onprem" | "public") =>
+  request<MoveCapacity>(`/projects/${project}/moves/capacity?target=${target}`);
 
 export const startMove = (
   project: string,
