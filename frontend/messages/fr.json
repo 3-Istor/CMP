@@ -4575,5 +4575,21 @@
       "done": "Identifiants de {name} provisionnés.",
       "failed": "Le provisionnement n'a pas abouti"
     }
+  },
+  "cluster": {
+    "memory": "Mémoire {pct} %",
+    "room": "Mémoire {pct} %",
+    "unreachable": "API injoignable",
+    "noProject": "Aucun projet",
+    "favorite": "Favori",
+    "protected": "Protégé",
+    "moving": "Bascule en cours",
+    "move": "Déplacer",
+    "moveTitle": "Déplacer {project}",
+    "moveTo": "Déplacer {project} vers {cloud}",
+    "publicCloud": "Cloud public",
+    "sourceIs": "{cloud} est {state}.",
+    "back": "Retour",
+    "runsOn": "Tourne sur"
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { ClusterGlyph } from "@/components/cluster/ClusterGlyph";
 import { CLOUD_META } from "@/components/finops/format";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
@@ -206,8 +207,8 @@ export function PlacementPanel() {
             const lane = (
               <div className="flex h-full w-full min-w-0 flex-col gap-3 rounded-xl bg-card p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="flex items-center gap-2 font-semibold">
-                    <Swatch cloud={c.cloud} />
+                  <span className="flex items-center gap-3 font-semibold">
+                    <ClusterGlyph cloud={c.cloud} state={c.state} className="mx-0.5" />
                     {CLOUD_META[c.cloud].label}
                   </span>
                   <span className="flex flex-col items-end gap-1">

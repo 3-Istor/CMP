@@ -1,15 +1,16 @@
 "use client";
 
 import { errorMessage } from "@/components/activity/labels";
+import { ClusterGlyph, type GlyphCloud } from "@/components/cluster/ClusterGlyph";
+import { useClusterStates } from "@/components/cluster/useClusterStates";
 import { useProjectContext } from "@/components/projects/ProjectContext";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
 import { type LastWal, type ProjectMove, getLastWal, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
 import { useGlobalHealth } from "@/lib/hooks";
-import { CircleAlert, CircleCheck, Circle, Loader2, SkipForward } from "lucide-react";
+import { ArrowRight, CircleAlert, CircleCheck, Circle, Loader2, SkipForward } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
@@ -18,6 +19,17 @@ import { toast } from "sonner";
 const cloudName = (cloud: string) => (cloud === "onprem" ? "On-prem" : cloud.toUpperCase());
 
 type MoveTarget = "onprem" | "public";
+
+/** Source and target as glyphs; the state ring only on the source, the target of a "public" move being picked by the platform. */
+function Route({ from, to, fromState }: { from: GlyphCloud; to: GlyphCloud; fromState?: string }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <ClusterGlyph cloud={from} state={fromState} size="sm" className="mx-1" />
+      <ArrowRight aria-hidden className="size-4 text-muted-foreground" />
+      <ClusterGlyph cloud={to} size="sm" />
+    </span>
+  );
+}
 
 function StepIcon({ status }: { status: string }) {
   if (status === "done") return <CircleCheck className="h-4 w-4 text-emerald-600" aria-hidden />;
@@ -95,6 +107,7 @@ export function MoveButtons() {
           { target: "onprem", label: t("moveOnprem"), enabled: true },
           { target: "public", label: t("move", { cloud: cloudName(other) }), enabled: up(other), down: cloudName(other) },
         ];
+  const confirmGlyph: GlyphCloud = confirming === "onprem" ? "onprem" : targetCloud === "onprem" ? "public" : other;
   const confirmName = confirming === "onprem" ? cloudName("onprem") : targetCloud === "onprem" ? t("publicName") : cloudName(other);
 
   const start = async () => {
@@ -147,6 +160,7 @@ export function MoveButtons() {
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
       >
+        <Route from={targetCloud} to={confirmGlyph} fromState={health?.clusters.find((c) => c.cloud === targetCloud)?.state ?? "up"} />
         {lost.length > 0 && (
           <div className="flex items-center gap-2">
             <input
@@ -203,8 +217,9 @@ export function MoveProgress() {
   if (!move) return null;
   return (
     <div className="space-y-3 border-t pt-4">
-      <p className="text-sm font-medium">
-        {move.status === "cancelling" ? t("cancelling") : t("moving", { cloud: cloudName(move.target) })}
+      <p className="flex items-center gap-3 text-sm font-medium">
+        <Route from={move.source as GlyphCloud} to={move.target as GlyphCloud} />
+        <span>{move.status === "cancelling" ? t("cancelling") : t("moving", { cloud: cloudName(move.target) })}</span>
       </p>
       <ol className="space-y-1.5 text-sm">
         {move.steps.map((s) => (
@@ -230,17 +245,16 @@ export function MoveProgress() {
 export function ProjectLocation() {
   const t = useTranslations("projectSettings.location");
   const { targetCloud } = useProjectContext();
+  const { states } = useClusterStates();
   if (!targetCloud) return null;
 
   return (
     <Card>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex items-center gap-3 text-sm font-medium">
+            <ClusterGlyph cloud={targetCloud} state={states?.[targetCloud] ?? "unknown"} className="mx-1" />
             {t("runsOn", { cloud: cloudName(targetCloud) })}
-            <Badge variant="outline" className="text-xs">
-              {cloudName(targetCloud)}
-            </Badge>
           </div>
           <MoveButtons />
         </div>

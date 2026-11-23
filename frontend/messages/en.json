@@ -4575,5 +4575,21 @@
       "done": "Credentials of {name} provisioned.",
       "failed": "Provisioning failed"
     }
+  },
+  "cluster": {
+    "memory": "Memory {pct} %",
+    "room": "Memory {pct} %",
+    "unreachable": "API unreachable",
+    "noProject": "No project",
+    "favorite": "Favorite",
+    "protected": "Protected",
+    "moving": "Moving",
+    "move": "Move",
+    "moveTitle": "Move {project}",
+    "moveTo": "Move {project} to {cloud}",
+    "publicCloud": "Public cloud",
+    "sourceIs": "{cloud} is {state}.",
+    "back": "Back",
+    "runsOn": "Runs on"
   }
 }

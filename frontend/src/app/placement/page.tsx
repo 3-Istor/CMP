@@ -1,21 +1,15 @@
 "use client";
 
-import { CLOUD_META } from "@/components/finops/format";
+import { ClusterCard } from "@/components/cluster/ClusterCard";
+import { ProjectRow } from "@/components/cluster/ProjectRow";
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
-import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import CountUp from "@/components/ui/CountUp";
-import ShinyText from "@/components/ui/ShinyText";
-import SpotlightCard from "@/components/ui/SpotlightCard";
 import { getPlatformPlacement, type PlatformPlacement } from "@/lib/api";
-import { useIsDark } from "@/lib/theme";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { pollWhileVisible } from "@/lib/visiblePolling";
-import { cn } from "@/lib/utils";
 import { ExternalLink, Map as MapIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const POLL_MS = 5000;
@@ -23,7 +17,6 @@ const POLL_MS = 5000;
 export default function PlacementPage() {
   const t = useTranslations("placement");
   const isAdmin = usePlatformAdmin();
-  const theme = useIsDark() ? "dark" : "light";
   const [data, setData] = useState<PlatformPlacement | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -73,93 +66,35 @@ export default function PlacementPage() {
             </div>
             <div className="grid gap-4 lg:grid-cols-3">
               {clusters.map((c) => (
-                <SpotlightCard
+                <ClusterCard
                   key={c.cloud}
-                  theme={theme}
-                  style={
-                    {
-                      "--spotlight-card-surface": "var(--card)",
-                      "--spotlight-card-border": "var(--border)",
-                    } as React.CSSProperties
+                  cloud={c.cloud}
+                  state={c.state}
+                  memoryPct={c.memory_requested_pct}
+                  footer={
+                    <a href={c.console_url} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                      {t(`console.${c.cloud}`)}
+                      <ExternalLink aria-hidden />
+                    </a>
                   }
-                  spotlightColor={CLOUD_META[c.cloud].color}
-                  aria-label={CLOUD_META[c.cloud].label}
-                  className="flex flex-col gap-3.5 text-card-foreground"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <h2 className="flex items-center gap-2 text-base font-semibold">
-                      <span
-                        aria-hidden
-                        className="size-3 rounded"
-                        style={{ background: CLOUD_META[c.cloud].color }}
-                      />
-                      {CLOUD_META[c.cloud].label}
-                    </h2>
-                    <CloudStateBadge state={c.state}>
-                      {t.has(`state.${c.state}`) ? t(`state.${c.state}`) : c.state}
-                    </CloudStateBadge>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>
-                        {t("memory")} · {t("nodes", { count: c.nodes })}
-                      </span>
-                      <span className="font-semibold text-foreground">
-                        {c.memory_requested_pct == null ? t("unread") : `${c.memory_requested_pct} %`}
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${c.memory_requested_pct ?? 0}%`,
-                          background: CLOUD_META[c.cloud].color,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <a href={c.console_url} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}>
-                    {t(`console.${c.cloud}`)}
-                    <ExternalLink aria-hidden />
-                  </a>
-                  <ul className="flex flex-col gap-2">
-                    {c.projects.map((p) => {
-                      const leaving = p.moving_to !== null;
-                      const arriving = p.moving_from !== null;
-                      return (
-                        <li key={p.name}>
-                          <Link
-                            href={`/projects/${encodeURIComponent(p.name)}`}
-                            className={cn(
-                              "flex flex-col gap-1 rounded-lg border bg-card p-3 hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-ring",
-                              leaving && "opacity-75",
-                              arriving && "border-dashed",
-                            )}
-                            style={arriving ? { borderColor: CLOUD_META[c.cloud].color } : undefined}
-                          >
-                            <span className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-semibold">{p.name}</span>
-                              <Badge variant="secondary">
-                                {leaving ? (
-                                  <ShinyText text={t("moving")} />
-                                ) : arriving ? (
-                                  t("arrivingBadge")
-                                ) : p.apps === 0 ? (
-                                  t("emptyProject")
-                                ) : (
-                                  t("running")
-                                )}
-                              </Badge>
-                            </span>
+                  {c.projects.length > 0
+                    ? c.projects.map((p) => (
+                        <ProjectRow
+                          key={p.name}
+                          name={p.name}
+                          href={`/projects/${encodeURIComponent(p.name)}`}
+                          moving={p.moving_to !== null}
+                          apps={
                             <span className="text-xs text-muted-foreground">
+                              {p.moving_from !== null ? `${t("arrivingBadge")} · ` : ""}
                               {t("apps", { count: p.apps })}
                             </span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </SpotlightCard>
+                          }
+                        />
+                      ))
+                    : undefined}
+                </ClusterCard>
               ))}
             </div>
           </div>
