@@ -18,7 +18,7 @@ from app.routers import moves
 from app.services import keycloak_service
 from app.services.audit import NOTABLE, match_action
 from app.services.keycloak_service import get_current_user
-from app.services.moves import loop, steps
+from app.services.moves import loop, steps, wal
 
 ROLES = {"admin": "admin", "member": "member"}
 NOW = time.time()
@@ -65,12 +65,7 @@ def env():
             side_effect=lambda user, _project: ROLES.get(user),
         ),
         mock.patch.object(steps, "fresh_state", return_value="up"),
-        mock.patch.object(
-            steps.project_registry,
-            "is_deletion_protected",
-            new=mock.AsyncMock(return_value=False),
-        ),
-        mock.patch.object(steps, "still_labelled", return_value=False),
+        mock.patch.object(steps, "_no_room", return_value=None),
         mock.patch.object(steps, "_unrestored", return_value=[]),
     ):
         yield TestClient(app), current, session
@@ -141,6 +136,17 @@ class TestStart:
         assert response.status_code == 202
         assert checks.await_args.args[3] == "onprem"
         assert invalid.status_code == 422
+
+    def test_last_wal_lists_the_databases(self, env):
+        http, _, _ = env
+        found = [{"database": "shop", "last_wal_at": None, "reason": "no key"}]
+
+        with mock.patch.object(
+            wal, "last_archived", new=mock.AsyncMock(return_value=found)
+        ):
+            response = http.get("/api/projects/alpha/moves/last-wal")
+
+        assert response.json() == found
 
     def test_admin_starts_one_move_and_a_second_is_refused(self, env):
         http, _, db = env

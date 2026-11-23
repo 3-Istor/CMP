@@ -31,7 +31,8 @@ class ProjectMove(Base):
     reason: Mapped[str] = mapped_column(String(32), default="button")
     # running | failed | cancelling | done | cancelled
     status: Mapped[str] = mapped_column(String(24), default="running")
-    # [{"name", "status", "detail", "started_at", "finished_at"}]
+    # [{"name", "status", "detail", "started_at", "finished_at"}]; status is
+    # pending | running | done | failed | skipped (a skipped cleanup may carry "deferred")
     steps: Mapped[list] = mapped_column(JSON, default=list)
     # Computed once in "prepare" (None until then), so a resume never bumps
     # the generation twice.

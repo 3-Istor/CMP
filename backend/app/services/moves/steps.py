@@ -8,6 +8,8 @@ take that backup and delete the source namespaces once the target is healthy
 (or the target ones, on cancel); the rest are registry commits.
 """
 
+# pylint: disable=too-many-lines
+
 import inspect
 import logging
 from datetime import datetime, timedelta, timezone
@@ -16,6 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import Project, TargetCloud
 from app.models.project_move import ACTIVE, STEP_NAMES, ProjectMove
@@ -26,7 +29,6 @@ from app.services.clusters.state import (
     fresh_state,
     pick_public_cloud,
 )
-from app.services.deletion_protection import still_labelled
 from app.services.environments import layout
 from app.services.kube_client import (
     ClusterNotConnectedError,
@@ -37,7 +39,7 @@ from app.services.kube_client import (
     kube_list,
     kube_merge_patch,
 )
-from app.services.moves import active_move, prepull
+from app.services.moves import active_move, capacity, prepull, wal
 from app.services.notifications import notify_project, notify_users
 from app.services.orphans import VAULT_AUTH_MOUNTS
 from app.services.security import restore as restores
@@ -57,6 +59,12 @@ WORKLOADS = (
 IMPORTED = ("import-service", "import-backing")
 APP_TEMPLATE = "k3s-gitops-app"
 CLUSTERS = {c.value for c in TargetCloud}
+# Longest a move waits on a source step before skipping it: the final backups
+# of moves 6 to 10 took 15 to 30 s, so 2 min is four times the worst.
+SOURCE_WAIT = timedelta(minutes=2)
+# Set on a namespace right before the move deletes it, once the project lives
+# elsewhere: the deletion-protection policy lets that one delete through.
+MOVE_CLEANUP = "cnp.3istor.com/move-cleanup"
 
 
 class MoveRefused(Exception):
@@ -86,7 +94,11 @@ async def start_checks(
     confirm_data_loss: bool,
     target: str = "public",
 ) -> str:
-    """The cluster *project* would move to; MoveRefused if it cannot move now."""
+    """The cluster *project* would move to; MoveRefused if it cannot move now.
+
+    Only the target has to be up (the restore needs it): the source steps are
+    best effort, whatever the source state.
+    """
     source = TargetCloud(project.target_cloud)
     if active_move(db, project.project_name):
         raise MoveRefused(409, "This project is already moving.")
@@ -104,34 +116,43 @@ async def start_checks(
     else:
         destination = next(c for c in PUBLIC_CLOUDS if c != source)
     # On-prem is up whenever the CMP answers.
-    for cloud in (source, destination):
-        state = fresh_state(cloud) if cloud in PUBLIC_CLOUDS else "up"
-        if state != "up":
-            raise MoveRefused(
-                409, f"The {cloud.value.upper()} cluster is {state}."
-            )
+    state = fresh_state(destination) if destination in PUBLIC_CLOUDS else "up"
+    if state != "up":
+        raise MoveRefused(
+            409, f"The {destination.value.upper()} cluster is {state}."
+        )
     if source == TargetCloud.ONPREM:
         await _check_leaving_onprem(project.project_name, destination)
-    # The admission policy refuses to delete protected source namespaces.
-    try:
-        protected = await project_registry.is_deletion_protected(
-            project.project_name
-        ) or await run_in_threadpool(
-            still_labelled, project.project_name, source
-        )
-    except project_registry.RegistryError as exc:
-        raise MoveRefused(
-            502, f"Could not check deletion protection: {exc}"
-        ) from exc
-    if protected:
-        raise MoveRefused(
-            409, "Turn deletion protection off to move this project."
-        )
+    full = await run_in_threadpool(
+        _no_room, project.project_name, source, destination
+    )
+    if full:
+        raise MoveRefused(409, full)
     if not confirm_data_loss:
         lost = await data_loss(db, project)
         if lost:
             raise MoveRefused(409, f"Data in {', '.join(lost)} will be lost.")
     return destination.value
+
+
+def _needed(project: str, source: TargetCloud) -> tuple[float, float]:
+    """What the project requests: read on the source, else its quotas."""
+    try:
+        return capacity.project_requests(
+            _app_namespaces(project, source), source
+        )
+    except (ClusterNotConnectedError, KubeUnavailableError):
+        namespaces = {
+            (app.get("spec") or {}).get("destination", {}).get("namespace")
+            for app in _project_apps(project)
+        } - {None, f"{project}-system"}
+        return capacity.quota_requests(len(namespaces))
+
+
+def _no_room(
+    project: str, source: TargetCloud, target: TargetCloud
+) -> str | None:
+    return capacity.refusal(_needed(project, source), target)
 
 
 async def _check_leaving_onprem(project: str, destination: TargetCloud):
@@ -184,13 +205,17 @@ async def data_loss(db: Session, project: Project) -> list[str]:
             project.project_name,
             TargetCloud(project.target_cloud),
         )
-    except (ClusterNotConnectedError, KubeUnavailableError) as exc:
-        raise MoveRefused(503, f"Could not read the databases: {exc}") from exc
+    except (ClusterNotConnectedError, KubeUnavailableError):
+        # A lost source: its databases come back from the archive.
+        unrestored = []
     return sorted({*imported, *unrestored})
 
 
 def new_move(
-    db: Session, project: Project, target: str, actor: str
+    db: Session,
+    project: Project,
+    target: str,
+    actor: str,
 ) -> ProjectMove:
     move = ProjectMove(
         project=project.project_name,
@@ -330,32 +355,13 @@ def _ready_on(app: dict, cloud: str) -> bool:
 # ── Checks before the source stops ──────────────────────────────────────────
 
 
-def _source_problems(move: ProjectMove) -> list[str]:
-    """What would break the move once the source is stopped, read live."""
-    problems = []
-    unhealthy = [
-        app["metadata"]["name"]
-        for app in _project_apps(move.project)
-        if _destination(app) == move.source and not _ready_on(app, move.source)
-    ]
-    if unhealthy:
-        problems.append(
-            f"Not synced and healthy on {move.source}: {', '.join(unhealthy)}"
-        )
-    # Without archiving, the final backup and the restore would miss WAL.
-    stuck = [
-        cluster["metadata"]["name"]
-        for _, cluster in _clusters(move.project, TargetCloud(move.source))
-        if restores.database_read(cluster).backups_enabled
-        and not any(
-            c.get("type") == "ContinuousArchiving"
-            and c.get("status") == "True"
-            for c in (cluster.get("status") or {}).get("conditions") or []
-        )
-    ]
-    if stuck:
-        problems.append(f"Not archiving its WAL: {', '.join(stuck)}")
-    return problems
+def _source_reachable(move: ProjectMove) -> bool:
+    """Whether the source API answers; the source steps are best effort."""
+    try:
+        _namespaces(move.project, TargetCloud(move.source))
+    except (ClusterNotConnectedError, KubeUnavailableError):
+        return False
+    return True
 
 
 def _vault_roles(move: ProjectMove) -> list[str]:
@@ -373,12 +379,20 @@ def _vault_roles(move: ProjectMove) -> list[str]:
     )
 
 
+def _roles_best_effort(move: ProjectMove) -> list[str]:
+    try:
+        return _vault_roles(move)
+    except (ClusterNotConnectedError, KubeUnavailableError):
+        return []  # source lost: nothing to check against
+
+
 async def _precheck(move: ProjectMove) -> None:
-    problems = await run_in_threadpool(_source_problems, move)
+    problems = []
     mount = VAULT_AUTH_MOUNTS[TargetCloud(move.target)]
+    roles = await run_in_threadpool(_roles_best_effort, move)
     missing = [
         role
-        for role in await run_in_threadpool(_vault_roles, move)
+        for role in roles
         if not await vault_client.app_role_exists(mount, role)
     ]
     if missing:
@@ -390,8 +404,27 @@ async def _precheck(move: ProjectMove) -> None:
         raise StepFailed("; ".join(problems))
 
 
+async def _restores_from_values(db: Session, move: ProjectMove) -> list[dict]:
+    """The same, for a lost source: the app repository names the servers."""
+    out = []
+    for app, values in await wal.backed_up(db, move.project):
+        generation = restores.current_generation(values)
+        release = layout.application(move.project, app, "backend", "prod")
+        out.append(
+            {
+                "app": app,
+                "env": "prod",
+                "generation": generation + 1,
+                "sourceServer": wal.server_name(release, generation),
+            }
+        )
+    return out
+
+
 async def _restores(db: Session, move: ProjectMove) -> list[dict]:
     """Per backed-up prod database: its next generation, from the source."""
+    if not await run_in_threadpool(_source_reachable, move):
+        return await _restores_from_values(db, move)
     clusters: dict[str, list[str]] = {}
     found = await run_in_threadpool(
         _databases, move.project, TargetCloud(move.source)
@@ -494,9 +527,9 @@ def _copy_secrets(move: ProjectMove) -> list[str]:
     return waiting
 
 
-def _target_prepared(move: ProjectMove) -> list[str]:
+def _target_prepared(move: ProjectMove, copy: bool = True) -> list[str]:
     """What the target still lacks before the switch; empty once ready."""
-    waiting = _copy_secrets(move)
+    waiting = _copy_secrets(move) if copy else []
     if not _ready_on(_bootstrap(move.project), move.target):
         waiting.append(f"{move.project}-bootstrap on {move.target}")
     return waiting
@@ -504,6 +537,15 @@ def _target_prepared(move: ProjectMove) -> list[str]:
 
 async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
     if step["status"] == "pending":
+        # Again here: the cluster may have filled since the click.
+        full = await run_in_threadpool(
+            _no_room,
+            move.project,
+            TargetCloud(move.source),
+            TargetCloud(move.target),
+        )
+        if full:
+            raise StepFailed(full)
         await project_registry.set_move(
             move.project,
             {
@@ -522,10 +564,15 @@ async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
     # Last step a cancel can undo: refuse here what would strand the move.
     await _precheck(move)
     await _ensure_restores(db, move)
-    waiting = await run_in_threadpool(_target_prepared, move)
+    # The VaultSecret copy and the pre-pull read the source: a lost one is left out.
+    lost = not await run_in_threadpool(_source_reachable, move)
+    waiting = await run_in_threadpool(_target_prepared, move, not lost)
     if waiting:
         step["detail"] = f"Waiting for {', '.join(waiting)}"
         return False
+    if lost:
+        step["detail"] = "source unreachable: no secret copy, no pre-pull"
+        return True
     waiting = await run_in_threadpool(prepull.pending, move)
     if waiting:
         step["detail"] = "; ".join(waiting)
@@ -544,7 +591,28 @@ def _replicated(pod: dict) -> bool:
     return any(o.get("kind") == "ReplicaSet" for o in owners)
 
 
+def _best_effort(run, move: ProjectMove, step: dict) -> bool:
+    """*run* the source step; what stops it skips it, the move goes on."""
+    try:
+        if run(move, step):
+            return True
+        waited = _now() - datetime.fromisoformat(step["started_at"])
+        if waited < SOURCE_WAIT:
+            return False
+        reason = (
+            f"waited {int(SOURCE_WAIT.total_seconds())} s: {step['detail']}"
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        reason = str(exc)
+    step.update(status="skipped", detail=reason)
+    return True
+
+
 def stop_source(_db, move: ProjectMove, step: dict, _steps) -> bool:
+    return _best_effort(_stop_source, move, step)
+
+
+def _stop_source(move: ProjectMove, step: dict) -> bool:
     cloud = TargetCloud(move.source)
     left = []
     for ns in _app_namespaces(move.project, cloud):
@@ -570,6 +638,10 @@ def stop_source(_db, move: ProjectMove, step: dict, _steps) -> bool:
 
 
 def final_backup(_db, move: ProjectMove, step: dict, _steps) -> bool:
+    return _best_effort(_final_backup, move, step)
+
+
+def _final_backup(move: ProjectMove, step: dict) -> bool:
     cloud = TargetCloud(move.source)
     waiting = []
     for ns, cluster in _databases(move.project, cloud):
@@ -696,6 +768,18 @@ async def persist_restores(
     return not waiting
 
 
+def _delete_source_namespace(name: str, cloud: TargetCloud):
+    """Delete a namespace of a cluster the project does not live on (after
+    the registry switch, or the target of a cancel). The annotation lets the delete through a protected one.
+    """
+    kube_merge_patch(
+        f"{NAMESPACES}/{name}",
+        {"metadata": {"annotations": {MOVE_CLEANUP: "true"}}},
+        cloud=cloud,
+    )
+    kube_delete(f"{NAMESPACES}/{name}", cloud=cloud)
+
+
 def cleanup_source(_db, move: ProjectMove, step: dict, steps) -> bool:
     if _named(steps, "wait_target")["status"] != "done":
         raise StepFailed("The target is not healthy yet")
@@ -705,14 +789,92 @@ def cleanup_source(_db, move: ProjectMove, step: dict, steps) -> bool:
         step["detail"] = waiting
         return False
     cloud = TargetCloud(move.source)
-    left = _namespaces(move.project, cloud)
+    try:
+        left = _namespaces(move.project, cloud)
+    except (ClusterNotConnectedError, KubeUnavailableError):
+        # cleanup_returned finishes it when the cluster answers again.
+        step.update(
+            status="skipped",
+            detail=f"On return of {move.source.upper()}",
+            deferred=True,
+        )
+        return True
     for ns in left:
         # A terminating namespace answers 409 to a second DELETE.
         if not ns["metadata"].get("deletionTimestamp"):
-            kube_delete(f"{NAMESPACES}/{ns['metadata']['name']}", cloud=cloud)
+            _delete_source_namespace(ns["metadata"]["name"], cloud)
     names = [ns["metadata"]["name"] for ns in left]
     step["detail"] = f"Deleting {', '.join(names)}" if names else None
     return not names
+
+
+def cleanup_returned(cloud: TargetCloud) -> list[str]:
+    """Finish the deferred source cleanups of the moves out of *cloud*.
+
+    Raises while the cluster does not answer; the caller retries.
+    """
+    did: list[str] = []
+    with SessionLocal() as db:
+        found = (
+            db.query(ProjectMove)
+            .filter(
+                ProjectMove.status == "done",
+                ProjectMove.source == cloud.value,
+            )
+            .all()
+        )
+        for move in found:
+            step = _named(move.steps, "cleanup_source")
+            if step["status"] != "skipped" or not step.get("deferred"):
+                continue
+            project = move.project
+            row = db.query(Project).filter_by(project_name=project).first()
+            current = active_move(db, project)
+            # The project came back to this cloud: its namespaces are live.
+            if (row and row.target_cloud == cloud) or (
+                current and current.target == cloud.value
+            ):
+                continue
+            did += _clean_returned(db, move, step, cloud)
+    return did
+
+
+def _clean_returned(
+    db: Session, move: ProjectMove, step: dict, cloud: TargetCloud
+) -> list[str]:
+    project = move.project
+    did = []
+    try:
+        # First, so the users stop reaching the stale copy.
+        kube_merge_patch(
+            f"/apis/apps/v1/namespaces/{project}-system/deployments/"
+            f"{project}-tunnel",
+            {"spec": {"replicas": 0}},
+            cloud=cloud,
+        )
+        did.append(f"{project}: tunnel stopped on {cloud.value}")
+    except KubeUnavailableError as exc:
+        if exc.status != 404:
+            raise
+    left = _namespaces(project, cloud)
+    for ns in left:
+        name = ns["metadata"]["name"]
+        if not ns["metadata"].get("deletionTimestamp"):
+            _delete_source_namespace(name, cloud)
+            did.append(f"{project}: deleting {name} on {cloud.value}")
+    if not left:
+        # A new list: SQLAlchemy does not see a JSON dict changed in place.
+        move.steps = [
+            (
+                {**s, "status": "done", "detail": None, "deferred": False}
+                if s is step
+                else s
+            )
+            for s in move.steps
+        ]
+        db.commit()
+        did.append(f"{project}: cleanup done on {cloud.value}")
+    return did
 
 
 def _params(move: ProjectMove) -> dict:
@@ -825,7 +987,7 @@ async def advance(db: Session, move: ProjectMove) -> ProjectMove:
         return move
     steps = [dict(step) for step in move.steps]
     for step in steps:
-        if step["status"] == "done":
+        if step["status"] in ("done", "skipped"):
             continue
         step["started_at"] = step["started_at"] or _now().isoformat()
         run = STEPS[step["name"]]
@@ -849,7 +1011,10 @@ async def advance(db: Session, move: ProjectMove) -> ProjectMove:
             step["status"] = "running"
             _save(db, move, steps)
             return move
-        step.update(status="done", finished_at=_now().isoformat())
+        # A best-effort step marks itself skipped before returning True.
+        if step["status"] != "skipped":
+            step["status"] = "done"
+        step["finished_at"] = _now().isoformat()
         _save(db, move, steps)
     move.status = "done"
     move.finished_at = _now()
@@ -866,7 +1031,8 @@ def _undo_target(move: ProjectMove) -> str | None:
     for ns in left:
         # A terminating namespace answers 409 to a second DELETE.
         if not ns["metadata"].get("deletionTimestamp"):
-            kube_delete(f"{NAMESPACES}/{ns['metadata']['name']}", cloud=cloud)
+            # Prepare gave them the protection label; the project lives on the source.
+            _delete_source_namespace(ns["metadata"]["name"], cloud)
     names = [ns["metadata"]["name"] for ns in left]
     return f"Deleting {', '.join(names)} on {move.target}" if names else None
 

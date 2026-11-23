@@ -1,10 +1,12 @@
 import asyncio
+import contextlib
 import json
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -182,7 +184,9 @@ class Kube:
     def merge_patch(self, path, body, cloud=ONPREM):
         self.log.append(("patch", cloud, path))
         obj = self.get(path, cloud=cloud)
-        obj["spec"].update(body.get("spec", {}))
+        if obj is None:
+            raise KubeUnavailableError(f"PATCH {path}: HTTP 404", 404)
+        obj.setdefault("spec", {}).update(body.get("spec", {}))
         obj["metadata"].setdefault("annotations", {}).update(
             body.get("metadata", {}).get("annotations", {})
         )
@@ -342,8 +346,7 @@ def _checks(
     db,
     states=None,
     confirm=False,
-    protected=False,
-    labels=False,
+    room=None,
     target="public",
     source=None,
     record=None,
@@ -354,12 +357,7 @@ def _checks(
         db.commit()
     with (
         mock.patch.object(steps, "fresh_state", lambda c: states[c]),
-        mock.patch.object(
-            project_registry,
-            "is_deletion_protected",
-            mock.AsyncMock(return_value=protected),
-        ),
-        mock.patch.object(steps, "still_labelled", return_value=labels),
+        mock.patch.object(steps, "_no_room", return_value=room),
         mock.patch.object(
             project_registry,
             "read_record",
@@ -426,9 +424,9 @@ def test_refuses_keycloak_to_public(db, world):
 
 
 @pytest.mark.parametrize(
-    "states", [{AWS: "up", GCP: "down"}, {AWS: "starting", GCP: "up"}]
+    "states", [{AWS: "up", GCP: "down"}, {AWS: "up", GCP: "starting"}]
 )
-def test_start_refuses_unless_both_clouds_are_up(db, states):
+def test_start_refuses_unless_the_target_is_up(db, states):
     with pytest.raises(steps.MoveRefused) as exc:
         _checks(db, states)
 
@@ -443,20 +441,6 @@ def test_start_refuses_a_second_move(db, status):
         _checks(db)
 
     assert exc.value.status_code == 409
-
-
-@pytest.mark.parametrize("protected,labels", [(True, False), (False, True)])
-def test_start_refuses_while_deletion_protection_is_on(
-    db, world, protected, labels
-):
-    with pytest.raises(steps.MoveRefused) as exc:
-        _checks(db, protected=protected, labels=labels)
-
-    assert exc.value.status_code == 409
-    assert (
-        exc.value.detail
-        == "Turn deletion protection off to move this project."
-    )
 
 
 def test_imported_data_needs_confirmation(db, world):
@@ -636,34 +620,6 @@ def test_switch_reuses_the_restores_after_a_failed_commit(db, world):
     assert second.args[1]["restores"] == [restore]
 
 
-def test_prepare_fails_while_a_source_app_is_unhealthy(db, world):
-    _backend(world.kube)["status"]["health"]["status"] = "Degraded"
-    move = _row(db)
-
-    advance(db, move)
-
-    assert move.status == "failed"
-    assert "alpha-shop-backend" in _step(move, "prepare")["detail"]
-    assert _step(move, "stop_source")["status"] == "pending"
-    # Only the ApplicationSet refresh (on-prem), no workload patched.
-    assert not [e for e in world.log if e[0] == "patch" and e[1] != ONPREM]
-    asyncio.run(steps.cancel(db, move))
-    assert move.status == "cancelling"
-
-
-def test_prepare_fails_while_a_database_does_not_archive(db, world):
-    world.kube.items[(AWS, f"{CNPG}/alpha-shop/clusters")] = [
-        _cluster("alpha-shop-backend-db", archiving=False)
-    ]
-    move = _row(db)
-
-    advance(db, move)
-
-    assert move.status == "failed"
-    assert "alpha-shop-backend-db" in _step(move, "prepare")["detail"]
-    assert _step(move, "stop_source")["status"] == "pending"
-
-
 def test_prepare_fails_while_a_vault_role_is_missing_on_the_target(db, world):
     world.role_exists.side_effect = lambda _mount, name: (
         name != "alpha-shop-role"
@@ -682,10 +638,10 @@ def test_prepare_fails_while_a_vault_role_is_missing_on_the_target(db, world):
 
 
 def test_the_owner_and_the_actor_hear_of_a_failed_move(db, world):
-    _backend(world.kube)["status"]["health"]["status"] = "Degraded"
     move = _row(db)
 
-    advance(db, move)
+    with mock.patch.object(steps, "_no_room", return_value="No room"):
+        advance(db, move)
 
     users = world.notify_users.call_args.args[0]
     assert set(users) == {"u1", "hugo"}
@@ -745,20 +701,6 @@ def test_stop_source_ignores_finished_pods(db, world):
     assert step["status"] == "running"
     assert "shop-backend-live" in step["detail"]
     assert "evicted" not in step["detail"]
-
-
-def test_kube_errors_keep_the_step_waiting(db, world):
-    move = _row(db, done=("prepare",))
-
-    def down(*_a, **_k):
-        raise ClusterNotConnectedError(AWS)
-
-    with mock.patch.object(steps, "kube_list", down):
-        advance(db, move)
-
-    assert move.status == "running"
-    assert _step(move, "stop_source")["status"] == "running"
-    assert "not connected" in _step(move, "stop_source")["detail"]
 
 
 @pytest.mark.parametrize("status", [None, 429, 503])
@@ -829,24 +771,6 @@ def test_a_step_that_answers_again_forgets_the_refusal(db, world):
     advance(db, move)
 
     assert "refused_since" not in _step(move, "cleanup_source")
-
-
-def test_a_failed_backup_fails_the_move(db, world):
-    move = _row(db, done=_before("final_backup"))
-    world.kube.add(
-        AWS,
-        f"{CNPG}/alpha-shop/backups",
-        {
-            "metadata": {"name": f"alpha-shop-backend-db-move-{move.id}"},
-            "status": {"phase": "failed", "error": "bucket gone"},
-        },
-    )
-
-    advance(db, move)
-
-    assert move.status == "failed"
-    assert "bucket gone" in _step(move, "final_backup")["detail"]
-    world.switch_cloud.assert_not_awaited()
 
 
 def test_final_backup_shows_the_backup_phase(db, world):
@@ -1336,3 +1260,338 @@ def test_cancel_refused_once_the_source_stops(db, world, status):
     assert exc.value.detail == "The source is already stopped: retry instead"
     world.set_move.assert_not_awaited()
     assert db.get(ProjectMove, move.id).status == "running"
+
+
+# ── a lost source ─────────────────────────────────────────
+
+
+@pytest.fixture
+def lost(world):
+    """AWS does not answer: every call to it raises."""
+    kube = world.kube
+
+    def guard(fn):
+        def call(path, *args, cloud=ONPREM, **kwargs):
+            if cloud == AWS:
+                raise ClusterNotConnectedError(AWS)
+            return fn(path, *args, cloud=cloud, **kwargs)
+
+        return call
+
+    with mock.patch.multiple(
+        steps,
+        kube_list=guard(kube.list),
+        kube_get=guard(kube.get),
+        kube_create=guard(kube.create),
+        kube_merge_patch=guard(kube.merge_patch),
+        kube_delete=guard(kube.delete),
+    ):
+        yield world
+
+
+def test_prepare_without_the_source_derives_the_restores_from_the_values(
+    db, lost
+):
+    lost.read_values.return_value = {
+        "db": {
+            "enabled": True,
+            "backup": {"enabled": True},
+            "restore": {"generation": 2},
+        }
+    }
+    move = _row(db)
+
+    advance(db, move)
+
+    assert _step(move, "prepare")["status"] == "done"
+    assert move.restores == [
+        {
+            "app": "shop",
+            "env": "prod",
+            "generation": 3,
+            "sourceServer": "alpha-shop-backend-db-r2",
+        }
+    ]
+    assert "unreachable" in _step(move, "prepare")["detail"]
+    lost.prepull_pending.assert_not_called()
+    assert not [e for e in lost.log if e[0] == "create"]
+
+
+def test_forced_restores_skip_apps_without_a_backed_up_database(db, lost):
+    lost.read_values.side_effect = HTTPException(409, "no database")
+    move = _row(db)
+
+    advance(db, move)
+
+    assert move.restores == []
+
+
+def test_forced_prepare_with_an_answering_source_is_as_usual(db, world):
+    move = _row(db)
+
+    advance(db, move)
+
+    assert _step(move, "prepare")["detail"] is None
+    world.prepull_pending.assert_called_once()
+    assert move.restores[0]["generation"] == 1
+
+
+def test_forced_prepare_ignores_source_problems(db, world):
+    _backend(world.kube)["status"]["health"]["status"] = "Degraded"
+    move = _row(db)
+
+    advance(db, move)
+
+    assert _step(move, "prepare")["status"] == "done"
+
+
+def test_a_lost_source_skips_stop_and_backup_and_the_move_goes_on(db, lost):
+    move = _row(db, done=("prepare",), restores=[RESTORE])
+
+    advance(db, move)
+
+    for name in ("stop_source", "final_backup"):
+        step = _step(move, name)
+        assert step["status"] == "skipped"
+        assert "not connected" in step["detail"]
+        assert step["started_at"] and step["finished_at"]
+    assert db.query(Project).one().target_cloud == GCP
+    assert _step(move, "wait_target")["status"] == "running"
+
+
+def test_a_failed_backup_is_skipped_on_a_forced_move(db, world):
+    move = _row(db, done=("prepare", "stop_source"))
+    world.kube.add(
+        AWS,
+        f"{CNPG}/alpha-shop/backups",
+        {
+            "metadata": {"name": f"alpha-shop-backend-db-move-{move.id}"},
+            "status": {"phase": "failed", "error": "no WireGuard"},
+        },
+    )
+
+    advance(db, move)
+
+    step = _step(move, "final_backup")
+    assert step["status"] == "skipped"
+    assert "no WireGuard" in step["detail"]
+
+
+def test_a_stuck_backup_is_skipped_after_the_bounded_wait(db, world):
+    move = _row(db, done=("prepare", "stop_source"))
+
+    advance(db, move)
+    assert _step(move, "final_backup")["status"] == "running"
+
+    steps_ = [dict(s) for s in move.steps]
+    _named = next(s for s in steps_ if s["name"] == "final_backup")
+    _named["started_at"] = (
+        steps.datetime.now(steps.timezone.utc)
+        - steps.SOURCE_WAIT
+        - timedelta(seconds=1)
+    ).isoformat()
+    move.steps = steps_
+    db.commit()
+    advance(db, move)
+
+    assert _step(move, "final_backup")["status"] == "skipped"
+    assert "waited" in _step(move, "final_backup")["detail"]
+
+
+def test_forced_cutover_counts_from_the_skipped_stop(db, lost):
+    move = _row(db, done=_before("cleanup_source"), restores=[RESTORE])
+    _apps_on(lost.kube, "gcp")
+    for name in ("stop_source", "final_backup"):
+        _step(move, name).update(status="skipped", detail="lost")
+
+    advance(db, move)
+
+    assert _step(move, "cleanup_source")["status"] == "skipped"
+    assert _step(move, "cleanup_source")["deferred"] is True
+    assert _step(move, "cleanup_source")["detail"] == "On return of AWS"
+    assert move.status == "done"
+    assert lost.event.call_args.args[2]["cutover_seconds"] == 0
+
+
+def test_forced_cleanup_runs_when_the_source_answers(db, world):
+    _apps_on(world.kube, "gcp")
+    move = _row(db, done=_before("cleanup_source"))
+
+    advance(db, move)
+
+    assert _step(move, "cleanup_source")["status"] == "running"
+    assert [e for e in world.log if e[0] == "delete"]
+
+
+def test_a_forced_cleanup_waits_for_the_target_before_deferring(db, lost):
+    move = _row(db, done=_before("cleanup_source"))
+
+    advance(db, move)
+
+    assert _step(move, "cleanup_source")["status"] == "running"
+    assert "Waiting for" in _step(move, "cleanup_source")["detail"]
+
+
+# ── cleanup_returned ────────────────────────────────────────────────────────
+
+
+def _deferred(db, project_cloud=GCP):
+    move = _row(db, done=STEP_NAMES)
+    move.steps = [
+        (
+            {**s, "status": "skipped", "deferred": True}
+            if s["name"] == "cleanup_source"
+            else s
+        )
+        for s in move.steps
+    ]
+    move.status = "done"
+    db.query(Project).one().target_cloud = project_cloud
+    db.commit()
+    return move
+
+
+def _returned(db, cloud=AWS):
+    with mock.patch.object(
+        steps, "SessionLocal", lambda: contextlib.nullcontext(db)
+    ):
+        return steps.cleanup_returned(cloud)
+
+
+def test_return_stops_the_tunnel_and_deletes_the_namespaces(db, world):
+    kube = world.kube
+    kube.add(AWS, _deployments("alpha-system"), _workload("alpha-tunnel", 2))
+    move = _deferred(db)
+
+    done = _returned(db)
+
+    assert done
+    assert kube.get(f"{_deployments('alpha-system')}/alpha-tunnel", cloud=AWS)[
+        "spec"
+    ] == {"replicas": 0}
+    deleted = [e[2] for e in world.log if e[0] == "delete"]
+    assert deleted == [
+        f"{NAMESPACES}/alpha-system",
+        f"{NAMESPACES}/alpha-shop",
+    ]
+    assert _step(move, "cleanup_source")["status"] == "skipped"
+
+    kube.items[(AWS, NAMESPACES)] = [_ns("kube-system", project=None)]
+    _returned(db)
+
+    assert _step(move, "cleanup_source")["status"] == "done"
+    assert not _step(move, "cleanup_source").get("deferred")
+
+
+def test_return_of_an_empty_cluster_closes_the_step(db, world):
+    world.kube.items[(AWS, NAMESPACES)] = []
+    move = _deferred(db)
+
+    _returned(db)
+
+    assert _step(move, "cleanup_source")["status"] == "done"
+    assert not [e for e in world.log if e[0] == "delete"]
+
+
+def test_return_without_a_tunnel_goes_on(db, world):
+    _deferred(db)
+
+    _returned(db)  # no alpha-tunnel: the 404 is ignored
+
+    assert [e for e in world.log if e[0] == "delete"]
+
+
+def test_return_never_touches_a_project_now_on_that_cloud(db, world):
+    _deferred(db, project_cloud=AWS)
+
+    assert _returned(db) == []
+    assert not world.log
+
+
+def test_return_never_touches_a_project_moving_to_that_cloud(db, world):
+    _deferred(db)
+    again = steps.new_move(db, db.query(Project).one(), "aws", "hugo")
+    assert again.status == "running"
+
+    assert _returned(db) == []
+    assert not world.log
+
+
+def test_return_ignores_other_clouds_and_normal_moves(db, world):
+    _deferred(db)
+
+    assert _returned(db, GCP) == []
+    assert not world.log
+
+
+def test_a_down_source_does_not_refuse_the_move(db, world):
+    assert _checks(db, {AWS: "down", GCP: "up"}, confirm=True) == "gcp"
+    assert _checks(db, {AWS: "degraded", GCP: "up"}, confirm=True) == "gcp"
+
+
+def test_the_target_must_still_be_up(db, world):
+    with pytest.raises(steps.MoveRefused) as exc:
+        _checks(db, {AWS: "down", GCP: "degraded"}, confirm=True)
+
+    assert exc.value.status_code == 409
+
+
+def test_a_protected_project_can_move(db, world):
+    # The registry label no longer refuses a move (see cleanup below).
+    assert _checks(db) == "gcp"
+
+
+def test_a_target_without_room_refuses_the_move(db, world):
+    with pytest.raises(steps.MoveRefused) as exc:
+        _checks(db, room="Not enough room on GCP: needs 1.2 CPU")
+
+    assert exc.value.status_code == 409
+    assert "Not enough room" in exc.value.detail
+
+
+def test_a_lost_source_leaves_the_data_loss_to_the_confirmation(db, lost):
+    _app_row(db, "legacy", template="import-service")
+
+    with pytest.raises(steps.MoveRefused) as exc:
+        _checks(db, {AWS: "down", GCP: "up"})
+
+    assert exc.value.detail == "Data in legacy will be lost."
+
+
+def test_prepare_fails_when_the_target_has_no_room(db, world):
+    move = _row(db)
+
+    with mock.patch.object(steps, "_no_room", return_value="Not enough room"):
+        advance(db, move)
+
+    assert move.status == "failed"
+    assert _step(move, "prepare")["detail"] == "Not enough room"
+    world.set_move.assert_not_awaited()
+
+
+def test_cleanup_marks_the_namespace_before_deleting_it(db, world):
+    _apps_on(world.kube, "gcp")
+    move = _row(db, done=_before("cleanup_source"))
+
+    advance(db, move)
+
+    ns = world.kube.get(f"{NAMESPACES}/alpha-shop", cloud=AWS)
+    assert ns["metadata"]["annotations"][steps.MOVE_CLEANUP] == "true"
+    kinds = [e[0] for e in world.log if e[2].endswith("/alpha-shop")]
+    assert kinds == ["patch", "delete"]
+
+
+def test_a_cancel_marks_the_target_namespace_before_deleting_it(db, world):
+    kube = world.kube
+    kube.add(ONPREM, f"{ARGOCD}/applications", _app("alpha-bootstrap", "aws"))
+    kube.items[(ONPREM, f"{ARGOCD}/applications")] = [
+        _app("alpha-bootstrap", "aws")
+    ]
+    move = _row(db, status="cancelling")
+
+    advance(db, move)
+
+    ns = kube.get(f"{NAMESPACES}/alpha-shop", cloud=GCP)
+    assert ns["metadata"]["annotations"][steps.MOVE_CLEANUP] == "true"
+    kinds = [e[0] for e in world.log if e[2].endswith("/alpha-shop")]
+    assert kinds == ["patch", "delete"]

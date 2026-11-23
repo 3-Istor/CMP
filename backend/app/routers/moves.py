@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.project import Project
 from app.models.project_move import ProjectMove
 from app.services.authz import RequireAdmin, RequireGuest
-from app.services.moves import steps
+from app.services.moves import steps, wal
 from app.services.moves.loop import project_lock
 from app.services.step_up import assert_step_up
 
@@ -88,6 +88,18 @@ async def move_data_loss(
         return await steps.data_loss(db, _project(db, ctx.project_name))
     except steps.MoveRefused as exc:
         raise _refused(exc) from exc
+
+
+@router.get("/moves/last-wal")
+async def move_last_wal(
+    ctx: RequireAdmin, db: Session = Depends(get_db)
+) -> list[dict]:
+    """Per backed-up database, the last archived WAL in the on-prem bucket:
+    what a move restores up to. ``last_wal_at`` is null with a reason when the
+    bucket cannot be read, without one when nothing is archived."""
+    return await wal.last_archived(
+        db, _project(db, ctx.project_name).project_name
+    )
 
 
 @router.get("/moves/current", response_model=MoveRead | None)

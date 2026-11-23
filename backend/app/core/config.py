@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     ICONS_S3_SECRET_ACCESS_KEY: str = ""
     ICONS_S3_REGION: str = "garage"
 
+    # On-prem RGW holding the CNPG backups: the chart's db.backup.endpointURL
+    # default, used when an app's values do not set it.
+    BACKUP_S3_ENDPOINT: str = "http://192.168.1.110:7480"
+
     # Project exports (EU Data Act Art. 25): private Garage bucket. Unset keys
     # disable the export. The archive is kept EXPORT_RETENTION_DAYS, the Data
     # Act retrieval period; a download link lives at most
