@@ -112,31 +112,39 @@ def test_an_app_is_its_components_requests_times_replicas():
     )
 
 
-def test_a_database_adds_its_instances_and_pooler():
+def test_an_app_without_requests_takes_the_limit_range_default():
+    assert capacity.component_need({"resources": None}) == (
+        0.05,
+        128 * 2**20,
+    )
+
+
+def test_a_database_takes_the_limit_range_per_container_and_a_pooler():
     values = {
         "db": {
             "enabled": True,
             "instances": 2,
-            "resources": {"requests": {"cpu": "200m", "memory": "512Mi"}},
+            "backup": {"enabled": True},
             "pooler": {"enabled": True, "instances": 2},
         }
     }
     cpu, memory = capacity.component_need(values)
 
-    # app 0.1 + 2 x 0.2 + 2 x 0.01 pooler
-    assert round(cpu, 3) == 0.52
-    assert memory == (128 + 2 * 512 + 2 * 64) * 2**20
+    # app 0.1 + 2 instances x 2 containers x 0.05 + 2 poolers x 0.01
+    assert round(cpu, 3) == 0.32
+    assert memory == (128 + 4 * 128 + 2 * 64) * 2**20
 
 
 def test_a_two_app_project_estimate_with_its_system_part():
-    fullstack = [{}, {"db": {"enabled": True}}]  # frontend, backend + CNPG
+    backend = {"db": {"enabled": True, "backup": {"enabled": True}}}
+    fullstack = [{}, backend]  # frontend, backend + CNPG postgres + barman
     static = [{}]
 
     cpu, memory = capacity.estimate([fullstack, static])
 
-    # 3 components x 100m / 128Mi (CNPG pods request nothing) + system.
-    assert round(cpu, 3) == round(0.3 + capacity.SYSTEM_CPU, 3)
-    assert memory == 3 * 128 * 2**20 + capacity.SYSTEM_MEMORY
+    # 3 components x 100m/128Mi + 2 CNPG containers x 50m/128Mi + system.
+    assert round(cpu, 3) == round(0.4 + capacity.SYSTEM_CPU, 3)
+    assert memory == 5 * 128 * 2**20 + capacity.SYSTEM_MEMORY
 
 
 def test_an_estimate_over_the_room_warns_and_a_real_need_refuses():
@@ -176,5 +184,5 @@ def test_a_lost_source_is_estimated_from_the_values_and_only_warns(db):
         full, warning = asyncio.run(steps._no_room(db, "alpha", AWS, GCP))
 
     assert result["estimated"] is True and result["fits"] is False
-    assert round(result["need_cpu"], 3) == round(0.2 + capacity.SYSTEM_CPU, 3)
+    assert round(result["need_cpu"], 3) == round(0.25 + capacity.SYSTEM_CPU, 3)
     assert full is None and "estimated" in warning

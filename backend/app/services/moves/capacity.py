@@ -19,8 +19,14 @@ MIB = 2**20
 # when its values file sets nothing.
 APP_CPU = 0.1
 APP_MEMORY = 128 * MIB
-# infra-templates values.yaml `db.pooler.resources.requests`. The CNPG Cluster
-# template (cnpg-cluster.yaml) sets no resources: database pods request 0.
+# LimitRange cnp-project-defaults (cnp-project-base templates/namespace.yaml):
+# defaultRequest of a container that declares none. The CNPG Cluster template
+# (infra-templates cnpg-cluster.yaml) sets no resources, so every database
+# container takes it: postgres, plus the barman-cloud plugin sidecar when
+# db.backup.enabled (cnpg-cluster.yaml `plugins`).
+LIMIT_CPU = 0.05
+LIMIT_MEMORY = 128 * MIB
+# infra-templates values.yaml `db.pooler.resources.requests`.
 POOLER_CPU = 0.01
 POOLER_MEMORY = 64 * MIB
 # cnp-project-base requests of the system namespace, summed: Gatus 10m/64Mi
@@ -48,13 +54,18 @@ def component_need(values: dict) -> tuple[float, float]:
         if scaled.get("enabled")
         else values.get("replicaCount", 1)
     )
-    cpu, memory = _asked(values.get("resources"), APP_CPU, APP_MEMORY)
+    # `resources: null` deletes the chart default: the LimitRange applies.
+    if "resources" in values and values["resources"] is None:
+        cpu, memory = LIMIT_CPU, LIMIT_MEMORY
+    else:
+        cpu, memory = _asked(values.get("resources"), APP_CPU, APP_MEMORY)
     cpu, memory = cpu * replicas, memory * replicas
     db = values.get("db") or {}
     if db.get("enabled"):
-        c, m = _asked(db.get("resources"), 0, 0)
-        cpu += c * db.get("instances", 1)
-        memory += m * db.get("instances", 1)
+        instances = db.get("instances", 1)
+        containers = 2 if (db.get("backup") or {}).get("enabled") else 1
+        cpu += LIMIT_CPU * containers * instances
+        memory += LIMIT_MEMORY * containers * instances
         pooler = db.get("pooler") or {}
         if pooler.get("enabled"):
             c, m = _asked(pooler.get("resources"), POOLER_CPU, POOLER_MEMORY)
