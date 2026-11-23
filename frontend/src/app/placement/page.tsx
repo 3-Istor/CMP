@@ -2,6 +2,7 @@
 
 import { CLOUD_META } from "@/components/finops/format";
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
+import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import CountUp from "@/components/ui/CountUp";
@@ -94,9 +95,9 @@ export default function PlacementPage() {
                       />
                       {CLOUD_META[c.cloud].label}
                     </h2>
-                    <Badge variant={c.state === "up" ? "secondary" : "destructive"}>
+                    <CloudStateBadge state={c.state}>
                       {t.has(`state.${c.state}`) ? t(`state.${c.state}`) : c.state}
-                    </Badge>
+                    </CloudStateBadge>
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs text-muted-foreground">

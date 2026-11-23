@@ -255,7 +255,7 @@ export interface GlobalHealthResponse {
 
 export interface ClusterStatus {
   cloud: "aws" | "gcp";
-  state: "up" | "down" | "starting" | "unknown";
+  state: "up" | "degraded" | "down" | "starting" | "unknown";
 }
 
 export interface VMInstance {

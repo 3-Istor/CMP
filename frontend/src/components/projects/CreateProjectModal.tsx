@@ -8,6 +8,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +39,7 @@ type Provider = "auto" | "aws" | "gcp";
 
 const PUBLIC_CLOUDS: Exclude<TargetCloud, "onprem">[] = ["aws", "gcp"];
 // Best non-up state to show on a disabled card.
-const STATE_ORDER: ClusterState[] = ["checking", "starting", "down", "unknown"];
+const STATE_ORDER: ClusterState[] = ["checking", "starting", "degraded", "down", "unknown"];
 // Same cadence as useProjectsLive while a bootstrap runs.
 const WAIT_POLL_MS = 3000;
 
@@ -361,12 +362,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                                             {selected ? (
                                                 <Check className="h-3.5 w-3.5 text-primary" />
                                             ) : !available ? (
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="text-[10px] px-1.5 py-0"
-                                                >
+                                                <CloudStateBadge state={publicState} className="text-[10px] px-1.5 py-0">
                                                     {t(`clusterState.${publicState}`)}
-                                                </Badge>
+                                                </CloudStateBadge>
                                             ) : null}
                                         </div>
                                         <span className="text-muted-foreground">

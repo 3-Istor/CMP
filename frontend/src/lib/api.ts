@@ -1873,8 +1873,10 @@ export const projectExportLink = (project: string, exportId: string) =>
 
 export type MoveStep = {
   name: string;
-  status: "pending" | "running" | "done" | "failed";
+  status: "pending" | "running" | "done" | "failed" | "skipped";
   detail: string | null;
+  /** Skipped now, runs when the source cloud is back. */
+  deferred?: boolean;
   started_at: string | null;
   finished_at: string | null;
 };
@@ -1897,6 +1899,16 @@ export const getCurrentMove = (project: string) =>
 /** Apps whose data would start empty on the other cloud. */
 export const getMoveDataLoss = (project: string) =>
   request<string[]>(`/projects/${project}/moves/data-loss`);
+
+/** Per prod database: newest archived WAL on the on-prem bucket . */
+export type LastWal = {
+  database: string;
+  last_wal_at: string | null;
+  reason: string | null;
+};
+
+export const getLastWal = (project: string) =>
+  request<LastWal[]>(`/projects/${project}/moves/last-wal`);
 
 export const startMove = (
   project: string,

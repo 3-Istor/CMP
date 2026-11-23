@@ -143,6 +143,7 @@
       "nameHint": "Lowercase, with hyphens. For example <code>platform-team</code>",
       "clusterState": {
         "checking": "Checking…",
+        "degraded": "Degraded",
         "down": "Stopped",
         "starting": "Starting",
         "unknown": "Unavailable"
@@ -2931,6 +2932,10 @@
       "cancelling": "Cancelling…",
       "details": "Details",
       "retry": "Retry",
+      "lastWal": "Data written after {time} will be lost ({database})",
+      "lastWalNone": "No archived WAL found ({database})",
+      "lastWalUnknown": "Last WAL unreadable ({database})",
+      "skipped": "Skipped",
       "cancel": "Cancel move",
       "steps": {
         "prepare": "Prepare target",
@@ -3008,6 +3013,7 @@
       "cloud": {
         "up": "up",
         "down": "down",
+        "degraded": "degraded",
         "starting": "starting",
         "unknown": "unknown"
       }
@@ -4069,6 +4075,7 @@
     "arriving": "Waiting for Argo CD",
     "state": {
       "up": "Up",
+      "degraded": "Degraded",
       "down": "Down",
       "starting": "Starting",
       "unknown": "Unknown",
