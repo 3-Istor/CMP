@@ -2,6 +2,7 @@
 
 import { CLOUD_META } from "@/components/finops/format";
 import { useProjectContext } from "@/components/projects/ProjectContext";
+import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -210,12 +211,7 @@ export function PlacementPanel() {
                     {CLOUD_META[c.cloud].label}
                   </span>
                   <span className="flex flex-col items-end gap-1">
-                    <Badge
-                      variant={c.state === "up" ? "secondary" : c.state === "degraded" ? "outline" : "destructive"}
-                      className={c.state === "degraded" ? "border-amber-600/40 bg-amber-500/10 text-amber-700 dark:text-amber-400" : undefined}
-                    >
-                      {t.has(`state.${c.state}`) ? t(`state.${c.state}`) : c.state}
-                    </Badge>
+                    <CloudStateBadge state={c.state}>{t.has(`state.${c.state}`) ? t(`state.${c.state}`) : c.state}</CloudStateBadge>
                     {(isSource || isTarget) && (
                       <span className="text-xs font-medium text-muted-foreground">
                         {isSource ? t("source") : t("target")}

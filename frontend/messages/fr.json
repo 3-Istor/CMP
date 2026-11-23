@@ -3012,6 +3012,7 @@
       "cloud": {
         "up": "en ligne",
         "down": "éteint",
+        "degraded": "dégradé",
         "starting": "démarrage",
         "unknown": "inconnu"
       }

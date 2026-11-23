@@ -8,6 +8,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -361,12 +362,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
                                             {selected ? (
                                                 <Check className="h-3.5 w-3.5 text-primary" />
                                             ) : !available ? (
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="text-[10px] px-1.5 py-0"
-                                                >
+                                                <CloudStateBadge state={publicState} className="text-[10px] px-1.5 py-0">
                                                     {t(`clusterState.${publicState}`)}
-                                                </Badge>
+                                                </CloudStateBadge>
                                             ) : null}
                                         </div>
                                         <span className="text-muted-foreground">

@@ -139,11 +139,10 @@ test("a failed move offers Retry", async ({ page }) => {
   await shot(page, "5-failed");
 });
 
-test("an on-prem project cannot move", async ({ page }) => {
-  await installMockApi(page, { "/projects/demo/moves/current": { json: null } });
+test("an on-prem project moves to a public cloud", async ({ page }) => {
+  await installMockApi(page, { ...nothingLost, "/projects/demo/moves/current": { json: null } });
   await page.goto("/projects/demo/settings");
-  await expect(page.getByText("Moving on-prem projects is not available yet.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Move to/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Move to public cloud" })).toBeVisible();
   await shot(page, "6-onprem");
 });
 

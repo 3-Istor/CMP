@@ -3012,6 +3012,7 @@
       "cloud": {
         "up": "up",
         "down": "down",
+        "degraded": "degraded",
         "starting": "starting",
         "unknown": "unknown"
       }
