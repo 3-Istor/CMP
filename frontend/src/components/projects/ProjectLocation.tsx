@@ -9,7 +9,6 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
 import { type LastWal, type ProjectMove, getLastWal, getMoveDataLoss, moveAction, startMove } from "@/lib/api";
 import { useGlobalHealth } from "@/lib/hooks";
-import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { CircleAlert, CircleCheck, Circle, Loader2, SkipForward } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -74,15 +73,12 @@ export function MoveButtons() {
   const [dataLoss, setDataLoss] = useState(false);
   const [lost, setLost] = useState<string[]>([]);
   const [wal, setWal] = useState<LastWal[]>([]);
-  const [forceOpt, setForceOpt] = useState(false);
-  const isAdmin = usePlatformAdmin();
 
   if (!targetCloud || move || !can("project.move")) return null;
 
   const up = (cloud: string) => health?.clusters.some((c) => c.cloud === cloud && c.state === "up") ?? false;
   // On-prem is not in the cluster health list; only a public source can be reported not up.
-  const sourceDown = isAdmin && targetCloud !== "onprem" && !!health && !up(targetCloud);
-  const forced = isAdmin && (sourceDown || forceOpt);
+  const sourceDown = targetCloud !== "onprem" && !!health && !up(targetCloud);
   // From a public cloud the "public" target is the other one; from on-prem, any public cloud that is up.
   const other = targetCloud === "aws" ? "gcp" : "aws";
   const options: { target: MoveTarget; label: string; enabled: boolean; down?: string }[] =
@@ -102,8 +98,8 @@ export function MoveButtons() {
   const confirmName = confirming === "onprem" ? cloudName("onprem") : targetCloud === "onprem" ? t("publicName") : cloudName(other);
 
   const start = async () => {
-    // The typed project name is the data-loss confirmation of a forced move.
-    setMove(await startMove(projectName, dataLoss || forced, confirming ?? "public", forced));
+    // With a source that is not up, the typed project name confirms the loss shown in the dialog.
+    setMove(await startMove(projectName, dataLoss || sourceDown, confirming ?? "public"));
   };
 
   return (
@@ -123,9 +119,8 @@ export function MoveButtons() {
               getMoveDataLoss(projectName)
                 .then(setLost)
                 .catch(() => setLost([]));
-              setForceOpt(false);
               setWal([]);
-              if (isAdmin) getLastWal(projectName).then(setWal).catch(() => setWal([]));
+              if (sourceDown) getLastWal(projectName).then(setWal).catch(() => setWal([]));
             }}
           >
             {o.label}
@@ -136,30 +131,14 @@ export function MoveButtons() {
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
         level={2}
-        title={t(forced ? "forceTitle" : "confirmTitle", { name: projectName, cloud: confirmName })}
-        description={
-          forced
-            ? t("forceDescription", { source: cloudName(targetCloud) })
-            : t("confirmDescription", { cloud: confirmName })
-        }
-        destructive={forced}
+        title={t("confirmTitle", { name: projectName, cloud: confirmName })}
+        description={t("confirmDescription", { cloud: confirmName })}
+        destructive={sourceDown}
         expectedName={projectName}
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
       >
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <input
-              id="move-force"
-              type="checkbox"
-              checked={forced}
-              disabled={sourceDown}
-              onChange={(e) => setForceOpt(e.target.checked)}
-            />
-            <Label htmlFor="move-force">{t("forceOption")}</Label>
-          </div>
-        )}
-        {forced &&
+        {sourceDown &&
           wal.map((w) => (
             <p key={w.database} className="text-sm text-destructive">
               {w.last_wal_at

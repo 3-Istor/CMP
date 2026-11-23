@@ -1889,7 +1889,6 @@ export type ProjectMove = {
   steps: MoveStep[];
   detail: string | null;
   actor: string;
-  forced?: boolean;
   created_at: string;
   finished_at: string | null;
 };
@@ -1901,7 +1900,7 @@ export const getCurrentMove = (project: string) =>
 export const getMoveDataLoss = (project: string) =>
   request<string[]>(`/projects/${project}/moves/data-loss`);
 
-/** Per prod database: newest archived WAL on the on-prem bucket (admins only). */
+/** Per prod database: newest archived WAL on the on-prem bucket . */
 export type LastWal = {
   database: string;
   last_wal_at: string | null;
@@ -1915,11 +1914,10 @@ export const startMove = (
   project: string,
   confirm_data_loss: boolean,
   target: "onprem" | "public",
-  force = false,
 ) =>
   request<ProjectMove>(`/projects/${project}/move`, {
     method: "POST",
-    body: JSON.stringify({ confirm_data_loss, target, force }),
+    body: JSON.stringify({ confirm_data_loss, target }),
   });
 
 export const moveAction = (
