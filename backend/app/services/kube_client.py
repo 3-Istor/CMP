@@ -23,6 +23,7 @@ from app.models.project import TargetCloud
 
 SERVICE_ACCOUNT_DIR = Path("/var/run/secrets/kubernetes.io/serviceaccount")
 REQUEST_TIMEOUT = 10
+PROBE_TIMEOUT = 3  # a dead tunnel must not stall the 60 s refresh
 CLUSTER_SECRET = "/api/v1/namespaces/argocd/secrets/cluster-{}"
 CREDENTIALS_TTL = 60
 
@@ -108,7 +109,8 @@ def _target(cloud: TargetCloud, refresh: bool = False) -> tuple[str, str, str]:
     # Imported here: state imports this module.
     from app.services.clusters.state import cached_state
 
-    if cached_state(cloud) != "up":
+    # degraded and starting clusters answer; the cleanup after an outage needs them.
+    if cached_state(cloud) in ("down", "unknown"):
         raise ClusterNotConnectedError(cloud)
     hit = _credentials.get(cloud)
     if hit and not refresh and time.monotonic() - hit[0] < CREDENTIALS_TTL:
@@ -116,6 +118,24 @@ def _target(cloud: TargetCloud, refresh: bool = False) -> tuple[str, str, str]:
     target = _cloud_credentials(cloud)
     _credentials[cloud] = (time.monotonic(), *target)
     return target
+
+
+def api_reachable(cloud: TargetCloud) -> bool:
+    """True when the cloud's kube API answers, whatever the status (401 included).
+
+    Bypasses the cached state, which gates every other call to the cloud.
+    """
+    try:
+        server, token, ca = _cloud_credentials(cloud)
+        _session.get(
+            f"{server}/version",
+            headers={"Authorization": f"Bearer {token}"},
+            verify=ca,
+            timeout=PROBE_TIMEOUT,
+        )
+    except (KubeUnavailableError, requests.RequestException):
+        return False
+    return True
 
 
 def _request(

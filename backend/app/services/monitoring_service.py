@@ -48,7 +48,7 @@ class HypervisorStatus(BaseModel):
 
 class ClusterStatus(BaseModel):
     cloud: str
-    state: str  # up | down | starting | unknown
+    state: str  # up | degraded | down | starting | unknown
 
 
 class GlobalHealthResponse(BaseModel):
