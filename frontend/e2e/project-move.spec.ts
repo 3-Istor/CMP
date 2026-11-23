@@ -193,13 +193,30 @@ test("an estimated need over the room warns without blocking", async ({ page }) 
     ...nothingLost,
     "/projects/demo/moves/last-wal": { json: [] },
     "/projects/demo/moves/capacity": {
-      json: { target: "gcp", need_cpu: 0.8, need_memory_bytes: 1.1 * 2 ** 30, free_cpu: 0.6, free_memory_bytes: 10.2 * 2 ** 30, estimated: true, fits: false },
+      json: { target: "gcp", need_cpu: 0.8, need_memory_bytes: 1.1 * 2 ** 30, free_cpu: 0.6, free_memory_bytes: 10.2 * 2 ** 30, basis: "estimate", measured_at: null, estimated: true, fits: false },
     },
     "/projects/demo/moves/current": { json: null },
   });
   await page.goto("/projects/demo/settings");
   await page.getByRole("button", { name: "Move to GCP" }).click();
-  await expect(page.getByText("Estimated need 0.8 CPU / 1.1 GiB, free 0.6 / 10.2")).toBeVisible();
+  await expect(page.getByText("Estimated. Need 0.8 CPU / 1.1 GiB, free 0.6 / 10.2")).toBeVisible();
+});
+
+test("a cached need over the room says when it was last seen", async ({ page }) => {
+  const health = { openstack_hypervisors: [], clusters: [{ cloud: "aws", state: "degraded" }, { cloud: "gcp", state: "up" }] };
+  await installMockApi(page, {
+    ...VARIANTS.aws,
+    "/infra/health": { json: health },
+    ...nothingLost,
+    "/projects/demo/moves/last-wal": { json: [] },
+    "/projects/demo/moves/capacity": {
+      json: { target: "gcp", need_cpu: 0.8, need_memory_bytes: 1.1 * 2 ** 30, free_cpu: 0.6, free_memory_bytes: 10.2 * 2 ** 30, basis: "cache", measured_at: "2026-11-23T14:32:00", estimated: true, fits: false },
+    },
+    "/projects/demo/moves/current": { json: null },
+  });
+  await page.goto("/projects/demo/settings");
+  await page.getByRole("button", { name: "Move to GCP" }).click();
+  await expect(page.getByText(/Last seen \d\d:\d\d\. Need 0.8 CPU/)).toBeVisible();
 });
 
 test("the overview moves the project in two clicks", async ({ page }) => {
