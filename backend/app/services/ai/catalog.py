@@ -235,8 +235,10 @@ def mcp_tools(app_name: str, values: Any) -> list[dict]:
         # Servers publish their final names (`<app>__<tool>`, the gateway
         # cannot prefix them), so the values may already carry the prefix.
         if name.startswith(prefix):
-            name = name[len(prefix):]
-            if not (isinstance(raw, dict) and isinstance(raw.get("badges"), list)):
+            name = name[len(prefix) :]
+            if not (
+                isinstance(raw, dict) and isinstance(raw.get("badges"), list)
+            ):
                 _, _, badges = _badges(name, private)
         if name:
             tools.append(
