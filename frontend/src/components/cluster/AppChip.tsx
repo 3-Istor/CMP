@@ -29,13 +29,20 @@ export function appKind(...hints: (string | null | undefined)[]): AppKind {
 }
 
 /** App symbol: type square, name, health dot. */
-export function AppChip({ name, kind, state, favorite }: { name: string; kind: AppKind; state?: string; favorite?: boolean }) {
-  return (
+export function AppChip({ name, kind, state, favorite, footprint }: { name: string; kind: AppKind; state?: string; favorite?: boolean; footprint?: React.ReactNode }) {
+  const chip = (
     <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-0.5 text-xs" data-kind={kind}>
       <span aria-hidden className={cn("size-3 shrink-0 rounded-[3px]", KIND[kind])} />
       <span className="truncate font-medium">{name}</span>
       {favorite && <Star aria-hidden className="size-3 shrink-0 fill-amber-500 text-amber-500" />}
       <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[toneOf(state ?? "up")])} />
+    </span>
+  );
+  if (!footprint) return chip;
+  return (
+    <span className="inline-flex flex-col items-start gap-0.5">
+      {chip}
+      <span className="pl-2">{footprint}</span>
     </span>
   );
 }

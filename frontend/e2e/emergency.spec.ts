@@ -9,9 +9,9 @@ const emergency = {
     { cloud: "gcp", state: "down" },
   ],
   projects: [
-    { name: "shop", cloud: "gcp", cloud_state: "down", apps: ["web", "api"], favorite_apps: ["api"], protected: true, favorite: true },
-    { name: "blog", cloud: "gcp", cloud_state: "down", apps: ["site"], favorite_apps: [], protected: false, favorite: false },
-    { name: "iot", cloud: "aws", cloud_state: "degraded", apps: [], favorite_apps: [], protected: false, favorite: false },
+    { name: "shop", cloud: "gcp", cloud_state: "down", apps: ["web", "api"], favorite_apps: ["api"], footprint: [{ project: "shop", cloud: "gcp", app: "web", cpu: 0.1, memory_bytes: 134217728, pods: 2, measured_at: "2026-11-23T14:32:00Z" }, { project: "shop", cloud: "gcp", app: "api", cpu: 0.35, memory_bytes: 536870912, pods: 2, measured_at: "2026-11-23T14:32:00Z" }], protected: true, favorite: true },
+    { name: "blog", cloud: "gcp", cloud_state: "down", apps: ["site"], favorite_apps: [], footprint: [], protected: false, favorite: false },
+    { name: "iot", cloud: "aws", cloud_state: "degraded", apps: [], favorite_apps: [], footprint: [], protected: false, favorite: false },
   ],
   moves: [
     { id: 2, project: "shop", source: "gcp", target: "aws", step: "switch", status: "failed", started_at: "2026-11-23T10:00:00Z", auto: true },
@@ -74,4 +74,15 @@ test("the move popover closes with Escape", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Move blog" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Move blog" })).toHaveCount(0);
+});
+
+test("a down cluster shows each app's last footprint and the project total", async ({ page }) => {
+  await installMockApi(page, {
+    ...VARIANTS.aws,
+    "/account/me": { json: { ...me, cnp_admin: true } },
+    "/emergency": { json: emergency },
+  });
+  await page.goto("/emergency");
+  await expect(page.getByText("0.35 CPU · 512 Mi")).toBeVisible();
+  await expect(page.getByText(/Total 0\.45 CPU · 640 Mi · last seen \d\d:\d\d/)).toBeVisible();
 });

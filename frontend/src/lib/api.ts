@@ -2023,6 +2023,19 @@ export type EmergencyMove = {
   auto: boolean;
 };
 
+export type AppFootprint = {
+  project: string;
+  app: string;
+  cloud: string;
+  cpu: number;
+  memory_bytes: number;
+  pods: number;
+  measured_at: string;
+};
+
+export const getProjectFootprint = (project: string) =>
+  request<AppFootprint[]>(`/projects/${encodeURIComponent(project)}/moves/footprint`);
+
 export type Emergency = {
   clusters: { cloud: string; state: string }[];
   projects: {
@@ -2031,6 +2044,7 @@ export type Emergency = {
     cloud_state: string;
     apps: string[];
     favorite_apps: string[];
+    footprint: AppFootprint[];
     protected: boolean;
     favorite: boolean;
   }[];

@@ -109,24 +109,39 @@ def refresh_due(clouds: list[TargetCloud]) -> None:
             )
 
 
+def _utc(at: datetime) -> datetime:
+    # SQLite drops the zone.
+    return at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+
+
+def rows(db: Session, project: str | None = None) -> list[dict]:
+    """The stored footprints (of one project), as the cards show them."""
+    query = db.query(ProjectFootprint)
+    if project:
+        query = query.filter(ProjectFootprint.project == project)
+    return [
+        {
+            "project": r.project,
+            "app": r.app,
+            "cloud": r.cloud,
+            "cpu": r.cpu,
+            "memory_bytes": r.memory_bytes,
+            "pods": r.pods,
+            "measured_at": _utc(r.measured_at).isoformat(),
+        }
+        for r in query.order_by(ProjectFootprint.app)
+    ]
+
+
 def cached(
     db: Session, project: str, cloud: TargetCloud
 ) -> tuple[tuple[float, float], datetime] | None:
     """((CPU, memory bytes), oldest measure) of the project's apps on *cloud*."""
-    rows = (
-        db.query(ProjectFootprint)
-        .filter(
-            ProjectFootprint.project == project,
-            ProjectFootprint.cloud == cloud.value,
-        )
-        .all()
-    )
-    if not rows:
+    found = [r for r in rows(db, project) if r["cloud"] == cloud.value]
+    if not found:
         return None
-    at = min(r.measured_at for r in rows)
-    if at.tzinfo is None:  # SQLite drops the zone
-        at = at.replace(tzinfo=timezone.utc)
+    at = min(datetime.fromisoformat(r["measured_at"]) for r in found)
     return (
-        sum(r.cpu for r in rows),
-        sum(r.memory_bytes for r in rows),
+        sum(r["cpu"] for r in found),
+        sum(r["memory_bytes"] for r in found),
     ), at

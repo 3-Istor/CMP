@@ -63,6 +63,20 @@ def test_a_starred_app_makes_its_project_a_favorite():
     assert first["favorite"] is True
 
 
+def test_a_project_carries_its_footprint_on_its_own_cluster():
+    here = {"project": "shop", "app": "web", "cloud": "gcp"}
+    elsewhere = {"project": "shop", "app": "web", "cloud": "aws"}
+    other = {"project": "blog", "app": "web", "cloud": "gcp"}
+    body = emergency.build(
+        {"gcp": "down"},
+        [_rec("shop", "gcp", apps=["web"])],
+        [],
+        set(),
+        footprints=[here, elsewhere, other],
+    )
+    assert body["projects"][0]["footprint"] == [here]
+
+
 def test_moves_active_and_auto_first_with_current_step():
     moves = [
         _move("old", status="done", day=3),

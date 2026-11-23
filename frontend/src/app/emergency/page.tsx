@@ -5,6 +5,7 @@ import { AppChip, appKind } from "@/components/cluster/AppChip";
 import { ClusterCard } from "@/components/cluster/ClusterCard";
 import { MapOverview } from "@/components/cluster/MapOverview";
 import { MovePopover } from "@/components/cluster/MovePopover";
+import { FootprintLine, FootprintTotal } from "@/components/cluster/Footprint";
 import { ProjectRow } from "@/components/cluster/ProjectRow";
 import { Badge } from "@/components/ui/badge";
 import { usePlacementMemory } from "@/components/cluster/useClusterStates";
@@ -158,6 +159,7 @@ export default function EmergencyPage() {
                                     favorite={p.favorite}
                                     protectedProject={p.protected}
                                     moving={busy}
+                                    total={<FootprintTotal rows={p.footprint} up={p.cloud_state === "up"} />}
                                     apps={p.apps.map((a) => (
                                       <AppChip
                                         key={a}
@@ -165,6 +167,7 @@ export default function EmergencyPage() {
                                         kind={appKind(a)}
                                         state={p.cloud_state}
                                         favorite={p.favorite_apps.includes(a)}
+                                        footprint={p.footprint.find((f) => f.app === a) && <FootprintLine row={p.footprint.find((f) => f.app === a)!} />}
                                       />
                                     ))}
                                     action={

@@ -15,10 +15,10 @@ const running = {
 const emergency = {
   clusters: [{ cloud: "onprem", state: "up" }, { cloud: "aws", state: "degraded" }, { cloud: "gcp", state: "down" }],
   projects: [
-    { name: "shop", cloud: "gcp", cloud_state: "down", apps: ["web", "api", "db"], favorite_apps: ["api"], protected: true, favorite: true },
-    { name: "blog", cloud: "gcp", cloud_state: "down", apps: ["site"], favorite_apps: [], protected: false, favorite: false },
-    { name: "iot", cloud: "aws", cloud_state: "degraded", apps: ["landing", "optispace", "db"], favorite_apps: [], protected: true, favorite: false },
-    { name: "todo-move", cloud: "aws", cloud_state: "degraded", apps: ["frontend", "backend"], favorite_apps: [], protected: false, favorite: true },
+    { name: "shop", cloud: "gcp", cloud_state: "down", apps: ["web", "api", "db"], favorite_apps: ["api"], footprint: [{ project: "shop", cloud: "gcp", app: "web", cpu: 0.1, memory_bytes: 134217728, pods: 2, measured_at: "2026-11-23T14:32:00Z" }, { project: "shop", cloud: "gcp", app: "api", cpu: 0.35, memory_bytes: 536870912, pods: 2, measured_at: "2026-11-23T14:32:00Z" }, { project: "shop", cloud: "gcp", app: "db", cpu: 0.15, memory_bytes: 1610612736, pods: 2, measured_at: "2026-11-23T14:32:00Z" }], protected: true, favorite: true },
+    { name: "blog", cloud: "gcp", cloud_state: "down", apps: ["site"], favorite_apps: [], footprint: [{ project: "blog", cloud: "gcp", app: "site", cpu: 0.1, memory_bytes: 134217728, pods: 2, measured_at: "2026-11-23T14:32:00Z" }], protected: false, favorite: false },
+    { name: "iot", cloud: "aws", cloud_state: "degraded", apps: ["landing", "optispace", "db"], favorite_apps: [], footprint: [], protected: true, favorite: false },
+    { name: "todo-move", cloud: "aws", cloud_state: "degraded", apps: ["frontend", "backend"], favorite_apps: [], footprint: [], protected: false, favorite: true },
   ],
   moves: [{ id: 3, project: "todo-move", source: "aws", target: "onprem", step: "final_backup", status: "running", started_at: "2026-11-23T14:00:00Z", auto: false }],
 };
@@ -35,9 +35,11 @@ for (const scheme of ["light", "dark"] as const) {
       page.screenshot({ path: `${DIR}/${name}-${scheme}.png`, fullPage: full });
 
     test("overview and settings", async ({ page }) => {
-      await installMockApi(page, { ...VARIANTS.aws, ...admin, "/projects/demo/apps": { json: three }, "/projects/demo/moves/current": { json: null }, "/projects/demo/moves/data-loss": { json: [] },
+      await installMockApi(page, { ...VARIANTS.aws, ...admin, "/projects/demo/moves/footprint": { json: [{ project: "demo", cloud: "aws", app: "demo-web", cpu: 0.1, memory_bytes: 134217728, pods: 2, measured_at: "2026-11-23T14:32:00Z" }, { project: "demo", cloud: "aws", app: "demo-api", cpu: 0.35, memory_bytes: 536870912, pods: 2, measured_at: "2026-11-23T14:32:00Z" }, { project: "demo", cloud: "aws", app: "demo-db", cpu: 0.15, memory_bytes: 1610612736, pods: 2, measured_at: "2026-11-23T14:32:00Z" }] }, "/projects/demo/apps": { json: three }, "/projects/demo/moves/current": { json: null }, "/projects/demo/moves/data-loss": { json: [] },
         "/placement": { json: { clusters: [placementCluster("aws", "up", [], 64)] } } });
       await page.goto("/projects/demo");
+      await page.getByText("Total 0.60 CPU").waitFor();
+      await shot(page, "overview-card", false);
       await page.getByRole("button", { name: "Move", exact: true }).click();
       await page.getByRole("dialog").waitFor();
       await page.waitForTimeout(500);

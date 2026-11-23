@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.project import Project, TargetCloud
 from app.models.project_move import ProjectMove
 from app.services.authz import RequireAdmin, RequireGuest
-from app.services.moves import steps, wal
+from app.services.moves import footprint, steps, wal
 from app.services.moves.loop import project_lock
 from app.services.step_up import assert_step_up
 
@@ -113,6 +113,14 @@ async def move_capacity(
         TargetCloud(project.target_cloud),
         destination,
     )
+
+
+@router.get("/moves/footprint")
+async def move_footprint(
+    ctx: RequireGuest, db: Session = Depends(get_db)
+) -> list[dict]:
+    """Last requests measured per app of the project, on every cloud."""
+    return footprint.rows(db, ctx.project_name)
 
 
 @router.get("/moves/last-wal")

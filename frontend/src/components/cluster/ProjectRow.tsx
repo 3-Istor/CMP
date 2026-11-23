@@ -13,6 +13,7 @@ export function ProjectRow({
   protectedProject,
   moving,
   apps,
+  total,
   action,
 }: {
   name: string;
@@ -21,6 +22,7 @@ export function ProjectRow({
   protectedProject?: boolean;
   moving?: boolean;
   apps?: React.ReactNode;
+  total?: React.ReactNode;
   action?: React.ReactNode;
 }) {
   const t = useTranslations("cluster");
@@ -42,6 +44,7 @@ export function ProjectRow({
             {t("moving")}
           </span>
         )}
+        {total}
         <span className="ml-auto">{action}</span>
       </div>
       {apps && <div className="flex flex-wrap gap-1.5">{apps}</div>}
