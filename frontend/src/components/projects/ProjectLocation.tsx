@@ -134,18 +134,19 @@ export function MoveButtons() {
         title={t("confirmTitle", { name: projectName, cloud: confirmName })}
         description={t("confirmDescription", { cloud: confirmName })}
         destructive={sourceDown}
+        consequences={
+          sourceDown
+            ? wal.map((w) =>
+                w.last_wal_at
+                  ? t("lastWal", { time: new Date(w.last_wal_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }), database: w.database })
+                  : t(w.reason ? "lastWalUnknown" : "lastWalNone", { database: w.database }),
+              )
+            : undefined
+        }
         expectedName={projectName}
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
       >
-        {sourceDown &&
-          wal.map((w) => (
-            <p key={w.database} className="text-sm text-destructive">
-              {w.last_wal_at
-                ? t("lastWal", { time: new Date(w.last_wal_at).toLocaleString(), database: w.database })
-                : t(w.reason ? "lastWalUnknown" : "lastWalNone", { database: w.database })}
-            </p>
-          ))}
         {lost.length > 0 && (
           <div className="flex items-center gap-2">
             <input
@@ -209,7 +210,7 @@ export function MoveProgress() {
         {move.steps.map((s) => (
           <li key={s.name} className="flex items-center gap-2">
             <StepIcon status={s.status} />
-            <span>{t(`steps.${s.name}`)}</span>
+            <span className={s.status === "skipped" ? "text-muted-foreground" : undefined}>{t(`steps.${s.name}`)}</span>
             {s.status === "skipped" && (
               <span className="text-xs text-muted-foreground">{s.detail ?? t("skipped")}</span>
             )}

@@ -210,7 +210,10 @@ export function PlacementPanel() {
                     {CLOUD_META[c.cloud].label}
                   </span>
                   <span className="flex flex-col items-end gap-1">
-                    <Badge variant={c.state === "up" ? "secondary" : "destructive"}>
+                    <Badge
+                      variant={c.state === "up" ? "secondary" : c.state === "degraded" ? "outline" : "destructive"}
+                      className={c.state === "degraded" ? "border-amber-600/40 bg-amber-500/10 text-amber-700 dark:text-amber-400" : undefined}
+                    >
                       {t.has(`state.${c.state}`) ? t(`state.${c.state}`) : c.state}
                     </Badge>
                     {(isSource || isTarget) && (
