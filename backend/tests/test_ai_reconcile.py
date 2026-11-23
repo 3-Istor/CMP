@@ -13,8 +13,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.core.database import Base
+from app.models.ai import AiAgent
 from app.services import vault_client
-from app.services.ai import catalog, identity, reconcile
+from app.services.ai import catalog, gitops, identity, reconcile
 
 PROJECT = "epitweet"
 TOOLS = [
@@ -386,21 +387,39 @@ def test_a_client_of_a_project_sharing_the_prefix_is_no_orphan(kc, vault, db):
     assert (report["orphans"], report["deleted"]) == ([], [])
 
 
-def test_credentials_show_up_once_the_reconcile_ran(kc, vault, db):
-    reconcile._runs.credentials.clear()  # pylint: disable=protected-access
-    before = asyncio.run(reconcile.credentials(PROJECT))
-
+def test_credentials_show_up_in_the_mirror_once_the_reconcile_ran(
+    kc, vault, db
+):
     _run(db, _record([_agent()]))
 
-    after = asyncio.run(reconcile.credentials(PROJECT))
-    assert ("agent-epitweet-grok-reader" in before, after) == (
-        False,
-        {
-            "agent-epitweet-grok-reader": {
-                "enabled": True,
-                "project": PROJECT,
-            }
-        },
+    row = db.query(AiAgent).filter_by(name="grok-reader").one()
+    assert row.credentials == "ok"
+
+
+def test_a_reconcile_reads_the_agent_settings_into_the_mirror(
+    kc, vault, db, monkeypatch
+):
+    record = _record([_agent()])
+    record["spec"]["apps"][-1][
+        "repoURL"
+    ] = f"https://github.com/{settings.GITHUB_ORG}/epitweet"
+    read_values = mock.AsyncMock(
+        return_value={
+            "agent": {"template": "app-bot", "trigger": {"type": "event"}}
+        }
+    )
+    monkeypatch.setattr(gitops, "read_values", read_values)
+
+    _run(db, record)
+
+    row = db.query(AiAgent).filter_by(name="grok-reader").one()
+    assert (row.template, row.declaration["trigger"], row.settings_status) == (
+        "app-bot",
+        {"type": "event"},
+        "ok",
+    )
+    read_values.assert_awaited_once_with(
+        f"{settings.GITHUB_ORG}/epitweet", "deploy/values-grok-reader.yaml"
     )
 
 

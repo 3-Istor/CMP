@@ -177,6 +177,40 @@ async def usage(
     return sorted(rows.values(), key=lambda r: -r["cost_usd"])
 
 
+async def today_by_azp(project: str | None = None) -> dict[str, dict]:
+    """
+    Tokens (cache reads left out) and cost of the last day per caller, of
+    one project or of all: one MetricsQL query for every agent of a list.
+
+    Raises:
+        UsageUnavailable: VictoriaMetrics could not be read.
+    """
+    labels = f'__name__=~"{TOKENS}|{COST}",direction!="cache"'
+    if project is not None:
+        labels += "," + _selector(project)[1:-1]
+    query = (
+        f"sum by (azp, __name__) "
+        f"(increase({{{labels}}}[1d]) keep_metric_names)"
+    )
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        samples = await _query(client, query)
+    found: dict[str, dict] = defaultdict(
+        lambda: {"tokens": 0, "cost_usd": 0.0, "cost_eur": 0.0}
+    )
+    for sample in samples:
+        item = found[sample["metric"].get("azp", "unknown")]
+        value = float(sample["value"][1])
+        if sample["metric"].get("__name__") == COST:
+            item["cost_usd"] += value
+        else:
+            item["tokens"] += round(value)
+    rate = await asyncio.to_thread(usd_per_eur)
+    for item in found.values():
+        item["cost_usd"] = round(item["cost_usd"], 6)
+        item["cost_eur"] = round(item["cost_usd"] / rate, 6)
+    return dict(found)
+
+
 def totals(items: list[dict]) -> dict[str, Any]:
     keys = ("tokens_in", "tokens_out", "tokens_cache", "requests")
     total: dict[str, Any] = {k: sum(i[k] for i in items) for k in keys}

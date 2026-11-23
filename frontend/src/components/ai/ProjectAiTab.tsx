@@ -27,7 +27,7 @@ import {
 import { useCardData } from "@/lib/useCardData";
 import { cn } from "@/lib/utils";
 import type { AiBackend, AiUsageItem, ProjectAi } from "@/types/ai";
-import { AlertCircle, Bot, Cpu, Plug, Plus, Sparkles } from "lucide-react";
+import { AlertCircle, Bot, CloudOff, Cpu, Plug, Plus, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useId, useState } from "react";
@@ -455,6 +455,12 @@ export function ProjectAiTab() {
           </p>
         ) : (
           <>
+            {current.degraded && current.degraded.length > 0 && (
+              <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                <CloudOff className="size-3.5 shrink-0" aria-hidden />
+                {t("degraded")}
+              </p>
+            )}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <AccessCard ai={current} onChange={setOverride} />
               <BudgetCard

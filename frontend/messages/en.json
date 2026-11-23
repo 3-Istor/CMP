@@ -4134,7 +4134,8 @@
     "agentCard": {
       "tokensToday": "tokens today of {budget}",
       "budgetLabel": "Daily budget of {name}",
-      "costToday": "{cost} today"
+      "costToday": "{cost} today",
+      "settingsMissing": "Settings not found in the repository"
     },
     "trigger": {
       "chat": "Chat",
@@ -4150,6 +4151,7 @@
       "accessSection": "Model access",
       "accessHint": "Models, budget and the project's apps that talk to the AI gateway.",
       "loadError": "Could not read the project's AI settings.",
+      "degraded": "Some sources are unreachable right now: showing the last known data.",
       "accessTitle": "AI access",
       "accessBody": "Prompts are sent to Anthropic after secrets and personal data are masked. No app holds a key: the gateway keeps it.",
       "criticalBody": "A critical project cannot enable AI.",
@@ -4343,6 +4345,7 @@
       "tabsLabel": "Agent sections",
       "loadError": "Agent not found or not accessible.",
       "owner": "Owner: {owner}",
+      "settingsMissing": "Settings not found in the repository: {path} is missing or unreadable in {repo}. Model, trigger and instructions are not shown until the file is read.",
       "suspendedBanner": "Agent suspended: its Keycloak client is disabled and it runs at zero replicas. Resume it to test it.",
       "prOpen": "PR #{number} pending"
     },

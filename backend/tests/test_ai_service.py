@@ -12,8 +12,9 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 from app.models.ai import AiAgent
 from app.services.agents import policy
-from app.services.ai import catalog, gitops, identity, service
+from app.services.ai import agent_settings, catalog, gitops, identity, service
 from app.services.ai import usage as ai_usage
+from app.services.github_service import GitHubAppError
 
 TEMPLATES = {
     "assistant": {
@@ -196,6 +197,9 @@ def world(monkeypatch):
         lambda c: world.clients.get(c, {}).get("enabled"),
     )
     monkeypatch.setattr(ai_usage, "usage", mock.AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        ai_usage, "today_by_azp", mock.AsyncMock(return_value={})
+    )
     monkeypatch.setattr(
         ai_usage,
         "budget",
@@ -570,21 +574,13 @@ def test_an_agent_declared_in_yaml_only_shows_up_in_the_list(world, db):
     ]
 
 
-def test_an_agent_without_a_client_is_listed_as_missing_credentials(
-    world, db, monkeypatch
-):
+def test_an_agent_without_a_client_is_listed_as_missing_credentials(world, db):
     world.record["spec"]["ai"]["agents"] = [
         {"name": "manual", "tools": [], "models": ["claude-haiku-5-5"]},
         {"name": "known", "tools": [], "models": ["claude-haiku-5-5"]},
     ]
-    service.reconcile._runs.credentials.clear()  # pylint: disable=protected-access
-    monkeypatch.setattr(
-        identity,
-        "project_clients",
-        lambda _p: {
-            "agent-alpha-known": {"enabled": True, "project": "alpha"}
-        },
-    )
+    clients = {"agent-alpha-known": {"enabled": True, "project": "alpha"}}
+    run(agent_settings.refresh(db, "alpha", world.record, clients))
 
     items = run(service.list_agents(db, "alpha"))
 
@@ -592,7 +588,32 @@ def test_an_agent_without_a_client_is_listed_as_missing_credentials(
         ("manual", "missing"),
         ("known", "ok"),
     ]
-    service.reconcile._runs.credentials.clear()  # pylint: disable=protected-access
+
+
+def test_listing_agents_writes_nothing_and_asks_for_a_reconcile(
+    world, db, monkeypatch
+):
+    world.record["spec"]["ai"]["agents"] = [
+        {"name": "manual", "tools": [], "models": ["claude-haiku-5-5"]}
+    ]
+    asked = []
+    monkeypatch.setattr(service.reconcile, "request", asked.append)
+
+    items = run(service.list_agents(db, "alpha"))
+
+    assert (
+        db.query(AiAgent).count(),
+        asked,
+        items[0]["credentials"],
+        items[0]["settings"]["status"],
+    ) == (0, ["alpha"], None, None)
+
+
+def test_the_backend_status_is_read_once_for_polls_close_together(world):
+    run(service.backend_status())
+    run(service.backend_status())
+
+    assert ai_usage.budget.await_count == 1
 
 
 def test_turning_ai_on_mirrors_the_stake_level_in_the_record(world, db):
@@ -635,3 +656,196 @@ def test_a_project_with_ai_on_cannot_become_critical(world):
         run(service.refuse_if_ai_enabled("alpha"))
 
     assert refused.value.status == 409
+
+
+READER_FILE = {
+    "agent": {
+        "template": "app-bot",
+        "description": "Lit le fil qui mentionne @bot",
+        "model": "claude-haiku-5-5",
+        "effort": "low",
+        "maxSteps": 8,
+        "trigger": {"type": "schedule", "cron": "0 * * * *"},
+        "instructions": "Lis le fil.",
+        "tools": ["shop__get_thread", "web_search"],
+        "output": {"name": "answer", "schema": {"type": "object"}},
+        "calls": ["bot-actor"],
+    }
+}
+
+
+def _declare_in_git(world, name="bot-reader"):
+    world.record["spec"]["apps"].append(
+        {
+            "name": name,
+            "type": "agent",
+            "repoURL": "https://github.com/3-Istor/shop",
+        }
+    )
+    world.record["spec"]["ai"]["agents"] = [
+        {
+            "name": name,
+            "tools": ["shop__get_thread", "web_search"],
+            "models": ["claude-haiku-5-5"],
+            "calls": ["bot-actor"],
+            "status": "active",
+        }
+    ]
+
+
+def _counting_reads(world, monkeypatch):
+    reads = []
+
+    async def read_values(repo, path, ref="main"):
+        reads.append((repo, path))
+        return world.values.get(path)
+
+    monkeypatch.setattr(gitops, "read_values", read_values)
+    return reads
+
+
+def test_an_agent_declared_in_git_shows_the_settings_of_its_values_file(
+    world, db
+):
+    _declare_in_git(world)
+    world.values["deploy/values-bot-reader.yaml"] = READER_FILE
+
+    agent = run(service.get_agent(db, "alpha", "bot-reader"))
+
+    assert {
+        k: agent[k]
+        for k in (
+            "template",
+            "description",
+            "model",
+            "effort",
+            "max_steps",
+            "trigger",
+            "instructions",
+            "tools",
+            "output",
+            "calls",
+            "repo",
+            "values_path",
+            "declaration_source",
+        )
+    } | {"settings": agent["settings"]["status"]} == {
+        "template": "app-bot",
+        "description": "Lit le fil qui mentionne @bot",
+        "model": "claude-haiku-5-5",
+        "effort": "low",
+        "max_steps": 8,
+        "trigger": {"type": "schedule", "cron": "0 * * * *"},
+        "instructions": "Lis le fil.",
+        "tools": ["shop__get_thread", "web_search"],
+        "output": {"name": "answer", "schema": {"type": "object"}},
+        "calls": ["bot-actor"],
+        "repo": "3-Istor/shop",
+        "values_path": "deploy/values-bot-reader.yaml",
+        "declaration_source": "main",
+        "settings": "ok",
+    }
+
+
+def test_an_agent_without_its_values_file_says_so_and_invents_nothing(
+    world, db
+):
+    _declare_in_git(world)
+
+    agent = run(service.get_agent(db, "alpha", "bot-reader"))
+
+    assert {
+        k: agent[k]
+        for k in ("template", "description", "trigger", "effort", "settings")
+    } == {
+        "template": None,
+        "description": None,
+        "trigger": None,
+        "effort": None,
+        "settings": {
+            "status": "missing",
+            "message": "Réglages introuvables dans le dépôt",
+            "read_at": agent["settings"]["read_at"],
+        },
+    }
+
+
+def test_an_unreadable_values_file_keeps_the_last_settings_read(
+    world, db, monkeypatch
+):
+    _declare_in_git(world)
+    world.values["deploy/values-bot-reader.yaml"] = READER_FILE
+    run(service.get_agent(db, "alpha", "bot-reader"))
+    monkeypatch.setattr(
+        gitops,
+        "read_values",
+        mock.AsyncMock(side_effect=GitHubAppError("GitHub is down")),
+    )
+
+    agent = run(service.get_agent(db, "alpha", "bot-reader"))
+
+    assert (agent["template"], agent["settings"]["status"]) == (
+        "app-bot",
+        "unreadable",
+    )
+
+
+def test_the_list_shows_the_mirror_without_reading_github_again(
+    world, db, monkeypatch
+):
+    _declare_in_git(world)
+    world.values["deploy/values-bot-reader.yaml"] = READER_FILE
+    reads = _counting_reads(world, monkeypatch)
+    run(agent_settings.refresh(db, "alpha", copy.deepcopy(world.record)))
+
+    run(service.list_agents(db, "alpha"))
+    items = run(service.list_agents(db, "alpha"))
+
+    assert (len(reads), items[0]["template"], items[0]["trigger"]) == (
+        1,
+        "app-bot",
+        {"type": "schedule", "cron": "0 * * * *"},
+    )
+
+
+def test_a_refresh_brings_a_changed_values_file_into_the_list(
+    world, db, monkeypatch
+):
+    _declare_in_git(world)
+    world.values["deploy/values-bot-reader.yaml"] = READER_FILE
+    run(agent_settings.refresh(db, "alpha", copy.deepcopy(world.record)))
+    world.values["deploy/values-bot-reader.yaml"] = {
+        "agent": {**READER_FILE["agent"], "trigger": {"type": "event"}}
+    }
+
+    run(agent_settings.refresh(db, "alpha", copy.deepcopy(world.record)))
+    items = run(service.list_agents(db, "alpha"))
+
+    assert items[0]["trigger"] == {"type": "event"}
+
+
+def test_the_project_view_shows_the_last_record_while_github_is_down(
+    world, db, monkeypatch
+):
+    world.record["spec"]["ai"]["agents"] = [
+        {"name": "manual", "tools": [], "models": ["claude-haiku-5-5"]}
+    ]
+    monkeypatch.setattr(
+        service,
+        "record_of",
+        mock.AsyncMock(
+            side_effect=service.project_registry.RegistryError("Vault sealed")
+        ),
+    )
+    monkeypatch.setattr(
+        service.project_registry,
+        "last_record",
+        lambda _p: copy.deepcopy(world.record),
+    )
+
+    view = run(service.project_view(db, "alpha"))
+
+    assert ([a["name"] for a in view["agents"]], view["degraded"]) == (
+        ["manual"],
+        ["registry"],
+    )

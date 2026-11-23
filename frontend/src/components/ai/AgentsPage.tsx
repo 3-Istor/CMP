@@ -200,7 +200,7 @@ function AllAgents() {
                 </td>
                 <td className="px-4 py-2.5">{agent.project}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{agent.owner}</td>
-                <td className="px-4 py-2.5"><IsolationBadge isolation={agent.isolation} /></td>
+                <td className="px-4 py-2.5">{agent.isolation && <IsolationBadge isolation={agent.isolation} />}</td>
                 <td className="px-4 py-2.5">
                   <div className="space-y-1">
                     <BarGauge value={agent.usage_today?.tokens ?? 0} max={agent.daily_token_budget} label={t("budgetOf", { name: agent.name })} />
