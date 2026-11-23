@@ -13,6 +13,7 @@ from app.models.project import Project, TargetCloud
 from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
+    api_reachable,
     kube_get,
     kube_list,
     kube_merge_patch,
@@ -30,24 +31,35 @@ GUARD_RETRIES = 4  # unknown is re-read every GUARD_DELAY s, ~20 s in all
 GUARD_DELAY = 5
 
 _HEALTH = {"Healthy": "up", "Progressing": "starting"}
+_REACHABLE = ("up", "degraded", "starting")
 _cache: dict[TargetCloud, str] = {}
 _cached_at: float | None = None
 # Clouds that came up and still wait for their resync (until platform-<cloud> is ready).
 _pending_resync: set[TargetCloud] = set()
+# Clouds that came back and still wait for the cleanup of the moves forced away from them.
+_pending_cleanup: set[TargetCloud] = set()
 _refresh_task: asyncio.Task | None = None
 
 
 def fresh_state(cloud: TargetCloud) -> str:
-    """up | starting | down from the Application health; unknown if absent or unreadable."""
+    """up | degraded | starting | down | unknown.
+
+    down: the kube API does not answer; unknown: wireguard-<cloud> absent or unreadable;
+    otherwise the Application health: Healthy up, Progressing starting, else degraded.
+    """
     try:
         app = kube_get(APP_PATH.format(cloud.value))
     except (KubeUnavailableError, ValueError):
         return "unknown"
     if app is None:
         return "unknown"
+    if not api_reachable(cloud):
+        return "down"
     status = app.get("status") or {}
-    result = _HEALTH.get((status.get("health") or {}).get("status"), "down")
-    # Argo CD keeps a stale Healthy when the cluster is unreachable.
+    result = _HEALTH.get(
+        (status.get("health") or {}).get("status"), "degraded"
+    )
+    # Argo CD keeps a stale Healthy when it cannot reach the cluster.
     errors = any(
         str(c.get("type", "")).endswith("Error")
         for c in status.get("conditions") or []
@@ -55,7 +67,7 @@ def fresh_state(cloud: TargetCloud) -> str:
     if result == "up" and (
         (status.get("sync") or {}).get("status") == "Unknown" or errors
     ):
-        return "down"
+        return "degraded"
     return result
 
 
@@ -133,6 +145,21 @@ def platform_ready(cloud: TargetCloud) -> bool:
     ).get("status") == "Healthy"
 
 
+async def _cleanup_returned(cloud: TargetCloud) -> None:
+    # Imported here: steps imports this module.
+    from app.services.moves.steps import (  # pylint: disable=cyclic-import
+        cleanup_returned,
+    )
+
+    try:
+        done = await run_in_threadpool(cleanup_returned, cloud)
+        _pending_cleanup.discard(cloud)
+        if done:
+            logger.info("%s is back, cleaned up %s", cloud.value, done)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning("%s is back, cleanup failed: %s", cloud.value, exc)
+
+
 async def _refresh() -> None:
     global _cache, _cached_at
     before = _cache
@@ -141,6 +168,13 @@ async def _refresh() -> None:
     }
     _cached_at = time.monotonic()
     for cloud in PUBLIC_CLOUDS:
+        if _cache[cloud] in _REACHABLE:
+            if before.get(cloud, "unknown") in ("down", "unknown"):
+                _pending_cleanup.add(cloud)
+        else:
+            _pending_cleanup.discard(cloud)
+        if cloud in _pending_cleanup:
+            await _cleanup_returned(cloud)
         if _cache[cloud] != "up":
             _pending_resync.discard(cloud)
             continue
@@ -183,6 +217,10 @@ async def ensure_cluster_up(cloud: TargetCloud) -> None:
         raise HTTPException(
             409,
             f"The {name} cluster is down; deployments resume once it is up.",
+        )
+    if state == "degraded":
+        raise HTTPException(
+            409, f"The {name} cluster is degraded; retry in a few minutes."
         )
     if state == "starting":
         raise HTTPException(

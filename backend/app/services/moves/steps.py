@@ -913,3 +913,7 @@ def retry(db: Session, move: ProjectMove) -> ProjectMove:
     move.detail = None
     _save(db, move, steps)
     return move
+
+
+def cleanup_returned(cloud: TargetCloud) -> list[str]:
+    return []

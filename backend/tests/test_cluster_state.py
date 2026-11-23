@@ -12,6 +12,13 @@ AWS = TargetCloud.AWS
 GCP = TargetCloud.GCP
 
 
+@pytest.fixture(autouse=True)
+def _api_answers():
+    with mock.patch.object(state, "api_reachable", return_value=True) as m:
+        yield m
+    state._pending_cleanup.clear()
+
+
 def _app(health):
     return {"status": {"health": {"status": health}}}
 
@@ -21,10 +28,10 @@ def _app(health):
     [
         (_app("Healthy"), "up"),
         (_app("Progressing"), "starting"),
-        (_app("Missing"), "down"),
-        (_app("Degraded"), "down"),
-        (_app("Unknown"), "down"),
-        (_app("Suspended"), "down"),
+        (_app("Missing"), "degraded"),
+        (_app("Degraded"), "degraded"),
+        (_app("Unknown"), "degraded"),
+        (_app("Suspended"), "degraded"),
         (None, "unknown"),  # Application absent
     ],
 )
@@ -49,15 +56,21 @@ def _stale(sync="Synced", conditions=()):
 @pytest.mark.parametrize(
     "app,expected",
     [
-        (_stale(sync="Unknown"), "down"),
-        (_stale(conditions=["ComparisonError"]), "down"),
-        (_stale(conditions=["UnknownError"]), "down"),
+        (_stale(sync="Unknown"), "degraded"),
+        (_stale(conditions=["ComparisonError"]), "degraded"),
+        (_stale(conditions=["UnknownError"]), "degraded"),
         (_stale(sync="OutOfSync"), "up"),  # drift is not an outage
     ],
 )
 def test_healthy_is_up_only_if_argocd_can_reach_the_cluster(app, expected):
     with mock.patch.object(state, "kube_get", return_value=app):
         assert state.fresh_state(AWS) == expected
+
+
+def test_unreachable_kube_api_is_down(_api_answers):
+    _api_answers.return_value = False
+    with mock.patch.object(state, "kube_get", return_value=_app("Healthy")):
+        assert state.fresh_state(AWS) == "down"
 
 
 def test_fresh_state_read_error_is_unknown():
@@ -89,6 +102,7 @@ def test_guard_passes_when_up():
     [
         ("down", 409, "The AWS cluster is down"),
         ("starting", 409, "The AWS cluster is starting"),
+        ("degraded", 409, "The AWS cluster is degraded"),
     ],
 )
 def test_guard_refuses_down_and_starting(st, code, text):
@@ -287,3 +301,33 @@ def test_pick_public_cloud_refuses_when_none_is_up():
         state.pick_public_cloud({AWS: "starting", GCP: "unknown"}, AWS)
     assert excinfo.value.status_code == 409
     assert "No public cloud is up" in excinfo.value.detail
+
+
+def _refresh_cleanup(before, after, **kwargs):
+    state._cache = dict(before)
+    with (
+        mock.patch.object(state, "fresh_state", lambda c: after[c]),
+        mock.patch.object(state, "platform_ready", lambda c: False),
+        mock.patch(
+            "app.services.moves.steps.cleanup_returned", **kwargs
+        ) as cleanup,
+    ):
+        asyncio.run(state._refresh())
+    return [c.args[0] for c in cleanup.call_args_list]
+
+
+@pytest.mark.parametrize("now", ["up", "degraded", "starting"])
+def test_a_returning_cloud_is_cleaned_up(now):
+    both = {AWS: now, GCP: "down"}
+    assert _refresh_cleanup(
+        {AWS: "down", GCP: "down"}, both, return_value=[]
+    ) == [AWS]
+    assert _refresh_cleanup(both, both, return_value=[]) == []
+
+
+def test_a_failed_cleanup_is_retried_until_it_returns():
+    up = {AWS: "up", GCP: "down"}
+    down = {AWS: "down", GCP: "down"}
+    assert _refresh_cleanup(down, up, side_effect=RuntimeError("x")) == [AWS]
+    assert _refresh_cleanup(up, up, return_value=[]) == [AWS]
+    assert _refresh_cleanup(up, up, return_value=[]) == []
