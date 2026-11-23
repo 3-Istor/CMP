@@ -768,14 +768,13 @@ async def persist_restores(
     return not waiting
 
 
-def _delete_namespace(name: str, cloud: TargetCloud, move: ProjectMove):
-    """Delete a namespace of a cluster the project no longer lives on.
-
-    The annotation is what lets the delete through a deletion-protected one.
+def _delete_source_namespace(name: str, cloud: TargetCloud):
+    """Delete a namespace of a cluster the project no longer lives on (after
+    the registry switch). The annotation lets the delete through a protected one.
     """
     kube_merge_patch(
         f"{NAMESPACES}/{name}",
-        {"metadata": {"annotations": {MOVE_CLEANUP: str(move.id)}}},
+        {"metadata": {"annotations": {MOVE_CLEANUP: "true"}}},
         cloud=cloud,
     )
     kube_delete(f"{NAMESPACES}/{name}", cloud=cloud)
@@ -803,7 +802,7 @@ def cleanup_source(_db, move: ProjectMove, step: dict, steps) -> bool:
     for ns in left:
         # A terminating namespace answers 409 to a second DELETE.
         if not ns["metadata"].get("deletionTimestamp"):
-            _delete_namespace(ns["metadata"]["name"], cloud, move)
+            _delete_source_namespace(ns["metadata"]["name"], cloud)
     names = [ns["metadata"]["name"] for ns in left]
     step["detail"] = f"Deleting {', '.join(names)}" if names else None
     return not names
@@ -861,7 +860,7 @@ def _clean_returned(
     for ns in left:
         name = ns["metadata"]["name"]
         if not ns["metadata"].get("deletionTimestamp"):
-            _delete_namespace(name, cloud, move)
+            _delete_source_namespace(name, cloud)
             did.append(f"{project}: deleting {name} on {cloud.value}")
     if not left:
         # A new list: SQLAlchemy does not see a JSON dict changed in place.
@@ -1032,7 +1031,7 @@ def _undo_target(move: ProjectMove) -> str | None:
     for ns in left:
         # A terminating namespace answers 409 to a second DELETE.
         if not ns["metadata"].get("deletionTimestamp"):
-            _delete_namespace(ns["metadata"]["name"], cloud, move)
+            kube_delete(f"{NAMESPACES}/{ns['metadata']['name']}", cloud=cloud)
     names = [ns["metadata"]["name"] for ns in left]
     return f"Deleting {', '.join(names)} on {move.target}" if names else None
 

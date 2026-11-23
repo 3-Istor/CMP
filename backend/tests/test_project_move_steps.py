@@ -1576,19 +1576,6 @@ def test_cleanup_marks_the_namespace_before_deleting_it(db, world):
     advance(db, move)
 
     ns = world.kube.get(f"{NAMESPACES}/alpha-shop", cloud=AWS)
-    assert ns["metadata"]["annotations"][steps.MOVE_CLEANUP] == str(move.id)
+    assert ns["metadata"]["annotations"][steps.MOVE_CLEANUP] == "true"
     kinds = [e[0] for e in world.log if e[2].endswith("/alpha-shop")]
     assert kinds == ["patch", "delete"]
-
-
-def test_a_cancel_marks_the_target_namespace_too(db, world):
-    move = _row(db, status="cancelling")
-    _apps_on(world.kube, "aws", compared=True)
-    world.kube.items[(ONPREM, f"{ARGOCD}/applications")][2]["spec"][
-        "destination"
-    ]["name"] = "aws"
-
-    advance(db, move)
-
-    ns = world.kube.get(f"{NAMESPACES}/alpha-shop", cloud=GCP)
-    assert ns["metadata"]["annotations"][steps.MOVE_CLEANUP] == str(move.id)
