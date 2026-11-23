@@ -14,10 +14,74 @@ from app.services.placement import quantity_bytes
 logger = logging.getLogger(__name__)
 
 GIB = 2**30
-# ResourceQuota of every app namespace (cnp-project-base, namespace.yaml): the
-# worst case a project can request when its source cannot be read.
-QUOTA_CPU = 1.0
-QUOTA_MEMORY = 2 * GIB
+MIB = 2**20
+# infra-templates values.yaml `resources.requests`: what an app component asks
+# when its values file sets nothing.
+APP_CPU = 0.1
+APP_MEMORY = 128 * MIB
+# LimitRange cnp-project-defaults (cnp-project-base templates/namespace.yaml):
+# defaultRequest of a container that declares none. The CNPG Cluster template
+# (infra-templates cnpg-cluster.yaml) sets no resources, so every database
+# container takes it: postgres, plus the barman-cloud plugin sidecar when
+# db.backup.enabled (cnpg-cluster.yaml `plugins`).
+LIMIT_CPU = 0.05
+LIMIT_MEMORY = 128 * MIB
+# infra-templates values.yaml `db.pooler.resources.requests`.
+POOLER_CPU = 0.01
+POOLER_MEMORY = 64 * MIB
+# cnp-project-base requests of the system namespace, summed: Gatus 10m/64Mi
+# (templates/gatus.yaml) + its sidecar 5m/64Mi (same file), cloudflared
+# `tunnel.resources` 10m/32Mi x `tunnel.replicas` 1, `offhours-guard.resources`
+# 10m/48Mi, Envoy proxy `gateway.resources` 25m/192Mi (values.yaml).
+SYSTEM_CPU = 0.010 + 0.005 + 0.010 + 0.010 + 0.025
+SYSTEM_MEMORY = (64 + 64 + 32 + 48 + 192) * MIB
+
+
+def _asked(resources, cpu: float, memory: float) -> tuple[float, float]:
+    asked = (resources or {}).get("requests") or {}
+    return (
+        quantity_bytes(asked["cpu"]) if "cpu" in asked else cpu,
+        quantity_bytes(asked["memory"]) if "memory" in asked else memory,
+    )
+
+
+def component_need(values: dict) -> tuple[float, float]:
+    """(CPU, memory bytes) of one app component's values file: its replicas
+    (the autoscaling floor when on) plus its database and pooler pods."""
+    scaled = values.get("autoscaling") or {}
+    replicas = (
+        scaled.get("minReplicas", 1)
+        if scaled.get("enabled")
+        else values.get("replicaCount", 1)
+    )
+    # `resources: null` deletes the chart default: the LimitRange applies.
+    if "resources" in values and values["resources"] is None:
+        cpu, memory = LIMIT_CPU, LIMIT_MEMORY
+    else:
+        cpu, memory = _asked(values.get("resources"), APP_CPU, APP_MEMORY)
+    cpu, memory = cpu * replicas, memory * replicas
+    db = values.get("db") or {}
+    if db.get("enabled"):
+        instances = db.get("instances", 1)
+        containers = 2 if (db.get("backup") or {}).get("enabled") else 1
+        cpu += LIMIT_CPU * containers * instances
+        memory += LIMIT_MEMORY * containers * instances
+        pooler = db.get("pooler") or {}
+        if pooler.get("enabled"):
+            c, m = _asked(pooler.get("resources"), POOLER_CPU, POOLER_MEMORY)
+            cpu += c * pooler.get("instances", 1)
+            memory += m * pooler.get("instances", 1)
+    return cpu, memory
+
+
+def estimate(apps: list[list[dict]]) -> tuple[float, float]:
+    """The project's need from its apps' component values, plus the system
+    part: what a move asks when the source cannot be read."""
+    needs = [component_need(v) for components in apps for v in components]
+    return (
+        SYSTEM_CPU + sum(c for c, _ in needs),
+        SYSTEM_MEMORY + sum(m for _, m in needs),
+    )
 
 
 def _requests(pods: list[dict]) -> tuple[float, float]:
@@ -43,10 +107,6 @@ def project_requests(
         for pod in kube_list(f"/api/v1/namespaces/{ns}/pods", cloud=cloud)
     ]
     return _requests(pods)
-
-
-def quota_requests(namespaces: int) -> tuple[float, float]:
-    return namespaces * QUOTA_CPU, namespaces * QUOTA_MEMORY
 
 
 def free(cloud: TargetCloud) -> tuple[float, float] | None:
@@ -75,13 +135,40 @@ def free(cloud: TargetCloud) -> tuple[float, float] | None:
     return cpu - used_cpu, memory - used_memory
 
 
-def refusal(needed: tuple[float, float], cloud: TargetCloud) -> str | None:
-    """Why *cloud* cannot take *needed*; None when it can (or is unknown)."""
+def check(
+    needed: tuple[float, float], cloud: TargetCloud, estimated: bool
+) -> dict:
+    """What *cloud* can take of *needed*. An unknown room fits: the move is
+    not blocked on a guess."""
     room = free(cloud)
-    if room is None or (needed[0] <= room[0] and needed[1] <= room[1]):
-        return None
+    fits = room is None or (needed[0] <= room[0] and needed[1] <= room[1])
+    return {
+        "target": cloud.value,
+        "need_cpu": needed[0],
+        "need_memory_bytes": needed[1],
+        "free_cpu": None if room is None else max(room[0], 0),
+        "free_memory_bytes": None if room is None else max(room[1], 0),
+        "estimated": estimated,
+        "fits": fits,
+    }
+
+
+def message(result: dict) -> str:
     return (
-        f"Not enough room on {cloud.value.upper()}: needs "
-        f"{needed[0]:.1f} CPU / {needed[1] / GIB:.1f} GiB, free "
-        f"{max(room[0], 0):.1f} / {max(room[1], 0) / GIB:.1f}"
+        f"Not enough room on {result['target'].upper()}"
+        f"{' (estimated)' if result['estimated'] else ''}: needs "
+        f"{result['need_cpu']:.1f} CPU / "
+        f"{result['need_memory_bytes'] / GIB:.1f} GiB, free "
+        f"{result['free_cpu']:.1f} / {result['free_memory_bytes'] / GIB:.1f}"
+    )
+
+
+def refusal(result: dict) -> str | None:
+    """Only a need read on the source refuses."""
+    return None if result["fits"] or result["estimated"] else message(result)
+
+
+def warning(result: dict) -> str | None:
+    return (
+        message(result) if not result["fits"] and result["estimated"] else None
     )

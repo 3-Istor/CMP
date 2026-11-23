@@ -93,15 +93,40 @@ async def start_checks(
     project: Project,
     confirm_data_loss: bool,
     target: str = "public",
-) -> str:
-    """The cluster *project* would move to; MoveRefused if it cannot move now.
+) -> tuple[str, str | None]:
+    """The cluster *project* would move to and a capacity warning (an estimate
+    over the room); MoveRefused if it cannot move now.
 
     Only the target has to be up (the restore needs it): the source steps are
     best effort, whatever the source state.
     """
-    source = TargetCloud(project.target_cloud)
     if active_move(db, project.project_name):
         raise MoveRefused(409, "This project is already moving.")
+    source = TargetCloud(project.target_cloud)
+    destination = pick_destination(project, target)
+    # On-prem is up whenever the CMP answers.
+    state = fresh_state(destination) if destination in PUBLIC_CLOUDS else "up"
+    if state != "up":
+        raise MoveRefused(
+            409, f"The {destination.value.upper()} cluster is {state}."
+        )
+    if source == TargetCloud.ONPREM:
+        await _check_leaving_onprem(project.project_name, destination)
+    full, warning = await _no_room(
+        db, project.project_name, source, destination
+    )
+    if full:
+        raise MoveRefused(409, full)
+    if not confirm_data_loss:
+        lost = await data_loss(db, project)
+        if lost:
+            raise MoveRefused(409, f"Data in {', '.join(lost)} will be lost.")
+    return destination.value, warning
+
+
+def pick_destination(project: Project, target: str) -> TargetCloud:
+    """The cluster a move of *project* to *target* aims at."""
+    source = TargetCloud(project.target_cloud)
     if target == "onprem":
         if source == TargetCloud.ONPREM:
             raise MoveRefused(409, "This project is already on-prem.")
@@ -115,44 +140,50 @@ async def start_checks(
             raise MoveRefused(exc.status_code, exc.detail) from exc
     else:
         destination = next(c for c in PUBLIC_CLOUDS if c != source)
-    # On-prem is up whenever the CMP answers.
-    state = fresh_state(destination) if destination in PUBLIC_CLOUDS else "up"
-    if state != "up":
-        raise MoveRefused(
-            409, f"The {destination.value.upper()} cluster is {state}."
+    return destination
+
+
+def _read_need(project: str, source: TargetCloud) -> tuple[float, float]:
+    return capacity.project_requests(_app_namespaces(project, source), source)
+
+
+async def _estimated_need(db: Session, project: str) -> tuple[float, float]:
+    """What the project's apps declare in their values files."""
+    names = {
+        name
+        for (name,) in db.query(Deployment.name).filter(
+            Deployment.project_id == project,
+            Deployment.template_id == APP_TEMPLATE,
+            Deployment.status != DeploymentStatus.DELETED,
         )
-    if source == TargetCloud.ONPREM:
-        await _check_leaving_onprem(project.project_name, destination)
-    full = await run_in_threadpool(
-        _no_room, project.project_name, source, destination
-    )
-    if full:
-        raise MoveRefused(409, full)
-    if not confirm_data_loss:
-        lost = await data_loss(db, project)
-        if lost:
-            raise MoveRefused(409, f"Data in {', '.join(lost)} will be lost.")
-    return destination.value
+    }
+    apps = [
+        await restore_commit.read_components(_deployment(db, project, name))
+        for name in sorted(names)
+    ]
+    return capacity.estimate(apps)
 
 
-def _needed(project: str, source: TargetCloud) -> tuple[float, float]:
-    """What the project requests: read on the source, else its quotas."""
+async def capacity_check(
+    db: Session, project: str, source: TargetCloud, target: TargetCloud
+) -> dict:
+    """The target's room against what the project requests: read on the
+    source, else estimated from the declared values."""
     try:
-        return capacity.project_requests(
-            _app_namespaces(project, source), source
-        )
+        need = await run_in_threadpool(_read_need, project, source)
+        estimated = False
     except (ClusterNotConnectedError, KubeUnavailableError):
-        namespaces = {
-            (app.get("spec") or {}).get("destination", {}).get("namespace")
-            for app in _project_apps(project)
-        } - {None, f"{project}-system"}
-        return capacity.quota_requests(len(namespaces))
+        need = await _estimated_need(db, project)
+        estimated = True
+    return await run_in_threadpool(capacity.check, need, target, estimated)
 
 
-def _no_room(
-    project: str, source: TargetCloud, target: TargetCloud
-) -> str | None:
-    return capacity.refusal(_needed(project, source), target)
+async def _no_room(
+    db: Session, project: str, source: TargetCloud, target: TargetCloud
+) -> tuple[str | None, str | None]:
+    """(refusal, warning): a real need over the room refuses, an estimate warns."""
+    result = await capacity_check(db, project, source, target)
+    return capacity.refusal(result), capacity.warning(result)
 
 
 async def _check_leaving_onprem(project: str, destination: TargetCloud):
@@ -538,8 +569,8 @@ def _target_prepared(move: ProjectMove, copy: bool = True) -> list[str]:
 async def prepare(db: Session, move: ProjectMove, step: dict, _steps) -> bool:
     if step["status"] == "pending":
         # Again here: the cluster may have filled since the click.
-        full = await run_in_threadpool(
-            _no_room,
+        full, _ = await _no_room(
+            db,
             move.project,
             TargetCloud(move.source),
             TargetCloud(move.target),

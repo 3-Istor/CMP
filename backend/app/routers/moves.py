@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.project import Project
+from app.models.project import Project, TargetCloud
 from app.models.project_move import ProjectMove
 from app.services.authz import RequireAdmin, RequireGuest
 from app.services.moves import steps, wal
@@ -35,6 +35,8 @@ class MoveRead(BaseModel):
     actor: str
     created_at: datetime
     finished_at: datetime | None
+    # Set on the start response only: the target may be short of room.
+    warning: str | None = None
 
 
 def _refused(exc: steps.MoveRefused) -> HTTPException:
@@ -71,12 +73,14 @@ async def start_move(
     # Checks and insert under one lock: two clicks cannot both pass.
     async with project_lock(ctx.project_name):
         try:
-            target = await steps.start_checks(
+            target, warning = await steps.start_checks(
                 db, project, body.confirm_data_loss, body.target
             )
         except steps.MoveRefused as exc:
             raise _refused(exc) from exc
-        return steps.new_move(db, project, target, ctx.username)
+        move = steps.new_move(db, project, target, ctx.username)
+        move.warning = warning
+        return move
 
 
 @router.get("/moves/data-loss", response_model=list[str])
@@ -88,6 +92,27 @@ async def move_data_loss(
         return await steps.data_loss(db, _project(db, ctx.project_name))
     except steps.MoveRefused as exc:
         raise _refused(exc) from exc
+
+
+@router.get("/moves/capacity")
+async def move_capacity(
+    ctx: RequireAdmin,
+    target: Literal["onprem", "public"] = "public",
+    db: Session = Depends(get_db),
+) -> dict:
+    """Whether the target has room for the project, before confirming:
+    ``estimated`` when the source cannot be read."""
+    project = _project(db, ctx.project_name)
+    try:
+        destination = steps.pick_destination(project, target)
+    except steps.MoveRefused as exc:
+        raise _refused(exc) from exc
+    return await steps.capacity_check(
+        db,
+        project.project_name,
+        TargetCloud(project.target_cloud),
+        destination,
+    )
 
 
 @router.get("/moves/last-wal")

@@ -65,7 +65,7 @@ def env():
             side_effect=lambda user, _project: ROLES.get(user),
         ),
         mock.patch.object(steps, "fresh_state", return_value="up"),
-        mock.patch.object(steps, "_no_room", return_value=None),
+        mock.patch.object(steps, "_no_room", return_value=(None, None)),
         mock.patch.object(steps, "_unrestored", return_value=[]),
     ):
         yield TestClient(app), current, session
@@ -124,7 +124,9 @@ class TestStart:
         http, _, _ = env
 
         with mock.patch.object(
-            steps, "start_checks", new=mock.AsyncMock(return_value="onprem")
+            steps,
+            "start_checks",
+            new=mock.AsyncMock(return_value=("onprem", None)),
         ) as checks:
             response = http.post(
                 "/api/projects/alpha/move", json={"target": "onprem"}
@@ -136,6 +138,29 @@ class TestStart:
         assert response.status_code == 202
         assert checks.await_args.args[3] == "onprem"
         assert invalid.status_code == 422
+
+    def test_the_capacity_is_exposed_before_confirming(self, env):
+        http, _, _ = env
+        result = {"target": "gcp", "estimated": True, "fits": False}
+
+        with mock.patch.object(
+            steps, "capacity_check", new=mock.AsyncMock(return_value=result)
+        ):
+            response = http.get("/api/projects/alpha/moves/capacity")
+
+        assert response.json() == result
+
+    def test_the_start_response_carries_the_warning(self, env):
+        http, _, _ = env
+
+        with mock.patch.object(
+            steps,
+            "_no_room",
+            return_value=(None, "Not enough room (estimated)"),
+        ):
+            response = http.post("/api/projects/alpha/move", json={})
+
+        assert response.json()["warning"] == "Not enough room (estimated)"
 
     def test_last_wal_lists_the_databases(self, env):
         http, _, _ = env
