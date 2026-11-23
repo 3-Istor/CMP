@@ -74,13 +74,15 @@ export function MoveButtons() {
   const [dataLoss, setDataLoss] = useState(false);
   const [lost, setLost] = useState<string[]>([]);
   const [wal, setWal] = useState<LastWal[]>([]);
+  const [forceOpt, setForceOpt] = useState(false);
   const isAdmin = usePlatformAdmin();
 
   if (!targetCloud || move || !can("project.move")) return null;
 
   const up = (cloud: string) => health?.clusters.some((c) => c.cloud === cloud && c.state === "up") ?? false;
   // On-prem is not in the cluster health list; only a public source can be reported not up.
-  const forced = isAdmin && targetCloud !== "onprem" && !!health && !up(targetCloud);
+  const sourceDown = isAdmin && targetCloud !== "onprem" && !!health && !up(targetCloud);
+  const forced = isAdmin && (sourceDown || forceOpt);
   // From a public cloud the "public" target is the other one; from on-prem, any public cloud that is up.
   const other = targetCloud === "aws" ? "gcp" : "aws";
   const options: { target: MoveTarget; label: string; enabled: boolean; down?: string }[] =
@@ -121,11 +123,12 @@ export function MoveButtons() {
               getMoveDataLoss(projectName)
                 .then(setLost)
                 .catch(() => setLost([]));
+              setForceOpt(false);
               setWal([]);
-              if (forced) getLastWal(projectName).then(setWal).catch(() => setWal([]));
+              if (isAdmin) getLastWal(projectName).then(setWal).catch(() => setWal([]));
             }}
           >
-            {forced ? t("force", { cloud: o.target === "onprem" ? cloudName("onprem") : (o.down ?? "") }) : o.label}
+            {o.label}
           </Button>
         ))}
       </div>
@@ -144,6 +147,18 @@ export function MoveButtons() {
         confirmLabel={t("confirmLabel")}
         onConfirm={start}
       >
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <input
+              id="move-force"
+              type="checkbox"
+              checked={forced}
+              disabled={sourceDown}
+              onChange={(e) => setForceOpt(e.target.checked)}
+            />
+            <Label htmlFor="move-force">{t("forceOption")}</Label>
+          </div>
+        )}
         {forced &&
           wal.map((w) => (
             <p key={w.database} className="text-sm text-destructive">

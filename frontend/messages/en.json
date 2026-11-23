@@ -2931,7 +2931,7 @@
       "cancelling": "Cancelling…",
       "details": "Details",
       "retry": "Retry",
-      "force": "Force move to {cloud}",
+      "forceOption": "Force move: skip what fails on the source",
       "forceTitle": "Force move {name} to {cloud}?",
       "forceDescription": "{source} is not up. The move skips its source-side steps and starts from the last archived backup.",
       "lastWal": "Data written after {time} will be lost ({database})",

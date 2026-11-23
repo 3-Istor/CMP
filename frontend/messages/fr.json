@@ -2931,7 +2931,7 @@
       "cancelling": "Annulation…",
       "details": "Détails",
       "retry": "Réessayer",
-      "force": "Forcer le déplacement vers {cloud}",
+      "forceOption": "Forcer : ignorer ce qui échoue sur la source",
       "forceTitle": "Forcer le déplacement de {name} vers {cloud} ?",
       "forceDescription": "{source} n'est pas up. Le déplacement saute les étapes côté source et repart de la dernière sauvegarde archivée.",
       "lastWal": "Les données écrites après {time} seront perdues ({database})",
