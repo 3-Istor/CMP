@@ -26,6 +26,7 @@ import type {
   ImportPlan,
   ImportPlanEdits,
   ImportRunDetail,
+  ImportSourceMode,
   ImportSourceView,
   Topology,
 } from "@/types";
@@ -196,9 +197,9 @@ function WizardForRun({
     });
   };
 
-  const start = async (repo: string, branch: string | null) => {
+  const start = async (repo: string, branch: string | null, mode: ImportSourceMode) => {
     try {
-      const next = await startImport(projectName, repo, branch);
+      const next = await startImport(projectName, repo, branch, mode);
       go(next.id);
     } catch (err) {
       refused("startFailed", err);
@@ -229,7 +230,7 @@ function WizardForRun({
   };
 
   const reanalyze = () => {
-    if (source) void start(source.repo_full_name, source.branch);
+    if (source) void start(source.origin_repo_full_name ?? source.repo_full_name, source.branch, source.source_mode);
     else go(null);
   };
 

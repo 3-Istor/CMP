@@ -156,7 +156,8 @@ export function errorMessage(e: unknown): string {
   const text = e instanceof Error ? e.message : String(e);
   try {
     const detail = JSON.parse(text).detail;
-    return typeof detail === "string" ? detail : text;
+    if (typeof detail === "string") return detail;
+    return typeof detail?.message === "string" ? detail.message : text;
   } catch {
     return text;
   }

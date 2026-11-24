@@ -1,6 +1,11 @@
 "use client";
 
 import { EnvironmentsTab } from "@/components/environments/EnvironmentsTab";
+import {
+  isUnmanagedImport,
+  RepoNotManagedNotice,
+  useImportTasks,
+} from "@/components/imports/ImportTasks";
 import { useAppContext } from "@/components/projects/AppContext";
 import { AppSection } from "@/components/projects/AppFrame";
 import { useProjectContext } from "@/components/projects/ProjectContext";
@@ -34,6 +39,8 @@ export default function AppDeliveryPage() {
   const { appId, projectName, deployment } = useAppContext();
   const { can } = useProjectContext();
   const isKubernetes = deployment.provider_type === "kubernetes";
+  const importTasks = useImportTasks();
+  const unmanaged = isUnmanagedImport(importTasks) ? importTasks : null;
   const settingsHref = `/projects/${encodeURIComponent(projectName)}/apps/${appId}/settings#delivery`;
 
   return (
@@ -41,12 +48,15 @@ export default function AppDeliveryPage() {
       allowed={can("app.viewLogs") || (isKubernetes && can("release.view"))}
     >
       <div className="space-y-10">
-        {isKubernetes && can("release.operate") && (
+        {isKubernetes && unmanaged && can("release.view") && (
+          <RepoNotManagedNotice tasks={unmanaged} />
+        )}
+        {isKubernetes && !unmanaged && can("release.operate") && (
           <div className="flex justify-end">
             <NewReleaseButton deploymentId={appId} />
           </div>
         )}
-        {isKubernetes && can("release.view") && (
+        {isKubernetes && !unmanaged && can("release.view") && (
           <>
             <Section title={t("pipeline")} description={t("pipelineHint")}>
               <EnvironmentsTab

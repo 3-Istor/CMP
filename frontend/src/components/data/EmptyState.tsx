@@ -25,7 +25,16 @@ export function EmptyState({
 }: EmptyStateProps) {
   const button =
     action &&
-    (action.href !== undefined ? (
+    (action.href !== undefined && /^https?:\/\//.test(action.href) ? (
+      <a
+        href={action.href}
+        target="_blank"
+        rel="noreferrer"
+        className={buttonVariants({ variant: "outline", size: "sm" })}
+      >
+        {action.label}
+      </a>
+    ) : action.href !== undefined ? (
       <Link
         href={action.href}
         className={buttonVariants({ variant: "outline", size: "sm" })}

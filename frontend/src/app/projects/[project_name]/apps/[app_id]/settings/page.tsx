@@ -2,6 +2,11 @@
 
 import { AppIconPanel } from "@/components/app-icon/AppIconPanel";
 import { EnvironmentsTab } from "@/components/environments/EnvironmentsTab";
+import {
+  isUnmanagedImport,
+  RepoNotManagedNotice,
+  useImportTasks,
+} from "@/components/imports/ImportTasks";
 import { SloTargetsCard } from "@/components/observability/SloTargetsCard";
 import { useObsCapabilities } from "@/components/observability/shared";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
@@ -170,6 +175,8 @@ export default function AppSettingsPage() {
   const [importFailed, setImportFailed] = useState(false);
   const [importAttempt, setImportAttempt] = useState(0);
   const imported = deployment.template_id.startsWith("import-");
+  const importTasks = useImportTasks();
+  const unmanaged = isUnmanagedImport(importTasks) ? importTasks : null;
   const canDelete = can("app.delete");
   const canImport = can("import.manage");
   useEffect(() => {
@@ -316,7 +323,11 @@ export default function AppSettingsPage() {
             <AppIconPanel />
             {isRunning && (
               <div id="security-data" className="scroll-mt-40">
-                <SecurityDataPanel deploymentId={appId} project={projectName} />
+                <SecurityDataPanel
+                  deploymentId={appId}
+                  project={projectName}
+                  notManaged={unmanaged && <RepoNotManagedNotice tasks={unmanaged} compact />}
+                />
               </div>
             )}
           </SettingsSection>
@@ -337,11 +348,17 @@ export default function AppSettingsPage() {
               title={ts("sections.delivery.title")}
               description={ts("sections.delivery.description")}
             >
-              <ReleaseSettingsCard
-                deploymentId={appId}
-                inProgress={releaseInProgress}
-              />
-              <EnvironmentsTab deploymentId={appId} mode="settings" />
+              {unmanaged ? (
+                <RepoNotManagedNotice tasks={unmanaged} />
+              ) : (
+                <>
+                  <ReleaseSettingsCard
+                    deploymentId={appId}
+                    inProgress={releaseInProgress}
+                  />
+                  <EnvironmentsTab deploymentId={appId} mode="settings" />
+                </>
+              )}
             </SettingsSection>
           )}
 
@@ -378,7 +395,9 @@ export default function AppSettingsPage() {
             title={ts("sections.advanced.title")}
             description={ts("sections.advanced.description")}
           >
-            {isRunning ? (
+            {unmanaged ? (
+              <RepoNotManagedNotice tasks={unmanaged} />
+            ) : isRunning ? (
               <SearchHighlight>
                 <AppConfigPanel
                   deploymentId={appId}

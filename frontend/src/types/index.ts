@@ -171,8 +171,9 @@ export type ExposurePreset =
   | "project_admins";
 
 export interface SecurityData {
-  repo: string;
+  repo: string | null;
   can_edit: boolean;
+  managed: boolean;
   exposure: ExposurePreset | "custom" | null;
   database: {
     backup: {
@@ -1634,7 +1635,7 @@ export interface ImportFailure {
 export interface ImportRun {
   id: string;
   source_id: string;
-  kind: "analyze" | "build";
+  kind: "analyze" | "build" | "sync";
   sha: string;
   status: ImportRunStatus;
   plan: ImportPlan | { edits: ImportPlanEdits } | null;
@@ -1733,6 +1734,47 @@ export interface ImportSourceView {
   auto_rebuild: boolean;
   rebuild_pending: ImportRebuildPending | null;
   standard_repo: ImportStandardRepo | null;
+  source_mode: ImportSourceMode;
+  origin_repo_full_name: string | null;
+  copy: ImportCopyState | null;
   runs: ImportRun[];
   services: ImportServiceView[];
+}
+
+export type ImportSourceMode = "in_place" | "copy";
+
+/** The copy of the original repository in the platform org (copy mode). */
+export interface ImportCopyState {
+  state: "pending" | "copied" | "failed";
+  at?: string;
+  leaks_total?: number;
+  error?: string;
+}
+
+export type ImportTaskKey = "deploy" | "route" | "setup_pr" | "code_scanning" | "tracing";
+export type ImportTaskUnlock = "delivery" | "settings" | "security.code" | "traces";
+
+export interface ImportTask {
+  key: ImportTaskKey;
+  label: string;
+  done: boolean;
+  params: Record<string, string>;
+  unlocks: ImportTaskUnlock[];
+  action: { kind: "pr" | "link" | "agent"; href: string } | null;
+}
+
+/** What is left to bring an imported app to parity with a template app. */
+export interface ImportTasks {
+  imported: boolean;
+  managed: boolean;
+  source_id: string | null;
+  repo_full_name: string | null;
+  source_mode: ImportSourceMode | null;
+  origin_repo_full_name: string | null;
+  setup_pr: { state: ImportStandardRepo["state"]; url: string | null } | null;
+  import_href: string | null;
+  agent_href: string | null;
+  tasks: ImportTask[];
+  done: number;
+  total: number;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranch, RotateCw, Trash2 } from "lucide-react";
+import { GitBranch, GitPullRequestArrow, RotateCw, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,7 +10,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
-import { deleteImport, getImports, openStandardPr, rebuildImport, updateImportSettings } from "@/lib/api";
+import {
+  deleteImport,
+  getImports,
+  openStandardPr,
+  pullImportOrigin,
+  rebuildImport,
+  updateImportSettings,
+} from "@/lib/api";
 import { importRefusal } from "@/lib/importRefusal";
 import type { ImportSourceView } from "@/types";
 import { RebuildPendingNotice } from "./RebuildPendingNotice";
@@ -96,10 +103,21 @@ export function ImportsList({
     }
   };
 
+  const pullOrigin = async (source: ImportSourceView) => {
+    try {
+      await pullImportOrigin(projectName, source.id);
+      toast.success(t("pullStarted", { origin: source.origin_repo_full_name ?? "" }));
+      refresh();
+    } catch (err) {
+      toast.error(t("pullFailed", { message: importRefusal(err).message }));
+    }
+  };
+
   const pending = sources.filter((s) => s.rebuild_pending);
+  const leaking = sources.filter((s) => (s.copy?.leaks_total ?? 0) > 0);
 
   return (
-    <section aria-labelledby="imports-title" className="space-y-2">
+    <section id="imports" aria-labelledby="imports-title" className="scroll-mt-40 space-y-2">
       <h2 id="imports-title" className="text-sm font-semibold">
         {t("title")}
       </h2>
@@ -110,6 +128,16 @@ export function ImportsList({
           canManage={canManage}
           onRebuild={() => void rebuild(source)}
         />
+      ))}
+      {leaking.map((source) => (
+        <p
+          key={`leaks-${source.id}`}
+          role="status"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm"
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+          {t("copyLeaks", { count: source.copy?.leaks_total ?? 0, repo: source.repo_full_name })}
+        </p>
       ))}
       {sources.map((source) => (
         <StandardRepoNotice
@@ -135,16 +163,22 @@ export function ImportsList({
           <tbody>
             {sources.map((source) => {
               const run = source.runs.at(-1);
+              const wizardRun = source.runs.filter((r) => r.kind !== "sync").at(-1);
               const active = ACTIVE.includes(run?.status ?? "");
               return (
                 <tr key={source.id} className="border-b last:border-0">
                   <th scope="row" className={`${TD} text-left font-mono font-normal`}>
-                    {run && canManage ? (
-                      <Link href={`${base}/import?run=${encodeURIComponent(run.id)}`} className="text-primary hover:underline">
+                    {wizardRun && canManage ? (
+                      <Link href={`${base}/import?run=${encodeURIComponent(wizardRun.id)}`} className="text-primary hover:underline">
                         {source.repo_full_name}
                       </Link>
                     ) : (
                       source.repo_full_name
+                    )}
+                    {source.source_mode === "copy" && source.origin_repo_full_name && (
+                      <span className="block font-sans text-xs text-muted-foreground">
+                        {t("copiedFrom", { origin: source.origin_repo_full_name })}
+                      </span>
                     )}
                   </th>
                   <td className={TD}>
@@ -183,6 +217,18 @@ export function ImportsList({
                           <RotateCw aria-hidden />
                           {t("rebuild")}
                         </Button>
+                        {source.source_mode === "copy" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={active || source.copy?.state !== "copied"}
+                            onClick={() => void pullOrigin(source)}
+                            aria-label={t("pullOf", { origin: source.origin_repo_full_name ?? "" })}
+                          >
+                            <GitPullRequestArrow aria-hidden />
+                            {t("pull")}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"

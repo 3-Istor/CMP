@@ -1229,9 +1229,9 @@ async def _apply_patch_to_gitops(
         _extract_repo_full_name,
         _get_github_token_for_deployment,
         _load_values_file,
+        _values_files,
         _yaml,
     )
-    from app.services.app_security_data import SINGLE_VALUES_FILE
     from app.services.github_service import GitHubAppError, put_file_content
 
     if _app_type_of(deployment) == "fullstack":
@@ -1245,14 +1245,15 @@ async def _apply_patch_to_gitops(
     try:
         token = await _get_github_token_for_deployment(deployment)
         repo = _extract_repo_full_name(deployment)
-        parsed, sha = await _load_values_file(token, repo, SINGLE_VALUES_FILE)
+        values_file = _values_files(deployment)[0]
+        parsed, sha = await _load_values_file(token, repo, values_file)
         _deep_merge(parsed, patch)
         out = StringIO()
         _yaml.dump(parsed, out)
         result = await put_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=SINGLE_VALUES_FILE,
+            file_path=values_file,
             content=out.getvalue(),
             message="chore(finops): apply cost optimisation recommendation",
             sha=sha,

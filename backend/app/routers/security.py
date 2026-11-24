@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
@@ -64,6 +64,7 @@ from app.services.security import settings as app_settings
 from app.services.security import store, upgrade_prs
 from app.services.security.collector import (
     K8S_TEMPLATE,
+    SCANNED_TEMPLATES,
     SECURITY_WORKFLOW,
     utcnow,
 )
@@ -112,7 +113,7 @@ def _app_deployment(db: Session, project: str, app: str) -> Deployment:
         .filter(
             Deployment.project_id == project,
             Deployment.name == app,
-            Deployment.template_id == K8S_TEMPLATE,
+            Deployment.template_id.in_(SCANNED_TEMPLATES),
         )
         .order_by(Deployment.id.desc())
         .first()
@@ -383,7 +384,7 @@ def _summary(
         for d in db.query(Deployment)
         .filter(
             Deployment.project_id == project,
-            Deployment.template_id == K8S_TEMPLATE,
+            Deployment.template_id.in_(SCANNED_TEMPLATES),
             Deployment.status != DeploymentStatus.DELETED,
         )
         .order_by(Deployment.id)
@@ -467,7 +468,7 @@ def _overview(db: Session, names: list[str] | None) -> list[ProjectOverview]:
             {
                 d.project_id
                 for d in db.query(Deployment).filter(
-                    Deployment.template_id == K8S_TEMPLATE,
+                    Deployment.template_id.in_(SCANNED_TEMPLATES),
                     Deployment.project_id.isnot(None),
                 )
             }
@@ -587,13 +588,27 @@ class ScanRequest(BaseModel):
 
 
 async def _github_token(deployment: Deployment) -> tuple[str, str]:
+    """
+    The org token and the app's repository. A switched import's repository
+    is in the org too (standard_pr.ineligible); an import not switched yet
+    answers 409 with the repo_not_managed code.
+    """
     try:
-        repo = app_repo.bound_repo(
-            deployment.github_repo_url,
-            deployment.name,
-            deployment.status,
-            deployment.template_id,
-        )
+        if app_repo.is_imported(deployment.template_id):
+            repo = app_repo.import_binding(
+                object_session(deployment), deployment
+            ).repo
+        else:
+            repo = app_repo.bound_repo(
+                deployment.github_repo_url,
+                deployment.name,
+                deployment.status,
+                deployment.template_id,
+            )
+    except app_repo.RepoNotManaged as exc:
+        raise HTTPException(
+            status_code=409, detail=app_repo.not_managed_detail()
+        ) from exc
     except app_repo.RepoNotBound as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
@@ -655,6 +670,12 @@ async def _sync_exceptions_file(
     if app is None:
         return None
     deployment = _app_deployment(db, project, app)
+    if app_repo.is_imported(deployment.template_id):
+        try:
+            app_repo.import_binding(db, deployment)
+        except app_repo.RepoNotManaged:
+            # Kept in the CMP only until the platform manages the repository.
+            return None
     installation_token, repo = await _github_token(deployment)
     today = utcnow().date()
     tiers = {
