@@ -147,20 +147,20 @@ def _pkce() -> tuple[str, str]:
     return verifier, challenge
 
 
-def _register(client, redirect=REDIRECT):
+def _register(client, redirect=REDIRECT, name="Claude Code"):
     return client.post(
         "/register",
         json={
             "redirect_uris": [redirect],
-            "client_name": "Claude Code",
+            "client_name": name,
             "token_endpoint_auth_method": "none",
             "grant_types": ["authorization_code", "refresh_token"],
         },
     )
 
 
-def _connect(client, scopes=None) -> dict:
-    client_id = _register(client).json()["client_id"]
+def _connect(client, scopes=None, name="Claude Code") -> dict:
+    client_id = _register(client, name=name).json()["client_id"]
     verifier, challenge = _pkce()
     authorize = client.get(
         "/authorize",
@@ -470,7 +470,7 @@ def test_account_lookup_raises_when_keycloak_cannot_say(
 
 def test_disabling_an_account_revokes_all_its_grants(platform):
     tokens = _connect(platform)
-    _connect(platform)
+    _connect(platform, name="Claude Desktop")
 
     revoked = store.revoke_subject(HUMAN["sub"])
 
@@ -533,7 +533,7 @@ def test_infra_revokes_another_users_grant(platform):
 
 def test_infra_revokes_every_grant_of_a_user(platform):
     _connect(platform)
-    _connect(platform)
+    _connect(platform, name="Claude Desktop")
 
     response = platform.delete(
         "/api/agents/admin/users/alice/grants",
