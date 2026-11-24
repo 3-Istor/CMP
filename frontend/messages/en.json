@@ -2262,9 +2262,10 @@
       "promoted": "Promoted",
       "aborted_auto": "Auto-rejected",
       "aborted_manual": "Aborted",
-      "superseded": "Superseded",
+      "superseded": "Replaced",
       "deployed": "Deployed",
-      "failed": "Failed"
+      "failed": "Failed",
+      "unknown": "Unknown"
     },
     "errors": {
       "readState": "Could not read the release state: {error}"
@@ -2278,7 +2279,7 @@
         "outcome": "Result",
         "progress": "Progress",
         "startedAt": "Started",
-        "duration": "Duration"
+        "duration": "Timing"
       },
       "forced": "Forced",
       "reason": "Reason: {reason}"
@@ -2503,6 +2504,10 @@
       "rolling": "Rolling",
       "canary": "Canary",
       "bluegreen": "Blue/green"
+    },
+    "lifetime": {
+      "readyIn": "ready in {duration}",
+      "live": "live {duration}"
     }
   },
   "appPage": {
@@ -2544,7 +2549,7 @@
       "outcome": "Outcome",
       "who": "By",
       "when": "When",
-      "duration": "Duration",
+      "duration": "Timing",
       "automatic": "Automatic",
       "forced": "Forced",
       "env": "Env",
@@ -2563,9 +2568,10 @@
         "promoted": "Promoted",
         "aborted_auto": "Automatically rejected",
         "aborted_manual": "Aborted",
-        "superseded": "Superseded",
+        "superseded": "Replaced",
         "deployed": "Deployed",
-        "failed": "Failed"
+        "failed": "Failed",
+        "unknown": "Unknown"
       }
     },
     "events": {

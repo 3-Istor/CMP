@@ -56,6 +56,7 @@ def compute(
         *app_target, project_cloud(db, deployment.project_id)
     )
     if snapshot is None:
+        history.close_orphan(db, deployment.id)
         return disabled_view(), None, None
 
     before = history.latest_event(db, deployment.id)

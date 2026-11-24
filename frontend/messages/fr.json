@@ -2264,7 +2264,8 @@
       "aborted_manual": "Abandonnée",
       "superseded": "Remplacée",
       "deployed": "Déployée",
-      "failed": "Échouée"
+      "failed": "Échouée",
+      "unknown": "Inconnue"
     },
     "errors": {
       "readState": "Impossible de lire l'état de la release : {error}"
@@ -2278,7 +2279,7 @@
         "outcome": "Résultat",
         "progress": "Progression",
         "startedAt": "Démarrée",
-        "duration": "Durée"
+        "duration": "Durées"
       },
       "forced": "Forcée",
       "reason": "Motif : {reason}"
@@ -2503,6 +2504,10 @@
       "rolling": "Rolling",
       "canary": "Canary",
       "bluegreen": "Bleu/vert"
+    },
+    "lifetime": {
+      "readyIn": "prête en {duration}",
+      "live": "en ligne {duration}"
     }
   },
   "appPage": {
@@ -2544,7 +2549,7 @@
       "outcome": "Résultat",
       "who": "Par",
       "when": "Quand",
-      "duration": "Durée",
+      "duration": "Durées",
       "automatic": "Automatique",
       "forced": "Forcée",
       "env": "Env",
@@ -2565,7 +2570,8 @@
         "aborted_manual": "Abortée",
         "superseded": "Remplacée",
         "deployed": "Déployée",
-        "failed": "Échouée"
+        "failed": "Échouée",
+        "unknown": "Inconnue"
       }
     },
     "events": {

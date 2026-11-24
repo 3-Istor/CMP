@@ -3,8 +3,9 @@ from unittest import mock
 
 import pytest
 
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.environment import AppEnvironment
-from app.models.project import TargetCloud
+from app.models.project import Project, TargetCloud
 from app.models.release import ReleaseEvent
 from app.services.kube_client import KubeUnavailableError
 from app.services.release import recorder
@@ -193,3 +194,40 @@ def test_record_all_ignores_a_staging_still_provisioning(
 
     # Assert
     assert read_rolling.call_args.args[2] == ["prod"]
+
+
+def test_record_all_keeps_recording_other_clusters_when_onprem_is_down(
+    session_factory,
+):
+    # Arrange: app 7 runs on-prem (down), app 8 on AWS (up)
+    with session_factory() as db:
+        db.add(Project(project_name="lab", owner_username="o", target_cloud=TargetCloud.AWS))
+        db.add(
+            Deployment(
+                id=8,
+                name="web",
+                template_id="k3s-gitops-app",
+                project_id="lab",
+                provider_type=ProviderType.KUBERNETES,
+                status=DeploymentStatus.RUNNING,
+            )
+        )
+        db.commit()
+    source = FakeSource(None)
+
+    def fetch(namespace, app_name, cloud):
+        if cloud == TargetCloud.ONPREM:
+            raise KubeUnavailableError("down")
+        return _paused()
+
+    source.fetch = fetch
+
+    # Act
+    with (
+        mock.patch.object(recorder, "SessionLocal", session_factory),
+        mock.patch.object(recorder, "reconcile_route"),
+    ):
+        recorded = recorder.record_all(source)
+
+    # Assert
+    assert recorded == 1

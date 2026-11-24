@@ -28,6 +28,10 @@ OUTCOMES = {
 }
 # Two recorder passes: past this a backfilled row's end time is unknown.
 BACKFILL_GRACE = timedelta(seconds=60)
+# The Deployment default the charts keep, plus two recorder passes. A
+# revision still "running" past it has no Progressing condition left to tell
+# (Deployment gone, taken over by a Rollout): its outcome is unknown.
+PROGRESS_DEADLINE = timedelta(seconds=600) + BACKFILL_GRACE
 
 
 @dataclass
@@ -163,7 +167,10 @@ def read_rolling(
 
 
 def _next_outcome(
-    row: ReleaseEvent, top: int, current: RollingRevision | None
+    row: ReleaseEvent,
+    top: int,
+    current: RollingRevision | None,
+    now: datetime,
 ) -> str | None:
     """Where a row moves to given what is seen now, None to leave it."""
     if row.outcome == "running":
@@ -172,12 +179,19 @@ def _next_outcome(
             return "superseded"
         if current and current.outcome != "running":
             return current.outcome
+        if now - _aware(row.started_at) > PROGRESS_DEADLINE:
+            return "unknown"
     # A failed rollout recovers when its pods come up late. Only the newest
     # revision tells: the older ones are always labelled deployed.
-    elif row.outcome == "failed" and row.revision == top:
+    elif row.outcome in ("failed", "unknown") and row.revision == top:
         if current and current.outcome == "deployed":
             return "deployed"
     return None
+
+
+def _aware(value: datetime) -> datetime:
+    # SQLite drops the timezone of DateTime(timezone=True) columns.
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def sync_rolling(
@@ -209,7 +223,7 @@ def sync_rolling(
         key = (row.environment, row.component, row.revision)
         known.add(key)
         top = newest.get(key[:2])
-        outcome = top and _next_outcome(row, top, seen.get(key))
+        outcome = top and _next_outcome(row, top, seen.get(key), now)
         if outcome:
             row.outcome = outcome
             row.finished_at = now

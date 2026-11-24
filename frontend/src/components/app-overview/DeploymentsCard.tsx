@@ -1,6 +1,6 @@
 "use client";
 
-import { imageTag, OUTCOME_TONE, TONE } from "@/components/release/format";
+import { imageTag, lifetimeLabel, OUTCOME_TONE, TONE } from "@/components/release/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { OpenDashboardButton } from "@/components/ui/open-dashboard-button";
@@ -8,7 +8,7 @@ import { getReleaseHistory } from "@/lib/api";
 import { useCardData } from "@/lib/useCardData";
 import type { ReleaseEvent } from "@/types";
 import { useLocale, useTranslations } from "next-intl";
-import { dateTime, duration } from "./format";
+import { dateTime } from "./format";
 import { OverviewCard } from "./OverviewCard";
 
 export function DeploymentsTable({
@@ -19,6 +19,7 @@ export function DeploymentsTable({
   onRollback?: (event: ReleaseEvent) => void;
 }) {
   const t = useTranslations("appPage.deployments");
+  const tRelease = useTranslations("release");
   const locale = useLocale();
   const showComponent = new Set(events.map((e) => e.component)).size > 1;
   return (
@@ -75,7 +76,7 @@ export function DeploymentsTable({
                   {dateTime(e.started_at, locale)}
                 </td>
                 <td className="py-2 pr-4 font-mono text-xs tabular-nums">
-                  {duration(e.started_at, e.finished_at)}
+                  {lifetimeLabel(e, tRelease) || "-"}
                 </td>
                 {onRollback && (
                   <td className="py-2">

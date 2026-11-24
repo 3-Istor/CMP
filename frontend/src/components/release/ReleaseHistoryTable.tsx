@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils";
 import type { ReleaseEvent, ReleaseStep } from "@/types";
 import { useLocale, useTranslations } from "next-intl";
 import {
-  durationBetween,
   formatDateTime,
   isVisibleStep,
   imageTag,
+  lifetimeLabel,
   OUTCOME_TONE,
   outcomeLabel,
   TONE,
@@ -110,7 +110,7 @@ export function ReleaseHistoryTable({ events }: { events: ReleaseEvent[] }) {
                   {formatDateTime(e.started_at, locale)}
                 </td>
                 <td className="py-2 font-mono text-xs tabular-nums">
-                  {durationBetween(e.started_at, e.finished_at, t) || "-"}
+                  {lifetimeLabel(e, t) || "-"}
                 </td>
               </tr>
             );

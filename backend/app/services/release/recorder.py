@@ -68,8 +68,12 @@ def record_all(source: ReleaseSource) -> int:
             )
             .all()
         )
+        # One cluster down must not stop the apps of the others being recorded.
+        unreachable: set[TargetCloud] = set()
         for deployment in deployments:
             cloud = project_cloud(db, deployment.project_id)
+            if cloud in unreachable:
+                continue
             try:
                 view, snapshot, _ = sync.compute(db, deployment, source)
             except ClusterNotConnectedError as exc:
@@ -81,8 +85,7 @@ def record_all(source: ReleaseSource) -> int:
                     cloud.value,
                     exc,
                 )
-                if cloud == TargetCloud.ONPREM:
-                    return recorded
+                unreachable.add(cloud)
                 continue
             except Exception:  # pylint: disable=broad-exception-caught
                 # One malformed Rollout must not stop the others being recorded.

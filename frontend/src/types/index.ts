@@ -947,7 +947,8 @@ export type ReleaseOutcome =
   | "aborted_manual"
   | "superseded"
   | "deployed"
-  | "failed";
+  | "failed"
+  | "unknown";
 
 export interface ReleaseActor {
   user: string;
@@ -972,6 +973,8 @@ export interface ReleaseEvent {
   environment: "prod" | "staging";
   component: string | null;
   rollback_promotion_id: number | null;
+  ready_seconds?: number | null;
+  live_seconds?: number | null;
 }
 
 export interface ReleaseSettings {
