@@ -90,9 +90,17 @@ async def golden_signals(
     step = step_of(range_name)
     start = now - timedelta(seconds=seconds)
     totals = queries(scope.namespace)
-    rate = _points(
-        await stores.series(scope, totals["rate"], start, now, step)
+    # All at once: without traffic the extra answers are empty and cheap.
+    found = await stores.gather_bounded(
+        [
+            *(
+                stores.series(scope, totals[signal], start, now, step)
+                for signal in ("rate", "errors", "p50", "p95")
+            ),
+            routes(scope, range_name, now),
+        ]
     )
+    rate, errors, p50, p95 = (_points(rows) for rows in found[:4])
     if not rate:
         return {
             "range": range_name,
@@ -104,11 +112,6 @@ async def golden_signals(
             "p95_ms": [],
             "routes": [],
         }
-    errors = _points(
-        await stores.series(scope, totals["errors"], start, now, step)
-    )
-    p50 = _points(await stores.series(scope, totals["p50"], start, now, step))
-    p95 = _points(await stores.series(scope, totals["p95"], start, now, step))
     return {
         "range": range_name,
         "step_seconds": step,
@@ -117,7 +120,7 @@ async def golden_signals(
         "error_percent": error_percent(rate, errors),
         "p50_ms": p50,
         "p95_ms": p95,
-        "routes": await routes(scope, range_name, now),
+        "routes": found[4],
     }
 
 
@@ -126,9 +129,12 @@ async def routes(
 ) -> list[dict[str, Any]]:
     """Per route over the whole range: rate, 5xx share, p50 and p95."""
     per_route = queries(scope.namespace, range_name, ROUTE_LABEL)
+    answers = await stores.gather_bounded(
+        stores.instant(scope, query, now) for query in per_route.values()
+    )
     found: dict[str, dict[str, Any]] = {}
-    for signal, query in per_route.items():
-        for row in await stores.instant(scope, query, now):
+    for signal, rows_of_signal in zip(per_route, answers):
+        for row in rows_of_signal:
             name = row["metric"].get(ROUTE_LABEL, "")
             found.setdefault(name, {})[signal] = row["value"]
     rows = []
@@ -185,38 +191,36 @@ async def slo_status(
     """
     sel = _slo_selector(scope)
     period = f"{period_days}d"
-    remaining = _by_kind(
-        await stores.instant(
-            scope, f"slo:period_error_budget_remaining:ratio{{{sel}}}", now
-        )
-    )
-    budget = _by_kind(
-        await stores.instant(scope, f"slo:error_budget:ratio{{{sel}}}", now)
-    )
-    burns = {
-        window: _by_kind(
-            await stores.instant(
-                scope, f"slo:sli_error:ratio_rate{window}{{{sel}}}", now
-            )
-        )
-        for window in ("1h", "6h")
-    }
-    sli = _by_kind(
-        await stores.instant(
-            scope, f"slo:sli_error:ratio_rate{period}{{{sel}}}", now
-        )
-    )
     start = now - timedelta(seconds=RANGES[range_name])
-    trend = {
-        r["metric"].get("cnp_slo", ""): r["points"]
-        for r in await stores.series(
-            scope,
-            f"slo:period_error_budget_remaining:ratio{{{sel}}}",
-            start,
-            now,
-            step_of(range_name),
-        )
+    instants = {
+        "remaining": f"slo:period_error_budget_remaining:ratio{{{sel}}}",
+        "budget": f"slo:error_budget:ratio{{{sel}}}",
+        "1h": f"slo:sli_error:ratio_rate1h{{{sel}}}",
+        "6h": f"slo:sli_error:ratio_rate6h{{{sel}}}",
+        "sli": f"slo:sli_error:ratio_rate{period}{{{sel}}}",
     }
+    found = await stores.gather_bounded(
+        [
+            *(stores.instant(scope, q, now) for q in instants.values()),
+            stores.series(
+                scope,
+                f"slo:period_error_budget_remaining:ratio{{{sel}}}",
+                start,
+                now,
+                step_of(range_name),
+            ),
+        ]
+    )
+    by_name = {
+        name: _by_kind(rows) for name, rows in zip(instants, found[:-1])
+    }
+    remaining, budget, sli = (
+        by_name["remaining"],
+        by_name["budget"],
+        by_name["sli"],
+    )
+    burns = {window: by_name[window] for window in ("1h", "6h")}
+    trend = {r["metric"].get("cnp_slo", ""): r["points"] for r in found[-1]}
     objectives = []
     for kind in slo.KINDS:
         allowed = budget.get(kind)

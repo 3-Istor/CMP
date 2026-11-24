@@ -1774,6 +1774,110 @@ export const getObsDeploys = (deploymentId: number, range: string) =>
     obs(deploymentId, `/deploys${obsQuery({ range })}`),
   );
 
+export type SummaryRange = "1h" | "6h" | "24h" | "7d";
+export type AppSummaryKind = "web" | "datastore" | "worker";
+export type AppHealthStatus = "healthy" | "degraded" | "down" | "unknown";
+type Series = (number | null)[];
+
+/** Optional fields are absent when their store has no data or no answer. */
+export type AppSummary = {
+  kind: AppSummaryKind;
+  status: AppHealthStatus;
+  status_reason?: string;
+  tiles: {
+    availability_pct?: number;
+    requests_total?: number;
+    errors_5xx?: number;
+    error_pct?: number;
+    p50_ms?: number;
+    p95_ms?: number;
+    restarts: number;
+    cpu_ratio?: number;
+    mem_ratio?: number;
+    cpu_cores?: number;
+    cpu_request_cores?: number;
+    mem_bytes?: number;
+    mem_limit_bytes?: number;
+    disk_bytes?: number;
+    disk_capacity_bytes?: number;
+    last_backup_at?: string;
+    replicas_ready: number;
+    replicas_desired: number;
+  };
+  /** t in epoch ms; log_* in lines per minute, empty without a logs store. */
+  series: {
+    t: number[];
+    rps?: Series;
+    err_rps?: Series;
+    p95_ms?: Series;
+    log_info: Series;
+    log_warn: Series;
+    log_error: Series;
+    cpu_cores?: Series;
+    mem_bytes?: Series;
+  };
+  deploys: {
+    version: string;
+    at: string;
+    outcome: "live" | "replaced" | "failed" | "running" | "unknown";
+    ready_seconds?: number;
+    live_seconds?: number;
+    by?: string;
+  }[];
+  clients: { app: string; verdict: "allowed" | "denied"; flows: number }[];
+  denied_flows_24h: number;
+  top_errors: { message: string; count: number }[];
+  alerts_firing: number;
+};
+
+export const getAppSummary = (
+  deploymentId: number,
+  range: SummaryRange = "24h",
+  maxAgeMs = 0,
+) =>
+  cachedGet<AppSummary>(
+    `/deployments/${deploymentId}/summary${obsQuery({ range })}`,
+    maxAgeMs,
+  );
+
+export type AppHealthRow = {
+  id: number;
+  name: string;
+  kind: AppSummaryKind;
+  status: AppHealthStatus;
+  status_reason?: string;
+  rps?: number;
+  error_pct?: number;
+  p95_ms?: number;
+  cpu_ratio?: number;
+  mem_ratio?: number;
+  disk_ratio?: number;
+  /** 24 points: requests/s for web apps, CPU cores for the others. */
+  spark: Series;
+  last_deploy?: { version: string; at: string };
+};
+
+/** Apps sorted down, degraded, unknown, healthy, then by name. */
+export type ProjectAppsHealth = {
+  apps: AppHealthRow[];
+  series: {
+    t: number[];
+    rps_by_app: Record<string, Series>;
+    err_pct_by_app: Record<string, Series>;
+    error_logs_per_min: Series;
+  };
+};
+
+export const getProjectAppsHealth = (
+  project: string,
+  range: SummaryRange = "24h",
+  maxAgeMs = 0,
+) =>
+  cachedGet<ProjectAppsHealth>(
+    `/projects/${encodeURIComponent(project)}/apps-health${obsQuery({ range })}`,
+    maxAgeMs,
+  );
+
 export const getObsDora = (deploymentId: number, days = 30) =>
   request<import("@/types/observability").Dora>(
     obs(deploymentId, `/dora${obsQuery({ days })}`),
@@ -2031,6 +2135,8 @@ export type AppFootprint = {
   memory_bytes: number;
   pods: number;
   measured_at: string;
+  /** Live cAdvisor usage on the project's current cloud; absent elsewhere. */
+  usage?: { cpu_cores: number; mem_bytes: number } | null;
 };
 
 export const getProjectFootprint = (project: string) =>

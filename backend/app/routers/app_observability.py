@@ -22,13 +22,19 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import ProjectRole
+from app.core.swr_cache import SwrCache
 from app.models.deployment import Deployment, ProviderType
 from app.routers.deployments import _get_app_or_404
 from app.routers.observability import SloRead, slo_read
 from app.services import alerts_grafana
 from app.services import app_overview as overview
 from app.services import links
-from app.services.authz import assert_project_role, is_cnp_admin, is_finops
+from app.services.authz import (
+    RequireMember,
+    assert_project_role,
+    is_cnp_admin,
+    is_finops,
+)
 from app.services.grafana_service import GRAFANA_BASE_URL
 from app.services.keycloak_service import get_current_user
 from app.services.observability import (
@@ -36,18 +42,28 @@ from app.services.observability import (
     app_costs,
     app_logs,
     app_traces,
+    apps_health,
     delivery,
     signals,
     stores,
+    summary,
 )
 
 router = APIRouter(prefix="/deployments", tags=["App observability"])
+projects_router = APIRouter(prefix="/projects", tags=["App observability"])
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 SIGNAL_RANGE = "^(1h|6h|24h|7d)$"
 LOG_RANGE = "^(15m|1h|6h|24h|7d)$"
 TRACE_RANGE = "^(15m|1h|6h|24h)$"
 TRACE_ID = "^[0-9a-fA-F]{16,32}$"
+
+# Pages poll these; two members on one app share one read of the stores.
+_summaries = SwrCache("app summary", ttl=30)
+_apps_health = SwrCache("apps health", ttl=30)
+_signals = SwrCache("golden signals", ttl=30)
+# The Grafana org of a project changes only when the project is created.
+_grafana_orgs = SwrCache("grafana org", ttl=300)
 
 
 # ── Access ───────────────────────────────────────────────────────────────────
@@ -285,15 +301,13 @@ async def get_capabilities(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> Capabilities:
     """Which tabs have a store behind them."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
     caps = stores.capabilities()
     # Fluent Bit ships only the on-prem cluster's logs to VictoriaLogs.
     caps["logs"] = caps["logs"] and scope.cloud == "onprem"
-    try:
-        org = await alerts_grafana.org_id(scope.project)
-    except Exception:  # pylint: disable=broad-exception-caught
-        # No org yet or Grafana unreachable: link the Grafana home.
-        org = None
+    org = await _grafana_orgs.get(
+        scope.project, lambda: _grafana_org(scope.project)
+    )
     return Capabilities(
         **caps,
         silence_max_hours=settings.OBS_SILENCE_MAX_HOURS,
@@ -303,6 +317,14 @@ async def get_capabilities(
             else links.grafana_app_url(org, scope.app, scope.namespace)
         ),
     )
+
+
+async def _grafana_org(project: str) -> int | None:
+    try:
+        return await alerts_grafana.org_id(project)
+    except Exception:  # pylint: disable=broad-exception-caught
+        # No org yet or Grafana unreachable: link the Grafana home.
+        return None
 
 
 @router.get(
@@ -315,9 +337,12 @@ async def get_signals(
     db: Session = Depends(get_db),
 ) -> GoldenSignals:
     """Requests, 5xx share, p50 and p95, overall and per route."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
     with _reading():
-        data = await signals.golden_signals(scope, range_, _now())
+        data = await _signals.get(
+            (deployment_id, range_),
+            lambda: signals.golden_signals(scope, range_, _now()),
+        )
     return GoldenSignals(
         range=data["range"],
         step_seconds=data["step_seconds"],
@@ -330,14 +355,9 @@ async def get_signals(
     )
 
 
-@router.get("/{deployment_id}/observability/slo", response_model=SloStatus)
-async def get_slo_status(
-    deployment_id: int,
-    token: CurrentUser,
-    range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "7d",
-    db: Session = Depends(get_db),
-) -> SloStatus:
-    """The app's objectives, budget left and burn rates."""
+def _slo_targets(
+    db: Session, token: dict, deployment_id: int
+) -> tuple[stores.Scope, SloRead]:
     deployment = db.get(Deployment, deployment_id)
     if deployment is None:
         raise HTTPException(status_code=404, detail="Deployment not found")
@@ -349,7 +369,20 @@ async def get_slo_status(
         if found not in (ProjectRole.ADMIN, ProjectRole.OWNER):
             role = "member"
     scope = _scope(deployment)
-    targets = slo_read(db, scope.project, scope.app, role)
+    return scope, slo_read(db, scope.project, scope.app, role)
+
+
+@router.get("/{deployment_id}/observability/slo", response_model=SloStatus)
+async def get_slo_status(
+    deployment_id: int,
+    token: CurrentUser,
+    range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "7d",
+    db: Session = Depends(get_db),
+) -> SloStatus:
+    """The app's objectives, budget left and burn rates."""
+    scope, targets = await run_in_threadpool(
+        _slo_targets, db, token, deployment_id
+    )
     with _reading():
         stores.require("slo")
         data = await signals.slo_status(
@@ -546,3 +579,152 @@ async def get_costs(
     with _reading():
         data = await app_costs.app_costs(deployment, scope, _now())
     return AppCosts(**data)
+
+
+# ── Summaries (CMP UX rework) ────────────────────────────────────────────────
+
+
+class SummaryTiles(BaseModel):
+    availability_pct: float | None = None
+    requests_total: int | None = None
+    errors_5xx: int | None = None
+    error_pct: float | None = None
+    p50_ms: float | None = None
+    p95_ms: float | None = None
+    restarts: int
+    cpu_ratio: float | None = None
+    mem_ratio: float | None = None
+    cpu_cores: float | None = None
+    cpu_request_cores: float | None = None
+    mem_bytes: float | None = None
+    mem_limit_bytes: float | None = None
+    disk_bytes: float | None = None
+    disk_capacity_bytes: float | None = None
+    last_backup_at: datetime | None = None
+    replicas_ready: int
+    replicas_desired: int
+
+
+class SummarySeries(BaseModel):
+    t: list[int]
+    rps: list[float | None] | None = None
+    err_rps: list[float | None] | None = None
+    p95_ms: list[float | None] | None = None
+    log_info: list[float | None]
+    log_warn: list[float | None]
+    log_error: list[float | None]
+    cpu_cores: list[float | None] | None = None
+    mem_bytes: list[float | None] | None = None
+
+
+class SummaryDeploy(BaseModel):
+    version: str
+    at: datetime
+    outcome: str
+    ready_seconds: int | None = None
+    live_seconds: int | None = None
+    by: str | None = None
+
+
+class SummaryClient(BaseModel):
+    app: str
+    verdict: str
+    flows: int
+
+
+class SummaryError(BaseModel):
+    message: str
+    count: int
+
+
+class AppSummary(BaseModel):
+    kind: str
+    status: str
+    status_reason: str | None = None
+    tiles: SummaryTiles
+    series: SummarySeries
+    deploys: list[SummaryDeploy]
+    clients: list[SummaryClient]
+    denied_flows_24h: int
+    top_errors: list[SummaryError]
+    alerts_firing: int
+
+
+@router.get(
+    "/{deployment_id}/summary",
+    response_model=AppSummary,
+    response_model_exclude_none=True,
+)
+async def get_summary(
+    deployment_id: int,
+    token: CurrentUser,
+    range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "24h",
+    db: Session = Depends(get_db),
+) -> AppSummary:
+    """
+    Above the fold of an app page in one call. Each part that cannot be
+    read is left empty rather than failing the whole summary.
+    """
+    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
+
+    async def load() -> AppSummary:
+        data = await run_in_threadpool(
+            summary.read_input, deployment_id, scope
+        )
+        return AppSummary(**await summary.app_summary(data, range_, _now()))
+
+    return await _summaries.get((deployment_id, range_), load)
+
+
+class LastDeploy(BaseModel):
+    version: str
+    at: datetime
+
+
+class AppHealthRow(BaseModel):
+    id: int
+    name: str
+    kind: str
+    status: str
+    status_reason: str | None = None
+    rps: float | None = None
+    error_pct: float | None = None
+    p95_ms: float | None = None
+    cpu_ratio: float | None = None
+    mem_ratio: float | None = None
+    disk_ratio: float | None = None
+    spark: list[float | None]
+    last_deploy: LastDeploy | None = None
+
+
+class AppsHealthSeries(BaseModel):
+    t: list[int]
+    rps_by_app: dict[str, list[float | None]]
+    err_pct_by_app: dict[str, list[float | None]]
+    error_logs_per_min: list[float | None]
+
+
+class AppsHealth(BaseModel):
+    apps: list[AppHealthRow]
+    series: AppsHealthSeries
+
+
+@projects_router.get(
+    "/{project_name}/apps-health",
+    response_model=AppsHealth,
+    response_model_exclude_none=True,
+)
+async def get_apps_health(
+    ctx: RequireMember,
+    range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "24h",
+) -> AppsHealth:
+    """Every app of the project, those that need attention first."""
+    project = ctx.project_name
+
+    async def load() -> AppsHealth:
+        data = await run_in_threadpool(apps_health.read_input, project)
+        return AppsHealth(
+            **await apps_health.apps_health(data, range_, _now())
+        )
+
+    return await _apps_health.get((project, range_), load)
