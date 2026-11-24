@@ -27,6 +27,8 @@ EFFORTS = ("low", "medium", "high")
 ISOLATIONS = ("runc", "gvisor", "kata")
 STATUSES = ("active", "suspended")
 MAX_STEPS = 20
+# Alert only: the hard caps are per agent and per app, at the gateway.
+PROJECT_DAILY_TOKEN_BUDGET = 1_000_000
 MAX_INSTRUCTIONS = 20_000
 CALLER_KINDS = ("app", "agent", "user")
 USER_CALLERS = ("members", "admins")
@@ -194,7 +196,9 @@ class ProjectAi:
             enabled=ai.get("enabled") is True,
             models=list(ai.get("models") or []),
             web_search=ai.get("webSearch") is True,
-            daily_token_budget=int(ai.get("dailyTokenBudget") or 0),
+            daily_token_budget=int(
+                ai.get("dailyTokenBudget", PROJECT_DAILY_TOKEN_BUDGET) or 0
+            ),
             apps=[dict(a) for a in ai.get("apps") or []],
             agents=[dict(a) for a in ai.get("agents") or []],
         )

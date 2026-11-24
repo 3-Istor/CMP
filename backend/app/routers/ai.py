@@ -38,7 +38,11 @@ from app.services.ai import (
     service,
 )
 from app.services.ai import usage as ai_usage
-from app.services.ai.declaration import ProjectAi, client_id
+from app.services.ai.declaration import (
+    PROJECT_DAILY_TOKEN_BUDGET,
+    ProjectAi,
+    client_id,
+)
 from app.services.authz import (
     ProjectContext,
     RequireAdmin,
@@ -108,7 +112,9 @@ class ProjectAiBody(BaseModel):
     enabled: bool
     models: list[str] = Field(default_factory=list)
     web_search: bool = False
-    daily_token_budget: int = Field(default=0, ge=0, le=1_000_000_000)
+    daily_token_budget: int = Field(
+        default=PROJECT_DAILY_TOKEN_BUDGET, ge=0, le=1_000_000_000
+    )
 
 
 class AppAiBody(BaseModel):
