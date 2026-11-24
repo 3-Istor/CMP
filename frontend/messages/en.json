@@ -376,7 +376,8 @@
       "confirmDescription": "A commit will be pushed to {repo}, then Argo CD will apply it.",
       "confirm": "Confirm and commit",
       "saved": "Settings saved. ArgoCD will apply them in a few moments.",
-      "saveFailed": "Failed to save: {message}"
+      "saveFailed": "Failed to save: {message}",
+      "notManaged": "These settings are managed in the app repository."
     }
   },
   "finops": {
@@ -3501,7 +3502,21 @@
       "branch": "Branch",
       "branchHelp": "The analysis reads the branch head and keeps that commit for every later step.",
       "analyze": "Analyze",
-      "moreRepos": "Add repositories"
+      "moreRepos": "Add repositories",
+      "modeLegend": "Where the code lives",
+      "mode": {
+        "default": "default",
+        "yourRepo": "your repository",
+        "in_place": {
+          "label": "Use the repository in place",
+          "hint": "3-Istor reads {repo} and opens pull requests there. Your repo stays the source of truth."
+        },
+        "copy": {
+          "label": "Copy into the 3-Istor organization",
+          "hint": "We clone the repository into 3-Istor and deploy from the copy. The original keeps running where it is, untouched. Good for a dual run. Changes made on one side are not synced to the other."
+        }
+      },
+      "copyNote": "The platform copies every branch and tag into a private repository of the organization, then scans the copied history for leaked secrets."
     },
     "stageState": {
       "pending": "Waiting",
@@ -3652,6 +3667,14 @@
           "succeeded": "Deployed",
           "failed": "Failed",
           "cancelled": "Cancelled"
+        },
+        "sync": {
+          "queued": "Pull queued",
+          "claimed": "Pulling changes",
+          "running": "Pulling changes",
+          "succeeded": "Pull request opened",
+          "failed": "Pull failed",
+          "cancelled": "Pull cancelled"
         }
       },
       "autoRebuild": "Rebuild on push",
@@ -3687,7 +3710,13 @@
           "deploy": "kept in deploy/: check it is not meant for another deployment",
           "workflow": "kept: check it does not build or deploy these services too"
         }
-      }
+      },
+      "copiedFrom": "Copied from {origin}",
+      "pull": "Pull changes from the original",
+      "pullOf": "Pull changes from {origin}",
+      "pullStarted": "Fetching {origin}: a pull request opens in the copy.",
+      "pullFailed": "Changes could not be pulled: {message}",
+      "copyLeaks": "{count, plural, one {# possible secret was} other {# possible secrets were}} found in the history of {repo}. Rotate them, then remove them from the history."
     },
     "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey.",
     "failure": {
@@ -3850,6 +3879,34 @@
       "diffEmpty": "No change.",
       "added": "{app} will be added.",
       "removed": "{app} is no longer in the plan: it stays deployed until the import is deleted."
+    },
+    "finish": {
+      "title": "Finish the import",
+      "heading": "Finish the import · {done} of {total} done",
+      "assignAgent": "Assign to an agent",
+      "openSetupPr": "Open setup PR",
+      "done": "Done",
+      "todo": "To do",
+      "unlocks": "unlocks {what}",
+      "unlock": {
+        "delivery": "Delivery",
+        "settings": "Settings",
+        "security_code": "Security › Code",
+        "traces": "Traces"
+      },
+      "tasks": {
+        "deploy": "Build and deploy from the repository",
+        "route": "Route public traffic ({hostname})",
+        "setup_pr": "Merge the setup PR: CI, signed images, release from tags",
+        "code_scanning": "Enable code scanning",
+        "tracing": "Add tracing (OpenTelemetry)"
+      },
+      "notManagedTitle": "Managed in your repository",
+      "notManagedReason": "These settings are managed in your repository until the setup pull request is merged. Merge the setup pull request to manage them here.",
+      "finishAction": "Finish the import",
+      "noTracesTitle": "No traces from {app}",
+      "noTracesReason": "This app does not send OpenTelemetry spans. nginx needs the otel module, and other services need the OTel SDK. The platform already sets the endpoint for you.",
+      "howToTrace": "How to add tracing"
     }
   },
   "obs": {

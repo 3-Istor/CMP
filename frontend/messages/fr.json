@@ -376,7 +376,8 @@
       "confirmDescription": "Un commit sera poussé sur {repo}, puis Argo CD l'appliquera.",
       "confirm": "Confirmer et commiter",
       "saved": "Paramètres enregistrés. ArgoCD les appliquera dans quelques instants.",
-      "saveFailed": "Échec de l'enregistrement : {message}"
+      "saveFailed": "Échec de l'enregistrement : {message}",
+      "notManaged": "Ces réglages sont gérés dans le repo de l'app."
     }
   },
   "finops": {
@@ -3501,7 +3502,21 @@
       "branch": "Branche",
       "branchHelp": "L'analyse lit la tête de la branche et garde ce commit pour toutes les étapes suivantes.",
       "analyze": "Analyser",
-      "moreRepos": "Ajouter des repos"
+      "moreRepos": "Ajouter des repos",
+      "modeLegend": "Où vit le code",
+      "mode": {
+        "default": "par défaut",
+        "yourRepo": "votre repo",
+        "in_place": {
+          "label": "Utiliser le repo en place",
+          "hint": "3-Istor lit {repo} et y ouvre des pull requests. Votre repo reste la source de vérité."
+        },
+        "copy": {
+          "label": "Copier dans l'organisation 3-Istor",
+          "hint": "Nous clonons le repo dans 3-Istor et déployons depuis la copie. L'original continue de tourner là où il est, sans changement. Utile pour un double run. Les changements faits d'un côté ne sont pas répercutés de l'autre."
+        }
+      },
+      "copyNote": "La plateforme copie toutes les branches et tous les tags dans un repo privé de l'organisation, puis cherche des secrets fuités dans l'historique copié."
     },
     "stageState": {
       "pending": "En attente",
@@ -3652,6 +3667,14 @@
           "succeeded": "Déployé",
           "failed": "Échec",
           "cancelled": "Annulé"
+        },
+        "sync": {
+          "queued": "Récupération en attente",
+          "claimed": "Récupération en cours",
+          "running": "Récupération en cours",
+          "succeeded": "Pull request ouverte",
+          "failed": "Récupération en échec",
+          "cancelled": "Récupération annulée"
         }
       },
       "autoRebuild": "Reconstruire au push",
@@ -3687,7 +3710,13 @@
           "deploy": "conservé dans deploy/ : vérifiez qu'il ne sert pas à un autre déploiement",
           "workflow": "conservé : vérifiez qu'il ne construit ni ne déploie aussi ces services"
         }
-      }
+      },
+      "copiedFrom": "Copié depuis {origin}",
+      "pull": "Récupérer les changements de l'original",
+      "pullOf": "Récupérer les changements de {origin}",
+      "pullStarted": "Lecture de {origin} : une pull request s'ouvre dans la copie.",
+      "pullFailed": "Les changements n'ont pas pu être récupérés : {message}",
+      "copyLeaks": "{count, plural, one {# secret possible trouvé} other {# secrets possibles trouvés}} dans l'historique de {repo}. Changez-les, puis retirez-les de l'historique."
     },
     "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey.",
     "failure": {
@@ -3850,6 +3879,34 @@
       "diffEmpty": "Aucun changement.",
       "added": "{app} sera ajoutée.",
       "removed": "{app} n'est plus dans le plan : elle reste déployée jusqu'à la suppression de l'import."
+    },
+    "finish": {
+      "title": "Terminer l'import",
+      "heading": "Terminer l'import · {done} sur {total} faites",
+      "assignAgent": "Confier à un agent",
+      "openSetupPr": "Ouvrir la PR de mise en place",
+      "done": "Fait",
+      "todo": "À faire",
+      "unlocks": "débloque {what}",
+      "unlock": {
+        "delivery": "Livraison",
+        "settings": "Réglages",
+        "security_code": "Sécurité › Code",
+        "traces": "Traces"
+      },
+      "tasks": {
+        "deploy": "Construire et déployer depuis le repo",
+        "route": "Router le trafic public ({hostname})",
+        "setup_pr": "Fusionner la PR de mise en place : CI, images signées, release depuis les tags",
+        "code_scanning": "Activer l'analyse du code",
+        "tracing": "Ajouter le tracing (OpenTelemetry)"
+      },
+      "notManagedTitle": "Géré dans votre repo",
+      "notManagedReason": "Ces réglages sont gérés dans votre repo tant que la pull request de mise en place n'est pas fusionnée. Fusionnez-la pour les gérer ici.",
+      "finishAction": "Terminer l'import",
+      "noTracesTitle": "Aucune trace de {app}",
+      "noTracesReason": "Cette app n'envoie pas de spans OpenTelemetry. nginx a besoin du module otel, les autres services du SDK OTel. La plateforme règle déjà l'endpoint pour vous.",
+      "howToTrace": "Ajouter le tracing"
     }
   },
   "obs": {

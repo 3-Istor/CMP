@@ -17,7 +17,15 @@ import { CardState, RangeSelect, Section, useObsFormat } from "./shared";
 const RANGES = ["15m", "1h", "6h", "24h"] as const;
 
 /** Traces of the app; `?trace=<id>` opens one as a waterfall. */
-export function TracesView({ appId, base }: { appId: number; base: string }) {
+export function TracesView({
+  appId,
+  base,
+  empty,
+}: {
+  appId: number;
+  base: string;
+  empty?: React.ReactNode;
+}) {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -32,11 +40,19 @@ export function TracesView({ appId, base }: { appId: number; base: string }) {
   return traceId ? (
     <TraceWaterfall appId={appId} base={base} traceId={traceId} onBack={() => open(null)} />
   ) : (
-    <TraceList appId={appId} onOpen={open} />
+    <TraceList appId={appId} onOpen={open} empty={empty} />
   );
 }
 
-function TraceList({ appId, onOpen }: { appId: number; onOpen: (id: string) => void }) {
+function TraceList({
+  appId,
+  onOpen,
+  empty,
+}: {
+  appId: number;
+  onOpen: (id: string) => void;
+  empty?: React.ReactNode;
+}) {
   const t = useTranslations("obs.traces");
   const { time, ms } = useObsFormat();
   const ids = { errors: useId(), min: useId() };
@@ -85,7 +101,11 @@ function TraceList({ appId, onOpen }: { appId: number; onOpen: (id: string) => v
       <CardState card={card} signal="traces">
         {(rows) =>
           rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("none")}</p>
+            empty && !errorsOnly && min === undefined ? (
+              empty
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("none")}</p>
+            )
           ) : (
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full text-sm">

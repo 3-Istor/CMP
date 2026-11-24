@@ -75,7 +75,7 @@ export function ImportProgress({
       {run.failure ? (
         <ImportFailurePanel
           runId={run.id}
-          kind={run.kind}
+          kind={run.kind === "analyze" ? "analyze" : "build"}
           failure={run.failure}
           onRebuild={onRebuild}
           onAnalyze={onReanalyze}

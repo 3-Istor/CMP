@@ -1,5 +1,6 @@
 "use client";
 
+import { FinishImportBanner } from "@/components/imports/ImportTasks";
 import { AiAccessBadge } from "@/components/ai/AiAccessBadge";
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { Breadcrumbs } from "@/components/layout/PageHeader";
@@ -554,6 +555,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             onOpen={() => router.push(`${base}/security`)}
           />
         )}
+
+        {isKubernetes && <FinishImportBanner />}
 
         <div className="space-y-6">{children}</div>
       </main>

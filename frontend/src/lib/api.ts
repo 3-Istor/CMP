@@ -61,6 +61,16 @@ export function isNotConnected(err: unknown): { cloud: string } | null {
   return null;
 }
 
+/** A 409 whose detail is `{code: "repo_not_managed"}`: the app's repository is not the platform's to write. */
+export function isRepoNotManaged(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 409) return false;
+  try {
+    return JSON.parse(err.body)?.detail?.code === "repo_not_managed";
+  } catch {
+    return false;
+  }
+}
+
 // ── Access-token cache ────────────────────────────────────────────────────────
 // `getSession()` performs a network round-trip to `/api/auth/session` on every
 // call. With polling hooks (deployments refresh every 3s, plus the sidebar),
@@ -1648,11 +1658,24 @@ export const startImport = (
   project: string,
   repo_full_name: string,
   branch: string | null,
+  source_mode: import("@/types").ImportSourceMode = "in_place",
 ) =>
   request<{ run: import("@/types").ImportRun }>(
     `${projectPath(project)}/imports`,
-    { method: "POST", body: JSON.stringify({ repo_full_name, branch }) },
+    { method: "POST", body: JSON.stringify({ repo_full_name, branch, source_mode }) },
   ).then((r) => r.run);
+
+export const pullImportOrigin = (project: string, sourceId: string) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/pull-origin`,
+    { method: "POST" },
+  ).then((r) => r.run);
+
+export const getImportTasks = (deploymentId: number, maxAgeMs = 30_000) =>
+  cachedGet<import("@/types").ImportTasks>(
+    `/deployments/${deploymentId}/import-tasks`,
+    maxAgeMs,
+  );
 
 export const getImports = (project: string) =>
   request<{ imports: import("@/types").ImportSourceView[] }>(

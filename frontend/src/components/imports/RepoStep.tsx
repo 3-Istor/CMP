@@ -14,7 +14,8 @@ import {
   getImportableRepos,
   startGitHubLink,
 } from "@/lib/api";
-import type { GitHubConnectionStatus, ImportableRepo } from "@/types";
+import { Badge } from "@/components/ui/badge";
+import type { GitHubConnectionStatus, ImportableRepo, ImportSourceMode } from "@/types";
 
 /** Read by the account page to offer the way back after linking GitHub. */
 export const IMPORT_RETURN_KEY = "cnp-import-return";
@@ -28,7 +29,7 @@ export function RepoStep({
   projectName: string;
   initialRepo?: string;
   initialBranch?: string;
-  onStart: (repo: string, branch: string | null) => Promise<void>;
+  onStart: (repo: string, branch: string | null, mode: ImportSourceMode) => Promise<void>;
 }) {
   const t = useTranslations("imports.repo");
   const ids = { search: useId(), branch: useId(), list: useId() };
@@ -39,6 +40,7 @@ export function RepoStep({
   const [selected, setSelected] = useState<string | null>(initialRepo ?? null);
   const [branch, setBranch] = useState(initialBranch ?? "");
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<ImportSourceMode>("in_place");
 
   useEffect(() => {
     Promise.all([getGitHubConnectionStatus().catch(() => null), getImportableRepos(projectName)])
@@ -78,7 +80,7 @@ export function RepoStep({
     if (!repo) return;
     setBusy(true);
     try {
-      await onStart(repo.full_name, branch.trim() || null);
+      await onStart(repo.full_name, branch.trim() || null, mode);
     } finally {
       setBusy(false);
     }
@@ -192,6 +194,33 @@ export function RepoStep({
         </div>
         <p className="text-xs text-muted-foreground">{t("branchHelp")}</p>
       </div>
+      <fieldset className="space-y-2">
+        <legend className="mb-1.5 text-sm font-medium">{t("modeLegend")}</legend>
+        {(["in_place", "copy"] as const).map((option) => (
+          <label
+            key={option}
+            className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm has-[:checked]:border-primary"
+          >
+            <input
+              type="radio"
+              name="source_mode"
+              value={option}
+              checked={mode === option}
+              onChange={() => setMode(option)}
+              className="mt-1 accent-primary"
+            />
+            <span className="space-y-0.5">
+              <span className="flex items-center gap-2 font-medium">
+                {t(`mode.${option}.label`)}
+                {option === "in_place" && <Badge variant="outline">{t("mode.default")}</Badge>}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t(`mode.${option}.hint`, { repo: repo?.full_name ?? t("mode.yourRepo") })}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={!repo || busy}>
           {busy && <Loader2 className="animate-spin" aria-hidden />}
@@ -203,7 +232,9 @@ export function RepoStep({
           </Button>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">{t("readOnlyNote")}</p>
+      <p className="text-xs text-muted-foreground">
+        {t(mode === "copy" ? "copyNote" : "readOnlyNote")}
+      </p>
     </form>
   );
 }
