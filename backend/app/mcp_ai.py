@@ -23,6 +23,7 @@ from app.mcp_server import (
     tool_errors,
 )
 from app.services import audit
+from app.services.ai import declaration
 
 AGENT_FIELDS = (
     "description",
@@ -69,7 +70,9 @@ async def set_project_ai(  # pylint: disable=too-many-arguments
         Field(description="Allowed models, e.g. claude-haiku-5-5"),
     ],
     web_search: bool = False,
-    daily_token_budget: Annotated[int, Field(ge=0)] = 0,
+    daily_token_budget: Annotated[
+        int, Field(ge=0)
+    ] = declaration.PROJECT_DAILY_TOKEN_BUDGET,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
     preview: PREVIEW = False,
