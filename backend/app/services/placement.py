@@ -2,9 +2,12 @@
 
 import re
 
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
 from app.services import project_registry
 from app.services.clusters.state import PUBLIC_CLOUDS, fresh_state
@@ -240,14 +243,31 @@ def _memory_requested_pct(cloud: TargetCloud) -> float | None:
     return round(100 * requested / allocatable, 1) if allocatable else None
 
 
-async def platform_placement() -> dict:
+def visible_app_counts(db: Session) -> dict[str, int]:
+    """
+    Apps per project as the project page counts them: the CMP's apps, not
+    the registry's entries, which also hold the agents and apps in flight.
+    """
+    return dict(
+        db.query(Deployment.project_id, func.count(Deployment.id))
+        .filter(
+            Deployment.project_id.isnot(None),
+            Deployment.status != DeploymentStatus.DELETED,
+        )
+        .group_by(Deployment.project_id)
+        .all()
+    )
+
+
+async def platform_placement(app_counts: dict[str, int]) -> dict:
     records = await project_registry.list_records()
     columns = {c: [] for c in CLOUDS}
     for record in records:
         spec, move = record.get("spec") or {}, (
             record.get("status") or {}
         ).get("move")
-        name, apps = record["metadata"]["name"], len(spec.get("apps") or [])
+        name = record["metadata"]["name"]
+        apps = app_counts.get(name, 0)
         if move:
             placed = [
                 (
