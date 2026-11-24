@@ -9,9 +9,9 @@ traces route forces the project's tenant: like the metrics and logs ones,
 an Editor cannot point it anywhere else. Its credentials are the vmauth
 ones, derived, never stored.
 
-The dashboards read the series the SLO rules record (cnp_slo:*, slo:*),
-which carry the app's namespace and so pass the project's vmauth filter;
-the raw Envoy series live in the gateway's namespace and do not.
+The dashboards themselves are built in grafana_dashboards. They read series
+that carry the project's namespace, so they pass its vmauth filter; the raw
+Envoy, Hubble and OpenCost series do not.
 """
 
 import hashlib
@@ -31,21 +31,11 @@ from app.services.grafana_service import (
     _grafana_org_name,
     _title_case_project_name,
 )
+from app.services.observability import grafana_dashboards as gd
 
 logger = logging.getLogger(__name__)
 
-FOLDER_UID = "cnp-portal"
-FOLDER_TITLE = "CNP"
-APP_DASHBOARD_UID = "cnp-app-signals"
-PROJECT_DASHBOARD_UID = "cnp-project-overview"
-DATASOURCE_VAR = {
-    "name": "ds",
-    "label": "Metrics",
-    "type": "datasource",
-    "query": "prometheus",
-    "hide": 2,
-}
-DS = {"type": "prometheus", "uid": "${ds}"}
+LOGS_DATASOURCE_TYPE = "victoriametrics-logs-datasource"
 _applied: dict[str, str] = {}
 
 
@@ -70,219 +60,50 @@ def traces_datasource(project: str) -> dict:
     }
 
 
-def _target(expr: str, legend: str = "", instant: bool = False) -> dict:
+def logs_uid(project: str) -> str:
+    return f"cnp-logs-{project}"
+
+
+def logs_datasource(project: str) -> dict:
     return {
-        "datasource": DS,
-        "expr": expr,
-        "legendFormat": legend,
-        "refId": "A",
-        "instant": instant,
-        "range": not instant,
-    }
-
-
-def _panel(  # pylint: disable=too-many-arguments
-    panel_id: int,
-    title: str,
-    expr: str,
-    grid: tuple[int, int, int, int],
-    unit: str = "short",
-    kind: str = "timeseries",
-    legend: str = "",
-) -> dict:
-    x, y, w, h = grid
-    return {
-        "id": panel_id,
-        "type": kind,
-        "title": title,
-        "datasource": DS,
-        "gridPos": {"x": x, "y": y, "w": w, "h": h},
-        "fieldConfig": {"defaults": {"unit": unit}, "overrides": []},
-        "targets": [_target(expr, legend, instant=kind != "timeseries")],
-    }
-
-
-def _variable(name: str, label: str, query: str) -> dict:
-    return {
-        "name": name,
-        "label": label,
-        "type": "query",
-        "datasource": DS,
-        "query": {"query": query, "refId": "var"},
-        "definition": query,
-        "refresh": 2,
-        "sort": 1,
-    }
-
-
-def _dashboard(uid: str, title: str, panels: list, variables: list) -> dict:
-    return {
-        "uid": uid,
-        "title": title,
-        "tags": ["cnp", "generated"],
+        "uid": logs_uid(project),
+        "name": f"Logs - {_title_case_project_name(project)}",
+        "type": LOGS_DATASOURCE_TYPE,
+        "access": "proxy",
+        "url": settings.OBS_VMAUTH_PROJECTS_URL,
+        "basicAuth": True,
+        "basicAuthUser": metrics_isolation.username(project),
+        "secureJsonData": {
+            "basicAuthPassword": metrics_isolation.password(project)
+        },
+        "jsonData": {},
         "editable": False,
-        "schemaVersion": 39,
-        "time": {"from": "now-24h", "to": "now"},
-        "refresh": "1m",
-        "templating": {"list": [DATASOURCE_VAR, *variables]},
-        "panels": panels,
     }
 
 
-def app_dashboard() -> dict:
-    """For developers: one app's golden signals, budget and resources."""
-    app = 'cnp_app="$app"'
-    avail = f'{app}, cnp_slo="availability"'
-    latency = f'{app}, cnp_slo="latency"'
-    pods = 'namespace="$namespace", container!="", container!="POD"'
-    panels = [
-        _panel(
-            1,
-            "Requests per second",
-            f"sum(cnp_slo:requests:rate5m{{{avail}}})",
-            (0, 0, 8, 8),
-            "reqps",
-        ),
-        _panel(
-            2,
-            "5xx share",
-            f"sum(cnp_slo:errors:rate5m{{{avail}}})"
-            f" / sum(cnp_slo:requests:rate5m{{{avail}}})",
-            (8, 0, 8, 8),
-            "percentunit",
-        ),
-        _panel(
-            3,
-            "Share slower than 500 ms",
-            f"sum(cnp_slo:errors:rate5m{{{latency}}})"
-            f" / sum(cnp_slo:requests:rate5m{{{latency}}})",
-            (16, 0, 8, 8),
-            "percentunit",
-        ),
-        _panel(
-            4,
-            "Error budget left",
-            f"slo:period_error_budget_remaining:ratio{{{app}}}",
-            (0, 8, 8, 6),
-            "percentunit",
-            "stat",
-            "{{cnp_slo}}",
-        ),
-        _panel(
-            5,
-            "Burn rate over 1 h",
-            f"slo:sli_error:ratio_rate1h{{{app}}}"
-            f" / on (cnp_project, cnp_app, cnp_slo) slo:error_budget:ratio{{{app}}}",
-            (8, 8, 8, 6),
-            "short",
-            "stat",
-            "{{cnp_slo}}",
-        ),
-        _panel(
-            6,
-            "Restarts over 1 h",
-            "sum(increase(kube_pod_container_status_restarts_total"
-            '{namespace="$namespace"}[1h]))',
-            (16, 8, 8, 6),
-            "short",
-            "stat",
-        ),
-        _panel(
-            7,
-            "CPU (cores)",
-            "sum by (pod) (rate(container_cpu_usage_seconds_total"
-            f"{{{pods}}}[5m]))",
-            (0, 14, 12, 8),
-            "short",
-            legend="{{pod}}",
-        ),
-        _panel(
-            8,
-            "Memory",
-            f"sum by (pod) (container_memory_working_set_bytes{{{pods}}})",
-            (12, 14, 12, 8),
-            "bytes",
-            legend="{{pod}}",
-        ),
-    ]
-    return _dashboard(
-        APP_DASHBOARD_UID,
-        "App - golden signals",
-        panels,
-        [
-            _variable(
-                "app", "App", "label_values(cnp_slo:requests:rate5m, cnp_app)"
-            ),
-            _variable(
-                "namespace",
-                "Namespace",
-                'label_values(cnp_slo:requests:rate5m{cnp_app="$app"},'
-                " namespace)",
-            ),
-        ],
-    )
-
-
-def project_dashboard() -> dict:
-    """For project owners: every app's traffic, errors and budget."""
-    avail = 'cnp_slo="availability"'
-    panels = [
-        _panel(
-            1,
-            "Requests per second by app",
-            f"sum by (cnp_app) (cnp_slo:requests:rate5m{{{avail}}})",
-            (0, 0, 12, 8),
-            "reqps",
-            legend="{{cnp_app}}",
-        ),
-        _panel(
-            2,
-            "5xx share by app",
-            f"sum by (cnp_app) (cnp_slo:errors:rate5m{{{avail}}})"
-            f" / sum by (cnp_app) (cnp_slo:requests:rate5m{{{avail}}})",
-            (12, 0, 12, 8),
-            "percentunit",
-            legend="{{cnp_app}}",
-        ),
-        _panel(
-            3,
-            "Availability budget left",
-            f"slo:period_error_budget_remaining:ratio{{{avail}}}",
-            (0, 8, 12, 8),
-            "percentunit",
-            "bargauge",
-            "{{cnp_app}}",
-        ),
-        _panel(
-            4,
-            "Latency budget left",
-            'slo:period_error_budget_remaining:ratio{cnp_slo="latency"}',
-            (12, 8, 12, 8),
-            "percentunit",
-            "bargauge",
-            "{{cnp_app}}",
-        ),
-        _panel(
-            5,
-            "CPU by namespace (cores)",
-            "sum by (namespace) (rate(container_cpu_usage_seconds_total"
-            '{container!="", container!="POD"}[5m]))',
-            (0, 16, 24, 8),
-            "short",
-            legend="{{namespace}}",
-        ),
-    ]
-    return _dashboard(PROJECT_DASHBOARD_UID, "Project - overview", panels, [])
+def _logs_dashboard(project: str) -> dict:
+    dashboard = gd.log_explorer_dashboard()
+    for variable in dashboard["templating"]["list"]:
+        if variable["name"] == gd.LOGS_DS_VAR:
+            variable["regex"] = f"/^{logs_uid(project)}$/"
+    return dashboard
 
 
 def desired(project: str) -> dict:
-    wanted = {
-        "folder": {"uid": FOLDER_UID, "title": FOLDER_TITLE},
-        "dashboards": [app_dashboard(), project_dashboard()],
-    }
+    """Folders, datasources and dashboards, each dashboard with its folder."""
+    dashboards = [(folder[0], build()) for folder, build in gd.DASHBOARDS]
+    datasources = []
     if settings.OBS_VTRACES_URL:
-        wanted["datasource"] = traces_datasource(project)
-    return wanted
+        datasources.append(traces_datasource(project))
+    if settings.OBS_VLOGS_URL:
+        datasources.append(logs_datasource(project))
+        dashboards.append((gd.LOGS_FOLDER[0], _logs_dashboard(project)))
+    return {
+        "folders": [{"uid": uid, "title": t} for uid, t in gd.FOLDERS],
+        "datasources": datasources,
+        "dashboards": [("", gd.home_dashboard()), *dashboards],
+        "home": gd.HOME_UID,
+    }
 
 
 def _checksum(wanted: dict) -> str:
@@ -330,22 +151,31 @@ async def sync_project(project: str) -> bool:
         return False
     headers = {"X-Grafana-Org-Id": str(org)}
     client = _get_http_client()
-    await _ensure_folder(client, headers, wanted["folder"])
-    if "datasource" in wanted:
-        await _upsert_datasource(client, headers, wanted["datasource"])
-    for dashboard in wanted["dashboards"]:
+    base = grafana_service.GRAFANA_BASE_URL
+    for folder in wanted["folders"]:
+        await _ensure_folder(client, headers, folder)
+    for datasource in wanted["datasources"]:
+        await _upsert_datasource(client, headers, datasource)
+    for folder_uid, dashboard in wanted["dashboards"]:
         (
             await client.post(
-                f"{grafana_service.GRAFANA_BASE_URL}/api/dashboards/db",
+                f"{base}/api/dashboards/db",
                 json={
                     "dashboard": dashboard,
-                    "folderUid": FOLDER_UID,
+                    "folderUid": folder_uid,
                     "overwrite": True,
                     "message": "Generated by the CMP",
                 },
                 headers=headers,
             )
         ).raise_for_status()
+    (
+        await client.put(
+            f"{base}/api/org/preferences",
+            json={"homeDashboardUID": wanted["home"]},
+            headers=headers,
+        )
+    ).raise_for_status()
     _applied[project] = checksum
     return True
 
