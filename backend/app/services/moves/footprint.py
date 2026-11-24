@@ -145,3 +145,50 @@ def cached(
         sum(r["cpu"] for r in found),
         sum(r["memory_bytes"] for r in found),
     ), at
+
+
+async def live_usage(
+    project: str, cloud: str, apps: set[str], now: datetime
+) -> dict[str, dict[str, float]]:
+    """
+    What the apps use now on *cloud* (cAdvisor), prod and staging summed
+    like the requests: {app: {cpu_cores, mem_bytes}}. Empty when the
+    metrics cannot be read.
+    """
+    # Imported here like SessionLocal above: stores opens the database.
+    from app.services.observability import stores  # pylint: disable=C0415
+
+    namespaces = {
+        layout.namespace(project, app, env): app
+        for app in apps
+        for env in layout.SUFFIX
+    }
+    if not namespaces or not stores.capabilities()["metrics"]:
+        return {}
+    scope = stores.ProjectScope(project, tuple(namespaces), cloud)
+    pods = (
+        f'namespace=~"{stores.namespace_pattern(scope)}", '
+        'container!="", container!="POD"'
+    )
+    query = stores.tagged(
+        {
+            "cpu_cores": "sum by (namespace) (rate("
+            f"container_cpu_usage_seconds_total{{{pods}}}[5m]))",
+            "mem_bytes": "sum by (namespace) "
+            f"(container_memory_working_set_bytes{{{pods}}})",
+        }
+    )
+    try:
+        rows = await stores.instant(scope, query, now)
+    except stores.StoreError as exc:
+        logger.warning("live usage of %s not readable: %s", project, exc)
+        return {}
+    usage: dict[str, dict[str, float]] = {}
+    for row in rows:
+        app = namespaces.get(row["metric"].get("namespace", ""))
+        tag = row["metric"].get("cnp_q", "")
+        if app is None or tag not in ("cpu_cores", "mem_bytes"):
+            continue
+        sums = usage.setdefault(app, {"cpu_cores": 0.0, "mem_bytes": 0.0})
+        sums[tag] += row["value"]
+    return usage

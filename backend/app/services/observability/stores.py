@@ -8,8 +8,10 @@ every logs query extra_stream_filters on it, and every traces call the
 project's own AccountID. Nothing the browser sends reaches a selector.
 """
 
+import asyncio
 import json
 import math
+from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -23,6 +25,8 @@ from app.services.metrics_isolation import ONPREM_FILTER
 from app.services.observability.trace_tenants import PROJECT_ID
 
 TIMEOUT = 15
+# Concurrent queries one page read sends to a store.
+MAX_PARALLEL = 6
 # One tenant for logs (D6): the namespace is the isolation, not the tenant.
 LOGS_TENANT = {"AccountID": "0", "ProjectID": "0"}
 
@@ -44,6 +48,15 @@ class Scope:
     project: str
     app: str
     namespace: str
+    cloud: str
+
+
+@dataclass(frozen=True)
+class ProjectScope:
+    """Several app namespaces of one project, read in one query."""
+
+    project: str
+    namespaces: tuple[str, ...]
     cloud: str
 
 
@@ -75,21 +88,58 @@ def _cluster(cloud: str) -> str:
     return ONPREM_FILTER[1:-1] if cloud == "onprem" else f'cluster="{cloud}"'
 
 
-def metrics_filters(scope: Scope) -> list[str]:
+def namespace_pattern(scope: Scope | ProjectScope) -> str:
+    """The scope's namespaces as a regex of exact names."""
+    if isinstance(scope, Scope):
+        return scope.namespace
+    return "(" + "|".join(sorted(scope.namespaces)) + ")"
+
+
+def metrics_filters(scope: Scope | ProjectScope) -> list[str]:
     """
     VictoriaMetrics ORs the extra_filters it receives: the app's namespace
     (pods, recorded SLO series) or its own routes at the gateway.
     """
     cluster = _cluster(scope.cloud)
+    names = namespace_pattern(scope)
+    namespace = (
+        f'namespace="{names}"'
+        if isinstance(scope, Scope)
+        else f'namespace=~"{names}"'
+    )
     return [
-        f'{{{cluster}, namespace="{scope.namespace}"}}',
+        f"{{{cluster}, {namespace}}}",
         f'{{{cluster}, namespace="{settings.OBS_GATEWAY_NAMESPACE}", '
-        f'envoy_cluster_name=~"httproute/{scope.namespace}/.+"}}',
+        f'envoy_cluster_name=~"httproute/{names}/.+"}}',
     ]
 
 
+def tagged(queries: dict[str, str], label: str = "cnp_q") -> str:
+    """
+    Several PromQL queries in one: each result carries *label* set to its
+    key. The label sets differ, so ``or`` keeps every series.
+    """
+    return " or ".join(
+        f'label_replace({query}, "{label}", "{key}", "", "")'
+        for key, query in queries.items()
+    )
+
+
+async def gather_bounded(
+    calls: Iterable[Awaitable[Any]], limit: int = MAX_PARALLEL
+) -> list[Any]:
+    """asyncio.gather with at most *limit* calls in flight."""
+    gate = asyncio.Semaphore(limit)
+
+    async def run(call: Awaitable[Any]) -> Any:
+        async with gate:
+            return await call
+
+    return await asyncio.gather(*(run(c) for c in calls))
+
+
 async def _metrics(
-    scope: Scope, path: str, params: dict[str, Any]
+    scope: Scope | ProjectScope, path: str, params: dict[str, Any]
 ) -> list[dict]:
     require("metrics")
     try:
@@ -109,7 +159,9 @@ def _value(raw: str) -> float | None:
     return value if math.isfinite(value) else None
 
 
-async def instant(scope: Scope, query: str, at: datetime) -> list[dict]:
+async def instant(
+    scope: Scope | ProjectScope, query: str, at: datetime
+) -> list[dict]:
     """[{"metric": {...}, "value": float}], NaN and Inf left out."""
     result = await _metrics(
         scope, "query", {"query": query, "time": int(at.timestamp())}
@@ -123,7 +175,11 @@ async def instant(scope: Scope, query: str, at: datetime) -> list[dict]:
 
 
 async def series(
-    scope: Scope, query: str, start: datetime, end: datetime, step: int
+    scope: Scope | ProjectScope,
+    query: str,
+    start: datetime,
+    end: datetime,
+    step: int,
 ) -> list[dict]:
     """[{"metric": {...}, "points": [(datetime, float)]}]."""
     result = await _metrics(
@@ -182,6 +238,45 @@ async def logs(namespace: str, query: str, limit: int) -> list[dict]:
         ]
     except (httpx.HTTPError, ValueError) as exc:
         raise StoreError(f"logs: {exc}") from exc
+
+
+async def log_counts(
+    namespace: str, query: str, start: datetime, end: datetime, step: int
+) -> list[dict]:
+    """
+    A LogsQL stats query over time, one namespace, as
+    [{"metric": {...}, "points": [(datetime, float)]}]; each stats result is
+    a series named by ``__name__``. Steps without a line are missing.
+    """
+    require("logs")
+    try:
+        async with _client(settings.OBS_VLOGS_URL) as client:
+            response = await client.post(
+                "/select/logsql/stats_query_range",
+                data={
+                    "query": f"{stream_filter(namespace)} {query}",
+                    "start": int(start.timestamp()),
+                    "end": int(end.timestamp()),
+                    "step": f"{step}s",
+                    "extra_stream_filters": stream_filter(namespace),
+                },
+                headers=LOGS_TENANT,
+            )
+        response.raise_for_status()
+        result = response.json()["data"]["result"]
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        raise StoreError(f"logs: {exc}") from exc
+    return [
+        {
+            "metric": row.get("metric", {}),
+            "points": [
+                (datetime.fromtimestamp(float(ts), tz=timezone.utc), value)
+                for ts, raw in row.get("values", [])
+                if (value := _value(raw)) is not None
+            ],
+        }
+        for row in result
+    ]
 
 
 # ── Traces ───────────────────────────────────────────────────────────────────
@@ -255,6 +350,32 @@ async def firing_alerts(project: str, app: str) -> list[dict]:
         if (a.get("labels") or {}).get("cnp_project") == project
         and (a.get("labels") or {}).get("cnp_app") == app
     ]
+
+
+async def firing_by_app(project: str) -> dict[str, int]:
+    """Active alerts of one project per ``cnp_app``."""
+    require("alerts")
+    try:
+        async with _client(settings.ALERTMANAGER_URL) as client:
+            response = await client.get(
+                "/api/v2/alerts",
+                params=[
+                    ("active", "true"),
+                    ("silenced", "false"),
+                    ("inhibited", "false"),
+                    ("filter", f'cnp_project="{project}"'),
+                ],
+            )
+        response.raise_for_status()
+        found = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise StoreError(f"alerts: {exc}") from exc
+    counts: dict[str, int] = {}
+    for alert in found:
+        labels = alert.get("labels") or {}
+        if labels.get("cnp_project") == project and labels.get("cnp_app"):
+            counts[labels["cnp_app"]] = counts.get(labels["cnp_app"], 0) + 1
+    return counts
 
 
 async def firing_by_project() -> dict[str, int]:
