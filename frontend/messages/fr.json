@@ -10,7 +10,7 @@
       "security": "Sécurité",
       "activity": "Activité",
       "alerts": "Alertes",
-      "assistants": "Assistants IA",
+      "assistants": "MCP",
       "docs": "Documentation",
       "projects": "Projets",
       "apps": "Applications",
@@ -543,7 +543,11 @@
       "apply": "Appliquer",
       "notify": "Notifier",
       "ignore": "Ignorer",
-      "actionFailed": "Action échouée"
+      "actionFailed": "Action échouée",
+      "sleepNow": "Mettre en veille",
+      "sleeping": "{app} se met en veille.",
+      "sleepNeedsAccess": "Un accès élevé est nécessaire pour mettre cette app en veille.",
+      "requestAccess": "Demander l'accès"
     },
     "recommendations": {
       "sortLabel": "Trier par",
@@ -1168,7 +1172,7 @@
       "noMore": "Plus d'événements",
       "newer": "Plus récent",
       "older": "Plus ancien",
-      "page": "Page {page} · {size} événements par page",
+      "page": "Page {page}",
       "retention": "Les événements sont gardés {days} jours.",
       "detail": {
         "title": "Détail de l'événement",
@@ -1186,7 +1190,8 @@
         "allFrom": "Toute l'activité de {actor}",
         "showRaw": "Voir les données brutes",
         "hideRaw": "Masquer les données brutes"
-      }
+      },
+      "pageSize": "Événements par page"
     },
     "logs": {
       "aria": {
@@ -1199,14 +1204,10 @@
       "allNamespaces": "Tous les namespaces",
       "allPods": "Tous les pods",
       "allContainers": "Tous les conteneurs",
-      "allLevels": "Tous les niveaux",
-      "errors": "Erreurs",
-      "warnings": "Avertissements",
       "search": "Rechercher…",
       "searchButton": "Rechercher",
       "lineWrap": "Retour à la ligne",
       "timestamp": "Horodatage",
-      "lineCount": "{count, plural, one {# ligne} other {# lignes}}",
       "download": "Télécharger les lignes affichées",
       "openNewTab": "Ouvrir dans un nouvel onglet",
       "exitFullscreen": "Quitter le plein écran (Échap)",
@@ -1215,15 +1216,36 @@
       "follow": "Suivre",
       "showStream": "Afficher ce flux",
       "hideStream": "Masquer ce flux",
-      "showContext": "Voir la minute autour de cette ligne",
-      "contextBanner": "Contexte : une minute avant et après la ligne choisie, même conteneur.",
+      "contextBanner": "Contexte : 20 lignes avant et après la ligne choisie, même conteneur.",
       "backToResults": "Retour aux résultats",
       "noLines": "Aucune ligne pour ces filtres.",
-      "info": "Info",
-      "debug": "Debug",
       "traceFilter": "Lignes de la trace {id}",
       "clearTrace": "Voir toutes les lignes",
-      "openTrace": "Ouvrir la trace"
+      "openTrace": "Ouvrir la trace",
+      "levels": {
+        "label": "Niveau",
+        "all": "Tous",
+        "error": "Erreur",
+        "warn": "Avert.",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "regex": "Expression régulière, appliquée aux lignes chargées",
+      "invalidRegex": "Expression régulière invalide",
+      "matchCount": "{count, plural, one {# résultat} other {# résultats}}",
+      "expand": "Agrandir",
+      "dialogTitle": "Logs",
+      "streamConnected": "Connecté",
+      "streamWaiting": "En attente du flux",
+      "contextBannerLoaded": "Contexte : 20 lignes avant et après la ligne choisie, parmi les lignes chargées.",
+      "details": {
+        "noFields": "Ligne en texte simple, sans champs structurés.",
+        "context": "Voir le contexte ±20 lignes",
+        "copyLine": "Copier la ligne",
+        "copied": "Ligne copiée",
+        "copyLink": "Copier le lien",
+        "linkCopied": "Lien copié, avec les filtres en cours"
+      }
     },
     "volume": {
       "title": "Volume de logs",
@@ -1536,7 +1558,7 @@
   },
   "agents": {
     "meta": {
-      "title": "Connecter votre assistant IA · CNP",
+      "title": "Connecter un client MCP · CNP",
       "description": "Utilisez CNP depuis Claude, ChatGPT, Codex, OpenCode, Cursor ou VS Code : créez, modifiez et publiez des applications en langage courant."
     },
     "never": "jamais",
@@ -1715,14 +1737,15 @@
       "rulesNote": "Pendant qu'une alerte est active sur une application, annuler ou relancer son déploiement progressif reste toujours permis. Chaque action figure dans l'onglet Activité, avec l'assistant qui l'a faite."
     },
     "connected": {
-      "title": "Assistants IA connectés",
+      "title": "Clients MCP connectés",
       "description": "Assistants qui agissent sur CNP avec vos droits. Déconnecter un assistant coupe son accès immédiatement.",
       "connectOne": "Connecter un assistant",
       "empty": "Aucun assistant connecté.",
       "meta": "{scope} · connecté {created} · dernière utilisation {lastUsed}",
       "revoked": "{name} déconnecté",
       "revokeFailed": "Impossible de déconnecter l'assistant. Réessayez.",
-      "disconnect": "Déconnecter"
+      "disconnect": "Déconnecter",
+      "clientMeta": "{count, plural, one {# session} other {# sessions}} · dernière utilisation {lastUsed}"
     },
     "confirmation": {
       "done": {
@@ -1744,7 +1767,7 @@
       "review": "Relire le plan"
     },
     "connectAi": {
-      "title": "Connectez votre assistant IA à CNP",
+      "title": "Connectez un client MCP à CNP",
       "lead": "Demandez en langage courant : l'assistant crée l'application, écrit le code, la publie et suit le déploiement, avec votre connexion d'entreprise et vos droits.",
       "install": "Installation",
       "setUp": "Mise en place",
@@ -2578,16 +2601,10 @@
     "console": {
       "title": "Console de déploiement",
       "download": "Télécharger les logs",
-      "clear": "Vider la console",
-      "minimize": "Réduire",
-      "maximize": "Agrandir",
       "expand": "Déplier la console",
       "collapse": "Replier la console",
-      "filter": "Filtrer les logs",
-      "matches": "{count, plural, one {# résultat} other {# résultats}}",
       "noMatch": "Aucune ligne ne correspond au filtre.",
-      "empty": "La console est vide. En attente d'une activité de déploiement.",
-      "cleared": "--- Console vidée ---"
+      "empty": "La console est vide. En attente d'une activité de déploiement."
     },
     "deploymentStatus": {
       "pending": "En attente",
@@ -4597,5 +4614,23 @@
     "sourceIs": "{cloud} est {state}.",
     "back": "Retour",
     "runsOn": "Tourne sur"
+  },
+  "data": {
+    "table": {
+      "search": "Rechercher",
+      "noMatch": "Aucune ligne ne correspond à cette recherche.",
+      "empty": "Rien à afficher pour l'instant.",
+      "rowsPerPage": "Lignes par page",
+      "pageOf": "Page {page} sur {count}",
+      "page": "Page {page}",
+      "previous": "Page précédente",
+      "next": "Page suivante"
+    },
+    "chart": {
+      "noData": "Aucune donnée sur cette période.",
+      "partial": "en cours",
+      "projected": "projection {value}",
+      "deployMarker": "Déploiement {label} à {time}"
+    }
   }
 }

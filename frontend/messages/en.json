@@ -10,7 +10,7 @@
       "security": "Security",
       "activity": "Activity",
       "alerts": "Alerts",
-      "assistants": "AI assistants",
+      "assistants": "MCP",
       "docs": "Docs",
       "projects": "Projects",
       "apps": "Apps",
@@ -543,7 +543,11 @@
       "apply": "Apply",
       "notify": "Notify",
       "ignore": "Ignore",
-      "actionFailed": "Action failed"
+      "actionFailed": "Action failed",
+      "sleepNow": "Sleep now",
+      "sleeping": "{app} is going to sleep.",
+      "sleepNeedsAccess": "Requires elevated access to put this app to sleep.",
+      "requestAccess": "Request access"
     },
     "recommendations": {
       "sortLabel": "Sort by",
@@ -1168,7 +1172,7 @@
       "noMore": "No more events",
       "newer": "Newer",
       "older": "Older",
-      "page": "Page {page} · {size} events per page",
+      "page": "Page {page}",
       "retention": "Events are kept {days} days.",
       "detail": {
         "title": "Event details",
@@ -1186,7 +1190,8 @@
         "allFrom": "All activity from {actor}",
         "showRaw": "Show raw data",
         "hideRaw": "Hide raw data"
-      }
+      },
+      "pageSize": "Events per page"
     },
     "logs": {
       "aria": {
@@ -1199,14 +1204,10 @@
       "allNamespaces": "All namespaces",
       "allPods": "All pods",
       "allContainers": "All containers",
-      "allLevels": "All levels",
-      "errors": "Errors",
-      "warnings": "Warnings",
       "search": "Search…",
       "searchButton": "Search",
       "lineWrap": "Wrap lines",
       "timestamp": "Timestamp",
-      "lineCount": "{count, plural, one {# line} other {# lines}}",
       "download": "Download the displayed lines",
       "openNewTab": "Open in a new tab",
       "exitFullscreen": "Exit full screen (Esc)",
@@ -1215,15 +1216,36 @@
       "follow": "Follow",
       "showStream": "Show this stream",
       "hideStream": "Hide this stream",
-      "showContext": "Show the minute around this line",
-      "contextBanner": "Context: one minute before and after the selected line, same container.",
+      "contextBanner": "Context: 20 lines before and after the selected line, same container.",
       "backToResults": "Back to results",
       "noLines": "No lines match these filters.",
-      "info": "Info",
-      "debug": "Debug",
       "traceFilter": "Lines of trace {id}",
       "clearTrace": "Show all lines",
-      "openTrace": "Open the trace"
+      "openTrace": "Open the trace",
+      "levels": {
+        "label": "Level",
+        "all": "All",
+        "error": "Error",
+        "warn": "Warn",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "regex": "Regular expression, applied to the loaded lines",
+      "invalidRegex": "Invalid regular expression",
+      "matchCount": "{count, plural, one {# match} other {# matches}}",
+      "expand": "Expand",
+      "dialogTitle": "Logs",
+      "streamConnected": "Connected",
+      "streamWaiting": "Waiting for the stream",
+      "contextBannerLoaded": "Context: 20 lines before and after the selected line, among the loaded lines.",
+      "details": {
+        "noFields": "Plain text line, no structured fields.",
+        "context": "Show context ±20 lines",
+        "copyLine": "Copy line",
+        "copied": "Line copied",
+        "copyLink": "Copy link",
+        "linkCopied": "Link copied, with the current filters"
+      }
     },
     "volume": {
       "title": "Log volume",
@@ -1536,7 +1558,7 @@
   },
   "agents": {
     "meta": {
-      "title": "Connect your AI assistant · CNP",
+      "title": "Connect an MCP client · CNP",
       "description": "Use CNP from Claude, ChatGPT, Codex, OpenCode, Cursor or VS Code: create, change and release apps in plain language."
     },
     "never": "never",
@@ -1715,14 +1737,15 @@
       "rulesNote": "While an alert fires on an app, aborting or retrying its rollout is always allowed. Every action is in the Activity tab, with the assistant that did it."
     },
     "connected": {
-      "title": "Connected AI assistants",
+      "title": "Connected MCP clients",
       "description": "Assistants that act on CNP with your rights. Disconnecting one cuts its access immediately.",
       "connectOne": "Connect one",
       "empty": "No assistant connected.",
       "meta": "{scope} · connected {created} · last used {lastUsed}",
       "revoked": "{name} disconnected",
       "revokeFailed": "Could not disconnect the assistant. Try again.",
-      "disconnect": "Disconnect"
+      "disconnect": "Disconnect",
+      "clientMeta": "{count, plural, one {# session} other {# sessions}} · last used {lastUsed}"
     },
     "confirmation": {
       "done": {
@@ -1744,7 +1767,7 @@
       "review": "Review the plan"
     },
     "connectAi": {
-      "title": "Connect your AI assistant to CNP",
+      "title": "Connect an MCP client to CNP",
       "lead": "Ask in plain language, the assistant creates the app, writes the code, releases it and follows the rollout, with your company login and your rights.",
       "install": "Install",
       "setUp": "Set up",
@@ -2578,16 +2601,10 @@
     "console": {
       "title": "Deployment console",
       "download": "Download logs",
-      "clear": "Clear console",
-      "minimize": "Minimize",
-      "maximize": "Maximize",
       "expand": "Expand console",
       "collapse": "Collapse console",
-      "filter": "Filter logs",
-      "matches": "{count, plural, one {# match} other {# matches}}",
       "noMatch": "No line matches the filter.",
-      "empty": "The console is empty. Waiting for deployment activity.",
-      "cleared": "--- Console cleared ---"
+      "empty": "The console is empty. Waiting for deployment activity."
     },
     "deploymentStatus": {
       "pending": "Pending",
@@ -4597,5 +4614,23 @@
     "sourceIs": "{cloud} is {state}.",
     "back": "Back",
     "runsOn": "Runs on"
+  },
+  "data": {
+    "table": {
+      "search": "Search",
+      "noMatch": "No row matches this search.",
+      "empty": "Nothing to show yet.",
+      "rowsPerPage": "Rows per page",
+      "pageOf": "Page {page} of {count}",
+      "page": "Page {page}",
+      "previous": "Previous page",
+      "next": "Next page"
+    },
+    "chart": {
+      "noData": "No data for this period.",
+      "partial": "in progress",
+      "projected": "projected {value}",
+      "deployMarker": "Deploy {label} at {time}"
+    }
   }
 }

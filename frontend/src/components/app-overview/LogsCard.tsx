@@ -28,7 +28,7 @@ export function LogsCard({
         <OpenDashboardButton href={`${base}/logs`} label={t("open")} />
       </CardHeader>
       <CardContent>
-        <LogsView project={project} namespace={namespace} appId={appId} compact />
+        <LogsView project={project} namespace={namespace} appId={appId} variant="compact" />
       </CardContent>
     </Card>
   );

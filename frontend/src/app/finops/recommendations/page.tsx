@@ -157,6 +157,12 @@ function RecommendationsInner() {
                   : undefined,
                 "finops.act",
               )}
+              canSleep={can(
+                rec.project_id
+                  ? roleByProject.get(rec.project_id)
+                  : undefined,
+                "app.operate",
+              )}
             />
           ))}
         </div>

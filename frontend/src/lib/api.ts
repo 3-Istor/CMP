@@ -978,9 +978,10 @@ function activityQuery(
 export const getActivity = (
   project: string | null,
   filters: import("@/types").ActivityFilters,
+  limit = 100,
 ) =>
   request<import("@/types").ActivityFeed>(
-    `/activity?${activityQuery(project, filters)}&limit=100`,
+    `/activity?${activityQuery(project, filters)}&limit=${limit}`,
   );
 
 export const getActivitySummary = (project: string | null, days = 7) =>

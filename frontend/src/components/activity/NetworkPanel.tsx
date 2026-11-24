@@ -14,7 +14,7 @@ export function NetworkPanel({ project }: { project: string }) {
   const t = useTranslations("activity");
   const locale = useLocale();
   const [flows, setFlows] = useState<DeniedFlow[] | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   useEffect(() => {
     getDeniedFlows(project, 1).then(setFlows, () => setFlows([]));
