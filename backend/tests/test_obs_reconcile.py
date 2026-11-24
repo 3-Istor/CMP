@@ -73,7 +73,7 @@ def test_the_owner_target_and_the_demo_period_are_used(db):
         r.get("record"): r
         for g in rule["spec"]["groups"]
         for r in g["rules"]
-        if r["labels"]["cnp_slo"] == "availability"
+        if r["labels"].get("cnp_slo") == "availability"
     }
 
     assert (
