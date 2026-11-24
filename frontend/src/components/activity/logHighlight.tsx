@@ -83,3 +83,90 @@ export function severityOf(line: string): "error" | "warn" | null {
   if (/\b(warn|warning)\b/i.test(line)) return "warn";
   return null;
 }
+
+/**
+ * The search as a pattern: the typed text literally, or as a regular
+ * expression. An invalid expression gives `invalid` and no pattern.
+ */
+export function searchPattern(
+  term: string | null | undefined,
+  regex: boolean,
+): { pattern: RegExp | null; invalid: boolean } {
+  if (!term) return { pattern: null, invalid: false };
+  const source = regex ? term : term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  try {
+    return { pattern: new RegExp(source, "gi"), invalid: false };
+  } catch {
+    return { pattern: null, invalid: true };
+  }
+}
+
+export interface Part {
+  text: string;
+  hit: boolean;
+}
+
+/** The text cut around every match of the pattern, for marking. */
+export function highlightParts(text: string, pattern: RegExp | null): Part[] {
+  if (!pattern) return [{ text, hit: false }];
+  const parts: Part[] = [];
+  let last = 0;
+  for (const match of text.matchAll(new RegExp(pattern.source, "gi"))) {
+    const index = match.index ?? 0;
+    // An expression like `a*` matches the empty string everywhere.
+    if (match[0].length === 0) continue;
+    if (index > last) parts.push({ text: text.slice(last, index), hit: false });
+    parts.push({ text: match[0], hit: true });
+    last = index + match[0].length;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last), hit: false });
+  return parts.length ? parts : [{ text, hit: false }];
+}
+
+export function matches(text: string, pattern: RegExp): boolean {
+  pattern.lastIndex = 0;
+  return pattern.test(text);
+}
+
+const LOGFMT = /([A-Za-z_][\w.-]*)=("(?:[^"\\]|\\.)*"|\S*)/g;
+
+function display(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+/**
+ * The fields of a structured line: a JSON object (nested values flattened to
+ * dotted keys), or logfmt key=value pairs. A plain text line has none.
+ */
+export function parseFields(line: string): [string, string][] | null {
+  const text = line.trim();
+  if (text.startsWith("{")) {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const out: [string, string][] = [];
+        const walk = (node: Record<string, unknown>, prefix: string) => {
+          for (const [k, v] of Object.entries(node)) {
+            const name = prefix ? `${prefix}.${k}` : k;
+            if (v && typeof v === "object" && !Array.isArray(v))
+              walk(v as Record<string, unknown>, name);
+            else out.push([name, display(v)]);
+          }
+        };
+        walk(parsed as Record<string, unknown>, "");
+        return out.length ? out : null;
+      }
+    } catch {
+      // Not JSON after all: try key=value pairs.
+    }
+  }
+  const pairs = [...text.matchAll(LOGFMT)].map(
+    (m): [string, string] => [
+      m[1],
+      m[2].startsWith('"') ? m[2].slice(1, -1).replace(/\\"/g, '"') : m[2],
+    ],
+  );
+  return pairs.length >= 2 ? pairs : null;
+}

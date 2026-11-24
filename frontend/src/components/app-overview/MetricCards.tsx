@@ -9,7 +9,7 @@ import type { MetricSeries, ProjectLink } from "@/types";
 import { ExternalLink } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { OverviewCard, type CardState } from "./OverviewCard";
-import { Sparkline } from "./Sparkline";
+import { Sparkline } from "@/components/data/Sparkline";
 
 const REFRESH_MS = 60_000;
 
@@ -58,7 +58,7 @@ function SeriesBody({
   return (
     <div className="space-y-2">
       <Value>{format(series.current ?? 0)}</Value>
-      <Sparkline points={series.points} label={summary} />
+      <Sparkline values={series.points.map((p) => p.value)} label={summary} />
       {note && <p className="text-xs text-muted-foreground">{note}</p>}
     </div>
   );
