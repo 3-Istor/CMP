@@ -1147,13 +1147,13 @@ def test_a_stuck_run_no_longer_blocks_a_rebuild(client, world):
     assert response.status_code == 202
 
 
-NEO4J_TO_POSTGRES = {
-    "id": "neo4j-to-postgres:neo4j",
-    "subject": "neo4j",
-    "rule": "neo4j-to-postgres",
+MYSQL_TO_POSTGRES = {
+    "id": "mysql-to-postgres:mysql",
+    "subject": "mysql",
+    "rule": "mysql-to-postgres",
     "target": "postgres",
     "level": "advised",
-    "reason": "Le graphe tient dans des tables Postgres.",
+    "reason": "The SQL is portable to Postgres.",
     "gain_mem_mib": 1024,
     "effort": "medium",
     "evidence": [
@@ -1168,14 +1168,14 @@ def _recommended(world):
         world,
         source,
         status="succeeded",
-        plan={**PLAN, "recommendations": [NEO4J_TO_POSTGRES]},
+        plan={**PLAN, "recommendations": [MYSQL_TO_POSTGRES]},
     )
     _run(
         world,
         source,
         kind="build",
         status="succeeded",
-        plan={"plan": PLAN, "edits": {"rename": {"neo4j": "graph"}}},
+        plan={"plan": PLAN, "edits": {"rename": {"mysql": "graph"}}},
     )
     with world.db() as db:
         db.add(
@@ -1183,7 +1183,7 @@ def _recommended(world):
                 source_id=source.id,
                 app_name="graph",
                 kind="backing",
-                spec={"backing_kind": "neo4j"},
+                spec={"backing_kind": "mysql"},
             )
         )
         db.commit()
@@ -1199,7 +1199,7 @@ def test_a_recommendation_is_shown_under_the_deployed_app_name(client, world):
 
     assert [
         (r["id"], r["app"], r["dismissed"]) for r in body["recommendations"]
-    ] == [("neo4j-to-postgres:neo4j", "graph", False)]
+    ] == [("mysql-to-postgres:mysql", "graph", False)]
 
 
 def test_a_backing_container_is_not_backed_up_and_names_its_alternative(
@@ -1214,7 +1214,7 @@ def test_a_backing_container_is_not_backed_up_and_names_its_alternative(
     assert body["backing"] == [
         {
             "app": "graph",
-            "kind": "neo4j",
+            "kind": "mysql",
             "backed_up": False,
             "managed_alternative": "postgres",
         }
@@ -1228,13 +1228,13 @@ def test_an_ignored_recommendation_stays_ignored_for_the_project(
 
     client.post(
         "/api/projects/shop/imports/recommendations/"
-        "neo4j-to-postgres:neo4j/dismiss"
+        "mysql-to-postgres:mysql/dismiss"
     )
     _run(
         world,
         source,
         status="succeeded",
-        plan={**PLAN, "recommendations": [NEO4J_TO_POSTGRES]},
+        plan={**PLAN, "recommendations": [MYSQL_TO_POSTGRES]},
     )
 
     body = client.get("/api/projects/shop/imports/recommendations").json()
@@ -1246,14 +1246,14 @@ def test_the_plan_view_lists_the_ignored_recommendations(client, world):
     _recommended(world)
     client.post(
         "/api/projects/shop/imports/recommendations/"
-        "neo4j-to-postgres:neo4j/dismiss"
+        "mysql-to-postgres:mysql/dismiss"
     )
     with world.db() as db:
         run = db.query(ImportRun).filter_by(kind="analyze").first()
 
     body = client.get(f"/api/projects/shop/imports/runs/{run.id}").json()
 
-    assert body["dismissed_recommendations"] == ["neo4j-to-postgres:neo4j"]
+    assert body["dismissed_recommendations"] == ["mysql-to-postgres:mysql"]
 
 
 def test_a_member_cannot_ignore_a_recommendation(client, world):
@@ -1262,7 +1262,7 @@ def test_a_member_cannot_ignore_a_recommendation(client, world):
 
     response = client.post(
         "/api/projects/shop/imports/recommendations/"
-        "neo4j-to-postgres:neo4j/dismiss"
+        "mysql-to-postgres:mysql/dismiss"
     )
 
     assert response.status_code == 403
@@ -1272,7 +1272,7 @@ def test_an_ignored_recommendation_can_be_shown_again(client, world):
     _recommended(world)
     path = (
         "/api/projects/shop/imports/recommendations/"
-        "neo4j-to-postgres:neo4j/dismiss"
+        "mysql-to-postgres:mysql/dismiss"
     )
     client.post(path)
 
@@ -1318,3 +1318,47 @@ def test_a_run_without_plan_has_no_estimate(client, world):
     )
 
     assert response.status_code == 409
+
+
+def test_a_rewrite_onto_postgres_is_never_offered_as_the_managed_alternative(
+    client, world
+):
+    # Arrange: the analyzer suggests full text in Postgres for Elasticsearch
+    source = _source(world)
+    _run(
+        world,
+        source,
+        status="succeeded",
+        plan={
+            **PLAN,
+            "recommendations": [
+                {
+                    **MYSQL_TO_POSTGRES,
+                    "id": "elasticsearch-to-postgres:search",
+                    "subject": "search",
+                    "rule": "elasticsearch-to-postgres",
+                }
+            ],
+        },
+    )
+    with world.db() as db:
+        db.add(
+            ImportService(
+                source_id=source.id,
+                app_name="search",
+                kind="backing",
+                spec={"backing_kind": "elasticsearch"},
+            )
+        )
+        db.commit()
+
+    # Act
+    body = client.get(
+        "/api/projects/shop/imports/recommendations", params={"app": "search"}
+    ).json()
+
+    # Assert
+    assert (body["recommendations"], body["backing"][0]["managed_alternative"]) == (
+        [],
+        None,
+    )

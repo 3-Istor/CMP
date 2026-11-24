@@ -3832,7 +3832,29 @@
       "failed": "L'action n'a pas abouti : {message}",
       "notBackedUp": "Non sauvegardé",
       "alternative": "Les données de ce conteneur ne sont pas sauvegardées. Alternative gérée et sauvegardée : {target}.",
-      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées. La plateforme propose Postgres et des buckets S3 gérés, sauvegardés."
+      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées, et la plateforme n'a pas d'équivalent managé pour ce moteur.",
+      "reasons": {
+        "elasticsearch-to-postgres": {
+          "advised": "Les recherches trouvées sont des requêtes bool, match et term : la recherche plein texte de Postgres managé (tsvector, index GIN) les couvre et libère la mémoire d'Elasticsearch.",
+          "evaluate": "Elasticsearch sert peut-être des agrégations, du flou ou des requêtes imbriquées, ou aucune requête n'a été trouvée. La recherche plein texte de Postgres managé est à évaluer selon ces usages."
+        },
+        "local-storage-to-bucket": {
+          "advised": "Le service semble écrire des fichiers sur son disque local, perdus à chaque redéploiement. Un bucket S3 managé les conserve et les partage entre répliques.",
+          "evaluate": "Le service semble écrire des fichiers sur son disque local, perdus à chaque redéploiement. Un bucket S3 managé les conserve et les partage entre répliques."
+        },
+        "minio-to-bucket": {
+          "advised": "Un bucket S3 managé parle la même API que MinIO : il suffit de changer l'endpoint et les clés, sans conteneur de stockage à faire tourner ni à sauvegarder.",
+          "evaluate": "Un bucket S3 managé parle la même API que MinIO : il suffit de changer l'endpoint et les clés, sans conteneur de stockage à faire tourner ni à sauvegarder."
+        },
+        "mongodb-to-postgres": {
+          "advised": "Postgres managé (sauvegardé) couvre les documents MongoDB avec des colonnes JSONB et des index GIN. Cela retire un conteneur de base sans sauvegarde.",
+          "evaluate": "Postgres managé (sauvegardé) couvre les documents MongoDB avec des colonnes JSONB et des index GIN. Cela retire un conteneur de base sans sauvegarde."
+        },
+        "neo4j-to-postgres": {
+          "advised": "Les requêtes Cypher trouvées ne parcourent qu'une relation à la fois : une table de liaison indexée dans Postgres managé les remplace et libère la mémoire de Neo4j.",
+          "evaluate": "Neo4j sert peut-être des parcours sur plusieurs relations, ou aucune requête n'a été trouvée. Postgres managé (tables de liaison, requêtes récursives) est à évaluer selon ces parcours."
+        }
+      }
     },
     "estimate": {
       "title": "Ressources et coût",

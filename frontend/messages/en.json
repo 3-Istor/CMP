@@ -3832,7 +3832,29 @@
       "failed": "The action failed: {message}",
       "notBackedUp": "Not backed up",
       "alternative": "The data of this container is not backed up. Managed, backed up alternative: {target}.",
-      "alternativeGeneric": "The data of this container is not backed up. The platform offers managed, backed up Postgres and S3 buckets."
+      "alternativeGeneric": "The data of this container is not backed up, and the platform has no managed equivalent for this engine.",
+      "reasons": {
+        "elasticsearch-to-postgres": {
+          "advised": "The searches found are bool, match and term queries: managed Postgres full text search (tsvector, GIN index) covers them and frees Elasticsearch's memory.",
+          "evaluate": "Elasticsearch may serve aggregations, fuzzy or nested queries, or no query was found. Managed Postgres full text search is to be evaluated against these uses."
+        },
+        "local-storage-to-bucket": {
+          "advised": "The service seems to write files to its local disk, lost on every redeploy. A managed S3 bucket keeps them and shares them between replicas.",
+          "evaluate": "The service seems to write files to its local disk, lost on every redeploy. A managed S3 bucket keeps them and shares them between replicas."
+        },
+        "minio-to-bucket": {
+          "advised": "A managed S3 bucket speaks the same API as MinIO: change the endpoint and the keys, with no storage container to run or back up.",
+          "evaluate": "A managed S3 bucket speaks the same API as MinIO: change the endpoint and the keys, with no storage container to run or back up."
+        },
+        "mongodb-to-postgres": {
+          "advised": "Managed, backed up Postgres covers MongoDB documents with JSONB columns and GIN indexes, and removes a database container without backups.",
+          "evaluate": "Managed, backed up Postgres covers MongoDB documents with JSONB columns and GIN indexes, and removes a database container without backups."
+        },
+        "neo4j-to-postgres": {
+          "advised": "The Cypher queries found follow one relationship at a time: an indexed link table in managed Postgres replaces them and frees Neo4j's memory.",
+          "evaluate": "Neo4j may serve traversals over several relationships, or no query was found. Managed Postgres (link tables, recursive queries) is to be evaluated against these traversals."
+        }
+      }
     },
     "estimate": {
       "title": "Resources and cost",
