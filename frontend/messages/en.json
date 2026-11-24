@@ -10,7 +10,7 @@
       "security": "Security",
       "activity": "Activity",
       "alerts": "Alerts",
-      "assistants": "AI assistants",
+      "assistants": "MCP",
       "docs": "Docs",
       "projects": "Projects",
       "apps": "Apps",
@@ -1558,7 +1558,7 @@
   },
   "agents": {
     "meta": {
-      "title": "Connect your AI assistant · CNP",
+      "title": "Connect an MCP client · CNP",
       "description": "Use CNP from Claude, ChatGPT, Codex, OpenCode, Cursor or VS Code: create, change and release apps in plain language."
     },
     "never": "never",
@@ -1737,14 +1737,15 @@
       "rulesNote": "While an alert fires on an app, aborting or retrying its rollout is always allowed. Every action is in the Activity tab, with the assistant that did it."
     },
     "connected": {
-      "title": "Connected AI assistants",
+      "title": "Connected MCP clients",
       "description": "Assistants that act on CNP with your rights. Disconnecting one cuts its access immediately.",
       "connectOne": "Connect one",
       "empty": "No assistant connected.",
       "meta": "{scope} · connected {created} · last used {lastUsed}",
       "revoked": "{name} disconnected",
       "revokeFailed": "Could not disconnect the assistant. Try again.",
-      "disconnect": "Disconnect"
+      "disconnect": "Disconnect",
+      "clientMeta": "{count, plural, one {# session} other {# sessions}} · last used {lastUsed}"
     },
     "confirmation": {
       "done": {
@@ -1766,7 +1767,7 @@
       "review": "Review the plan"
     },
     "connectAi": {
-      "title": "Connect your AI assistant to CNP",
+      "title": "Connect an MCP client to CNP",
       "lead": "Ask in plain language, the assistant creates the app, writes the code, releases it and follows the rollout, with your company login and your rights.",
       "install": "Install",
       "setUp": "Set up",

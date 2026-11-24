@@ -10,7 +10,7 @@
       "security": "Sécurité",
       "activity": "Activité",
       "alerts": "Alertes",
-      "assistants": "Assistants IA",
+      "assistants": "MCP",
       "docs": "Documentation",
       "projects": "Projets",
       "apps": "Applications",
@@ -1558,7 +1558,7 @@
   },
   "agents": {
     "meta": {
-      "title": "Connecter votre assistant IA · CNP",
+      "title": "Connecter un client MCP · CNP",
       "description": "Utilisez CNP depuis Claude, ChatGPT, Codex, OpenCode, Cursor ou VS Code : créez, modifiez et publiez des applications en langage courant."
     },
     "never": "jamais",
@@ -1737,14 +1737,15 @@
       "rulesNote": "Pendant qu'une alerte est active sur une application, annuler ou relancer son déploiement progressif reste toujours permis. Chaque action figure dans l'onglet Activité, avec l'assistant qui l'a faite."
     },
     "connected": {
-      "title": "Assistants IA connectés",
+      "title": "Clients MCP connectés",
       "description": "Assistants qui agissent sur CNP avec vos droits. Déconnecter un assistant coupe son accès immédiatement.",
       "connectOne": "Connecter un assistant",
       "empty": "Aucun assistant connecté.",
       "meta": "{scope} · connecté {created} · dernière utilisation {lastUsed}",
       "revoked": "{name} déconnecté",
       "revokeFailed": "Impossible de déconnecter l'assistant. Réessayez.",
-      "disconnect": "Déconnecter"
+      "disconnect": "Déconnecter",
+      "clientMeta": "{count, plural, one {# session} other {# sessions}} · dernière utilisation {lastUsed}"
     },
     "confirmation": {
       "done": {
@@ -1766,7 +1767,7 @@
       "review": "Relire le plan"
     },
     "connectAi": {
-      "title": "Connectez votre assistant IA à CNP",
+      "title": "Connectez un client MCP à CNP",
       "lead": "Demandez en langage courant : l'assistant crée l'application, écrit le code, la publie et suit le déploiement, avec votre connexion d'entreprise et vos droits.",
       "install": "Installation",
       "setUp": "Mise en place",
