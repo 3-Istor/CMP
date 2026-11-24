@@ -22,11 +22,16 @@ KINDS = ("availability", "latency")
 WINDOWS = ("5m", "30m", "1h", "6h", "3d")
 DEMO_LEVELS = frozenset({"sandbox", "demo"})
 LATENCY_THRESHOLD_MS = 500
+LATENCY_QUANTILES = ("50", "95", "99")
 DEFAULT_AVAILABILITY = 99.5
 DEFAULT_LATENCY = 95.0
 # A request answered while the app slept, or while it woke up, is not the
 # app's fault: offhours-guard flips the gauge back before pods are ready.
 ASLEEP_LOOKBACK = "10m"
+# The budget group records every 5 minutes, aligned to the interval: a bare
+# instant read at "now" finds its newest sample up to 10 minutes old, past
+# the default lookback, so readers wrap it in last_over_time.
+BUDGET_LOOKBACK = "15m"
 
 
 @dataclass(frozen=True)
@@ -293,12 +298,45 @@ def _budget_rules(slo: AppSlo, kind: str) -> list[dict]:
         },
         {
             "record": "slo:period_error_budget_remaining:ratio",
-            "expr": (
-                f"1 - slo:sli_error:ratio_rate{period}{{{sel}}}"
-                f" / {_num(slo.budget(kind))}"
-            ),
+            "expr": _budget_left(slo, kind),
             "labels": labels,
         },
+    ]
+
+
+def _budget_left(slo: AppSlo, kind: str) -> str:
+    # Reads the 5m-rate series, never the period ratio recorded just above:
+    # vmalert aligns a group's timestamps to its interval, so that ratio's
+    # newest visible sample sits exactly one interval back, on the excluded
+    # edge of the instant lookback, and the rule recorded nothing.
+    sel = _selector(slo, kind)
+    period = f"{slo.period_days}d"
+    errors = f"sum_over_time(cnp_slo:errors:rate5m{{{sel}}}[{period}])"
+    requests = f"sum_over_time(cnp_slo:requests:rate5m{{{sel}}}[{period}])"
+    budget = _num(slo.budget(kind))
+    # 0/0 is NaN and VictoriaMetrics drops it: no request, no budget spent.
+    return f"(1 - ({errors} / {requests}) / {budget}) or ({requests} * 0 + 1)"
+
+
+def _latency_quantiles(slo: AppSlo) -> list[dict]:
+    sel = envoy_selector(slo.namespace)
+    labels = {
+        "cnp_project": slo.project,
+        "cnp_app": slo.app,
+        "namespace": slo.namespace,
+    }
+    return [
+        {
+            "record": f"cnp_slo:latency_seconds:p{quantile}_5m",
+            # Envoy buckets are in milliseconds.
+            "expr": (
+                f"histogram_quantile(0.{quantile}, sum by (cluster, le) ("
+                f"rate(envoy_cluster_upstream_rq_time_bucket{{{sel}}}[5m])"
+                ")) / 1000"
+            ),
+            "labels": labels,
+        }
+        for quantile in LATENCY_QUANTILES
     ]
 
 
@@ -314,7 +352,8 @@ def groups(slo: AppSlo) -> list[dict]:
                 rule
                 for kind in KINDS
                 for rule in _recordings(slo, kind) + _alerts(slo, kind)
-            ],
+            ]
+            + _latency_quantiles(slo),
         },
         {
             # The period window reads weeks of samples: every 5 minutes is

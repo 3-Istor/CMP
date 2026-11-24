@@ -64,6 +64,52 @@ def _alert(severity: str, window: str) -> dict:
 
 
 def _run(tmp_path, series: list[dict], expected: list[dict]) -> str:
+    return _unittest(
+        tmp_path,
+        series,
+        {
+            "alert_rule_test": [
+                {
+                    "eval_time": "90m",
+                    "alertname": "SloAvailabilityBurnRate",
+                    "exp_alerts": expected,
+                }
+            ]
+        },
+    )
+
+
+def _budget_left(tmp_path, series: list[dict], expected: list[dict]) -> str:
+    return _unittest(
+        tmp_path,
+        series,
+        {
+            "metricsql_expr_test": [
+                {
+                    "expr": (
+                        "slo:period_error_budget_remaining:ratio"
+                        '{cnp_slo="availability"}'
+                    ),
+                    "eval_time": "92m",
+                    "exp_samples": expected,
+                }
+            ]
+        },
+    )
+
+
+def _left(value: float) -> dict:
+    return {
+        "labels": (
+            'slo:period_error_budget_remaining:ratio{cluster="onprem", '
+            'cnp_project="shop", cnp_app="web", cnp_slo="availability", '
+            'namespace="shop-web"}'
+        ),
+        "value": value,
+    }
+
+
+def _unittest(tmp_path, series: list[dict], checks: dict) -> str:
     (tmp_path / "rules.json").write_text(
         json.dumps(_rules_without_annotations())
     )
@@ -73,17 +119,7 @@ def _run(tmp_path, series: list[dict], expected: list[dict]) -> str:
                 "rule_files": [str(tmp_path / "rules.json")],
                 "evaluation_interval": "1m",
                 "tests": [
-                    {
-                        "interval": "1m",
-                        "input_series": series,
-                        "alert_rule_test": [
-                            {
-                                "eval_time": "90m",
-                                "alertname": "SloAvailabilityBurnRate",
-                                "exp_alerts": expected,
-                            }
-                        ],
-                    }
+                    {"interval": "1m", "input_series": series, **checks}
                 ],
             }
         )
@@ -163,6 +199,21 @@ def test_another_apps_errors_are_not_counted(tmp_path):
     assert failure == ""
 
 
+def test_the_budget_left_is_recorded_from_the_period_error_ratio(tmp_path):
+    # 0.1 % errors on a 0.5 % budget: a fifth of the budget is spent.
+    failure = _budget_left(
+        tmp_path, [_series("2", 999), _series("5", 1)], [_left(0.8)]
+    )
+
+    assert failure == ""
+
+
+def test_an_app_without_requests_keeps_its_whole_budget(tmp_path):
+    failure = _budget_left(tmp_path, [_series("2", 0)], [_left(1)])
+
+    assert failure == ""
+
+
 VMALERT = os.environ.get("VMALERT") or shutil.which("vmalert")
 
 
@@ -183,3 +234,41 @@ def test_the_full_rule_file_with_its_templates_passes_vmalert_dry_run(
     )
 
     assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_latency_quantiles_are_recorded_in_seconds_per_app(tmp_path):
+    buckets = [
+        {
+            "series": (
+                f"envoy_cluster_upstream_rq_time_bucket{{{ROUTE}, "
+                f'le="{le}"}}'
+            ),
+            "values": f"0+{count}x{MINUTES}",
+        }
+        for le, count in (("100", 0), ("200", 100), ("+Inf", 100))
+    ]
+
+    failure = _unittest(
+        tmp_path,
+        buckets,
+        {
+            "metricsql_expr_test": [
+                {
+                    "expr": "cnp_slo:latency_seconds:p50_5m",
+                    "eval_time": "60m",
+                    "exp_samples": [
+                        {
+                            "labels": (
+                                "cnp_slo:latency_seconds:p50_5m"
+                                '{cluster="onprem", cnp_project="shop", '
+                                'cnp_app="web", namespace="shop-web"}'
+                            ),
+                            "value": 0.15,
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+
+    assert failure == ""

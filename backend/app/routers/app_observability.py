@@ -160,6 +160,8 @@ class Objective(BaseModel):
     error_ratio: float | None
     burn_rate_1h: float | None
     burn_rate_6h: float | None
+    requests_in_period: int
+    insufficient_traffic: bool
     trend: list[Point]
 
 
@@ -402,6 +404,8 @@ async def get_slo_status(
                 error_ratio=o["error_ratio"],
                 burn_rate_1h=o["burn_rate_1h"],
                 burn_rate_6h=o["burn_rate_6h"],
+                requests_in_period=o["requests_in_period"],
+                insufficient_traffic=o["insufficient_traffic"],
                 trend=_points(o["trend"]),
             )
             for o in data["objectives"]

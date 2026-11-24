@@ -10,6 +10,12 @@ cnp_ns:* recording rules, never the raw gateway, Hubble or OpenCost series.
 
 from dataclasses import dataclass, field
 
+from app.services.observability.slo import (
+    BUDGET_LOOKBACK,
+    LATENCY_QUANTILES,
+    LATENCY_THRESHOLD_MS,
+)
+
 DS = {"type": "prometheus", "uid": "${ds}"}
 LOGS_DS_VAR = "logs"
 LOGS_DS = {"type": "victoriametrics-logs-datasource", "uid": "${logs}"}
@@ -53,13 +59,12 @@ LOGS_DATASOURCE_VAR = {
 }
 
 SLO_AVAIL = 'cnp_slo="availability"'
-SLO_LATENCY = 'cnp_slo="latency"'
 APP_SEL = 'cnp_app="$app", namespace=~"$env"'
 CONTAINERS = 'container!="", container!="POD"'
-BAD_STATES = [
+LATENCY_STATES = [
     {"color": "green", "value": None},
-    {"color": "orange", "value": 0.01},
-    {"color": "red", "value": 0.05},
+    {"color": "orange", "value": LATENCY_THRESHOLD_MS / 1000},
+    {"color": "red", "value": 2 * LATENCY_THRESHOLD_MS / 1000},
 ]
 BUDGET_STATES = [
     {"color": "red", "value": None},
@@ -217,6 +222,18 @@ def _app_link(label: str) -> list[dict]:
     ]
 
 
+def budget_left(sel: str) -> str:
+    # The budget group records every 5 minutes, past the instant lookback.
+    return (
+        f"last_over_time(slo:period_error_budget_remaining:ratio{{{sel}}}"
+        f"[{BUDGET_LOOKBACK}])"
+    )
+
+
+def latency(quantile: str, sel: str = "") -> str:
+    return f"cnp_slo:latency_seconds:p{quantile}_5m{{{sel}}}"
+
+
 def home_dashboard() -> dict:
     by_app = "cnp_app"
     reqs = f"sum by (cnp_app) (cnp_slo:requests:rate5m{{{SLO_AVAIL}}})"
@@ -235,8 +252,7 @@ def home_dashboard() -> dict:
                 "5xx",
             ),
             (
-                f"min by ({by_app}) (slo:period_error_budget_remaining:ratio"
-                f"{{{SLO_AVAIL}}})",
+                f"min by ({by_app}) ({budget_left(SLO_AVAIL)})",
                 "Budget left",
             ),
         ],
@@ -274,14 +290,9 @@ def home_dashboard() -> dict:
                     width=8,
                 ),
                 Panel(
-                    "Slow requests share by app (over 500 ms)",
-                    q(
-                        "sum by (cnp_app) (cnp_slo:errors:rate5m"
-                        f"{{{SLO_LATENCY}}}) / sum by (cnp_app)"
-                        f" (cnp_slo:requests:rate5m{{{SLO_LATENCY}}})",
-                        "{{cnp_app}}",
-                    ),
-                    "percentunit",
+                    "p95 latency by app",
+                    q(f"max by (cnp_app) ({latency('95')})", "{{cnp_app}}"),
+                    "s",
                     width=8,
                 ),
                 Panel(
@@ -311,7 +322,6 @@ def home_dashboard() -> dict:
 
 def app_dashboard() -> dict:
     avail = f"{APP_SEL}, {SLO_AVAIL}"
-    latency = f"{APP_SEL}, {SLO_LATENCY}"
     ns = 'namespace=~"$env"'
     pods = f'{ns}, pod=~"$app-.*", {CONTAINERS}'
     requests = f"sum(cnp_slo:requests:rate5m{{{avail}}})"
@@ -340,23 +350,17 @@ def app_dashboard() -> dict:
                     5,
                 ),
                 Panel(
-                    "Slow requests share (over 500 ms)",
-                    q(
-                        f"sum(cnp_slo:errors:rate5m{{{latency}}})"
-                        f" / sum(cnp_slo:requests:rate5m{{{latency}}})"
-                    ),
-                    "percentunit",
+                    "p95 latency now",
+                    q(f"max({latency('95', APP_SEL)})"),
+                    "s",
                     "stat",
                     6,
                     5,
-                    BAD_STATES,
+                    LATENCY_STATES,
                 ),
                 Panel(
                     "Error budget left",
-                    q(
-                        "min(slo:period_error_budget_remaining:ratio"
-                        f"{{{APP_SEL}}})"
-                    ),
+                    q(f"min({budget_left(APP_SEL)})"),
                     "percentunit",
                     "stat",
                     6,
@@ -370,13 +374,12 @@ def app_dashboard() -> dict:
                     "percentunit",
                 ),
                 Panel(
-                    "Slow requests share over time",
-                    q(
-                        f"sum(cnp_slo:errors:rate5m{{{latency}}})"
-                        f" / sum(cnp_slo:requests:rate5m{{{latency}}})",
-                        "over 500 ms",
-                    ),
-                    "percentunit",
+                    "Latency",
+                    [
+                        (f"max({latency(qt, APP_SEL)})", f"p{qt}")
+                        for qt in LATENCY_QUANTILES
+                    ],
+                    "s",
                 ),
             ],
         ),

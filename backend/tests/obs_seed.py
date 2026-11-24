@@ -28,6 +28,7 @@ RIVAL_TRACE = "9aa92f3577b34da6a3ce929d0e0e4738"
 RIVAL_SECRET = "rival card number 4111"
 BUCKETS = ("25", "100", "250", "500", "1000", "+Inf")
 STEP = 30
+BUDGET_GROUP_LAG = 6 * 60
 
 
 def _line(name: str, labels: dict[str, str], value: float, ts_ms: int) -> str:
@@ -91,19 +92,23 @@ def metrics_lines(now: float, hours: int = 3) -> list[str]:
             }
             for i in range(0, samples + 1, 10):
                 ts = int((now - (samples - i) * STEP) * 1000)
+                # As in vmalert: the 5-minute budget group's newest sample
+                # is older than the default instant lookback.
+                late = ts - BUDGET_GROUP_LAG * 1000
                 left = remaining + 0.0005 * (samples - i)
-                for name, value in (
-                    ("slo:period_error_budget_remaining:ratio", left),
+                for name, value, at in (
+                    ("slo:period_error_budget_remaining:ratio", left, late),
                     (
                         "slo:error_budget:ratio",
                         0.005 if kind == "availability" else 0.05,
+                        late,
                     ),
-                    ("slo:sli_error:ratio_rate1h", 0.012),
-                    ("slo:sli_error:ratio_rate6h", 0.006),
-                    ("slo:sli_error:ratio_rate28d", 0.0019),
-                    ("slo:sli_error:ratio_rate7d", 0.0019),
+                    ("slo:sli_error:ratio_rate1h", 0.012, ts),
+                    ("slo:sli_error:ratio_rate6h", 0.006, ts),
+                    ("slo:sli_error:ratio_rate28d", 0.0019, late),
+                    ("slo:sli_error:ratio_rate7d", 0.0019, late),
                 ):
-                    lines.append(_line(name, slo, value, ts))
+                    lines.append(_line(name, slo, value, at))
     return lines
 
 

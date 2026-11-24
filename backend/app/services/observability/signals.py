@@ -182,29 +182,45 @@ def _by_kind(rows: list[dict]) -> dict[str, float]:
     return {r["metric"].get("cnp_slo", ""): r["value"] for r in rows}
 
 
+# Samples of cnp_slo:requests:rate5m are 1 minute apart.
+REQUEST_SAMPLE_SECONDS = 60
+
+
+def _budget_series(name: str, sel: str) -> str:
+    return f"last_over_time({name}{{{sel}}}[{slo.BUDGET_LOOKBACK}])"
+
+
 async def slo_status(
     scope: Scope, period_days: int, now: datetime, range_name: str
 ) -> dict[str, Any]:
     """
     Per objective: what is left of the period's error budget, and how fast
-    it burns over 1 h and 6 h (1 = exactly on budget).
+    it burns over 1 h and 6 h (1 = exactly on budget). An objective with
+    fewer requests in the period than it takes for one failure to stay
+    within budget is flagged insufficient_traffic: its numbers are noise.
     """
     sel = _slo_selector(scope)
     period = f"{period_days}d"
     start = now - timedelta(seconds=RANGES[range_name])
     instants = {
-        "remaining": f"slo:period_error_budget_remaining:ratio{{{sel}}}",
-        "budget": f"slo:error_budget:ratio{{{sel}}}",
+        "remaining": _budget_series(
+            "slo:period_error_budget_remaining:ratio", sel
+        ),
+        "budget": _budget_series("slo:error_budget:ratio", sel),
         "1h": f"slo:sli_error:ratio_rate1h{{{sel}}}",
         "6h": f"slo:sli_error:ratio_rate6h{{{sel}}}",
-        "sli": f"slo:sli_error:ratio_rate{period}{{{sel}}}",
+        "sli": _budget_series(f"slo:sli_error:ratio_rate{period}", sel),
+        "requests": (
+            f"sum_over_time(cnp_slo:requests:rate5m{{{sel}}}[{period}])"
+            f" * {REQUEST_SAMPLE_SECONDS}"
+        ),
     }
     found = await stores.gather_bounded(
         [
             *(stores.instant(scope, q, now) for q in instants.values()),
             stores.series(
                 scope,
-                f"slo:period_error_budget_remaining:ratio{{{sel}}}",
+                _budget_series("slo:period_error_budget_remaining:ratio", sel),
                 start,
                 now,
                 step_of(range_name),
@@ -214,27 +230,40 @@ async def slo_status(
     by_name = {
         name: _by_kind(rows) for name, rows in zip(instants, found[:-1])
     }
-    remaining, budget, sli = (
+    remaining, budget, sli, requests = (
         by_name["remaining"],
         by_name["budget"],
         by_name["sli"],
+        by_name["requests"],
     )
     burns = {window: by_name[window] for window in ("1h", "6h")}
     trend = {r["metric"].get("cnp_slo", ""): r["points"] for r in found[-1]}
     objectives = []
     for kind in slo.KINDS:
         allowed = budget.get(kind)
+        served = round(requests.get(kind, 0))
+        left = remaining.get(kind)
         objectives.append(
             {
                 "kind": kind,
-                "budget_remaining": remaining.get(kind),
+                "budget_remaining": (
+                    1.0 if left is None and not served else left
+                ),
                 "error_ratio": sli.get(kind),
                 "burn_rate_1h": _burn(burns["1h"].get(kind), allowed),
                 "burn_rate_6h": _burn(burns["6h"].get(kind), allowed),
+                "requests_in_period": served,
+                "insufficient_traffic": _insufficient(served, allowed),
                 "trend": trend.get(kind, []),
             }
         )
     return {"objectives": objectives}
+
+
+def _insufficient(requests: int, budget: float | None) -> bool:
+    if not budget:
+        return requests == 0
+    return requests * budget < 1
 
 
 def _burn(ratio: float | None, budget: float | None) -> float | None:

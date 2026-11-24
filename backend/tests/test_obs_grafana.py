@@ -14,6 +14,7 @@ import pytest
 from app.services import grafana_service, metrics_isolation
 from app.services.observability import grafana_dashboards as gd
 from app.services.observability import grafana_project as gp
+from app.services.observability.slo import BUDGET_LOOKBACK
 
 
 @pytest.fixture(autouse=True)
@@ -287,3 +288,45 @@ def test_only_project_visible_series_are_queried():
         if isinstance(t, dict)
     ]
     assert [e for e in exprs if any(r in e for r in raw)] == []
+
+
+def _exprs(dashboard: dict) -> list[str]:
+    return [
+        t.get("expr", "")
+        for node in _walk(dashboard["panels"])
+        for t in node.get("targets", [])
+        if isinstance(t, dict)
+    ]
+
+
+@pytest.mark.parametrize("build", [gd.home_dashboard, gd.app_dashboard])
+def test_budget_panels_read_the_latest_sample_within_the_lookback(build):
+    budget_reads = [
+        e for e in _exprs(build()) if "error_budget_remaining" in e
+    ]
+
+    assert budget_reads and all(
+        "last_over_time(slo:period_error_budget_remaining:ratio" in e
+        and f"[{BUDGET_LOOKBACK}]" in e
+        for e in budget_reads
+    )
+
+
+def test_the_app_latency_panel_shows_p50_p95_and_p99():
+    panel = next(
+        p
+        for p in _walk(gd.app_dashboard()["panels"])
+        if p.get("title") == "Latency"
+    )
+
+    assert [t["legendFormat"] for t in panel["targets"]] == [
+        "p50",
+        "p95",
+        "p99",
+    ]
+
+
+def test_the_project_health_home_shows_p95_latency_by_app():
+    exprs = _exprs(gd.home_dashboard())
+
+    assert any("cnp_slo:latency_seconds:p95_5m" in e for e in exprs)
