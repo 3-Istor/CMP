@@ -1168,7 +1168,7 @@
       "noMore": "No more events",
       "newer": "Newer",
       "older": "Older",
-      "page": "Page {page} · {size} events per page",
+      "page": "Page {page}",
       "retention": "Events are kept {days} days.",
       "detail": {
         "title": "Event details",
@@ -1186,7 +1186,8 @@
         "allFrom": "All activity from {actor}",
         "showRaw": "Show raw data",
         "hideRaw": "Hide raw data"
-      }
+      },
+      "pageSize": "Events per page"
     },
     "logs": {
       "aria": {

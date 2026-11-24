@@ -1168,7 +1168,7 @@
       "noMore": "Plus d'événements",
       "newer": "Plus récent",
       "older": "Plus ancien",
-      "page": "Page {page} · {size} événements par page",
+      "page": "Page {page}",
       "retention": "Les événements sont gardés {days} jours.",
       "detail": {
         "title": "Détail de l'événement",
@@ -1186,7 +1186,8 @@
         "allFrom": "Toute l'activité de {actor}",
         "showRaw": "Voir les données brutes",
         "hideRaw": "Masquer les données brutes"
-      }
+      },
+      "pageSize": "Événements par page"
     },
     "logs": {
       "aria": {
