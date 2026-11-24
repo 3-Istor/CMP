@@ -31,8 +31,19 @@ export function ProjectsGrid({
   if (loading && projects.length === 0) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-36 rounded-xl" />
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="space-y-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10" aria-hidden>
+            <div className="flex items-start justify-between">
+              <Skeleton className="size-10 rounded-lg" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="h-5 w-2/3" />
+            <div className="flex gap-2">
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <Skeleton className="h-1.5 w-full rounded-full" />
+          </div>
         ))}
       </div>
     );

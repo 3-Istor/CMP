@@ -1,9 +1,10 @@
 "use client";
 
-import { PendingApprovals } from "@/components/security/PendingApprovals";
+import { PendingApprovals, PendingApprovalsPlaceholder } from "@/components/security/PendingApprovals";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { getSecurityOverview, getSecurityRole } from "@/lib/api";
 import { useProjectApps, useProjects } from "@/lib/hooks";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { SecurityProjectOverview, SecurityView } from "@/types";
 import { useTranslations } from "next-intl";
@@ -23,6 +24,7 @@ function SecurityInner() {
   const [overview, setOverview] = useState<SecurityProjectOverview[]>([]);
   const [isCnpAdmin, setIsCnpAdmin] = useState(false);
   const [username, setUsername] = useState("");
+  const [roleKnown, setRoleKnown] = useState(false);
 
   const project = searchParams.get("project") ?? projects[0]?.name ?? "";
   const app = searchParams.get("app");
@@ -36,7 +38,8 @@ function SecurityInner() {
         setIsCnpAdmin(r.cnp_admin || r.auditor === true);
         setUsername(r.username);
       })
-      .catch(() => setIsCnpAdmin(false));
+      .catch(() => setIsCnpAdmin(false))
+      .finally(() => setRoleKnown(true));
   }, [project]);
 
   useEffect(() => {
@@ -60,7 +63,11 @@ function SecurityInner() {
 
   return (
     <div className="space-y-6">
-      {isCnpAdmin && <PendingApprovals username={username} />}
+      {roleKnown ? (
+        isCnpAdmin && <PendingApprovals username={username} />
+      ) : (
+        <PendingApprovalsPlaceholder />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <select
           aria-label={tc("project")}
@@ -124,7 +131,14 @@ function SecurityInner() {
 
 export default function SecurityPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="space-y-6">
+          <PendingApprovalsPlaceholder />
+          <Skeleton className="h-72 rounded-xl" />
+        </div>
+      }
+    >
       <SecurityInner />
     </Suspense>
   );

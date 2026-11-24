@@ -1,14 +1,15 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getActivity, getAgentTraces, getAgentUsage } from "@/lib/api";
 import { useCardData } from "@/lib/useCardData";
 import { useFormat } from "@/lib/useFormat";
 import { cn } from "@/lib/utils";
-import type { RefusalReason } from "@/types/ai";
+import type { AgentTrace, RefusalReason } from "@/types/ai";
 import { AlertCircle, ExternalLink, ShieldCheck, Users } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { useAgentContext } from "./AgentFrame";
 import { CapabilityMap, type CapabilityNode } from "./CapabilityMap";
 import { RiskBadge, RingGauge, Sparkline, useAiFormat } from "./shared";
@@ -28,69 +29,90 @@ function LoadError({ message }: { message: string }) {
 export function AgentOverview() {
   const t = useTranslations("ai.overview");
   const tReason = useTranslations("ai.refusal");
+  const format = useFormatter();
   const f = useAiFormat();
   const { project, agent } = useAgentContext();
   const today = useCardData(`agent-usage-1d-${project}-${agent.name}`, () => getAgentUsage(project, agent.name, "1d"), {
     intervalMs: 30_000,
   });
   const month = useCardData(`agent-usage-30d-${project}-${agent.name}`, () => getAgentUsage(project, agent.name, "30d"));
-  if (today.loading && !today.data) return <Skeleton className="h-56 rounded-xl" />;
-  if (!today.data) return <LoadError message={t("error")} />;
+  const loading = today.loading && !today.data;
+  if (!loading && !today.data) return <LoadError message={t("error")} />;
   const u = today.data;
-  const used = u.tokens_in + u.tokens_out;
-  const budget = u.budget || agent.daily_token_budget;
+  const used = u ? u.tokens_in + u.tokens_out : 0;
+  const budget = u ? u.budget || agent.daily_token_budget : agent.daily_token_budget;
   const pct = budget > 0 ? Math.round((used / budget) * 100) : 0;
   const kpis = [
-    { label: t("costToday"), value: f.eur(u.cost_eur) },
-    { label: t("costMonth"), value: month.data ? f.eur(month.data.cost_eur) : "…" },
-    { label: t("requests"), value: f.tokens(u.requests) },
-    { label: t("errorRate"), value: `${(u.requests ? (u.errors / u.requests) * 100 : 0).toFixed(1)} %` },
+    { label: t("costToday"), value: u && f.eur(u.cost_eur) },
+    { label: t("costMonth"), value: month.data && f.eur(month.data.cost_eur) },
+    { label: t("requests"), value: u && f.tokens(u.requests) },
+    { label: t("errorRate"), value: u && `${(u.requests ? (u.errors / u.requests) * 100 : 0).toFixed(1)} %` },
   ];
+  const pulse = <span className="inline-block h-5 w-16 animate-pulse rounded bg-muted align-middle" aria-hidden />;
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" aria-busy={loading}>
       <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)]">
         <div className={cn(panel, "flex items-center gap-5")}>
-          <RingGauge
-            value={used}
-            max={budget}
-            size={136}
-            label={t("budget")}
-            valueText={t("budgetValue", { used: f.tokens(used), budget: f.tokens(budget) })}
-          >
-            <span>
-              <span className="block text-2xl font-semibold tabular-nums">{pct} %</span>
-              <span className="text-xs text-muted-foreground">{t("ofBudget")}</span>
-            </span>
-          </RingGauge>
+          {loading ? (
+            <div className="size-[136px] shrink-0 animate-pulse rounded-full bg-muted" aria-hidden />
+          ) : (
+            <RingGauge
+              value={used}
+              max={budget}
+              size={136}
+              label={t("budget")}
+              valueText={t("budgetValue", { used: f.tokens(used), budget: f.tokens(budget) })}
+            >
+              <span>
+                <span className="block text-2xl font-semibold tabular-nums">{pct} %</span>
+                <span className="text-xs text-muted-foreground">{t("ofBudget")}</span>
+              </span>
+            </RingGauge>
+          )}
           <div className="space-y-1">
             <h2 className="text-sm font-semibold">{t("budget")}</h2>
-            <p className="text-2xl font-semibold tabular-nums">{f.tokens(used)}</p>
+            <p className="text-2xl font-semibold tabular-nums">{loading ? pulse : f.tokens(used)}</p>
             <p className="text-sm text-muted-foreground">/ {f.tokens(budget)} {t("tokensPerDay")}</p>
+            {u?.resets_at && (
+              <p className="text-xs text-muted-foreground">
+                {t("resetsAt", {
+                  time: format.dateTime(new Date(u.resets_at), { hour: "2-digit", minute: "2-digit" }),
+                })}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">{t("hardCap")}</p>
           </div>
         </div>
         <div className={cn(panel, "flex flex-col gap-3")}>
           <h2 className="text-sm font-semibold">{t("activity")}</h2>
-          <Sparkline points={u.series.map((p) => p.tokens)} className="h-24 w-full" />
+          {u ? (
+            <Sparkline points={u.series.map((p) => p.tokens)} className="h-24 w-full" />
+          ) : (
+            <div className="h-24 w-full animate-pulse rounded-lg bg-muted" aria-hidden />
+          )}
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {kpis.map((k) => (
               <div key={k.label}>
                 <dt className="text-xs text-muted-foreground">{k.label}</dt>
-                <dd className="text-lg font-semibold tabular-nums">{k.value}</dd>
+                <dd className="text-lg font-semibold tabular-nums">{k.value ?? pulse}</dd>
               </div>
             ))}
           </dl>
         </div>
       </div>
       <div className={panel}>
-        <h2 className="mb-3 text-sm font-semibold">{t("refusals", { count: u.refused_total })}</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t("refusals", { count: u?.refused_total ?? 0 })}</h2>
         <ul className="grid gap-2 sm:grid-cols-4">
           {REASONS.map((reason) => (
             <li key={reason} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
               <span>{tReason(reason)}</span>
-              <span className={cn("font-semibold tabular-nums", (u.refused[reason] ?? 0) > 0 && "text-destructive")}>
-                {u.refused[reason] ?? 0}
-              </span>
+              {u ? (
+                <span className={cn("font-semibold tabular-nums", (u.refused[reason] ?? 0) > 0 && "text-destructive")}>
+                  {u.refused[reason] ?? 0}
+                </span>
+              ) : (
+                <span className="h-4 w-6 animate-pulse rounded bg-muted" aria-hidden />
+              )}
             </li>
           ))}
         </ul>
@@ -106,9 +128,57 @@ export function AgentTraces() {
   const traces = useCardData(`agent-traces-${project}-${agent.name}`, () => getAgentTraces(project, agent.name), {
     intervalMs: 30_000,
   });
-  if (traces.loading && !traces.data) return <Skeleton className="h-56 rounded-xl" />;
-  if (!traces.data) return <LoadError message={t("error")} />;
-  const { items, grafana_url } = traces.data;
+  const loading = traces.loading && !traces.data;
+  if (!loading && !traces.data) return <LoadError message={t("error")} />;
+  const grafana_url = traces.data?.grafana_url;
+  const columns: DataColumn<AgentTrace>[] = [
+    {
+      key: "start",
+      header: t("when"),
+      sortable: true,
+      sortValue: (trace) => Date.parse(trace.start),
+      className: "whitespace-nowrap text-muted-foreground",
+      cell: (trace) => f.relative(trace.start),
+    },
+    {
+      key: "root_operation",
+      header: t("task"),
+      sortable: true,
+      className: "max-w-md truncate",
+      cell: (trace) => trace.root_operation,
+    },
+    {
+      key: "errors",
+      header: t("status"),
+      sortable: true,
+      cell: (trace) => (
+        <Badge
+          variant="secondary"
+          className={
+            trace.errors === 0
+              ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
+              : "bg-destructive/10 text-destructive"
+          }
+        >
+          {trace.errors === 0 ? t("statuses.ok") : t("errors", { count: trace.errors })}
+        </Badge>
+      ),
+    },
+    {
+      key: "duration_ms",
+      header: t("duration"),
+      align: "right",
+      sortable: true,
+      cell: (trace) => f.ms(trace.duration_ms),
+    },
+    { key: "spans", header: t("spans"), align: "right", sortable: true, cell: (trace) => trace.spans },
+    {
+      key: "trace_id",
+      header: t("traceId"),
+      className: "font-mono text-xs text-muted-foreground",
+      cell: (trace) => trace.trace_id.slice(0, 16),
+    },
+  ];
   return (
     <div className="space-y-3">
       {grafana_url && (
@@ -117,48 +187,14 @@ export function AgentTraces() {
           <ExternalLink className="size-3.5" aria-hidden />
         </a>
       )}
-      {items.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">{t("empty")}</p>
-      ) : (
-        <div className={cn(panel, "overflow-x-auto p-0")} tabIndex={0} role="region" aria-label={t("caption")}>
-          <table className="w-full min-w-[640px] text-sm">
-            <caption className="sr-only">{t("caption")}</caption>
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th scope="col" className="px-4 py-2.5 font-medium">{t("when")}</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">{t("task")}</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">{t("status")}</th>
-                <th scope="col" className="px-4 py-2.5 text-right font-medium">{t("duration")}</th>
-                <th scope="col" className="px-4 py-2.5 text-right font-medium">{t("spans")}</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">{t("traceId")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((trace) => (
-                <tr key={trace.trace_id} className="border-b last:border-0">
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{f.relative(trace.start)}</td>
-                  <td className="max-w-md truncate px-4 py-2.5">{trace.root_operation}</td>
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      variant="secondary"
-                      className={
-                        trace.errors === 0
-                          ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
-                          : "bg-destructive/10 text-destructive"
-                      }
-                    >
-                      {trace.errors === 0 ? t("statuses.ok") : t("errors", { count: trace.errors })}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{f.ms(trace.duration_ms)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{trace.spans}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{trace.trace_id.slice(0, 16)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={traces.data?.items ?? []}
+        rowKey={(trace) => trace.trace_id}
+        loading={loading}
+        storageKey="agent.traces"
+        empty={{ title: t("empty") }}
+      />
     </div>
   );
 }

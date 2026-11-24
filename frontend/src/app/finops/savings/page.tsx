@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { DataFreshness } from "@/components/finops/DataFreshness";
 import { formatEUR, formatNumber, intlLocale } from "@/components/finops/format";
 import {
@@ -35,64 +36,126 @@ const PERIODS = ["30d", "90d", "ytd"] as const;
 const SELECT_CLASS =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
 
-function SavingsTable({ rows }: { rows: FinopsSavings["rows"] }) {
+type SavingsRow = FinopsSavings["rows"][number];
+
+function SavingsTable({
+  rows,
+  loading = false,
+}: {
+  rows: SavingsRow[];
+  loading?: boolean;
+}) {
   const t = useTranslations("finops");
   const locale = intlLocale(useLocale());
+  const columns: DataColumn<SavingsRow>[] = [
+    {
+      key: "project",
+      header: t("common.project"),
+      sortable: true,
+      cell: (r) => (
+        <Badge variant="outline" className="font-normal">
+          {r.project}
+        </Badge>
+      ),
+    },
+    {
+      key: "app",
+      header: t("common.application"),
+      sortable: true,
+      className: "font-medium",
+      cell: (r) => r.app || t("common.na"),
+    },
+    {
+      key: "category",
+      header: t("savings.columns.mechanism"),
+      sortable: true,
+      cell: (r) =>
+        CATEGORY_KEY[r.category]
+          ? t(`savings.mechanism.${CATEGORY_KEY[r.category]}`)
+          : r.category,
+    },
+    {
+      key: "avoided_eur",
+      header: t("savings.columns.avoided"),
+      align: "right",
+      sortable: true,
+      cell: (r) => formatEUR(r.avoided_eur, "EUR", locale),
+    },
+    {
+      key: "realized_eur",
+      header: t("savings.columns.realized"),
+      align: "right",
+      sortable: true,
+      cell: (r) => formatEUR(r.realized_eur, "EUR", locale),
+    },
+    {
+      key: "energy_avoided_kwh",
+      header: t("savings.columns.kwh"),
+      align: "right",
+      sortable: true,
+      cell: (r) => `${formatNumber(r.energy_avoided_kwh, 1, locale)} kWh`,
+    },
+    {
+      key: "days",
+      header: t("savings.columns.days"),
+      align: "right",
+      sortable: true,
+      cell: (r) => r.days,
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <th className="px-3 py-2 font-medium">{t("common.project")}</th>
-            <th className="px-3 py-2 font-medium">{t("common.application")}</th>
-            <th className="px-3 py-2 font-medium">
-              {t("savings.columns.mechanism")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("savings.columns.avoided")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("savings.columns.realized")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("savings.columns.kwh")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("savings.columns.days")}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={`${r.project}/${r.app}/${r.category}`}
-              className="border-b border-border/50 transition-colors hover:bg-accent/50"
-            >
-              <td className="px-3 py-2">
-                <Badge variant="outline" className="font-normal">
-                  {r.project}
-                </Badge>
-              </td>
-              <td className="px-3 py-2 font-medium">{r.app || t("common.na")}</td>
-              <td className="px-3 py-2">
-                {CATEGORY_KEY[r.category]
-                  ? t(`savings.mechanism.${CATEGORY_KEY[r.category]}`)
-                  : r.category}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatEUR(r.avoided_eur, "EUR", locale)}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatEUR(r.realized_eur, "EUR", locale)}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatNumber(r.energy_avoided_kwh, 1, locale)} kWh
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">{r.days}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <DataTable
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => `${r.project}/${r.app}/${r.category}`}
+      loading={loading}
+      storageKey="finops.savings"
+      initialSort={{ key: "avoided_eur", direction: "desc" }}
+    />
+  );
+}
+
+function SavingsSkeleton() {
+  const t = useTranslations("finops");
+  const tiles = [
+    { icon: PiggyBank, label: t("savings.seriesAvoided") },
+    { icon: Leaf, label: t("savings.seriesRealized") },
+    { icon: Zap, label: t("savings.columns.kwh") },
+  ];
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {tiles.map(({ icon: Icon, label }) => (
+          <Card key={label}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-muted-foreground">
+                <Icon className="h-4 w-4" /> {label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Skeleton className="h-8 w-28" />
+              <Skeleton className="h-4 w-48" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("common.dailyTrend")}</CardTitle>
+          <p className="text-xs text-muted-foreground">{t("savings.timelineHint")}</p>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 rounded-lg" />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("savings.detailTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SavingsTable rows={[]} loading />
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -158,14 +221,7 @@ function SavingsInner() {
       )}
 
       {loading && !data ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-xl" />
-            ))}
-          </div>
-          <Skeleton className="h-80 rounded-xl" />
-        </div>
+        <SavingsSkeleton />
       ) : data ? (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { getDeniedFlows } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,29 @@ export function NetworkPanel({ project }: { project: string }) {
   }, [project]);
 
   const total = flows?.reduce((a, f) => a + f.count, 0) ?? 0;
+
+  const columns: DataColumn<DeniedFlow>[] = [
+    { key: "source", header: t("network.table.source"), sortable: true, cell: (f) => f.source },
+    { key: "destination", header: t("network.table.destination"), sortable: true, cell: (f) => f.destination },
+    {
+      key: "port",
+      header: t("network.table.port"),
+      cell: (f) => `${f.port ?? t("network.noPort")} ${f.protocol}`,
+    },
+    {
+      key: "direction",
+      header: t("network.table.direction"),
+      cell: (f) => t(`network.direction.${f.direction === "ingress" ? "ingress" : "egress"}`),
+    },
+    { key: "count", header: t("network.table.count"), align: "right", sortable: true, cell: (f) => f.count },
+    {
+      key: "last",
+      header: t("network.table.last"),
+      sortable: true,
+      className: "font-sans",
+      cell: (f) => timeLabel(t, locale, f.last),
+    },
+  ];
 
   return (
     <div className="rounded-xl border">
@@ -48,48 +72,17 @@ export function NetworkPanel({ project }: { project: string }) {
         />
       </button>
       {open && (
-        <div className="overflow-x-auto border-t">
-          {flows && flows.length > 0 ? (
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-1.5 font-medium">{t("network.table.source")}</th>
-                  <th className="px-3 py-1.5 font-medium">{t("network.table.destination")}</th>
-                  <th className="px-3 py-1.5 font-medium">{t("network.table.port")}</th>
-                  <th className="px-3 py-1.5 font-medium">{t("network.table.direction")}</th>
-                  <th className="px-3 py-1.5 text-right font-medium">{t("network.table.count")}</th>
-                  <th className="px-3 py-1.5 font-medium">{t("network.table.last")}</th>
-                </tr>
-              </thead>
-              <tbody className="font-mono text-xs">
-                {flows.map((f) => (
-                  <tr
-                    key={`${f.source}|${f.destination}|${f.port}|${f.direction}`}
-                    className="border-t"
-                  >
-                    <td className="px-3 py-1.5">{f.source}</td>
-                    <td className="px-3 py-1.5">{f.destination}</td>
-                    <td className="px-3 py-1.5">
-                      {f.port ?? t("network.noPort")} {f.protocol}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {t(`network.direction.${f.direction === "ingress" ? "ingress" : "egress"}`)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {f.count}
-                    </td>
-                    <td className="px-3 py-1.5 font-sans">
-                      {timeLabel(t, locale, f.last)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="px-3 py-4 text-sm text-muted-foreground">
-              {t("network.empty")}
-            </p>
-          )}
+        <div className="border-t p-2">
+          <DataTable
+            columns={columns}
+            rows={flows ?? []}
+            rowKey={(f) => `${f.source}|${f.destination}|${f.port}|${f.direction}`}
+            loading={flows === null}
+            storageKey="activity.network"
+            initialSort={{ key: "count", direction: "desc" }}
+            empty={{ title: t("network.empty") }}
+            className="font-mono text-xs"
+          />
         </div>
       )}
     </div>

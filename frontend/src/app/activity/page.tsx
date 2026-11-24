@@ -8,6 +8,7 @@ import { ActivityTab } from "@/components/activity/ActivityTab";
 import { AuditView } from "@/components/activity/AuditView";
 import { PlatformCard } from "@/components/activity/PlatformCard";
 import { getPlatformStatus } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/lib/hooks";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -18,20 +19,41 @@ const SELECT =
 
 const PLATFORM = "__platform__";
 
+function ActivitySkeleton() {
+  return (
+    <div className="space-y-4" aria-busy>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-20" />
+        ))}
+      </div>
+      <Skeleton className="h-48" />
+      <div className="space-y-2">
+        {Array.from({ length: 20 }, (_, i) => (
+          <Skeleton key={i} className="h-14" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ActivityInner() {
   const t = useTranslations("activity.page");
   const tc = useTranslations("common");
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { projects } = useProjects();
+  const { projects, loading: projectsLoading } = useProjects();
   const [isCnpAdmin, setIsCnpAdmin] = useState(false);
+  const [adminKnown, setAdminKnown] = useState(false);
 
   useEffect(() => {
-    getPlatformStatus().then(
-      () => setIsCnpAdmin(true),
-      () => setIsCnpAdmin(false),
-    );
+    getPlatformStatus()
+      .then(
+        () => setIsCnpAdmin(true),
+        () => setIsCnpAdmin(false),
+      )
+      .finally(() => setAdminKnown(true));
   }, []);
 
   const selected =
@@ -67,7 +89,9 @@ function ActivityInner() {
         }
       />
       <PageBody>
-      {selected === PLATFORM ? (
+      {!searchParams.get("project") && (projectsLoading || !adminKnown) ? (
+        <ActivitySkeleton />
+      ) : selected === PLATFORM ? (
         <>
           <PlatformCard />
           <AuditView project={null} canExport showLogins />

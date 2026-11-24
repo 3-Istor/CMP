@@ -29,6 +29,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { getCurrentUser, uploadProfilePicture } from "@/lib/api";
 import type { UserProfile } from "@/types";
@@ -161,14 +162,40 @@ export default function AccountPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="container mx-auto max-w-4xl p-6">
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <span className="ml-3 text-muted-foreground">
-              {t("page.loading")}
-            </span>
-          </div>
-        </div>
+        <PageHeader
+          title={t("page.title")}
+          description={t("page.subtitle")}
+          icon={UserRound}
+        />
+        <PageBody className="max-w-4xl">
+          <Card aria-busy>
+            <CardHeader>
+              <CardTitle>{t("profile.title")}</CardTitle>
+              <CardDescription>{t("profile.description")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-start gap-6">
+                <Skeleton className="size-24 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-6 w-56" />
+                  <Skeleton className="h-4 w-44" />
+                  <Skeleton className="h-5 w-32 rounded-full" />
+                </div>
+              </div>
+              <Separator />
+              <div className="grid gap-4 md:grid-cols-2">
+                {(["firstName", "lastName", "email"] as const).map((key) => (
+                  <div key={key} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      {t(`profile.${key}`)}
+                    </Label>
+                    <Skeleton className="h-5 w-40" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </PageBody>
       </div>
     );
   }

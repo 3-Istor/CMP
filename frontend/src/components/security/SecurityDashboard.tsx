@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotConnected } from "@/components/clusters/NotConnected";
 import {
@@ -168,6 +169,164 @@ function CategorySection({
   );
 }
 
+function TabBar({
+  tab,
+  onSelect,
+  countOf,
+  fullPageHref,
+}: {
+  tab: SecurityTab;
+  onSelect: (tab: SecurityTab) => void;
+  countOf?: (item: (typeof TABS)[number]) => number;
+  fullPageHref?: string;
+}) {
+  const t = useTranslations("security");
+  return (
+    <div className="flex flex-wrap items-center gap-1 border-b pb-2">
+      {TABS.map((item) => {
+        const count = countOf?.(item) ?? 0;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => onSelect(item.value)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+              tab === item.value
+                ? "bg-primary/10 font-medium text-primary"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            {t(`tabs.${item.value}`)}
+            {item.value !== "overview" && count > 0 && (
+              <Badge variant="outline" className="h-5 px-1.5 text-[11px]">
+                {count}
+              </Badge>
+            )}
+          </button>
+        );
+      })}
+      {fullPageHref && (
+        <Link href={fullPageHref} className="ml-auto text-xs text-primary hover:underline">
+          {t("dashboard.openFullPage")}
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function TitledSkeleton({
+  title,
+  description,
+  height,
+  className,
+}: {
+  title: string;
+  description?: string;
+  height: string;
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      </CardHeader>
+      <CardContent>
+        <Skeleton className={height} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function OverviewSkeleton({ showApps }: { showApps: boolean }) {
+  const t = useTranslations("security");
+  return (
+    <div className="space-y-4" aria-busy>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <TitledSkeleton className="lg:col-span-2" title={t("dashboard.trend")} height="h-40" />
+        <TitledSkeleton
+          title={t("dashboard.newMajor")}
+          description={t("dashboard.newMajorDescription")}
+          height="h-40"
+        />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TitledSkeleton title={t("dashboard.score")} height="h-36" />
+        <TitledSkeleton title={t("dashboard.scans")} height="h-36" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <TitledSkeleton className="lg:col-span-2" title={t("dashboard.priority")} height="h-72" />
+        <div className="space-y-4">
+          <TitledSkeleton title={t("dashboard.guarantees")} height="h-28" />
+        </div>
+      </div>
+      {showApps && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("dashboard.apps")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AppsTable apps={[]} project="" loading />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function AppsTable({
+  apps,
+  project,
+  loading = false,
+}: {
+  apps: SecuritySummary["apps"];
+  project: string;
+  loading?: boolean;
+}) {
+  const t = useTranslations("security");
+  const columns: DataColumn<SecuritySummary["apps"][number]>[] = [
+    {
+      key: "app",
+      header: t("dashboard.app"),
+      sortable: true,
+      cell: (a) => (
+        <Link
+          href={`/security?project=${encodeURIComponent(project)}&app=${encodeURIComponent(a.app)}`}
+          className="font-medium hover:underline"
+        >
+          {a.app}
+        </Link>
+      ),
+    },
+    {
+      key: "score",
+      header: t("dashboard.grade"),
+      sortable: true,
+      className: "tabular-nums",
+      cell: (a) => `${a.score} · ${a.grade}`,
+    },
+    { key: "actions", header: t("dashboard.appActions"), sortable: true, cell: (a) => a.actions },
+    {
+      key: "core",
+      header: t("dashboard.appMandatory"),
+      sortable: true,
+      cell: (a) => <span className={cn(a.core > 0 && "font-semibold text-red-600")}>{a.core}</span>,
+    },
+  ];
+  return (
+    <DataTable
+      columns={columns}
+      rows={apps}
+      rowKey={(a) => a.app}
+      loading={loading}
+      storageKey="security.apps"
+      initialSort={{ key: "score", direction: "asc" }}
+      empty={{ title: t("dashboard.noApp") }}
+    />
+  );
+}
+
 /**
  * The security page of a project, or of one app when ``app`` is set. Used
  * as the /security page and inside the project and app pages.
@@ -225,13 +384,13 @@ export function SecurityDashboard({
   }
   if (!data) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-12 rounded-lg" />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Skeleton className="h-56 rounded-xl" />
-          <Skeleton className="h-56 rounded-xl" />
-        </div>
-        <Skeleton className="h-72 rounded-xl" />
+      <div className="space-y-6">
+        <TabBar tab={tab} onSelect={setView} />
+        {tab === "overview" ? (
+          <OverviewSkeleton showApps={!app} />
+        ) : (
+          <Skeleton className="h-72 rounded-xl" />
+        )}
       </div>
     );
   }
@@ -265,45 +424,45 @@ export function SecurityDashboard({
     <div className="space-y-6">
       <CoreBanner findings={findings} onShow={(f) => showCategory(f.category)} />
 
-      <div className="flex flex-wrap items-center gap-1 border-b pb-2">
-        {TABS.map((item) => {
-          const count =
-            item.value === "ignored"
-              ? exceptions.length
-              : findings.filter((f) => item.categories.includes(f.category)).length;
-          return (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => setView(item.value)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
-                tab === item.value
-                  ? "bg-primary/10 font-medium text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              {t(`tabs.${item.value}`)}
-              {item.value !== "overview" && count > 0 && (
-                <Badge variant="outline" className="h-5 px-1.5 text-[11px]">
-                  {count}
-                </Badge>
-              )}
-            </button>
-          );
-        })}
-        {fullPageLink && (
-          <Link
-            href={`/security?project=${encodeURIComponent(project)}${app ? `&app=${encodeURIComponent(app)}` : ""}`}
-            className="ml-auto text-xs text-primary hover:underline"
-          >
-            {t("dashboard.openFullPage")}
-          </Link>
-        )}
-      </div>
+      <TabBar
+        tab={tab}
+        onSelect={setView}
+        countOf={(item) =>
+          item.value === "ignored"
+            ? exceptions.length
+            : findings.filter((f) => item.categories.includes(f.category)).length
+        }
+        fullPageHref={
+          fullPageLink
+            ? `/security?project=${encodeURIComponent(project)}${app ? `&app=${encodeURIComponent(app)}` : ""}`
+            : undefined
+        }
+      />
 
       {tab === "overview" && (
         <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>{t("dashboard.trend")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScoreTrendChart points={trend} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("dashboard.newMajor")}</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {t("dashboard.newMajorDescription")}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <NewMajorChart points={trend} />
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -360,17 +519,6 @@ export function SecurityDashboard({
               </CardContent>
             </Card>
             <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("dashboard.newMajor")}</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {t("dashboard.newMajorDescription")}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <NewMajorChart points={trend} />
-                </CardContent>
-              </Card>
               {showSettings && app && view === "developer" && (
                 <AppSettingsCard project={project} app={app} canAdmin={canAdmin} />
               )}
@@ -415,65 +563,16 @@ export function SecurityDashboard({
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          {!app && (
             <Card>
               <CardHeader>
-                <CardTitle>{t("dashboard.trend")}</CardTitle>
+                <CardTitle>{t("dashboard.apps")}</CardTitle>
               </CardHeader>
               <CardContent>
-                <ScoreTrendChart points={trend} />
+                <AppsTable apps={summary.apps} project={project} />
               </CardContent>
             </Card>
-            {!app && (
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>{t("dashboard.apps")}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {summary.apps.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{t("dashboard.noApp")}</p>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead className="text-left text-xs text-muted-foreground">
-                        <tr>
-                          <th className="pb-2 font-medium">{t("dashboard.app")}</th>
-                          <th className="pb-2 font-medium">{t("dashboard.grade")}</th>
-                          <th className="pb-2 font-medium">{t("dashboard.appActions")}</th>
-                          <th className="pb-2 font-medium">{t("dashboard.appMandatory")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {summary.apps.map((a) => (
-                          <tr key={a.app} className="border-t">
-                            <td className="py-2">
-                              <Link
-                                href={`/security?project=${encodeURIComponent(project)}&app=${encodeURIComponent(a.app)}`}
-                                className="font-medium hover:underline"
-                              >
-                                {a.app}
-                              </Link>
-                            </td>
-                            <td className="py-2 tabular-nums">
-                              {a.score} · {a.grade}
-                            </td>
-                            <td className="py-2 tabular-nums">{a.actions}</td>
-                            <td
-                              className={cn(
-                                "py-2 tabular-nums",
-                                a.core > 0 && "font-semibold text-red-600",
-                              )}
-                            >
-                              {a.core}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          )}
         </div>
       )}
 

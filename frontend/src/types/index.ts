@@ -386,6 +386,10 @@ export interface CostSeriesPoint {
   ai?: number;
   platform?: number;
   total: number;
+  /** Set by the API when the bucket is still filling. */
+  is_partial?: boolean;
+  /** Share of the bucket elapsed, 0 to 1, on the UTC clock. */
+  elapsed_fraction?: number;
 }
 
 export interface AppCostRow {

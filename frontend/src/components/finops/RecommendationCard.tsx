@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import type { Recommendation } from "@/types";
 import { ArrowRight, BarChart3, Bell, Check, Loader2, Lock, Moon, X } from "lucide-react";
+import { projectHref } from "@/components/layout/projectSections";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -180,10 +181,16 @@ export function RecommendationCard({
             ) : (
               <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 <Lock className="h-3.5 w-3.5" />
-                {t("recommendation.sleepNeedsAccess")}
-                <Link href="/access" className="text-primary underline-offset-2 hover:underline">
-                  {t("recommendation.requestAccess")}
-                </Link>
+                {rec.project_id ? (
+                  <Link
+                    href={projectHref(rec.project_id, "members")}
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    {t("recommendation.askOwner")}
+                  </Link>
+                ) : (
+                  t("recommendation.askOwner")
+                )}
               </p>
             )}
           </div>

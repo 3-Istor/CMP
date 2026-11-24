@@ -546,8 +546,7 @@
       "actionFailed": "Action échouée",
       "sleepNow": "Mettre en veille",
       "sleeping": "{app} se met en veille.",
-      "sleepNeedsAccess": "Un accès élevé est nécessaire pour mettre cette app en veille.",
-      "requestAccess": "Demander l'accès"
+      "askOwner": "Demandez l'accès opérateur à un propriétaire du projet"
     },
     "recommendations": {
       "sortLabel": "Trier par",
@@ -673,15 +672,16 @@
     },
     "timeline": {
       "inProgress": "en cours",
-      "partialDay": "En cours : {partial} à {hour} h, projeté {projected}",
       "forecast": "Prévision",
       "forecastValue": "{value} ({low} – {high})",
       "forecastRange": "Intervalle de prévision",
       "forecastLegend": "Prévision ({confidence} %)",
-      "today": "Jour en cours (projeté)",
       "anomaly": "Anomalie",
       "anomalyDetail": "Anomalie · {app} : {cost} (médiane {baseline})",
-      "cause": "Cause probable : {cause}"
+      "cause": "Cause probable : {cause}",
+      "soFarDetail": "Jusqu'ici : {partial} ({pct} % écoulé), projeté {projected}",
+      "soFar": "{unit, select, daily {Aujourd'hui} weekly {Cette semaine} other {Ce mois}} jusqu'ici ({pct} % écoulé, UTC)",
+      "projectedEnd": "Fin {unit, select, daily {de journée} weekly {de semaine} other {de mois}} projetée"
     },
     "donut": {
       "total": "Total"
@@ -857,7 +857,8 @@
       "finding": "Alerte",
       "by": "Par",
       "reject": "Rejeter",
-      "rejected": "Exception rejetée"
+      "rejected": "Exception rejetée",
+      "actions": "Actions"
     },
     "exceptions": {
       "empty": "Aucune alerte ignorée.",
@@ -4483,7 +4484,8 @@
       "costMonth": "Coût du mois",
       "requests": "Requêtes",
       "errorRate": "Taux d'erreur",
-      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}"
+      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}",
+      "resetsAt": "Réinitialisé à {time}"
     },
     "traces": {
       "error": "Impossible de lire les traces.",
