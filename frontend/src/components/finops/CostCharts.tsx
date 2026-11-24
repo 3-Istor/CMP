@@ -4,6 +4,7 @@ import { CostDonut } from "@/components/finops/CostDonut";
 import { CostTimeline } from "@/components/finops/CostTimeline";
 import { DataFreshness } from "@/components/finops/DataFreshness";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   CostAnomaly,
   CostBreakdown,
@@ -23,7 +24,9 @@ export function CostCharts({
   granularity,
   anomalies,
   meta,
+  loading = false,
 }: {
+  loading?: boolean;
   timeline: CostSeriesPoint[];
   breakdown: CostBreakdown;
   forecast: CostForecast | null;
@@ -53,13 +56,17 @@ export function CostCharts({
           )}
         </CardHeader>
         <CardContent>
-          <CostTimeline
-            data={timeline}
-            focus={selectedResource}
-            forecast={forecast}
-            granularity={granularity}
-            anomalies={anomalies}
-          />
+          {loading ? (
+            <Skeleton className="h-72 w-full" />
+          ) : (
+            <CostTimeline
+              data={timeline}
+              focus={selectedResource}
+              forecast={forecast}
+              granularity={granularity}
+              anomalies={anomalies}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -69,11 +76,15 @@ export function CostCharts({
           <DataFreshness meta={meta} />
         </CardHeader>
         <CardContent>
-          <CostDonut
-            breakdown={breakdown}
-            selected={selectedResource}
-            onSelect={setSelectedResource}
-          />
+          {loading ? (
+            <Skeleton className="mx-auto size-52 rounded-full" />
+          ) : (
+            <CostDonut
+              breakdown={breakdown}
+              selected={selectedResource}
+              onSelect={setSelectedResource}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

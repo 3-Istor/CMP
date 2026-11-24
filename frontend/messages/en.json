@@ -547,8 +547,7 @@
       "actionFailed": "Action failed",
       "sleepNow": "Sleep now",
       "sleeping": "{app} is going to sleep.",
-      "sleepNeedsAccess": "Requires elevated access to put this app to sleep.",
-      "requestAccess": "Request access"
+      "askOwner": "Ask a project owner for operator access"
     },
     "recommendations": {
       "sortLabel": "Sort by",
@@ -674,15 +673,16 @@
     },
     "timeline": {
       "inProgress": "in progress",
-      "partialDay": "Today so far: {partial} at {hour} h, projected {projected}",
       "forecast": "Forecast",
       "forecastValue": "{value} ({low} – {high})",
       "forecastRange": "Forecast range",
       "forecastLegend": "Forecast ({confidence} %)",
-      "today": "Today (projected)",
       "anomaly": "Anomaly",
       "anomalyDetail": "Anomaly · {app}: {cost} (median {baseline})",
-      "cause": "Likely cause: {cause}"
+      "cause": "Likely cause: {cause}",
+      "soFarDetail": "So far: {partial} ({pct} % elapsed), projected {projected}",
+      "soFar": "{unit, select, daily {Today} weekly {This week} other {This month}} so far ({pct} % elapsed, UTC)",
+      "projectedEnd": "Projected end of {unit, select, daily {day} weekly {week} other {month}}"
     },
     "donut": {
       "total": "Total"
@@ -884,7 +884,8 @@
       "finding": "Finding",
       "by": "By",
       "reject": "Reject",
-      "rejected": "Exception rejected"
+      "rejected": "Exception rejected",
+      "actions": "Actions"
     },
     "exceptions": {
       "empty": "No ignored alert.",

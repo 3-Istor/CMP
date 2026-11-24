@@ -4,6 +4,7 @@ import { AppIcon } from "@/components/app-icon/AppIcon";
 import { EnvLinks } from "@/components/projects/EnvLinks";
 import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { DeletingBadge } from "@/components/projects/DeletingBadge";
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppsHealth } from "@/lib/hooks";
 import { appUrlOf, cn } from "@/lib/utils";
@@ -67,70 +68,70 @@ export function AppsTable({
     shown.filter(isLive).map((a) => a.id),
     60_000,
   );
-  if (loading && apps.length === 0) {
-    return (
-      <div className="space-y-2 p-4">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
-      </div>
-    );
-  }
-  if (apps.length === 0) {
-    return <p className="p-6 text-center text-sm text-muted-foreground">{t("empty")}</p>;
-  }
+  const columns: DataColumn<Deployment>[] = [
+    {
+      key: "name",
+      header: t("name"),
+      sortable: true,
+      cell: (app) => (
+        <Link href={appHref(app)} className="flex items-center gap-2.5 font-medium hover:underline">
+          <AppIcon
+            appId={app.id}
+            templateIcon={app.template_icon}
+            icon={app.icon}
+            className="h-7 w-7"
+          />
+          <span className="truncate">{app.name}</span>
+        </Link>
+      ),
+    },
+    ...(showProject
+      ? [
+          {
+            key: "project_id",
+            header: t("project"),
+            sortable: true,
+            className: "text-muted-foreground",
+            cell: (app: Deployment) =>
+              app.project_id && (
+                <Link
+                  href={`/projects/${encodeURIComponent(app.project_id)}`}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {app.project_id}
+                </Link>
+              ),
+          },
+        ]
+      : []),
+    {
+      key: "status",
+      header: t("state"),
+      sortable: true,
+      cell: (app) => (
+        <AppState app={app} health={health[app.id]} loading={healthLoading} />
+      ),
+    },
+    {
+      key: "url",
+      header: t("url"),
+      className: "hidden md:table-cell",
+      cell: (app) => (
+        <span className="flex items-center gap-3 text-xs">
+          <EnvLinks prod={appUrlOf(app.terraform_outputs)} staging={app.staging_url} />
+        </span>
+      ),
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="px-4 py-2 font-medium">{t("name")}</th>
-            {showProject && <th className="px-4 py-2 font-medium">{t("project")}</th>}
-            <th className="px-4 py-2 font-medium">{t("state")}</th>
-            <th className="hidden px-4 py-2 font-medium md:table-cell">{t("url")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((app) => {
-            const url = appUrlOf(app.terraform_outputs);
-            return (
-              <tr key={app.id} className="border-b last:border-0 hover:bg-muted/40">
-                <td className="px-4 py-2.5">
-                  <Link href={appHref(app)} className="flex items-center gap-2.5 font-medium hover:underline">
-                    <AppIcon
-                      appId={app.id}
-                      templateIcon={app.template_icon}
-                      icon={app.icon}
-                      className="h-7 w-7"
-                    />
-                    <span className="truncate">{app.name}</span>
-                  </Link>
-                </td>
-                {showProject && (
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {app.project_id && (
-                      <Link
-                        href={`/projects/${encodeURIComponent(app.project_id)}`}
-                        className="hover:text-foreground hover:underline"
-                      >
-                        {app.project_id}
-                      </Link>
-                    )}
-                  </td>
-                )}
-                <td className="px-4 py-2.5">
-                  <AppState app={app} health={health[app.id]} loading={healthLoading} />
-                </td>
-                <td className="hidden px-4 py-2.5 md:table-cell">
-                  <span className="flex items-center gap-3 text-xs">
-                    <EnvLinks prod={url} staging={app.staging_url} />
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      rows={shown}
+      rowKey={(app) => app.id}
+      loading={loading && apps.length === 0}
+      storageKey={limit ? undefined : "apps.list"}
+      {...(limit ? { pageSizeOptions: [limit], defaultPageSize: limit } : {})}
+      empty={{ title: t("empty") }}
+    />
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { CarbonTimeline } from "@/components/finops/CarbonTimeline";
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { DataFreshness } from "@/components/finops/DataFreshness";
 import { formatNumber, intlLocale } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
@@ -23,52 +24,111 @@ const PERIODS = ["30d", "90d", "ytd"] as const;
 const SELECT_CLASS =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
 
-function CarbonTable({ rows }: { rows: FinopsCarbon["rows"] }) {
+type CarbonRow = FinopsCarbon["rows"][number];
+
+function CarbonTable({
+  rows,
+  loading = false,
+}: {
+  rows: CarbonRow[];
+  loading?: boolean;
+}) {
   const t = useTranslations("finops");
   const locale = intlLocale(useLocale());
+  const columns: DataColumn<CarbonRow>[] = [
+    {
+      key: "project",
+      header: t("common.project"),
+      sortable: true,
+      cell: (r) => (
+        <Badge variant="outline" className="font-normal">
+          {r.project || t("common.na")}
+        </Badge>
+      ),
+    },
+    {
+      key: "app",
+      header: t("common.application"),
+      sortable: true,
+      className: "font-medium",
+      cell: (r) => r.app || t("common.na"),
+    },
+    {
+      key: "energy_kwh",
+      header: t("carbon.energyColumn"),
+      align: "right",
+      sortable: true,
+      cell: (r) => `${formatNumber(r.energy_kwh, 1, locale)} kWh`,
+    },
+    {
+      key: "co2e_direct_kg",
+      header: t("carbon.directColumn"),
+      align: "right",
+      sortable: true,
+      cell: (r) => formatNumber(r.co2e_direct_kg, 2, locale),
+    },
+    {
+      key: "co2e_lca_kg",
+      header: t("carbon.lcaColumn"),
+      align: "right",
+      sortable: true,
+      cell: (r) => formatNumber(r.co2e_lca_kg, 2, locale),
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <th className="px-3 py-2 font-medium">{t("common.project")}</th>
-            <th className="px-3 py-2 font-medium">{t("common.application")}</th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("carbon.energyColumn")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("carbon.directColumn")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("carbon.lcaColumn")}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={`${r.project}/${r.app}`}
-              className="border-b border-border/50 transition-colors hover:bg-accent/50"
-            >
-              <td className="px-3 py-2">
-                <Badge variant="outline" className="font-normal">
-                  {r.project || t("common.na")}
-                </Badge>
-              </td>
-              <td className="px-3 py-2 font-medium">{r.app || t("common.na")}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatNumber(r.energy_kwh, 1, locale)} kWh
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatNumber(r.co2e_direct_kg, 2, locale)}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatNumber(r.co2e_lca_kg, 2, locale)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <DataTable
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => `${r.project}/${r.app}`}
+      loading={loading}
+      storageKey="finops.greenops"
+      initialSort={{ key: "energy_kwh", direction: "desc" }}
+    />
+  );
+}
+
+function CarbonSkeleton() {
+  const t = useTranslations("finops");
+  const tiles = [
+    { icon: Zap, label: t("carbon.energyTitle") },
+    { icon: Cloud, label: t("carbon.emissionsTitle") },
+    { icon: Activity, label: t("carbon.gridTitle") },
+    { icon: Moon, label: t("carbon.avoidedTitle") },
+  ];
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {tiles.map(({ icon: Icon, label }) => (
+          <Card key={label}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-muted-foreground">
+                <Icon className="h-4 w-4" /> {label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Skeleton className="h-8 w-28" />
+              <Skeleton className="h-4 w-48" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("common.dailyTrend")}</CardTitle>
+          <p className="text-xs text-muted-foreground">{t("carbon.trendHint")}</p>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 rounded-lg" />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("carbon.detailTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CarbonTable rows={[]} loading />
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -140,14 +200,7 @@ function GreenopsInner() {
       )}
 
       {loading && !data ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-xl" />
-            ))}
-          </div>
-          <Skeleton className="h-80 rounded-xl" />
-        </div>
+        <CarbonSkeleton />
       ) : data ? (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

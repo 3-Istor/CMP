@@ -24,18 +24,21 @@ import {
   axisTickFormatter,
   formatEUR,
   intlLocale,
-  parisClock,
   visibleResources,
 } from "./format";
 
 const FORECAST_COLOR = "#64748B";
 const ANOMALY_COLOR = "#EF4444";
 
-type PartialDay = {
+type Granularity = "daily" | "weekly" | "monthly";
+
+type PartialBucket = {
   date: string;
   partial: number;
-  hour: number;
+  /** Share of the bucket already elapsed, 0 to 1. */
+  elapsed: number;
   projected: number;
+  stack?: Partial<Record<FinopsResource, [number, number]>>;
 };
 
 type StackedRow = TimelineRow & {
@@ -48,30 +51,60 @@ type TimelineRow = Partial<CostSeriesPoint> & {
   band?: [number, number];
   anomalies?: CostAnomaly[];
   projection?: number;
-  partialDay?: PartialDay;
+  partialBucket?: PartialBucket;
+  partialStack?: Partial<Record<FinopsResource, [number, number]>>;
 };
 
-function findPartialDay(
+const DAY_MS = 86_400_000;
+
+/** Cost data are UTC days: the elapsed share comes from the UTC clock, never the local or Paris hour. */
+function utcElapsed(
+  date: string,
+  granularity: Granularity,
+  now: Date,
+): number | null {
+  const start = Date.parse(`${date}T00:00:00Z`);
+  const end =
+    granularity === "daily"
+      ? start + DAY_MS
+      : granularity === "weekly"
+        ? start + 7 * DAY_MS
+        : Date.UTC(
+            new Date(start).getUTCFullYear(),
+            new Date(start).getUTCMonth() + 1,
+            1,
+          );
+  const share = (now.getTime() - start) / (end - start);
+  return share > 0 && share < 1 ? share : null;
+}
+
+function findPartialBucket(
   data: CostSeriesPoint[],
   forecast: CostForecast | null,
+  granularity: Granularity,
   now: Date,
-): PartialDay | null {
-  const clock = parisClock(now);
-  const today = data.find((p) => p.date === clock.date);
-  if (!today) return null;
-  const forecastToday = forecast?.daily.find((d) => d.date === clock.date);
-  const previousDay = data.findLast((p) => p.date < clock.date);
-  // Ingestion runs hourly: from 3 h today's own costs are the best guess;
-  // before that, the forecast, then the previous day, stand in.
-  const projected =
-    clock.hour >= 3
-      ? (today.total * 24) / clock.hour
-      : (forecastToday?.eur ?? previousDay?.total ?? today.total);
+): PartialBucket | null {
+  const last = data[data.length - 1];
+  if (!last) return null;
+  const elapsed =
+    last.is_partial === false
+      ? null
+      : (last.elapsed_fraction ?? utcElapsed(last.date, granularity, now));
+  if (elapsed === null || elapsed <= 0 || elapsed >= 1) return null;
+  const previous = data[data.length - 2];
+  const forecastToday = forecast?.daily.find((d) => d.date === last.date);
+  // Ingestion runs hourly: past the first 3 h of a day (or any later share of a
+  // longer bucket) the bucket's own cost is the best guess; before that, the
+  // forecast, then the previous bucket, stand in.
+  const reliable = granularity === "daily" ? elapsed >= 0.125 : elapsed >= 0.02;
+  const projected = reliable
+    ? last.total / elapsed
+    : (forecastToday?.eur ?? previous?.total ?? last.total);
   return {
-    date: clock.date,
-    partial: today.total,
-    hour: Math.floor(clock.hour),
-    projected: Math.max(projected, today.total),
+    date: last.date,
+    partial: last.total,
+    elapsed,
+    projected: Math.max(projected, last.total),
   };
 }
 
@@ -79,7 +112,6 @@ function CostTooltip({
   active,
   payload,
   label,
-  granularity,
   resources,
 }: {
   resources: { key: FinopsResource; name: string; color: string }[];
@@ -92,17 +124,12 @@ function CostTooltip({
     payload?: TimelineRow;
   }>;
   label?: string;
-  granularity: string;
 }) {
   const t = useTranslations("finops");
   const locale = intlLocale(useLocale());
   const money = (value: number) => formatEUR(value, "EUR", locale);
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0]?.payload;
-  const monthInProgress =
-    granularity === "monthly" &&
-    !!label &&
-    label.slice(0, 7) === parisClock(new Date()).date.slice(0, 7);
   const costs = resources
     .filter((r) => row?.[r.key] !== undefined)
     .map((r) => ({ name: r.name, color: r.color, value: row![r.key] as number }));
@@ -111,18 +138,18 @@ function CostTooltip({
     <div className="max-w-xs rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
       <p className="mb-1 font-medium">
         {label}
-        {monthInProgress && (
+        {row?.partialBucket && (
           <span className="ml-1.5 font-normal text-muted-foreground">
             {t("timeline.inProgress")}
           </span>
         )}
       </p>
-      {row?.partialDay && (
+      {row?.partialBucket && (
         <p className="tabular-nums">
-          {t("timeline.partialDay", {
-            partial: money(row.partialDay.partial),
-            hour: row.partialDay.hour,
-            projected: money(row.partialDay.projected),
+          {t("timeline.soFarDetail", {
+            partial: money(row.partialBucket.partial),
+            pct: Math.round(row.partialBucket.elapsed * 100),
+            projected: money(row.partialBucket.projected),
           })}
         </p>
       )}
@@ -142,7 +169,7 @@ function CostTooltip({
           <span className="tabular-nums">{money(total)}</span>
         </p>
       )}
-      {row?.band && row.total === undefined && !row.partialDay && (
+      {row?.band && row.total === undefined && !row.partialBucket && (
         <p className="flex justify-between gap-3">
           <span>{t("timeline.forecast")}</span>
           <span className="tabular-nums">
@@ -176,15 +203,36 @@ function CostTooltip({
   );
 }
 
+function stackOf(
+  row: Partial<CostSeriesPoint>,
+  resources: FinopsResource[],
+  isHidden: (r: FinopsResource) => boolean,
+): NonNullable<TimelineRow["partialStack"]> {
+  let low = 0;
+  const stack: NonNullable<TimelineRow["partialStack"]> = {};
+  for (const r of resources) {
+    if (isHidden(r)) continue;
+    const high = low + ((row[r] as number | undefined) ?? 0);
+    stack[r] = [low, high];
+    low = high;
+  }
+  return stack;
+}
+
 function buildRows(
   data: CostSeriesPoint[],
   forecast: CostForecast | null,
   anomalies: CostAnomaly[],
-  partialDay: PartialDay | null,
+  partialBucket: PartialBucket | null,
+  resources: FinopsResource[],
+  isHidden: (r: FinopsResource) => boolean,
 ): TimelineRow[] {
-  const complete = partialDay
-    ? data.filter((p) => p.date !== partialDay.date)
+  const complete = partialBucket
+    ? data.filter((p) => p.date !== partialBucket.date)
     : data;
+  const partialPoint = partialBucket
+    ? data.find((p) => p.date === partialBucket.date)
+    : undefined;
   const rows = new Map<string, TimelineRow>(
     complete.map((p) => [p.date, { ...p }]),
   );
@@ -192,16 +240,20 @@ function buildRows(
     date: p.date,
     total: p.total,
   }));
-  if (partialDay) {
-    const lastComplete = complete.findLast((p) => p.date < partialDay.date);
-    if (lastComplete)
-      rows.get(lastComplete.date)!.projection = lastComplete.total;
-    rows.set(partialDay.date, {
-      date: partialDay.date,
-      projection: partialDay.projected,
-      partialDay,
+  if (partialBucket) {
+    const lastComplete = complete.findLast((p) => p.date < partialBucket.date);
+    if (lastComplete) {
+      const row = rows.get(lastComplete.date)!;
+      row.projection = lastComplete.total;
+      row.partialStack = stackOf(row, resources, isHidden);
+    }
+    rows.set(partialBucket.date, {
+      date: partialBucket.date,
+      projection: partialBucket.projected,
+      partialStack: partialPoint && stackOf(partialPoint, resources, isHidden),
+      partialBucket,
     });
-    anchors.push({ date: partialDay.date, total: partialDay.projected });
+    anchors.push({ date: partialBucket.date, total: partialBucket.projected });
   }
   if (forecast && forecast.daily.length > 0) {
     // Start the dashed line on the last real point so the two connect.
@@ -262,28 +314,23 @@ export function CostTimeline({
 
   const isHidden = (r: FinopsResource) => (focus ? r !== focus : hidden.has(r));
 
-  const partialDay = useMemo(
-    () =>
-      granularity === "daily"
-        ? findPartialDay(data, forecast, new Date())
-        : null,
-    [data, forecast, granularity],
+  const bucketSize: Granularity =
+    granularity === "weekly" || granularity === "monthly" ? granularity : "daily";
+  const partialBucket = useMemo(
+    () => findPartialBucket(data, forecast, bucketSize, new Date()),
+    [data, forecast, bucketSize],
   );
-  const rows = useMemo(
-    () => buildRows(data, forecast, anomalies, partialDay),
-    [data, forecast, anomalies, partialDay],
+  const rows = buildRows(
+    data,
+    forecast,
+    anomalies,
+    partialBucket,
+    RESOURCES,
+    isHidden,
   );
   const stackedRows: StackedRow[] = rows.map((row) => {
     if (row.total === undefined) return row;
-    let low = 0;
-    const stack: StackedRow["stack"] = {};
-    for (const r of RESOURCES) {
-      if (isHidden(r)) continue;
-      const high = low + ((row[r] as number | undefined) ?? 0);
-      stack[r] = [low, high];
-      low = high;
-    }
-    return { ...row, stack };
+    return { ...row, stack: stackOf(row, RESOURCES, isHidden) };
   });
   const tooltipResources = RESOURCES.filter((r) => !isHidden(r)).map((r) => ({
     key: r,
@@ -332,6 +379,19 @@ export function CostTimeline({
                   />
                 </linearGradient>
               ))}
+              {RESOURCES.map((r) => (
+                <pattern
+                  key={r}
+                  id={`hatch-${r}`}
+                  width="6"
+                  height="6"
+                  patternUnits="userSpaceOnUse"
+                  patternTransform="rotate(45)"
+                >
+                  <rect width="6" height="6" fill={RESOURCE_META[r].color} fillOpacity={0.08} />
+                  <line x1="0" y1="0" x2="0" y2="6" stroke={RESOURCE_META[r].color} strokeWidth={2} strokeOpacity={0.55} />
+                </pattern>
+              ))}
             </defs>
             <CartesianGrid
               strokeDasharray="3 3"
@@ -354,10 +414,7 @@ export function CostTimeline({
             />
             <Tooltip
               content={
-                <CostTooltip
-                  granularity={granularity}
-                  resources={tooltipResources}
-                />
+                <CostTooltip resources={tooltipResources} />
               }
             />
             {RESOURCES.map((r) => (
@@ -376,6 +433,22 @@ export function CostTimeline({
                 animationDuration={300}
               />
             ))}
+            {partialBucket &&
+              RESOURCES.map((r) => (
+                <Area
+                  key={`partial-${r}`}
+                  type="linear"
+                  dataKey={(row: StackedRow) => row.partialStack?.[r]}
+                  name={t(`resources.${r}`)}
+                  stroke={RESOURCE_META[r].color}
+                  strokeDasharray="3 3"
+                  fill={`url(#hatch-${r})`}
+                  strokeWidth={1.5}
+                  hide={isHidden(r)}
+                  activeDot={false}
+                  isAnimationActive={false}
+                />
+              ))}
             {hasForecast && (
               <Area
                 type="linear"
@@ -400,11 +473,11 @@ export function CostTimeline({
                 isAnimationActive={false}
               />
             )}
-            {partialDay && (
+            {partialBucket && (
               <Line
                 type="linear"
                 dataKey="projection"
-                name={t("timeline.today")}
+                name={t("timeline.projectedEnd", { unit: bucketSize })}
                 stroke={FORECAST_COLOR}
                 strokeWidth={2}
                 strokeDasharray="5 4"
@@ -413,10 +486,10 @@ export function CostTimeline({
                 isAnimationActive={false}
               />
             )}
-            {partialDay && (
+            {partialBucket && (
               <ReferenceDot
-                x={partialDay.date}
-                y={partialDay.projected}
+                x={partialBucket.date}
+                y={partialBucket.projected}
                 r={5}
                 fill="var(--background)"
                 stroke={FORECAST_COLOR}
@@ -474,14 +547,29 @@ export function CostTimeline({
             })}
           </span>
         )}
-        {partialDay && (
-          <span className="flex items-center gap-1.5 text-xs">
-            <span
-              className="h-2.5 w-2.5 rounded-full border-2 bg-background"
-              style={{ borderColor: FORECAST_COLOR }}
-            />
-            {t("timeline.today")}
-          </span>
+        {partialBucket && (
+          <>
+            <span className="flex items-center gap-1.5 text-xs">
+              <span
+                className="h-2.5 w-2.5 rounded-sm border"
+                style={{
+                  borderColor: FORECAST_COLOR,
+                  backgroundImage: `repeating-linear-gradient(45deg, ${FORECAST_COLOR} 0 1px, transparent 1px 4px)`,
+                }}
+              />
+              {t("timeline.soFar", {
+                unit: bucketSize,
+                pct: Math.round(partialBucket.elapsed * 100),
+              })}
+            </span>
+            <span className="flex items-center gap-1.5 text-xs">
+              <span
+                className="w-4 border-t-2 border-dashed"
+                style={{ borderColor: FORECAST_COLOR }}
+              />
+              {t("timeline.projectedEnd", { unit: bucketSize })}
+            </span>
+          </>
         )}
         {markers.length > 0 && (
           <span className="flex items-center gap-1.5 text-xs">

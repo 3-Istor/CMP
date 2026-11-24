@@ -519,6 +519,7 @@ export function useFinopsFinance() {
     [],
   );
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -532,6 +533,8 @@ export function useFinopsFinance() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chargement impossible");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -539,7 +542,7 @@ export function useFinopsFinance() {
     void refresh();
   }, [refresh]);
 
-  return { closes, centers, error, refresh };
+  return { closes, centers, error, loading, refresh };
 }
 
 /** Platform cost report; the endpoint refuses non admin/finance callers. */

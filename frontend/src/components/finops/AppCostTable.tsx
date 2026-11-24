@@ -34,7 +34,13 @@ function Trend({ pct }: { pct: number | null }) {
 }
 
 /** Liste exhaustive des applications, triée par coût mensuel décroissant. */
-export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
+export function AppCostTable({
+  apps,
+  loading = false,
+}: {
+  apps: AppCostRow[];
+  loading?: boolean;
+}) {
   const t = useTranslations("finops");
   const locale = intlLocale(useLocale());
 
@@ -97,6 +103,7 @@ export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
     <DataTable
       columns={columns}
       rows={apps}
+      loading={loading}
       rowKey={(app) => app.app_id}
       storageKey="finops.appCost"
       initialSort={{ key: "cost_month_estimate_eur", direction: "desc" }}

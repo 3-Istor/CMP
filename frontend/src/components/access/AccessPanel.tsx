@@ -13,6 +13,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { errorMessage } from "@/components/activity/labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, decideAccess, getAccessOverview, requestAccess } from "@/lib/api";
 import { useFormat } from "@/lib/useFormat";
 import type { AccessOverview, AccessRequest, AccessStatus } from "@/types";
@@ -118,12 +120,7 @@ export function AccessPanel() {
   }
 
   if (data === null) {
-    return (
-      <Loader2
-        className="h-5 w-5 animate-spin text-muted-foreground"
-        aria-label={t("loading")}
-      />
-    );
+    return <AccessSkeleton />;
   }
 
   const mine = [...data.pending, ...data.active].filter(
@@ -447,10 +444,92 @@ function RequestList({
   );
 }
 
-function History({ rows }: { rows: AccessRequest[] }) {
+function AccessSkeleton() {
+  const t = useTranslations("access");
+  const card = (title: string, description: string, height: string) => (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Skeleton className={height} />
+      </CardContent>
+    </Card>
+  );
+  return (
+    <div className="space-y-6" aria-busy>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {card(t("form.title"), t("form.description"), "h-64")}
+        {card(t("mine.title"), t("mine.description"), "h-24")}
+      </div>
+      {card(t("queue.title"), t("queue.description"), "h-16")}
+      {card(t("active.title"), t("active.description"), "h-16")}
+      <History rows={[]} loading />
+    </div>
+  );
+}
+
+function History({ rows, loading = false }: { rows: AccessRequest[]; loading?: boolean }) {
   const t = useTranslations("access");
   const label = useElevationLabel();
   const format = useFormat();
+
+  const columns: DataColumn<AccessRequest>[] = [
+    {
+      key: "created_at",
+      header: t("history.when"),
+      sortable: true,
+      className: "whitespace-nowrap align-top tabular-nums",
+      cell: (row) => format.dateTime(row.created_at),
+    },
+    {
+      key: "requester",
+      header: t("history.who"),
+      sortable: true,
+      className: "align-top",
+      cell: (row) => row.requester,
+    },
+    {
+      key: "elevation",
+      header: t("history.elevation"),
+      sortable: true,
+      sortValue: (row) => label(row.elevation),
+      className: "align-top",
+      cell: (row) => label(row.elevation),
+    },
+    {
+      key: "decided_by",
+      header: t("history.decidedBy"),
+      sortable: true,
+      className: "align-top",
+      cell: (row) => row.decided_by ?? "",
+    },
+    {
+      key: "status",
+      header: t("history.status"),
+      sortable: true,
+      className: "align-top",
+      cell: (row) => (
+        <Badge variant={STATUS_VARIANT[row.status]}>{t(`status.${row.status}`)}</Badge>
+      ),
+    },
+    {
+      key: "reason",
+      header: t("history.reason"),
+      className: "max-w-md break-words align-top text-muted-foreground",
+      cell: (row) => (
+        <>
+          {row.reason}
+          {row.decision_note && (
+            <span className="block text-xs">
+              {t("history.note", { note: row.decision_note })}
+            </span>
+          )}
+        </>
+      ),
+    },
+  ];
 
   return (
     <Card>
@@ -459,55 +538,15 @@ function History({ rows }: { rows: AccessRequest[] }) {
         <CardDescription>{t("history.description")}</CardDescription>
       </CardHeader>
       <CardContent>
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("history.empty")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-2 pr-3 font-medium">{t("history.when")}</th>
-                  <th className="py-2 pr-3 font-medium">{t("history.who")}</th>
-                  <th className="py-2 pr-3 font-medium">
-                    {t("history.elevation")}
-                  </th>
-                  <th className="py-2 pr-3 font-medium">
-                    {t("history.decidedBy")}
-                  </th>
-                  <th className="py-2 pr-3 font-medium">
-                    {t("history.status")}
-                  </th>
-                  <th className="py-2 font-medium">{t("history.reason")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((row) => (
-                  <tr key={row.id} className="align-top">
-                    <td className="whitespace-nowrap py-2 pr-3 tabular-nums">
-                      {format.dateTime(row.created_at)}
-                    </td>
-                    <td className="py-2 pr-3">{row.requester}</td>
-                    <td className="py-2 pr-3">{label(row.elevation)}</td>
-                    <td className="py-2 pr-3">{row.decided_by ?? ""}</td>
-                    <td className="py-2 pr-3">
-                      <Badge variant={STATUS_VARIANT[row.status]}>
-                        {t(`status.${row.status}`)}
-                      </Badge>
-                    </td>
-                    <td className="max-w-md break-words py-2 text-muted-foreground">
-                      {row.reason}
-                      {row.decision_note && (
-                        <span className="block text-xs">
-                          {t("history.note", { note: row.decision_note })}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(row) => row.id}
+          loading={loading}
+          storageKey="access.history"
+          initialSort={{ key: "created_at", direction: "desc" }}
+          empty={{ title: t("history.empty") }}
+        />
       </CardContent>
     </Card>
   );

@@ -128,7 +128,12 @@ export function TopologyView() {
   );
 
   if (!topology && !error) {
-    return <Skeleton className="h-[420px] w-full rounded-xl" />;
+    return (
+      <div className="space-y-6" aria-busy>
+        <Skeleton className="h-[420px] w-full rounded-xl" />
+        <TopologyTable graph={null} projectName={projectName} canEdit={false} />
+      </div>
+    );
   }
 
   if (!graph) {

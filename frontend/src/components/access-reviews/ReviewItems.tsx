@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { errorMessage } from "@/components/activity/labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -196,65 +197,73 @@ export function ReviewTable({
   me,
   onDone,
   showSubject = false,
+  storageKey = "accessReviews.items",
 }: {
   items: AccessReviewItem[];
   me: string;
   onDone: () => void;
   showSubject?: boolean;
+  storageKey?: string;
 }) {
   const t = useTranslations("accessReviews");
+  const columns: DataColumn<AccessReviewItem>[] = [
+    ...(showSubject
+      ? [
+          {
+            key: "subject",
+            header: t("table.subject"),
+            sortable: true,
+            className: "align-top",
+            cell: (item: AccessReviewItem) => item.subject,
+          },
+        ]
+      : []),
+    {
+      key: "username",
+      header: t("table.member"),
+      sortable: true,
+      className: "align-top font-medium",
+      cell: (item) => item.username,
+    },
+    {
+      key: "role",
+      header: t("table.role"),
+      sortable: true,
+      className: "align-top",
+      cell: (item) => (item.scope === "project" ? t(`roles.${item.role}`) : "-"),
+    },
+    {
+      key: "last_login_at",
+      header: t("table.lastLogin"),
+      sortable: true,
+      className: "whitespace-nowrap align-top",
+      cell: (item) => <LastLogin value={item.last_login_at} />,
+    },
+    {
+      key: "decision",
+      header: t("table.decision"),
+      className: "align-top",
+      cell: (item) => (
+        <>
+          <DecisionControls item={item} me={me} onDone={onDone} />
+          {item.decided_by && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("decision.by", { user: item.decided_by })}
+            </p>
+          )}
+          {item.outcome === "failed" && item.outcome_detail && (
+            <p className="mt-1 text-xs text-destructive">{item.outcome_detail}</p>
+          )}
+        </>
+      ),
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs text-muted-foreground">
-          <tr>
-            {showSubject && (
-              <th scope="col" className="py-2 pr-3 font-medium">
-                {t("table.subject")}
-              </th>
-            )}
-            <th scope="col" className="py-2 pr-3 font-medium">
-              {t("table.member")}
-            </th>
-            <th scope="col" className="py-2 pr-3 font-medium">
-              {t("table.role")}
-            </th>
-            <th scope="col" className="py-2 pr-3 font-medium">
-              {t("table.lastLogin")}
-            </th>
-            <th scope="col" className="py-2 font-medium">
-              {t("table.decision")}
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {items.map((item) => (
-            <tr key={item.id} className="align-top">
-              {showSubject && <td className="py-2 pr-3">{item.subject}</td>}
-              <td className="py-2 pr-3 font-medium">{item.username}</td>
-              <td className="py-2 pr-3">
-                {item.scope === "project" ? t(`roles.${item.role}`) : "-"}
-              </td>
-              <td className="whitespace-nowrap py-2 pr-3">
-                <LastLogin value={item.last_login_at} />
-              </td>
-              <td className="py-2">
-                <DecisionControls item={item} me={me} onDone={onDone} />
-                {item.decided_by && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("decision.by", { user: item.decided_by })}
-                  </p>
-                )}
-                {item.outcome === "failed" && item.outcome_detail && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {item.outcome_detail}
-                  </p>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      rows={items}
+      rowKey={(item) => item.id}
+      storageKey={storageKey}
+    />
   );
 }

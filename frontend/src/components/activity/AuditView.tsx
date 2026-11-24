@@ -644,7 +644,7 @@ export function AuditView({
         <div className="space-y-2">
           <div ref={topRef} className="scroll-mt-4" />
           {events === null ? (
-            [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)
+            Array.from({ length: 20 }, (_, i) => <Skeleton key={i} className="h-14" />)
           ) : events.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
               {back.length > 0 ? t("audit.noMore") : t("audit.empty")}

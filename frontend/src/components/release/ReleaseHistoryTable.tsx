@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { intlLocale, type Translate } from "@/components/finops/format";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -51,72 +52,94 @@ function forcedReason(event: ReleaseEvent): string | null {
   return withReason.length ? withReason[withReason.length - 1].reason : null;
 }
 
-export function ReleaseHistoryTable({ events }: { events: ReleaseEvent[] }) {
+export function ReleaseHistoryTable({
+  events,
+  loading = false,
+}: {
+  events: ReleaseEvent[];
+  loading?: boolean;
+}) {
   const t = useTranslations("release");
   const locale = intlLocale(useLocale());
-  if (events.length === 0) {
-    return (
-      <p className="py-6 text-center text-sm text-muted-foreground">{t("history.empty")}</p>
-    );
-  }
+  const columns: DataColumn<ReleaseEvent>[] = [
+    {
+      key: "revision",
+      header: t("history.columns.revision"),
+      sortable: true,
+      className: "align-top font-mono",
+      cell: (e) => `#${e.revision}`,
+    },
+    {
+      key: "version",
+      header: t("history.columns.version"),
+      className: "align-top",
+      cell: (e) => (
+        <>
+          <span className="font-mono" title={e.image}>
+            {imageTag(e.image)}
+          </span>
+          <span className="ml-2 text-xs text-muted-foreground">
+            {t.has(`strategyNames.${e.strategy}`) ? t(`strategyNames.${e.strategy}`) : e.strategy}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "outcome",
+      header: t("history.columns.outcome"),
+      className: "align-top",
+      cell: (e) => {
+        const reason = e.forced ? forcedReason(e) : null;
+        return (
+          <>
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="outline" className={TONE[OUTCOME_TONE[e.outcome] ?? "muted"]}>
+                {outcomeLabel(e.outcome, t)}
+              </Badge>
+              {e.forced && (
+                <Badge variant="outline" className={TONE.warn}>
+                  {t("history.forced")}
+                </Badge>
+              )}
+            </div>
+            {reason && (
+              <p className="mt-1 max-w-64 text-xs text-muted-foreground">
+                {t("history.reason", { reason })}
+              </p>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      key: "progress",
+      header: t("history.columns.progress"),
+      className: "align-top",
+      cell: (e) => <Progress event={e} t={t} />,
+    },
+    {
+      key: "started_at",
+      header: t("history.columns.startedAt"),
+      sortable: true,
+      className: "align-top font-mono text-xs tabular-nums",
+      cell: (e) => formatDateTime(e.started_at, locale),
+    },
+    {
+      key: "duration",
+      header: t("history.columns.duration"),
+      className: "align-top font-mono text-xs tabular-nums",
+      cell: (e) => lifetimeLabel(e, t) || "-",
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th scope="col" className="py-2 pr-4 font-medium">{t("history.columns.revision")}</th>
-            <th scope="col" className="py-2 pr-4 font-medium">{t("history.columns.version")}</th>
-            <th scope="col" className="py-2 pr-4 font-medium">{t("history.columns.outcome")}</th>
-            <th scope="col" className="py-2 pr-4 font-medium">{t("history.columns.progress")}</th>
-            <th scope="col" className="py-2 pr-4 font-medium">{t("history.columns.startedAt")}</th>
-            <th scope="col" className="py-2 font-medium">{t("history.columns.duration")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((e) => {
-            const reason = e.forced ? forcedReason(e) : null;
-            return (
-              <tr key={e.id} className="border-b last:border-0 align-top">
-                <td className="py-2 pr-4 font-mono">#{e.revision}</td>
-                <td className="py-2 pr-4">
-                  <span className="font-mono" title={e.image}>
-                    {imageTag(e.image)}
-                  </span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {t.has(`strategyNames.${e.strategy}`) ? t(`strategyNames.${e.strategy}`) : e.strategy}
-                  </span>
-                </td>
-                <td className="py-2 pr-4">
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="outline" className={TONE[OUTCOME_TONE[e.outcome] ?? "muted"]}>
-                      {outcomeLabel(e.outcome, t)}
-                    </Badge>
-                    {e.forced && (
-                      <Badge variant="outline" className={TONE.warn}>
-                        {t("history.forced")}
-                      </Badge>
-                    )}
-                  </div>
-                  {reason && (
-                    <p className="mt-1 max-w-64 text-xs text-muted-foreground">
-                      {t("history.reason", { reason })}
-                    </p>
-                  )}
-                </td>
-                <td className="py-2 pr-4">
-                  <Progress event={e} t={t} />
-                </td>
-                <td className="py-2 pr-4 font-mono text-xs tabular-nums">
-                  {formatDateTime(e.started_at, locale)}
-                </td>
-                <td className="py-2 font-mono text-xs tabular-nums">
-                  {lifetimeLabel(e, t) || "-"}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      rows={events}
+      rowKey={(e) => e.id}
+      loading={loading}
+      storageKey="release.history"
+      initialSort={{ key: "revision", direction: "desc" }}
+      empty={{ title: t("history.empty") }}
+    />
   );
 }

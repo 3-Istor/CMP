@@ -617,11 +617,7 @@ export function ReleaseTab({
           <CardTitle className="text-sm">{t("history.title")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {historyLoading ? (
-            <Skeleton className="h-24 w-full" />
-          ) : (
-            <ReleaseHistoryTable events={canaryEvents} />
-          )}
+          <ReleaseHistoryTable events={canaryEvents} loading={historyLoading} />
         </CardContent>
       </Card>
       )}

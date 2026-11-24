@@ -389,6 +389,7 @@ export interface CostSeriesPoint {
   total: number;
   /** The bucket holding now (UTC day, week or month) is still filling up. */
   is_partial?: boolean;
+  /** Share of the bucket elapsed, 0 to 1, on the UTC clock. */
   elapsed_fraction?: number;
 }
 

@@ -81,6 +81,35 @@ function UseTemplate({ template, onClose }: { template: AgentTemplate | null; on
   );
 }
 
+function TemplateCardSkeleton() {
+  const t = useTranslations("ai.templateGallery");
+  return (
+    <li className="flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10" aria-hidden>
+      <div className="flex items-start gap-3">
+        <div className="size-9 shrink-0 animate-pulse rounded-lg bg-muted" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="h-4 w-36 animate-pulse rounded bg-muted" />
+          <div className="h-3 w-full animate-pulse rounded bg-muted" />
+          <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-muted-foreground">{t("tools")}</p>
+        <div className="h-8 animate-pulse rounded-lg bg-muted" />
+        <div className="h-8 animate-pulse rounded-lg bg-muted" />
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-muted-foreground">{t("ruleOfTwo")}</p>
+        <div className="h-5 w-32 animate-pulse rounded bg-muted" />
+      </div>
+      <Button className="mt-auto self-start" disabled>
+        <Wand2 aria-hidden />
+        {t("use")}
+      </Button>
+    </li>
+  );
+}
+
 export function TemplatesGallery() {
   const t = useTranslations("ai.templateGallery");
   const tTpl = useTranslations("ai.templates");
@@ -90,9 +119,9 @@ export function TemplatesGallery() {
 
   if (templates.loading && !templates.data) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-72 rounded-xl" />)}
-      </div>
+      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-busy>
+        {Array.from({ length: 6 }, (_, i) => <TemplateCardSkeleton key={i} />)}
+      </ul>
     );
   }
   if (!templates.data) {

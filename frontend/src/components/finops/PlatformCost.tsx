@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { useFinopsPlatform } from "@/lib/hooks";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -27,15 +28,21 @@ function Kpi({
   label,
   value,
   hint,
+  loading = false,
 }: {
   label: string;
-  value: string;
-  hint?: string;
+  value?: string | null;
+  hint?: string | null;
+  loading?: boolean;
 }) {
   return (
     <div className="rounded-lg border px-3 py-2">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-lg font-semibold tabular-nums">{value}</p>
+      {loading ? (
+        <div className="my-1 h-6 w-20 animate-pulse rounded bg-muted" aria-hidden />
+      ) : (
+        <p className="text-lg font-semibold tabular-nums">{value}</p>
+      )}
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
@@ -48,6 +55,23 @@ export function PlatformCost() {
   const [period, setPeriod] = useState("30d");
   const { data, error } = useFinopsPlatform(period, true);
   const money = (value: number) => formatEUR(value, "EUR", locale);
+  const columns: DataColumn<{ namespace: string; eur: number }>[] = [
+    {
+      key: "namespace",
+      header: "Namespace",
+      sortable: true,
+      className: "font-medium",
+      cell: (n) => n.namespace,
+    },
+    {
+      key: "eur",
+      header: t("platform.cost"),
+      align: "right",
+      sortable: true,
+      cell: (n) => money(n.eur),
+    },
+  ];
+  const showing = !data && !error;
 
   return (
     <Card>
@@ -71,66 +95,57 @@ export function PlatformCost() {
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {data && (
+        {(data || showing) && (
           <>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Kpi
                 label={t("platform.total")}
-                value={money(data.total_eur)}
-                hint={t("platform.idleHint", { idle: money(data.idle_eur) })}
+                loading={showing}
+                value={data && money(data.total_eur)}
+                hint={data && t("platform.idleHint", { idle: money(data.idle_eur) })}
               />
               <Kpi
                 label={t("platform.covered")}
-                value={money(data.recovered_eur)}
+                loading={showing}
+                value={data && money(data.recovered_eur)}
               />
               <Kpi
                 label={t("platform.uncovered")}
-                value={money(data.uncovered_eur)}
+                loading={showing}
+                value={data && money(data.uncovered_eur)}
                 hint={
-                  data.uncovered_eur < 0
+                  data && data.uncovered_eur < 0
                     ? t("platform.uncoveredHint")
                     : undefined
                 }
               />
               <Kpi
                 label={t("platform.feePerApp")}
-                value={`${money(data.fee_per_app_month_eur)} ${t("common.perMonth")}`}
-                hint={t("platform.feeHint", {
-                  active: data.active_apps_avg.toFixed(1),
-                  slots: data.app_slots,
-                })}
+                loading={showing}
+                value={data && `${money(data.fee_per_app_month_eur)} ${t("common.perMonth")}`}
+                hint={
+                  data &&
+                  t("platform.feeHint", {
+                    active: data.active_apps_avg.toFixed(1),
+                    slots: data.app_slots,
+                  })
+                }
               />
             </div>
 
-            <div className="overflow-x-auto" tabIndex={0}>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-3 py-2 font-medium">Namespace</th>
-                    <th className="px-3 py-2 text-right font-medium">
-                      {t("platform.cost")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.by_namespace.map((n) => (
-                    <tr key={n.namespace} className="border-b border-border/50">
-                      <td className="px-3 py-2 font-medium">{n.namespace}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {money(n.eur)}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="border-b border-border/50">
-                    <td className="px-3 py-2 font-medium">{t("platform.idle")}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {money(data.idle_eur)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={columns}
+              rows={
+                data
+                  ? [...data.by_namespace, { namespace: t("platform.idle"), eur: data.idle_eur }]
+                  : []
+              }
+              rowKey={(n) => n.namespace}
+              loading={showing}
+              storageKey="finops.platform"
+            />
 
+            {data ? (
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.daily} stackOffset="sign">
@@ -162,6 +177,9 @@ export function PlatformCost() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            ) : (
+              <div className="h-64 w-full animate-pulse rounded-lg bg-muted" aria-busy />
+            )}
           </>
         )}
       </CardContent>

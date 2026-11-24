@@ -1,9 +1,9 @@
 "use client";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { PageBody, PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -20,12 +20,12 @@ import { useCardData } from "@/lib/useCardData";
 import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import { cn } from "@/lib/utils";
 import type { Agent } from "@/types/ai";
-import { AlertCircle, Bot, Loader2, Power, PowerOff, Search } from "lucide-react";
+import { AlertCircle, Bot, Loader2, Power, PowerOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AgentCard, agentHref } from "./AgentCard";
+import { AgentCard, AgentCardSkeleton, agentHref } from "./AgentCard";
 import { AgentStatusBadge, BarGauge, IsolationBadge, RiskBadge, RingGauge, useAiFormat } from "./shared";
 import { TemplatesGallery } from "./TemplatesGallery";
 
@@ -82,8 +82,8 @@ function MyAgents() {
   );
   if (loading || (agents.loading && !agents.data)) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {[0, 1, 2].map((i) => <Skeleton key={i} className="h-44 rounded-xl" />)}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy>
+        {[0, 1, 2].map((i) => <AgentCardSkeleton key={i} />)}
       </div>
     );
   }
@@ -142,86 +142,93 @@ function AllAgents() {
   const f = useAiFormat();
   const agents = useCardData("admin-agents", getAdminAgents, { intervalMs: 30_000 });
   const [overrides, setOverrides] = useState<Record<string, Agent>>({});
-  const [query, setQuery] = useState("");
-  const searchId = useId();
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (agents.data ?? [])
-      .map((a) => overrides[`${a.project}/${a.name}`] ?? a)
-      .filter((a) => !q || `${a.name} ${a.project} ${a.owner}`.toLowerCase().includes(q));
-  }, [agents.data, overrides, query]);
+  const loading = agents.loading && !agents.data;
+  const rows = useMemo(
+    () => (agents.data ?? []).map((a) => overrides[`${a.project}/${a.name}`] ?? a),
+    [agents.data, overrides],
+  );
 
-  if (agents.loading && !agents.data) return <Skeleton className="h-64 rounded-xl" />;
-  if (!agents.data) return <Failed message={t("error")} />;
-  const active = agents.data.filter((a) => a.status === "active").length;
-  const tokens = agents.data.reduce((s, a) => s + (a.usage_today?.tokens ?? 0), 0);
-  const cost = agents.data.reduce((s, a) => s + (a.usage_today?.cost_eur ?? 0), 0);
+  if (!loading && !agents.data) return <Failed message={t("error")} />;
+  const active = rows.filter((a) => a.status === "active").length;
+  const tokens = rows.reduce((s, a) => s + (a.usage_today?.tokens ?? 0), 0);
+  const cost = rows.reduce((s, a) => s + (a.usage_today?.cost_eur ?? 0), 0);
+  const columns: DataColumn<Agent>[] = [
+    {
+      key: "name",
+      header: t("colAgent"),
+      sortable: true,
+      cell: (agent) => (
+        <Link href={agentHref(agent.project, agent.name)} className="whitespace-nowrap font-mono font-semibold hover:underline">
+          {agent.name}
+        </Link>
+      ),
+    },
+    { key: "project", header: t("colProject"), sortable: true, cell: (agent) => agent.project },
+    { key: "owner", header: t("colOwner"), sortable: true, className: "text-muted-foreground", cell: (agent) => agent.owner },
+    {
+      key: "isolation",
+      header: t("colIsolation"),
+      cell: (agent) => agent.isolation && <IsolationBadge isolation={agent.isolation} />,
+    },
+    {
+      key: "tokens",
+      header: t("colTokens"),
+      sortable: true,
+      sortValue: (agent) => agent.usage_today?.tokens ?? 0,
+      className: "w-48",
+      cell: (agent) => (
+        <div className="space-y-1">
+          <BarGauge value={agent.usage_today?.tokens ?? 0} max={agent.daily_token_budget} label={t("budgetOf", { name: agent.name })} />
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {f.tokens(agent.usage_today?.tokens ?? 0)} / {f.tokens(agent.daily_token_budget)}
+          </span>
+        </div>
+      ),
+    },
+    { key: "status", header: t("colStatus"), sortable: true, cell: (agent) => <AgentStatusBadge status={agent.status} /> },
+    {
+      key: "updated_at",
+      header: t("colLast"),
+      sortable: true,
+      className: "whitespace-nowrap text-muted-foreground",
+      cell: (agent) => (agent.updated_at ? f.relative(agent.updated_at) : t("never")),
+    },
+    {
+      key: "actions",
+      header: <span className="sr-only">{t("colActions")}</span>,
+      align: "right",
+      cell: (agent) => (
+        <RowKill agent={agent} onChange={(a) => setOverrides((o) => ({ ...o, [`${a.project}/${a.name}`]: a }))} />
+      ),
+    },
+  ];
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          [t("kpiAgents"), String(agents.data.length)],
+          [t("kpiAgents"), String(rows.length)],
           [t("kpiActive"), String(active)],
           [t("kpiTokens"), f.tokens(tokens)],
           [t("kpiCost"), f.eur(cost)],
         ].map(([label, value]) => (
           <div key={label} className={cn(panel, "px-4 py-3")}>
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
+            <dd className="text-2xl font-semibold tabular-nums">
+              {loading ? <span className="inline-block h-7 w-16 animate-pulse rounded bg-muted align-middle" aria-hidden /> : value}
+            </dd>
           </div>
         ))}
       </dl>
-      <div className="relative max-w-sm">
-        <label htmlFor={searchId} className="sr-only">{t("search")}</label>
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input id={searchId} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("search")} className="h-9 pl-8" />
-      </div>
-      <div className={cn(panel, "overflow-x-auto")} tabIndex={0} role="region" aria-label={t("tableCaption")}>
-        <table className="w-full min-w-[880px] text-sm">
-          <caption className="sr-only">{t("tableCaption")}</caption>
-          <thead>
-            <tr className="border-b text-left text-xs text-muted-foreground">
-              <th scope="col" className="px-4 py-2.5 font-medium">{t("colAgent")}</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">{t("colProject")}</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">{t("colOwner")}</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">{t("colIsolation")}</th>
-              <th scope="col" className="w-48 px-4 py-2.5 font-medium">{t("colTokens")}</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">{t("colStatus")}</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">{t("colLast")}</th>
-              <th scope="col" className="px-4 py-2.5"><span className="sr-only">{t("colActions")}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((agent) => (
-              <tr key={`${agent.project}/${agent.name}`} className="border-b last:border-0">
-                <td className="px-4 py-2.5">
-                  <Link href={agentHref(agent.project, agent.name)} className="whitespace-nowrap font-mono font-semibold hover:underline">
-                    {agent.name}
-                  </Link>
-                </td>
-                <td className="px-4 py-2.5">{agent.project}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{agent.owner}</td>
-                <td className="px-4 py-2.5">{agent.isolation && <IsolationBadge isolation={agent.isolation} />}</td>
-                <td className="px-4 py-2.5">
-                  <div className="space-y-1">
-                    <BarGauge value={agent.usage_today?.tokens ?? 0} max={agent.daily_token_budget} label={t("budgetOf", { name: agent.name })} />
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {f.tokens(agent.usage_today?.tokens ?? 0)} / {f.tokens(agent.daily_token_budget)}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-2.5"><AgentStatusBadge status={agent.status} /></td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
-                  {agent.updated_at ? f.relative(agent.updated_at) : t("never")}
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <RowKill agent={agent} onChange={(a) => setOverrides((o) => ({ ...o, [`${a.project}/${a.name}`]: a }))} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(agent) => `${agent.project}/${agent.name}`}
+        loading={loading}
+        storageKey="agents.all"
+        searchable
+        searchKeys={["name", "project", "owner"]}
+        searchPlaceholder={t("search")}
+      />
       <p className="text-xs text-muted-foreground">{t("killHint")}</p>
     </div>
   );

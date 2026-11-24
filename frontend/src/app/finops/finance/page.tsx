@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { PlatformCost } from "@/components/finops/PlatformCost";
 import { Input } from "@/components/ui/input";
 import {
@@ -53,7 +54,7 @@ export default function FinopsFinancePage() {
   const t = useTranslations("finops");
   const locale = intlLocale(useLocale());
   const role = useFinopsMeta()?.role;
-  const { closes, centers, error, refresh } = useFinopsFinance();
+  const { closes, centers, error, loading, refresh } = useFinopsFinance();
   const [period, setPeriod] = useState(previousMonth);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -128,6 +129,39 @@ export default function FinopsFinancePage() {
       </div>
     );
   }
+
+  const centerColumns: DataColumn<FinopsCostCenter>[] = [
+    {
+      key: "project_name",
+      header: t("common.project"),
+      sortable: true,
+      className: "font-medium",
+      cell: (r) => r.project_name,
+    },
+    {
+      key: "cost_center",
+      header: t("finance.colCostCentre"),
+      cell: (r) => (
+        <Input
+          aria-label={t("finance.costCentreLabel", { project: r.project_name })}
+          value={r.cost_center ?? ""}
+          maxLength={64}
+          onChange={(e) => edit(r.project_name, "cost_center", e.target.value)}
+        />
+      ),
+    },
+    {
+      key: "budget_owner",
+      header: t("finance.colBudgetOwner"),
+      cell: (r) => (
+        <Input
+          aria-label={t("finance.budgetOwnerLabel", { project: r.project_name })}
+          value={r.budget_owner ?? ""}
+          onChange={(e) => edit(r.project_name, "budget_owner", e.target.value)}
+        />
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -301,51 +335,13 @@ export default function FinopsFinancePage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">{t("common.project")}</th>
-                  <th className="px-3 py-2 font-medium">
-                    {t("finance.colCostCentre")}
-                  </th>
-                  <th className="px-3 py-2 font-medium">
-                    {t("finance.colBudgetOwner")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {draft.map((r) => (
-                  <tr key={r.project_name} className="border-b border-border/50">
-                    <td className="px-3 py-2 font-medium">{r.project_name}</td>
-                    <td className="px-3 py-2">
-                      <Input
-                        aria-label={t("finance.costCentreLabel", {
-                          project: r.project_name,
-                        })}
-                        value={r.cost_center ?? ""}
-                        maxLength={64}
-                        onChange={(e) =>
-                          edit(r.project_name, "cost_center", e.target.value)
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Input
-                        aria-label={t("finance.budgetOwnerLabel", {
-                          project: r.project_name,
-                        })}
-                        value={r.budget_owner ?? ""}
-                        onChange={(e) =>
-                          edit(r.project_name, "budget_owner", e.target.value)
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={centerColumns}
+            rows={draft}
+            rowKey={(r) => r.project_name}
+            loading={loading}
+            storageKey="finops.costCentres"
+          />
           <Button
             disabled={!canAct || busy !== null || draft.length === 0}
             onClick={saveCenters}
