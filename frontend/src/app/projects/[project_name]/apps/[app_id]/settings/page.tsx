@@ -128,6 +128,8 @@ function SearchHighlight({ children }: { children: React.ReactNode }) {
   );
 }
 
+// scroll-mt-40 on each section: where a section jumped to sits under the sticky header.
+const SECTION_OFFSET_PX = 160;
 const SECTIONS = ["general", "secrets", "delivery", "slo", "security", "advanced", "danger"] as const;
 
 function SettingsSection({
@@ -224,18 +226,30 @@ export default function AppSettingsPage() {
   const sectionsKey = visibleSections.join();
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.find((e) => e.isIntersecting);
-        if (visible) setActive(visible.target.id);
-      },
-      { rootMargin: "-160px 0px -60% 0px" },
-    );
-    sectionsKey.split(",").forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
+    const ids = sectionsKey.split(",");
+    const update = () => {
+      const atBottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 2;
+      // Short last sections never reach the top: the page bottom selects the last one.
+      if (atBottom) {
+        setActive(ids[ids.length - 1]);
+        return;
+      }
+      let current = ids[0];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= SECTION_OFFSET_PX + 8) current = id;
+      }
+      setActive(current);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
   }, [allowed, sectionsKey]);
 
 
@@ -277,6 +291,7 @@ export default function AppSettingsPage() {
               <li key={id}>
                 <a
                   href={`#${id}`}
+                  onClick={() => setActive(id)}
                   aria-current={active === id ? "location" : undefined}
                   className={cn(
                     "block rounded-md px-3 py-1.5 transition-colors",
@@ -440,6 +455,8 @@ export default function AppSettingsPage() {
               </Card>
             </SettingsSection>
           )}
+          {/* Room under the last section, so the nav can bring any section to the top. */}
+          <div aria-hidden className="hidden h-[calc(100vh-20rem)] lg:block" />
         </div>
       </div>
 
