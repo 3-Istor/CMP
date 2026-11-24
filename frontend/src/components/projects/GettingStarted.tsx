@@ -1,8 +1,8 @@
 "use client";
 
 import { useProjectContext } from "@/components/projects/ProjectContext";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { getBudget, getProjectMembers, getReleaseHistory } from "@/lib/api";
 import type { Capability } from "@/lib/permissions";
 import {
@@ -10,8 +10,6 @@ import {
   Circle,
   CircleCheck,
   CircleHelp,
-  Loader2,
-  X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -56,6 +54,8 @@ function writeDismissed(storageKey: string) {
 
 export function GettingStarted() {
   const t = useTranslations("gettingStarted");
+  const tp = useTranslations("projectHome.gettingStarted");
+  const [open, setOpen] = useState(false);
   const {
     projectName,
     apps,
@@ -176,59 +176,66 @@ export function GettingStarted() {
     writeDismissed(storageKey);
   };
 
+  const next = steps.find((step) => step.status !== "done");
+
   return (
     <section
       aria-labelledby="getting-started-title"
-      className="rounded-xl border bg-card p-6 space-y-4"
+      className="flex flex-col gap-3 rounded-xl border bg-card p-4"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h2 id="getting-started-title" className="font-semibold">
-            {t("title")}
-          </h2>
-          <p className="text-sm text-muted-foreground">{t("description")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono text-xs">
-            {t("progress", { done: doneCount, total: steps.length })}
-          </Badge>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={hide}
-            title={t("dismiss")}
-            aria-label={t("dismiss")}
-          >
-            <X aria-hidden />
-          </Button>
-        </div>
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="getting-started-title" className="text-sm font-semibold">
+          {t("title")}
+        </h2>
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="tabular-nums">{t("progress", { done: doneCount, total: steps.length })}</span>
+          <span aria-hidden>·</span>
+          <button type="button" onClick={hide} title={t("dismiss")} className="text-primary hover:underline">
+            {tp("hide")}
+          </button>
+        </span>
       </div>
-      <ol className="space-y-2">
-        {steps.map((step) => (
-          <li key={step.id} className="flex items-center gap-3 text-sm">
-            <StepIcon status={step.status} label={t(`state.${step.status}`)} />
-            <Link
-              href={hrefs[step.id]}
-              className={
-                step.status === "done"
-                  ? "flex-1 text-muted-foreground line-through hover:underline"
-                  : "flex-1 font-medium hover:underline"
-              }
-            >
-              {t(`steps.${step.id}`)}
-            </Link>
-            {step.status === "unknown" && (
-              <span className="text-xs text-muted-foreground">
-                {t("unknown")}
-              </span>
-            )}
-            <ChevronRight
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              aria-hidden
-            />
-          </li>
-        ))}
-      </ol>
+      <Progress value={(doneCount / steps.length) * 100} aria-label={t("progress", { done: doneCount, total: steps.length })} />
+      {next && (
+        <p className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">{tp("next")}</span>
+          <Link href={hrefs[next.id]} className="inline-flex items-center gap-1 font-medium hover:underline">
+            {t(`steps.${next.id}`)}
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </Link>
+        </p>
+      )}
+      <Button
+        variant="ghost"
+        size="xs"
+        className="self-start text-muted-foreground"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? tp("hideSteps") : tp("showSteps")}
+      </Button>
+      {open && (
+        <ol className="space-y-2">
+          {steps.map((step) => (
+            <li key={step.id} className="flex items-center gap-3 text-sm">
+              <StepIcon status={step.status} label={t(`state.${step.status}`)} />
+              <Link
+                href={hrefs[step.id]}
+                className={
+                  step.status === "done"
+                    ? "flex-1 text-muted-foreground line-through hover:underline"
+                    : "flex-1 font-medium hover:underline"
+                }
+              >
+                {t(`steps.${step.id}`)}
+              </Link>
+              {step.status === "unknown" && (
+                <span className="text-xs text-muted-foreground">{t("unknown")}</span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }
@@ -239,7 +246,7 @@ function StepIcon({ status, label }: { status: StepStatus; label: string }) {
     done: <CircleCheck className={`${className} text-primary`} aria-hidden />,
     pending: <Circle className={`${className} text-muted-foreground`} aria-hidden />,
     unknown: <CircleHelp className={`${className} text-muted-foreground`} aria-hidden />,
-    loading: <Loader2 className={`${className} animate-spin text-muted-foreground`} aria-hidden />,
+    loading: <Circle className={`${className} animate-pulse text-muted-foreground`} aria-hidden />,
   }[status];
   return (
     <span role="img" aria-label={label} className="inline-flex">

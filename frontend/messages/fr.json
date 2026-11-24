@@ -90,10 +90,7 @@
     },
     "page": {
       "kubernetes": "Projet Kubernetes",
-      "kubernetesRole": "Projet Kubernetes · {role}",
-      "appCount": "{count, plural, one {# app} other {# apps}}",
       "live": "Mises à jour en direct",
-      "description": "Applications déployées dans ce projet.",
       "templatesTitle": "Choisir un modèle Kubernetes",
       "templatesLoading": "Chargement des modèles…",
       "noTemplates": "Aucun modèle Kubernetes disponible.",
@@ -2584,30 +2581,7 @@
       "openGrafana": "Ouvrir dans Grafana, lien externe",
       "openArgo": "Ouvrir {name} dans Argo CD, lien externe"
     },
-    "metrics": {
-      "requests": "Requêtes/s",
-      "errors": "Erreurs 5xx (%)",
-      "cpu": "CPU (millicores)",
-      "cost": "Coût du mois",
-      "noTraffic": "Pas de données de trafic",
-      "noData": "Pas de données",
-      "noCost": "Pas de coût pour cette application",
-      "perSecond": "req/s",
-      "last24h": "Sur 24 h",
-      "cpuRequest": "Sur 24 h, demande {value} m",
-      "costNote": "Cumul du mois, estimation {estimate}"
-    },
-    "components": {
-      "title": "Composants"
-    },
-    "logs": {
-      "recent": "Logs récents",
-      "open": "Ouvrir les logs",
-      "region": "Logs de l'application"
-    },
     "deployments": {
-      "recent": "Derniers déploiements",
-      "open": "Ouvrir les déploiements",
       "history": "Historique des déploiements",
       "empty": "Aucun déploiement enregistré",
       "version": "Version",
@@ -2912,9 +2886,6 @@
   "scorecard": {
     "title": "Score",
     "badgeLabel": "Score {grade}, {score} sur {max}",
-    "sortBy": "Trier par :",
-    "sortName": "Nom",
-    "sortScore": "Score",
     "criteria": {
       "security": "Sécurité",
       "cost": "Coût",
@@ -4006,7 +3977,7 @@
     },
     "notAvailable": {
       "title": "Pas encore disponible",
-      "metrics": "Les signaux dorés apparaissent quand la base de métriques de la plateforme est branchée.",
+      "metrics": "Les graphes de trafic et d'erreurs apparaissent quand la base de métriques de la plateforme est branchée.",
       "logs": "Cet explorateur apparaît quand la base de logs de la plateforme est branchée.",
       "traces": "Les traces apparaissent quand la base de traces est branchée et que le projet a son tenant.",
       "alerts": "Les alertes apparaissent quand la chaîne d'alerte de la plateforme est branchée.",
@@ -4015,21 +3986,6 @@
     "error": "Impossible de charger ces données. {message}",
     "retry": "Réessayer",
     "openGrafana": "Ouvrir dans Grafana",
-    "signals": {
-      "title": "Signaux dorés",
-      "description": "Requêtes, erreurs et latence mesurées à la gateway, prod seulement.",
-      "noTraffic": "Pas encore de trafic : la gateway compte une route à partir de sa première requête. Ce n'est pas une erreur.",
-      "rate": "Requêtes par seconde",
-      "errors": "Part de 5xx",
-      "p95": "Latence p95",
-      "p50": "Latence p50",
-      "now": "Maintenant : {value}",
-      "chartLabel": "{name} sur la période, dernière valeur {value}",
-      "deployMarker": "Déploiement {version} ({outcome})",
-      "routes": "Routes",
-      "route": "Route",
-      "noRoutes": "Aucune route n'a reçu de trafic sur la période."
-    },
     "slo": {
       "title": "Budget d'erreur",
       "description": "Ce qui reste du budget sur {days} jours, et à quel rythme il brûle.",
@@ -4050,13 +4006,6 @@
       "saved": "Objectifs enregistrés. Les règles sont réécrites dans la minute.",
       "ownersOnly": "Seuls les admins et l'owner du projet changent les objectifs.",
       "invalid": "Disponibilité de 90 à 99,99 %, latence de 50 à 99,9 %."
-    },
-    "delivery": {
-      "title": "Livraison",
-      "deploysPerWeek": "Déploiements par semaine",
-      "changeFailure": "Taux d'échec des changements",
-      "window": "Sur {days} jours : {deploys} déploiements, {failed} en échec",
-      "none": "Aucun déploiement en prod sur {days} jours."
     },
     "topErrors": {
       "title": "Erreurs les plus fréquentes",
@@ -4760,6 +4709,218 @@
       "partial": "en cours",
       "projected": "projection {value}",
       "deployMarker": "Déploiement {label} à {time}"
+    }
+  },
+  "appOverview": {
+    "reasons": {
+      "asleep": "En veille",
+      "errors_5xx": "Erreurs 5xx",
+      "alerts_firing": "Alerte en cours",
+      "no_ready_replica": "Aucun réplica prêt",
+      "missing": "Absente du cluster",
+      "argo_degraded": "Dégradée dans Argo CD",
+      "restarts": "Redémarrages",
+      "not_observed": "Pas encore observée"
+    },
+    "badges": {
+      "imported": "Importée",
+      "datastore": "Datastore",
+      "worker": "Worker",
+      "internal": "Interne uniquement"
+    },
+    "header": {
+      "liveSince": "{version} en ligne depuis le {date}",
+      "logs": "Logs",
+      "restart": "Redémarrer",
+      "rollbackTo": "Revenir à {version}",
+      "grafana": "Grafana",
+      "openApp": "Ouvrir l'app",
+      "backupNow": "Sauvegarder maintenant",
+      "backupStarted": "Sauvegarde lancée : {list}"
+    },
+    "units": {
+      "s": "s",
+      "m": "min",
+      "h": "h",
+      "d": "j"
+    },
+    "tiles": {
+      "availability": "Disponibilité · 24 h",
+      "availabilityHint": "{errors} en échec sur {requests}",
+      "requests": "Requêtes · 24 h",
+      "requestsHint": "{rate} req/s en moyenne",
+      "errors": "Erreurs 5xx · 24 h",
+      "errorsHint": "{pct} des requêtes",
+      "latency": "Latence p95 · 24 h",
+      "latencyHint": "p50 {value}",
+      "restarts": "Redémarrages · 24 h",
+      "restartsHint": "{ready}/{desired} réplicas",
+      "restartsMemHint": "{ready}/{desired} réplicas · Mém. {pct} de la limite",
+      "noTraffic": "Pas encore de trafic",
+      "cpu": "CPU · de la request",
+      "cpuHint": "{used} sur {request} CPU",
+      "memory": "Mémoire · de la limite",
+      "memoryHint": "{used} sur {limit}",
+      "disk": "Disque",
+      "diskHint": "{pct} de {capacity}",
+      "noVolume": "Aucun volume mesuré",
+      "lastBackup": "Dernière sauvegarde",
+      "noBackup": "Aucune sauvegarde enregistrée"
+    },
+    "traffic": {
+      "title": "Trafic et erreurs",
+      "description": "Requêtes arrivant à l'app par la gateway. Les lignes verticales marquent les déploiements.",
+      "requests": "Requêtes/s",
+      "errors": "5xx/s",
+      "p95": "Latence p95",
+      "range": "Période",
+      "noTraffic": "Pas encore de trafic",
+      "noTrafficReason": "La gateway compte une route dès sa première requête. Ce n'est pas une erreur."
+    },
+    "resources": {
+      "title": "Ressources",
+      "description": "Consommation face à la request et à la limite. 100 % correspond à la request CPU et à la limite mémoire.",
+      "cpu": "CPU, % de la request",
+      "memory": "Mémoire, % de la limite",
+      "threshold": "Request / limite",
+      "empty": "Aucune consommation mesurée",
+      "emptyReason": "Les métriques du cluster n'ont aucun échantillon pour cette app sur la période."
+    },
+    "deployments": {
+      "title": "Déploiements",
+      "all": "Tous",
+      "description": "Les 3 derniers en prod",
+      "live": "En ligne",
+      "replaced": "Remplacé",
+      "failed": "Échoué",
+      "running": "En cours",
+      "unknown": "Inconnu",
+      "readyIn": "prêt en {duration}",
+      "liveFor": "en ligne {duration}",
+      "logs": "Logs",
+      "rollback": "Revenir",
+      "empty": "Aucun déploiement en prod",
+      "emptyReason": "Les déploiements apparaissent ici dès qu'une version arrive en prod."
+    },
+    "logVolume": {
+      "title": "Volume de logs",
+      "description": "Lignes par minute et par niveau. Un pic ici est souvent le premier signe.",
+      "info": "info",
+      "warn": "warn",
+      "error": "error",
+      "empty": "Aucune ligne de log",
+      "emptyReason": "Rien n'a été journalisé sur la période, ou l'app n'a pas de stockage de logs."
+    },
+    "recentLogs": "Logs récents",
+    "topErrors": {
+      "title": "Erreurs les plus fréquentes",
+      "description": "Erreurs de logs regroupées, 24 h",
+      "none": "Aucune ligne d'erreur sur 24 h"
+    },
+    "alerts": {
+      "title": "Alertes",
+      "description": "En cours",
+      "none": "Aucune alerte en cours",
+      "seeRules": "Voir les règles",
+      "firing": "{count, plural, one {# alerte en cours} other {# alertes en cours}}",
+      "open": "Ouvrir les alertes"
+    },
+    "talksTo": {
+      "title": "Parle à",
+      "description": "Observé sur la dernière heure (Hubble)",
+      "none": "Aucun flux observé sur la dernière heure",
+      "denied": "{count, plural, one {# flux refusé} other {# flux refusés}} en 24 h"
+    },
+    "clients": {
+      "title": "Clients connectés",
+      "description": "Flux vus sur la dernière heure (Hubble)",
+      "verdict": "{verdict, select, denied {refusé} other {autorisé}} · {flows} flux"
+    },
+    "weekly": {
+      "title": "Vue hebdo",
+      "reliability": "Objectif de fiabilité · 7 j",
+      "reliabilityNoTarget": "Aucun objectif",
+      "reliabilityNoTargetHint": "Définissez un objectif de disponibilité dans Paramètres",
+      "reliabilityBudget": "{pct} du budget d'erreur restant",
+      "reliabilityNoData": "Pas encore assez de trafic pour mesurer",
+      "delivery": "Delivery · 30 j",
+      "deploys": "{count, plural, one {déploiement} other {déploiements}}",
+      "deliveryHint": "{failed} en échec · {perWeek} par semaine",
+      "deliveryNone": "Aucun déploiement en prod sur 30 jours",
+      "score": "Score",
+      "scoreHint": "{count, plural, =0 {Rien à améliorer} one {# point à améliorer} other {# points à améliorer}}",
+      "scoreNone": "Score pas encore calculé",
+      "cost": "Coût · ce mois-ci",
+      "costHint": "estimation {estimate}",
+      "costNone": "Aucun coût enregistré pour cette app",
+      "unavailable": "Non disponible pour cette app"
+    }
+  },
+  "projectHome": {
+    "attention": "{count, plural, one {# app demande votre attention} other {# apps demandent votre attention}}",
+    "allHealthy": "Toutes les apps vont bien",
+    "description": "{count, plural, one {# app} other {# apps}} · {cloud} · vous êtes {role}",
+    "descriptionNoRole": "{count, plural, one {# app} other {# apps}} · {cloud}",
+    "logs": "Logs",
+    "grafana": "Grafana",
+    "band": {
+      "requests": "Requêtes/s",
+      "requestsSub": "24 h · par app",
+      "errors": "Erreurs 5xx",
+      "errorsSub": "24 h · par app, % des requêtes",
+      "errorLogs": "Logs d'erreur/min",
+      "errorLogsSub": "24 h",
+      "allApps": "toutes les apps",
+      "peak": "{app} · {value} à {time}",
+      "empty": "Pas encore de données",
+      "emptyReason": "Apparaît dès que les apps reçoivent du trafic."
+    },
+    "apps": {
+      "title": "Apps",
+      "sort": "Tri : à surveiller d'abord",
+      "filter": "Type",
+      "all": "Tous les types",
+      "web": "Services",
+      "datastore": "Datastores",
+      "worker": "Workers",
+      "app": "App",
+      "rps": "Req/s",
+      "errors": "5xx",
+      "p95": "p95",
+      "spark": "24 h",
+      "lastDeploy": "Dernier déploiement",
+      "cpu": "CPU {pct}",
+      "mem": "Mém. {pct}",
+      "disk": "disque {pct}",
+      "open": "Ouvrir {name}",
+      "more": "{count, plural, one {+ # autre app, en bonne santé ({names})} other {+ # autres apps, toutes en bonne santé ({names})}}",
+      "noMatch": "Aucune app de ce type",
+      "kinds": {
+        "service": "Service",
+        "frontend": "Frontend",
+        "datastore": "Datastore",
+        "worker": "Worker"
+      },
+      "deploying": "Déploiement",
+      "failed": "Déploiement échoué",
+      "deleting": "Suppression",
+      "sparkLabel": "{name}, 24 h"
+    },
+    "where": {
+      "title": "Où ça tourne",
+      "state": "{cloud} · {state}",
+      "reserved": "Réservé",
+      "reservedHint": "somme des requests des pods",
+      "using": "Utilisé maintenant",
+      "usingHint": "{cpu} · {mem} du réservé",
+      "usingNone": "Consommation en direct indisponible sur ce cloud",
+      "none": "Pas encore mesuré"
+    },
+    "gettingStarted": {
+      "next": "Étape suivante :",
+      "hide": "masquer",
+      "showSteps": "Voir toutes les étapes",
+      "hideSteps": "Masquer les étapes"
     }
   }
 }

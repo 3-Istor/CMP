@@ -1,106 +1,142 @@
 "use client";
 
-import { ComponentsCard } from "@/components/app-overview/ComponentsCard";
-import { DeploymentsCard } from "@/components/app-overview/DeploymentsCard";
-import { ScoreCard } from "@/components/app-overview/ScoreCard";
+import { LogsView } from "@/components/activity/LogsView";
+import { DeploymentsPanel, AlertsPanel, ClientsPanel, TalksToPanel, TopErrorsPanel } from "@/components/app-overview/Cards";
+import { LogVolumeCard, ResourcesCard, TrafficCard } from "@/components/app-overview/Charts";
+import { appKind } from "@/components/cluster/AppChip";
 import { EventsCard } from "@/components/app-overview/EventsCard";
-import { LogsCard } from "@/components/app-overview/LogsCard";
-import {
-  CostCard,
-  MetricCards,
-} from "@/components/app-overview/MetricCards";
+import { useRollback } from "@/components/app-overview/Rollback";
+import { Panel } from "@/components/app-overview/shared";
+import { DatastoreStatusBand, WebStatusBand } from "@/components/app-overview/StatusBand";
+import { WeeklyView } from "@/components/app-overview/WeeklyView";
 import { ManagedServicesCard } from "@/components/imports/Recommendations";
-import { useObsCapabilities } from "@/components/observability/shared";
-import { OverviewObservability } from "@/components/observability/OverviewObservability";
 import { useAppContext } from "@/components/projects/AppContext";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getDeploymentLinks } from "@/lib/api";
-import { useCardData } from "@/lib/useCardData";
+import type { SummaryRange } from "@/lib/api";
+import { useAppSummary, useInView } from "@/lib/appSummary";
+import { hasScorecard } from "@/lib/scorecard";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 
 export default function AppOverviewPage() {
   const { appId, projectName, deployment: current } = useAppContext();
   const { can } = useProjectContext();
+  const t = useTranslations("appOverview");
 
   const isKubernetes = current.provider_type === "kubernetes";
   const canViewLogs = can("app.viewLogs");
-  const canViewConfig = can("app.viewConfig");
+  const canViewObservability = can("app.viewObservability");
+  const allowed = isKubernetes && canViewLogs;
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
 
-  // The golden signals above replace the legacy request and error cards.
-  const obsMetrics = Boolean(
-    useObsCapabilities(
-      appId,
-      isKubernetes && canViewLogs && can("app.viewObservability"),
-    ).data?.metrics,
-  );
+  const [range, setRange] = useState<SummaryRange>("24h");
+  const day = useAppSummary(appId, "24h", allowed);
+  const chart = useAppSummary(appId, range, allowed && range !== "24h");
+  const chartCard = range === "24h" ? day : chart;
+  const summary = day.data;
+  const loading = day.loading && !summary;
+  const chartLoading = chartCard.loading && !chartCard.data;
 
-  const links = useCardData(
-    `links-${appId}-${current.github_repo_url ?? ""}`,
-    () => getDeploymentLinks(appId),
-    { enabled: isKubernetes && canViewLogs },
-  );
+  const rollback = useRollback(appId, summary?.deploys ?? [], allowed && can("release.operate"));
+  const [belowRef, belowSeen] = useInView<HTMLDivElement>();
 
   if (!isKubernetes) {
-    return canViewConfig ? <TerraformOutputs outputs={current.terraform_outputs} /> : null;
+    return can("app.viewConfig") ? <TerraformOutputs outputs={current.terraform_outputs} /> : null;
   }
+  if (!allowed) return null;
+
+  // Until the summary answers, guess the layout from the template so the skeleton keeps its shape.
+  const kind =
+    summary?.kind ??
+    (appKind(current.name, current.template_id, current.template_category) === "db" ? "datastore" : "web");
+  const datastore = kind === "datastore";
+  const namespace = current.k8s_namespace ?? `${projectName}-${current.name}`;
+  const alertsHref = `/projects/${encodeURIComponent(projectName)}/alerts`;
 
   return (
     <>
-      <OverviewObservability
-        appId={appId}
-        project={projectName}
-        app={current.name}
-        base={base}
-        allowed={canViewLogs && can("app.viewObservability")}
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {!obsMetrics && (
-          <MetricCards
-            appId={appId}
-            links={links.data ?? []}
-            isKubernetes={isKubernetes}
-            allowed={canViewLogs}
-          />
-        )}
-        <CostCard
-          appId={appId}
-          projectName={projectName}
-          allowed={can("finops.view")}
-        />
-      </div>
-
-      <ScoreCard
-        appId={appId}
-        projectName={projectName}
-        repoUrl={current.github_repo_url}
-        allowed={canViewLogs}
-      />
-
-      <ComponentsCard appId={appId} links={links.data ?? []} />
-
-      {current.template_id.startsWith("import-") && (
-        <ManagedServicesCard
-          projectName={projectName}
-          app={current.name}
-          canManage={can("import.manage")}
-        />
+      {datastore ? (
+        <DatastoreStatusBand summary={summary} loading={loading} />
+      ) : (
+        <WebStatusBand summary={summary} loading={loading} />
       )}
 
-      <LogsCard
-        project={projectName}
-        namespace={current.k8s_namespace ?? `${projectName}-${current.name}`}
+      {datastore ? (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <ResourcesCard
+            summary={chartCard.data}
+            loading={chartLoading}
+            range={range}
+            onRange={setRange}
+            className="lg:col-span-2"
+          />
+          <ClientsPanel summary={summary} loading={loading} />
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <TrafficCard
+            summary={chartCard.data}
+            loading={chartLoading}
+            range={range}
+            onRange={setRange}
+            className="lg:col-span-2"
+          />
+          <DeploymentsPanel
+            deploys={summary?.deploys ?? []}
+            loading={loading}
+            base={base}
+            promotionFor={rollback.promotionFor}
+            onRollback={rollback.ask}
+          />
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <LogVolumeCard summary={summary} loading={loading} />
+        <Panel title={t("recentLogs")} className="lg:col-span-2">
+          <LogsView project={projectName} namespace={namespace} appId={appId} variant="compact" />
+        </Panel>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <TopErrorsPanel summary={summary} loading={loading} base={base} />
+        <AlertsPanel summary={summary} loading={loading} alertsHref={alertsHref} />
+        {datastore ? (
+          <DeploymentsPanel
+            deploys={summary?.deploys ?? []}
+            loading={loading}
+            base={base}
+            promotionFor={rollback.promotionFor}
+            onRollback={rollback.ask}
+          />
+        ) : (
+          <TalksToPanel summary={summary} loading={loading} />
+        )}
+      </div>
+
+      <WeeklyView
         appId={appId}
+        projectName={projectName}
         base={base}
-        allowed={canViewLogs}
+        repoUrl={current.github_repo_url}
+        canViewObservability={canViewObservability}
+        canViewFinops={can("finops.view")}
+        hasScore={hasScorecard(current)}
       />
 
-      <DeploymentsCard appId={appId} base={base} canOpen={canViewLogs} />
+      <div ref={belowRef} className="space-y-6">
+        {belowSeen && current.template_id.startsWith("import-") && (
+          <ManagedServicesCard
+            projectName={projectName}
+            app={current.name}
+            canManage={can("import.manage")}
+          />
+        )}
+        {belowSeen && <EventsCard appId={appId} allowed />}
+      </div>
 
-      <EventsCard appId={appId} allowed={canViewLogs} />
-
+      {rollback.dialog}
     </>
   );
 }

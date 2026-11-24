@@ -397,11 +397,6 @@ export const getAppsHealth = (ids: number[], maxAgeMs = 0) =>
     maxAgeMs,
   );
 
-export const getAppMetrics = (deploymentId: number, window = "24h") =>
-  request<import("@/types").AppMetrics>(
-    `/deployments/${deploymentId}/metrics?window=${window}`,
-  );
-
 export const getAppEvents = (deploymentId: number, limit = 10) =>
   request<import("@/types").AppEvent[]>(
     `/deployments/${deploymentId}/events?limit=${limit}`,
@@ -1783,19 +1778,9 @@ export function isObsNotAvailable(err: unknown): boolean {
 export const getObsCapabilities = (deploymentId: number) =>
   request<import("@/types/observability").ObsCapabilities>(obs(deploymentId));
 
-export const getObsSignals = (deploymentId: number, range: string) =>
-  request<import("@/types/observability").GoldenSignals>(
-    obs(deploymentId, `/signals${obsQuery({ range })}`),
-  );
-
 export const getObsSlo = (deploymentId: number, range: string) =>
   request<import("@/types/observability").SloStatus>(
     obs(deploymentId, `/slo${obsQuery({ range })}`),
-  );
-
-export const getObsDeploys = (deploymentId: number, range: string) =>
-  request<import("@/types/observability").DeployMarker[]>(
-    obs(deploymentId, `/deploys${obsQuery({ range })}`),
   );
 
 export type SummaryRange = "1h" | "6h" | "24h" | "7d";

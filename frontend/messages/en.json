@@ -90,10 +90,7 @@
     },
     "page": {
       "kubernetes": "Kubernetes project",
-      "kubernetesRole": "Kubernetes project · {role}",
-      "appCount": "{count, plural, one {# app} other {# apps}}",
       "live": "Live updates",
-      "description": "Applications deployed in this project.",
       "templatesTitle": "Select a Kubernetes template",
       "templatesLoading": "Loading templates…",
       "noTemplates": "No Kubernetes templates available.",
@@ -2584,30 +2581,7 @@
       "openGrafana": "Open in Grafana, external link",
       "openArgo": "Open {name} in Argo CD, external link"
     },
-    "metrics": {
-      "requests": "Requests/s",
-      "errors": "5xx errors (%)",
-      "cpu": "CPU (millicores)",
-      "cost": "Cost this month",
-      "noTraffic": "No traffic data",
-      "noData": "No data",
-      "noCost": "No cost for this application",
-      "perSecond": "req/s",
-      "last24h": "Last 24 h",
-      "cpuRequest": "Last 24 h, request {value} m",
-      "costNote": "Month to date, estimate {estimate}"
-    },
-    "components": {
-      "title": "Components"
-    },
-    "logs": {
-      "recent": "Recent logs",
-      "open": "Open logs",
-      "region": "Application logs"
-    },
     "deployments": {
-      "recent": "Recent deployments",
-      "open": "Open deployments",
       "history": "Deployment history",
       "empty": "No deployment recorded",
       "version": "Version",
@@ -2912,9 +2886,6 @@
   "scorecard": {
     "title": "Score",
     "badgeLabel": "Score {grade}, {score} out of {max}",
-    "sortBy": "Sort by:",
-    "sortName": "Name",
-    "sortScore": "Score",
     "criteria": {
       "security": "Security",
       "cost": "Cost",
@@ -4006,7 +3977,7 @@
     },
     "notAvailable": {
       "title": "Not available yet",
-      "metrics": "Golden signals appear once the platform metrics store is connected.",
+      "metrics": "Traffic and error charts appear once the platform metrics store is connected.",
       "logs": "This log explorer appears once the platform logs store is connected.",
       "traces": "Traces appear once the platform traces store is connected and the project has a traces tenant.",
       "alerts": "Alerts appear once the platform alert chain is connected.",
@@ -4015,21 +3986,6 @@
     "error": "Could not load this data. {message}",
     "retry": "Retry",
     "openGrafana": "Open in Grafana",
-    "signals": {
-      "title": "Golden signals",
-      "description": "Requests, errors and latency measured at the gateway, prod only.",
-      "noTraffic": "No traffic yet: the gateway counts a route from its first request. This is not an error.",
-      "rate": "Requests per second",
-      "errors": "5xx share",
-      "p95": "Latency p95",
-      "p50": "Latency p50",
-      "now": "Now: {value}",
-      "chartLabel": "{name} over the period, last value {value}",
-      "deployMarker": "Deploy {version} ({outcome})",
-      "routes": "Routes",
-      "route": "Route",
-      "noRoutes": "No route received traffic over the period."
-    },
     "slo": {
       "title": "Error budget",
       "description": "What is left of the budget over {days} days, and how fast it burns.",
@@ -4050,13 +4006,6 @@
       "saved": "Targets saved. The rules are rewritten within a minute.",
       "ownersOnly": "Only project admins and owners change the targets.",
       "invalid": "Availability is 90 to 99.99 %, latency 50 to 99.9 %."
-    },
-    "delivery": {
-      "title": "Delivery",
-      "deploysPerWeek": "Deploys per week",
-      "changeFailure": "Change failure rate",
-      "window": "Over {days} days: {deploys} deploys, {failed} failed",
-      "none": "No prod deploy recorded over {days} days."
     },
     "topErrors": {
       "title": "Most frequent errors",
@@ -4760,6 +4709,218 @@
       "partial": "in progress",
       "projected": "projected {value}",
       "deployMarker": "Deploy {label} at {time}"
+    }
+  },
+  "appOverview": {
+    "reasons": {
+      "asleep": "Asleep",
+      "errors_5xx": "5xx errors",
+      "alerts_firing": "Alert firing",
+      "no_ready_replica": "No ready replica",
+      "missing": "Missing in the cluster",
+      "argo_degraded": "Degraded in Argo CD",
+      "restarts": "Restarting",
+      "not_observed": "Not observed yet"
+    },
+    "badges": {
+      "imported": "Imported",
+      "datastore": "Datastore",
+      "worker": "Worker",
+      "internal": "Internal only"
+    },
+    "header": {
+      "liveSince": "{version} live since {date}",
+      "logs": "Logs",
+      "restart": "Restart",
+      "rollbackTo": "Roll back to {version}",
+      "grafana": "Grafana",
+      "openApp": "Open app",
+      "backupNow": "Back up now",
+      "backupStarted": "Backup started: {list}"
+    },
+    "units": {
+      "s": "s",
+      "m": "m",
+      "h": "h",
+      "d": "d"
+    },
+    "tiles": {
+      "availability": "Availability · 24 h",
+      "availabilityHint": "{errors} failed of {requests}",
+      "requests": "Requests · 24 h",
+      "requestsHint": "{rate} req/s on average",
+      "errors": "Errors 5xx · 24 h",
+      "errorsHint": "{pct} of requests",
+      "latency": "Latency p95 · 24 h",
+      "latencyHint": "p50 {value}",
+      "restarts": "Restarts · 24 h",
+      "restartsHint": "{ready}/{desired} replicas",
+      "restartsMemHint": "{ready}/{desired} replicas · Mem {pct} of limit",
+      "noTraffic": "No traffic yet",
+      "cpu": "CPU · of request",
+      "cpuHint": "{used} of {request} CPU",
+      "memory": "Memory · of limit",
+      "memoryHint": "{used} of {limit}",
+      "disk": "Disk",
+      "diskHint": "{pct} of {capacity}",
+      "noVolume": "No volume measured",
+      "lastBackup": "Last backup",
+      "noBackup": "No backup recorded"
+    },
+    "traffic": {
+      "title": "Traffic and errors",
+      "description": "Requests reaching the app through the gateway. Vertical lines mark deploys.",
+      "requests": "Requests/s",
+      "errors": "5xx/s",
+      "p95": "p95 latency",
+      "range": "Time range",
+      "noTraffic": "No traffic yet",
+      "noTrafficReason": "The gateway counts a route from its first request. This is not an error."
+    },
+    "resources": {
+      "title": "Resources",
+      "description": "Usage against request and limit. 100 % is the CPU request and the memory limit.",
+      "cpu": "CPU, % of request",
+      "memory": "Memory, % of limit",
+      "empty": "No usage measured",
+      "emptyReason": "The cluster metrics have no sample for this app over the period.",
+      "threshold": "Request / limit"
+    },
+    "deployments": {
+      "title": "Deployments",
+      "all": "All",
+      "description": "Last 3 to prod",
+      "live": "Live",
+      "replaced": "Replaced",
+      "failed": "Failed",
+      "running": "Deploying",
+      "unknown": "Unknown",
+      "readyIn": "ready in {duration}",
+      "liveFor": "live {duration}",
+      "logs": "Logs",
+      "rollback": "Roll back",
+      "empty": "No prod deploy yet",
+      "emptyReason": "Deploys appear here once a version reaches prod."
+    },
+    "logVolume": {
+      "title": "Log volume",
+      "description": "Lines per minute by level. A spike here is often the first sign.",
+      "info": "info",
+      "warn": "warn",
+      "error": "error",
+      "empty": "No log lines",
+      "emptyReason": "Nothing was logged over the period, or the app has no log store."
+    },
+    "recentLogs": "Recent logs",
+    "topErrors": {
+      "title": "Most frequent errors",
+      "description": "Grouped log errors, 24 h",
+      "none": "No error line over 24 h"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "description": "Firing now",
+      "none": "No alert firing",
+      "seeRules": "See rules",
+      "firing": "{count, plural, one {# alert firing} other {# alerts firing}}",
+      "open": "Open alerts"
+    },
+    "talksTo": {
+      "title": "Talks to",
+      "description": "Observed in the last hour (Hubble)",
+      "none": "No flow observed in the last hour",
+      "denied": "{count, plural, one {# denied flow} other {# denied flows}} in 24 h"
+    },
+    "clients": {
+      "title": "Connected clients",
+      "description": "Flows seen in the last hour (Hubble)",
+      "verdict": "{verdict, select, denied {denied} other {allowed}} · {flows} flows"
+    },
+    "weekly": {
+      "title": "Weekly view",
+      "reliability": "Reliability target · 7 d",
+      "reliabilityNoTarget": "No target set",
+      "reliabilityNoTargetHint": "Set an availability target in Settings",
+      "reliabilityBudget": "{pct} of the error budget left",
+      "reliabilityNoData": "Not enough traffic to measure yet",
+      "delivery": "Delivery · 30 d",
+      "deploys": "{count, plural, one {deploy} other {deploys}}",
+      "deliveryHint": "{failed} failed · {perWeek} per week",
+      "deliveryNone": "No prod deploy over 30 days",
+      "score": "Score",
+      "scoreHint": "{count, plural, =0 {Nothing to improve} one {# to improve} other {# to improve}}",
+      "scoreNone": "Score not computed yet",
+      "cost": "Cost · this month",
+      "costHint": "estimate {estimate}",
+      "costNone": "No cost recorded yet for this app",
+      "unavailable": "Not available for this app"
+    }
+  },
+  "projectHome": {
+    "attention": "{count, plural, one {# app needs attention} other {# apps need attention}}",
+    "allHealthy": "All apps healthy",
+    "description": "{count, plural, one {# app} other {# apps}} · {cloud} · you are {role}",
+    "descriptionNoRole": "{count, plural, one {# app} other {# apps}} · {cloud}",
+    "logs": "Logs",
+    "grafana": "Grafana",
+    "band": {
+      "requests": "Requests/s",
+      "requestsSub": "24 h · by app",
+      "errors": "Errors 5xx",
+      "errorsSub": "24 h · by app, % of requests",
+      "errorLogs": "Error logs/min",
+      "errorLogsSub": "24 h",
+      "allApps": "all apps",
+      "peak": "{app} · {value} at {time}",
+      "empty": "No data yet",
+      "emptyReason": "Appears once the apps receive traffic."
+    },
+    "apps": {
+      "title": "Apps",
+      "sort": "Sort: needs attention first",
+      "filter": "Type",
+      "all": "All types",
+      "web": "Services",
+      "datastore": "Datastores",
+      "worker": "Workers",
+      "app": "App",
+      "rps": "Req/s",
+      "errors": "5xx",
+      "p95": "p95",
+      "spark": "24 h",
+      "lastDeploy": "Last deploy",
+      "cpu": "CPU {pct}",
+      "mem": "Mem {pct}",
+      "disk": "disk {pct}",
+      "open": "Open {name}",
+      "more": "{count, plural, one {+ # more app, healthy ({names})} other {+ # more apps, all healthy ({names})}}",
+      "noMatch": "No app of this type",
+      "kinds": {
+        "service": "Service",
+        "frontend": "Frontend",
+        "datastore": "Datastore",
+        "worker": "Worker"
+      },
+      "deploying": "Deploying",
+      "failed": "Deploy failed",
+      "deleting": "Deleting",
+      "sparkLabel": "{name}, 24 h"
+    },
+    "where": {
+      "title": "Where it runs",
+      "state": "{cloud} · {state}",
+      "reserved": "Reserved",
+      "reservedHint": "sum of pod requests",
+      "using": "Using now",
+      "usingHint": "{cpu} · {mem} of reserved",
+      "usingNone": "Live usage not available on this cloud",
+      "none": "Not measured yet"
+    },
+    "gettingStarted": {
+      "next": "Next:",
+      "hide": "hide",
+      "showSteps": "Show all steps",
+      "hideSteps": "Hide steps"
     }
   }
 }

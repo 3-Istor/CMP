@@ -33,9 +33,9 @@ export function FootprintTotal({ rows, up }: { rows: AppFootprint[]; up: boolean
   );
 }
 
-/** The project's footprint on one cloud; empty until read or when none is stored. */
+/** The project's footprint on one cloud; null until read, empty when none is stored. */
 export function useProjectFootprint(project: string, cloud: string | null) {
-  const [rows, setRows] = useState<AppFootprint[]>([]);
+  const [rows, setRows] = useState<AppFootprint[] | null>(null);
   useEffect(() => {
     getProjectFootprint(project)
       .then((all) => setRows(all.filter((r) => r.cloud === cloud)))
