@@ -176,6 +176,7 @@ export function TopologyTable({
       <section className="space-y-2">
         <h3 className="px-1 text-sm font-medium">{t("table.apps")}</h3>
         <DataTable
+          caption={t("table.apps")}
           columns={nodeColumns}
           rows={nodes}
           rowKey={(node) => node.id}
@@ -186,6 +187,7 @@ export function TopologyTable({
       <section className="space-y-2">
         <h3 className="px-1 text-sm font-medium">{t("table.links")}</h3>
         <DataTable
+          caption={t("table.links")}
           columns={edgeColumns}
           rows={edges}
           rowKey={(edge) => edge.id}

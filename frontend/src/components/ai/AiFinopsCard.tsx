@@ -108,6 +108,7 @@ export function AiFinopsCard({ projects, period }: { projects: string[]; period:
       </CardHeader>
       <CardContent>
         <DataTable
+          caption={t("caption")}
           columns={columns}
           rows={rows}
           rowKey={(row) => `${row.project}/${row.kind}/${row.name}`}

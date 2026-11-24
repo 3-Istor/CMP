@@ -183,6 +183,7 @@ export function AgentTraces() {
         </a>
       )}
       <DataTable
+        caption={t("caption")}
         columns={columns}
         rows={traces.data?.items ?? []}
         rowKey={(trace) => trace.trace_id}

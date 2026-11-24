@@ -220,6 +220,7 @@ function AllAgents() {
         ))}
       </dl>
       <DataTable
+        caption={t("tableCaption")}
         columns={columns}
         rows={rows}
         rowKey={(agent) => `${agent.project}/${agent.name}`}

@@ -53,6 +53,8 @@ export interface DataTableProps<T> {
   rowClassName?: (row: T) => string | undefined;
   /** Shown above the table, left of the search box. */
   toolbar?: ReactNode;
+  /** Accessible name of the table, read by screen readers only. */
+  caption?: string;
   className?: string;
 }
 
@@ -78,6 +80,7 @@ export function DataTable<T>({
   searchKeys,
   searchPlaceholder,
   initialSort,
+  caption,
   onRowClick,
   rowClassName,
   toolbar,
@@ -184,6 +187,7 @@ export function DataTable<T>({
       )}
       <div className="overflow-x-auto" tabIndex={0}>
         <table className="w-full text-sm" aria-busy={loading}>
+          {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
             <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
               {columns.map((c) => {

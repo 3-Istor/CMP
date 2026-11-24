@@ -108,7 +108,7 @@ test("the test chat streams the answer next to every step and its cost", async (
   await expect(steps.getByLabel("Code Python")).toContainText("plt.savefig");
   await expect(steps.getByRole("img", { name: /chart\.png/ })).toBeVisible();
   await expect(steps.getByRole("alert")).toContainText("politique de la plateforme");
-  await expect(page.getByText(/8\s?230 entrée · 350 sortie/).first()).toBeVisible();
+  await expect(page.getByText(/8,2\s?k entrée · 350 sortie/).first()).toBeVisible();
   await steps.getByRole("button", { name: "Arguments" }).first().click();
   await expect(steps.getByText("taux de chômage France 2026")).toBeVisible();
   await shot(page, "6-agent-test");
