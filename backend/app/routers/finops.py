@@ -23,7 +23,7 @@ import csv
 import io
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -81,7 +81,13 @@ from app.services.authz import (
     is_cnp_admin,
     is_finops,
 )
-from app.services.finops import anomalies, estimate, platform, reconciliation
+from app.services.finops import (
+    anomalies,
+    engine,
+    estimate,
+    platform,
+    reconciliation,
+)
 from app.services.finops.forecast import forecast_for_apps
 from app.services.finops.ingest import carbon, fx
 from app.services.finops.provider import (
@@ -315,7 +321,11 @@ def get_overview(
     start, end = period_to_range(period)
     timeline = [
         CostSeriesPoint(**p)
-        for p in provider.timeline(apps, start, end, granularity)
+        for p in engine.mark_partial(
+            provider.timeline(apps, start, end, granularity),
+            granularity,
+            datetime.now(timezone.utc),
+        )
     ]
     app_rows = [AppCostRow(**r) for r in provider.app_rows(apps)]
 
@@ -853,6 +863,7 @@ def get_timeline(
                 if r != resource:
                     p[r] = 0.0
             p["total"] = p.get(resource, 0.0)
+    engine.mark_partial(points, granularity, datetime.now(timezone.utc))
     return [CostSeriesPoint(**p) for p in points]
 
 
@@ -976,6 +987,8 @@ def get_recommendations(
                 effort=r.effort,
                 status=states.get(r.id, "pending"),
                 can_apply=r.patch is not None,
+                text_key=r.text_key,
+                text_params=r.text_params,
             )
         )
     return result
@@ -1216,9 +1229,9 @@ async def _apply_patch_to_gitops(
         _extract_repo_full_name,
         _get_github_token_for_deployment,
         _load_values_file,
+        _values_files,
         _yaml,
     )
-    from app.services.app_security_data import SINGLE_VALUES_FILE
     from app.services.github_service import GitHubAppError, put_file_content
 
     if _app_type_of(deployment) == "fullstack":
@@ -1232,14 +1245,15 @@ async def _apply_patch_to_gitops(
     try:
         token = await _get_github_token_for_deployment(deployment)
         repo = _extract_repo_full_name(deployment)
-        parsed, sha = await _load_values_file(token, repo, SINGLE_VALUES_FILE)
+        values_file = _values_files(deployment)[0]
+        parsed, sha = await _load_values_file(token, repo, values_file)
         _deep_merge(parsed, patch)
         out = StringIO()
         _yaml.dump(parsed, out)
         result = await put_file_content(
             installation_token=token,
             repo_full_name=repo,
-            file_path=SINGLE_VALUES_FILE,
+            file_path=values_file,
             content=out.getvalue(),
             message="chore(finops): apply cost optimisation recommendation",
             sha=sha,

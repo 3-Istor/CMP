@@ -1,5 +1,6 @@
 "use client";
 
+import { FinishImportBanner } from "@/components/imports/ImportTasks";
 import { AiAccessBadge } from "@/components/ai/AiAccessBadge";
 import { AppIcon } from "@/components/app-icon/AppIcon";
 import { Breadcrumbs } from "@/components/layout/PageHeader";
@@ -13,6 +14,10 @@ import {
   useProjectContext,
 } from "@/components/projects/ProjectContext";
 import { useObsCapabilities } from "@/components/observability/shared";
+import { useRollback } from "@/components/app-overview/Rollback";
+import { STATUS_TEXT, useReasonLabel } from "@/components/app-overview/shared";
+import { liveDeploy } from "@/lib/appHealth";
+import { useAppSummary } from "@/lib/appSummary";
 import { ScoreBadge } from "@/components/scorecard/ScoreBadge";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +25,7 @@ import { HealthBadge } from "@/components/projects/DeploymentHealth";
 import { MenuText } from "@/components/projects/MenuText";
 import { EnvLinks } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DeletingBadge,
   ProgressBadge,
@@ -40,6 +45,7 @@ import {
   getDeploymentLinks,
   getPower,
   pauseDeployment,
+  requestSecurityBackup,
   resumeDeployment,
   restartDeployment,
   sleepDeployment,
@@ -52,7 +58,10 @@ import { cn, appUrlOf } from "@/lib/utils";
 import type { Deployment, ProjectLink } from "@/types";
 import {
   Check,
+  DatabaseBackup,
+  ExternalLink,
   FileCode,
+  History,
   Image as ImageIcon,
   MoreHorizontal,
   Moon,
@@ -127,6 +136,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const tf = useTranslations("appPage");
   const tNavProj = useTranslations("projectNav");
   const tFrame = useTranslations("apps.frame");
+  const tOv = useTranslations("appOverview");
+  const reasonLabel = useReasonLabel();
   const locale = intlLocale(useLocale());
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const linksReady = isKubernetes && canViewLogs;
@@ -174,6 +185,31 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     [current.id],
     canViewLogs && hasScorecard(current),
   )[current.id];
+  const summary = useAppSummary(appId, "24h", healthReady).data;
+  const rollback = useRollback(
+    appId,
+    summary?.deploys ?? [],
+    healthReady && can("release.operate"),
+  );
+  const live24 = summary ? liveDeploy(summary.deploys) : null;
+  const statusReason =
+    summary && summary.status !== "healthy" && summary.status_reason !== "asleep"
+      ? reasonLabel(summary.status_reason)
+      : null;
+  const grafanaUrl =
+    obsCaps?.grafana_url ||
+    links.find((l) => l.id.startsWith("grafana") && l.app)?.url ||
+    null;
+  const canBackUp =
+    summary?.kind === "datastore" && can("security.manage");
+  const handleBackup = async () => {
+    try {
+      const { backups } = await requestSecurityBackup(projectName, current.name);
+      toast.success(tOv("header.backupStarted", { list: backups.join(", ") }));
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
   const powerReadable =
     canOperate &&
     isKubernetes &&
@@ -336,6 +372,29 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                       status={health?.status ?? null}
                     />
                   )}
+                  {statusReason && (
+                    <Badge
+                      variant="outline"
+                      className={cn("px-1.5 py-0 text-[11px]", STATUS_TEXT[summary!.status])}
+                    >
+                      {statusReason}
+                    </Badge>
+                  )}
+                  {imported && (
+                    <Badge variant="outline" className="px-1.5 py-0 text-[11px]">
+                      {tOv("badges.imported")}
+                    </Badge>
+                  )}
+                  {summary && summary.kind !== "web" && (
+                    <Badge variant="outline" className="px-1.5 py-0 text-[11px]">
+                      {tOv(`badges.${summary.kind}`)}
+                    </Badge>
+                  )}
+                  {summary && summary.kind !== "web" && !outputsUrl && (
+                    <Badge variant="outline" className="px-1.5 py-0 text-[11px] text-muted-foreground">
+                      {tOv("badges.internal")}
+                    </Badge>
+                  )}
                   {current.status === "deleting" && <DeletingBadge />}
                   {stage !== null && <DeployStages stage={stage} />}
                   {current.status === "failed" && (
@@ -354,17 +413,28 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   {isKubernetes && canViewLogs && urlSoon && (
                     <span>{tFrame("urlSoon")}</span>
                   )}
-                  <span>{current.template_name || current.template_id}</span>
-                  {current.k8s_namespace && (
-                    <span className="font-mono">{current.k8s_namespace}</span>
+                  {live24 ? (
+                    <span>
+                      {tOv("header.liveSince", {
+                        version: live24.version,
+                        date: new Date(live24.at).toLocaleDateString(locale, {
+                          day: "numeric",
+                          month: "short",
+                        }),
+                      })}
+                    </span>
+                  ) : (
+                    <span>
+                      {tFrame(deployedLabel ? "deployedOn" : "createdOn", {
+                        date: new Date(current.created_at).toLocaleDateString(
+                          locale,
+                          { day: "numeric", month: "short", year: "numeric" },
+                        ),
+                      })}
+                    </span>
                   )}
-                  <span>
-                    {tFrame(deployedLabel ? "deployedOn" : "createdOn", {
-                      date: new Date(current.created_at).toLocaleDateString(
-                        locale,
-                        { day: "numeric", month: "short", year: "numeric" },
-                      ),
-                    })}
+                  <span title={current.k8s_namespace ?? undefined}>
+                    {current.template_name || current.template_id}
                   </span>
                   {current.created_via && (
                     <Badge
@@ -384,7 +454,66 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {isKubernetes && canViewLogs && (
+                <Link
+                  href={`${base}/logs`}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  <ScrollText aria-hidden />
+                  {tOv("header.logs")}
+                </Link>
+              )}
+              {canOperate && isKubernetes && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={restartReason() !== null}
+                  title={restartReason() ?? undefined}
+                  onClick={() => setConfirming("restart")}
+                >
+                  <RotateCw aria-hidden />
+                  {tOv("header.restart")}
+                </Button>
+              )}
+              {rollback.target && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => rollback.ask(rollback.target)}
+                >
+                  <History aria-hidden />
+                  {tOv("header.rollbackTo", { version: rollback.target.version })}
+                </Button>
+              )}
+              {canBackUp && (
+                <Button variant="outline" size="sm" onClick={handleBackup}>
+                  <DatabaseBackup aria-hidden />
+                  {tOv("header.backupNow")}
+                </Button>
+              )}
+              {grafanaUrl && canViewObservability && (
+                <a
+                  href={grafanaUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  {tOv("header.grafana")}
+                  <ExternalLink aria-hidden />
+                </a>
+              )}
+              {appUrl && (
+                <a
+                  href={appUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonVariants({ size: "sm" })}
+                >
+                  {tOv("header.openApp")}
+                  <ExternalLink aria-hidden />
+                </a>
+              )}
               {linksReady && <ToolsMenu links={links} />}
               <Button
                 variant="ghost"
@@ -454,17 +583,6 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                             />
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem
-                          className="gap-2"
-                          disabled={restartReason() !== null}
-                          onClick={() => setConfirming("restart")}
-                        >
-                          <RotateCw className="h-4 w-4" aria-hidden />
-                          <MenuText
-                            label={ta("restart")}
-                            reason={restartReason()}
-                          />
-                        </DropdownMenuItem>
                       </>
                     )}
                     {canEditIcon && (
@@ -555,9 +673,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           />
         )}
 
+        {isKubernetes && <FinishImportBanner />}
+
         <div className="space-y-6">{children}</div>
       </main>
 
+      {rollback.dialog}
       <AppIconDialog
         deployment={current}
         open={iconOpen}

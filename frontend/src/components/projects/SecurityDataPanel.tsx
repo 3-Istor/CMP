@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
     getSecurityData,
+    isRepoNotManaged,
     previewSecurityData,
     updateSecurityData,
 } from "@/lib/api";
@@ -36,7 +37,10 @@ import { toast } from "sonner";
 interface Props {
     deploymentId: number;
     project: string;
+    notManaged?: React.ReactNode;
 }
+
+const REPO_NOT_MANAGED = "repo_not_managed";
 
 const RETENTION_PATTERN = /^[1-9][0-9]*[dwm]$/;
 
@@ -51,7 +55,7 @@ const renderCode = (chunks: React.ReactNode) => (
     <span className="font-mono">{chunks}</span>
 );
 
-export function SecurityDataPanel({ deploymentId, project }: Props) {
+export function SecurityDataPanel({ deploymentId, project, notManaged }: Props) {
     const t = useTranslations("apps.data");
     const tc = useTranslations("common");
     // Cloud backups are deleted with the app: nothing to keep.
@@ -85,7 +89,11 @@ export function SecurityDataPanel({ deploymentId, project }: Props) {
             setKeepAfterDelete(data.database?.backup.keep_after_delete ?? false);
             setRetention(data.database?.backup.retention_policy ?? "");
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            setError(
+                isRepoNotManaged(err)
+                    ? REPO_NOT_MANAGED
+                    : err instanceof Error ? err.message : String(err),
+            );
         } finally {
             setLoading(false);
         }
@@ -153,7 +161,9 @@ export function SecurityDataPanel({ deploymentId, project }: Props) {
         }
     };
 
-    const canEdit = remote?.can_edit ?? false;
+    const repoNotManaged =
+        error === REPO_NOT_MANAGED || remote?.managed === false;
+    const canEdit = (remote?.can_edit ?? false) && !repoNotManaged;
     const hasNothingToShow =
         remote !== null && remote.exposure === null && remote.database === null;
 
@@ -191,6 +201,12 @@ export function SecurityDataPanel({ deploymentId, project }: Props) {
                             <Skeleton key={i} className="h-9 w-full" />
                         ))}
                     </div>
+                ) : repoNotManaged && (error || hasNothingToShow) ? (
+                    notManaged ?? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                            {t("notManaged")}
+                        </p>
+                    )
                 ) : error ? (
                     <div className="rounded-lg border border-destructive bg-destructive/5 p-4 text-sm text-destructive space-y-2">
                         <p className="font-medium">{t("loadFailed")}</p>
@@ -206,7 +222,9 @@ export function SecurityDataPanel({ deploymentId, project }: Props) {
                     </p>
                 ) : (
                     <div className="space-y-6">
-                        {!canEdit && (
+                        {repoNotManaged
+                            ? notManaged
+                            : !canEdit && (
                             <Alert>
                                 <AlertDescription>
                                     {t("adminsOnly")}

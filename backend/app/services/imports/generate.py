@@ -832,6 +832,8 @@ def service_values(
             }
             for e in spec.env
         ]
+    if tracing_allowed(spec):
+        values["tracing"] = {"enabled": True}
     if needs_secret(spec):
         values["secrets"] = _secrets(project, spec.name)
     if spec.database:
@@ -855,6 +857,17 @@ def service_values(
         workload["securityContext"] = {"allowPrivilegeEscalation": False}
     values["workload"] = workload
     return values
+
+
+def tracing_allowed(spec: AppSpec) -> bool:
+    """
+    The chart sets OTEL_SERVICE_NAME (the app name) and the collector
+    endpoint, like for a template app, and fails the render when env sets
+    OTEL_RESOURCE_ATTRIBUTES: an app that does keeps its own setup.
+    """
+    return not any(
+        e.get("name") == "OTEL_RESOURCE_ATTRIBUTES" for e in spec.env
+    )
 
 
 def _secrets(project: str, app: str) -> dict:

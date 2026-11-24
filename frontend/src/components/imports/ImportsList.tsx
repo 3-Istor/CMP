@@ -1,24 +1,30 @@
 "use client";
 
-import { GitBranch, RotateCw, Trash2 } from "lucide-react";
+import { GitBranch, GitPullRequestArrow, RotateCw, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
-import { deleteImport, getImports, openStandardPr, rebuildImport, updateImportSettings } from "@/lib/api";
+import {
+  deleteImport,
+  getImports,
+  openStandardPr,
+  pullImportOrigin,
+  rebuildImport,
+  updateImportSettings,
+} from "@/lib/api";
 import { importRefusal } from "@/lib/importRefusal";
 import type { ImportSourceView } from "@/types";
 import { RebuildPendingNotice } from "./RebuildPendingNotice";
 import { StandardRepoNotice } from "./StandardRepoNotice";
 import { pollWhileVisible } from "@/lib/visiblePolling";
 
-const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
-const TD = "px-3 py-2 align-middle";
 const ACTIVE = ["queued", "claimed", "running"];
 
 function lastSha(source: ImportSourceView): string | null {
@@ -96,10 +102,144 @@ export function ImportsList({
     }
   };
 
+  const pullOrigin = async (source: ImportSourceView) => {
+    try {
+      await pullImportOrigin(projectName, source.id);
+      toast.success(t("pullStarted", { origin: source.origin_repo_full_name ?? "" }));
+      refresh();
+    } catch (err) {
+      toast.error(t("pullFailed", { message: importRefusal(err).message }));
+    }
+  };
+
   const pending = sources.filter((s) => s.rebuild_pending);
+  const leaking = sources.filter((s) => (s.copy?.leaks_total ?? 0) > 0);
+
+  const columns: DataColumn<ImportSourceView>[] = [
+    {
+      key: "repo_full_name",
+      header: t("repo"),
+      sortable: true,
+      className: "font-mono",
+      cell: (source) => {
+        const wizardRun = source.runs.filter((r) => r.kind !== "sync").at(-1);
+        return (
+          <>
+            {wizardRun && canManage ? (
+              <Link href={`${base}/import?run=${encodeURIComponent(wizardRun.id)}`} className="text-primary hover:underline">
+                {source.repo_full_name}
+              </Link>
+            ) : (
+              source.repo_full_name
+            )}
+            {source.source_mode === "copy" && source.origin_repo_full_name && (
+              <span className="block font-sans text-xs text-muted-foreground">
+                {t("copiedFrom", { origin: source.origin_repo_full_name })}
+              </span>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      key: "branch",
+      header: t("branch"),
+      sortable: true,
+      cell: (source) => (
+        <span className="inline-flex items-center gap-1 font-mono text-xs">
+          <GitBranch className="h-3 w-3" aria-hidden />
+          {source.branch}
+        </span>
+      ),
+    },
+    {
+      key: "sha",
+      header: t("sha"),
+      className: "font-mono text-xs",
+      cell: (source) => lastSha(source) ?? "-",
+    },
+    {
+      key: "status",
+      header: t("status"),
+      cell: (source) => {
+        const run = source.runs.at(-1);
+        return run ? t(`runStatus.${run.kind}.${run.status}`) : t("never");
+      },
+    },
+    {
+      key: "apps",
+      header: t("apps"),
+      sortable: true,
+      sortValue: (source) => source.services.length,
+      cell: (source) => source.services.length,
+    },
+    {
+      key: "auto_rebuild",
+      header: t("autoRebuild"),
+      cell: (source) => (
+        <Switch
+          checked={source.auto_rebuild}
+          disabled={!canManage || saving === source.id || source.standard_repo?.state === "switched"}
+          onCheckedChange={(value) => void setAutoRebuild(source, value)}
+          aria-label={t("autoRebuildOf", { repo: source.repo_full_name })}
+        />
+      ),
+    },
+    ...(canManage
+      ? [
+          {
+            key: "actions",
+            header: t("actions"),
+            cell: (source: ImportSourceView) => {
+              const active = ACTIVE.includes(source.runs.at(-1)?.status ?? "");
+              return (
+                <div className="flex flex-wrap gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      active ||
+                      source.services.length === 0 ||
+                      ["merged", "switched"].includes(source.standard_repo?.state ?? "")
+                    }
+                    onClick={() => void rebuild(source)}
+                    aria-label={t("rebuildOf", { repo: source.repo_full_name })}
+                  >
+                    <RotateCw aria-hidden />
+                    {t("rebuild")}
+                  </Button>
+                  {source.source_mode === "copy" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={active || source.copy?.state !== "copied"}
+                      onClick={() => void pullOrigin(source)}
+                      aria-label={t("pullOf", { origin: source.origin_repo_full_name ?? "" })}
+                    >
+                      <GitPullRequestArrow aria-hidden />
+                      {t("pull")}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={active}
+                    onClick={() => setDeleting(source)}
+                    aria-label={t("deleteOf", { repo: source.repo_full_name })}
+                  >
+                    <Trash2 aria-hidden />
+                    {t("delete")}
+                  </Button>
+                </div>
+              );
+            },
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <section aria-labelledby="imports-title" className="space-y-2">
+    <section id="imports" aria-labelledby="imports-title" className="scroll-mt-40 space-y-2">
       <h2 id="imports-title" className="text-sm font-semibold">
         {t("title")}
       </h2>
@@ -111,6 +251,16 @@ export function ImportsList({
           onRebuild={() => void rebuild(source)}
         />
       ))}
+      {leaking.map((source) => (
+        <p
+          key={`leaks-${source.id}`}
+          role="status"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm"
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+          {t("copyLeaks", { count: source.copy?.leaks_total ?? 0, repo: source.repo_full_name })}
+        </p>
+      ))}
       {sources.map((source) => (
         <StandardRepoNotice
           key={`standard-${source.id}`}
@@ -119,89 +269,12 @@ export function ImportsList({
           onOpen={() => void openPr(source)}
         />
       ))}
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted/40">
-            <tr>
-              <th scope="col" className={TH}>{t("repo")}</th>
-              <th scope="col" className={TH}>{t("branch")}</th>
-              <th scope="col" className={TH}>{t("sha")}</th>
-              <th scope="col" className={TH}>{t("status")}</th>
-              <th scope="col" className={TH}>{t("apps")}</th>
-              <th scope="col" className={TH}>{t("autoRebuild")}</th>
-              {canManage && <th scope="col" className={TH}>{t("actions")}</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {sources.map((source) => {
-              const run = source.runs.at(-1);
-              const active = ACTIVE.includes(run?.status ?? "");
-              return (
-                <tr key={source.id} className="border-b last:border-0">
-                  <th scope="row" className={`${TD} text-left font-mono font-normal`}>
-                    {run && canManage ? (
-                      <Link href={`${base}/import?run=${encodeURIComponent(run.id)}`} className="text-primary hover:underline">
-                        {source.repo_full_name}
-                      </Link>
-                    ) : (
-                      source.repo_full_name
-                    )}
-                  </th>
-                  <td className={TD}>
-                    <span className="inline-flex items-center gap-1 font-mono text-xs">
-                      <GitBranch className="h-3 w-3" aria-hidden />
-                      {source.branch}
-                    </span>
-                  </td>
-                  <td className={`${TD} font-mono text-xs`}>{lastSha(source) ?? "-"}</td>
-                  <td className={TD}>
-                    {run ? t(`runStatus.${run.kind}.${run.status}`) : t("never")}
-                  </td>
-                  <td className={TD}>{source.services.length}</td>
-                  <td className={TD}>
-                    <Switch
-                      checked={source.auto_rebuild}
-                      disabled={!canManage || saving === source.id || source.standard_repo?.state === "switched"}
-                      onCheckedChange={(value) => void setAutoRebuild(source, value)}
-                      aria-label={t("autoRebuildOf", { repo: source.repo_full_name })}
-                    />
-                  </td>
-                  {canManage && (
-                    <td className={TD}>
-                      <div className="flex flex-wrap gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={
-                            active ||
-                            source.services.length === 0 ||
-                            ["merged", "switched"].includes(source.standard_repo?.state ?? "")
-                          }
-                          onClick={() => void rebuild(source)}
-                          aria-label={t("rebuildOf", { repo: source.repo_full_name })}
-                        >
-                          <RotateCw aria-hidden />
-                          {t("rebuild")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={active}
-                          onClick={() => setDeleting(source)}
-                          aria-label={t("deleteOf", { repo: source.repo_full_name })}
-                        >
-                          <Trash2 aria-hidden />
-                          {t("delete")}
-                        </Button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={sources}
+        rowKey={(source) => source.id}
+        storageKey="imports.list"
+      />
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}

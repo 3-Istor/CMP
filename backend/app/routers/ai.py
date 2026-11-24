@@ -11,6 +11,7 @@ import asyncio
 import json
 import re
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -38,7 +39,14 @@ from app.services.ai import (
     service,
 )
 from app.services.ai import usage as ai_usage
-from app.services.ai.declaration import ProjectAi, client_id
+from app.services.ai.declaration import (
+    PROJECT_DAILY_TOKEN_BUDGET,
+    ProjectAi,
+    client_id,
+)
+from app.services.ai.usage import (
+    APP_DAILY_TOKEN_BUDGET,
+)
 from app.services.authz import (
     ProjectContext,
     RequireAdmin,
@@ -108,13 +116,17 @@ class ProjectAiBody(BaseModel):
     enabled: bool
     models: list[str] = Field(default_factory=list)
     web_search: bool = False
-    daily_token_budget: int = Field(default=0, ge=0, le=1_000_000_000)
+    daily_token_budget: int = Field(
+        default=PROJECT_DAILY_TOKEN_BUDGET, ge=0, le=1_000_000_000
+    )
 
 
 class AppAiBody(BaseModel):
     enabled: bool = True
     # 0 is an app without model access (an MCP server only).
-    daily_token_budget: int = Field(default=50_000, ge=0, le=1_000_000_000)
+    daily_token_budget: int = Field(
+        default=APP_DAILY_TOKEN_BUDGET, ge=0, le=1_000_000_000
+    )
 
 
 class ReconcileBody(BaseModel):
@@ -272,6 +284,10 @@ async def reconcile_project_ai(
         raise _fail(exc) from exc
 
 
+def _resets_at() -> str:
+    return ai_usage.utc_day(datetime.now(timezone.utc))[1].isoformat()
+
+
 @projects.get("/ai/usage")
 async def project_usage(ctx: RequireMember, period: Period = "1d") -> dict:
     try:
@@ -287,7 +303,12 @@ async def project_usage(ctx: RequireMember, period: Period = "1d") -> dict:
         elif project_ai and item["kind"] == "app":
             rights = project_ai.app(item["name"])
         item["budget"] = (rights or {}).get("dailyTokenBudget")
-    return {"period": period, "items": items, "totals": ai_usage.totals(items)}
+    return {
+        "period": period,
+        "items": items,
+        "totals": ai_usage.totals(items),
+        "resets_at": _resets_at(),
+    }
 
 
 @projects.get("/ai/tools")
@@ -428,7 +449,12 @@ async def agent_usage(
         )
     item = items[0] if items else ai_usage.empty_row(azp, ctx.project_name)
     item["budget"] = rights.get("dailyTokenBudget")
-    return {"period": period, **item, "series": points}
+    return {
+        "period": period,
+        **item,
+        "series": points,
+        "resets_at": _resets_at(),
+    }
 
 
 @projects.get("/agents/{agent}/traces")

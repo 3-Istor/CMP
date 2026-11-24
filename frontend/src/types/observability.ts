@@ -13,25 +13,6 @@ export interface ObsCapabilities {
   grafana_url: string;
 }
 
-export interface RouteSignals {
-  route: string;
-  requests_per_second: number;
-  error_percent: number;
-  p50_ms: number | null;
-  p95_ms: number | null;
-}
-
-export interface GoldenSignals {
-  range: string;
-  step_seconds: number;
-  no_traffic: boolean;
-  rate: ObsPoint[];
-  error_percent: ObsPoint[];
-  p50_ms: ObsPoint[];
-  p95_ms: ObsPoint[];
-  routes: RouteSignals[];
-}
-
 export interface SloSettings {
   project: string;
   app: string;
@@ -49,21 +30,14 @@ export interface SloObjective {
   error_ratio: number | null;
   burn_rate_1h: number | null;
   burn_rate_6h: number | null;
+  requests_in_period: number;
+  insufficient_traffic: boolean;
   trend: ObsPoint[];
 }
 
 export interface SloStatus {
   settings: SloSettings;
   objectives: SloObjective[];
-}
-
-export interface DeployMarker {
-  time: string;
-  finished_at: string | null;
-  version: string | null;
-  strategy: string;
-  outcome: string;
-  component: string | null;
 }
 
 export interface Dora {
@@ -153,6 +127,8 @@ export interface WasteHint {
   rec_type: string;
   monthly_saving_eur: number;
   justification: string;
+  text_key?: string | null;
+  text_params?: Record<string, string | number>;
 }
 
 export interface AppCosts {

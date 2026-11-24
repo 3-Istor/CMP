@@ -471,7 +471,7 @@ def test_capabilities_link_the_app_dashboard(make):
 
     assert body["grafana_url"] == (
         "https://grafana.3istor.com/d/cnp-app-signals"
-        "?orgId=7&var-app=web&var-namespace=shop-web"
+        "?orgId=7&var-app=web&var-env=shop-web"
     )
 
 
@@ -601,3 +601,46 @@ def test_costs_without_traffic_have_no_cost_per_request(make, fake):
         body = _get(client, SHOP, "/costs").json()
 
     assert body["cost_per_1k_requests_eur"] is None
+
+
+# ── Summaries (CMP UX rework) ────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("who", ["guest", "outsider"])
+def test_only_members_read_an_apps_summary(make, who):
+    client = make(who)
+
+    response = client.get(f"/api/deployments/{SHOP}/summary")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("who", ["guest", "outsider"])
+def test_only_members_read_the_projects_apps_health(make, who):
+    client = make(who)
+    client.app.include_router(router.projects_router, prefix="/api")
+
+    response = client.get("/api/projects/shop/apps-health")
+
+    assert response.status_code == 403
+
+
+def test_a_summary_range_is_bounded(make):
+    client = make("member")
+
+    response = client.get(
+        f"/api/deployments/{SHOP}/summary", params={"range": "30d"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_capabilities_ask_grafana_once_per_project(make):
+    client = make("member")
+    org_id = mock.AsyncMock(return_value=7)
+
+    with mock.patch.object(router.alerts_grafana, "org_id", org_id):
+        for _ in range(3):
+            _get(client, SHOP, "")
+
+    assert org_id.await_count == 1

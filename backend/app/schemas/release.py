@@ -26,6 +26,7 @@ Outcome = Literal[
     "superseded",
     "deployed",
     "failed",
+    "unknown",
 ]
 
 
@@ -166,6 +167,10 @@ class ReleaseEventRead(BaseModel):
     environment: str
     component: str | None
     rollback_promotion_id: int | None = None
+    # From the start until the revision was available, then until the next
+    # revision of the same component replaced it (or now while it is live).
+    ready_seconds: int | None = None
+    live_seconds: int | None = None
 
 
 class ReleaseChoices(_Camel):

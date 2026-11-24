@@ -1,11 +1,12 @@
 """Moving a project between clusters."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.models.project import Project, TargetCloud
@@ -115,12 +116,29 @@ async def move_capacity(
     )
 
 
+def _footprint(db: Session, project: str) -> tuple[list[dict], str]:
+    return footprint.rows(db, project), _project(db, project).target_cloud
+
+
 @router.get("/moves/footprint")
 async def move_footprint(
     ctx: RequireGuest, db: Session = Depends(get_db)
 ) -> list[dict]:
-    """Last requests measured per app of the project, on every cloud."""
-    return footprint.rows(db, ctx.project_name)
+    """
+    Last requests measured per app of the project, on every cloud, and
+    what the apps use now (``usage``) on the cloud the project runs on.
+    """
+    rows, cloud = await run_in_threadpool(_footprint, db, ctx.project_name)
+    here = TargetCloud(cloud or TargetCloud.ONPREM).value
+    usage = await footprint.live_usage(
+        ctx.project_name,
+        here,
+        {r["app"] for r in rows if r["cloud"] == here},
+        datetime.now(timezone.utc),
+    )
+    for row in rows:
+        row["usage"] = usage.get(row["app"]) if row["cloud"] == here else None
+    return rows
 
 
 @router.get("/moves/last-wal")

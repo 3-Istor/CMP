@@ -37,6 +37,9 @@ class CostSeriesPoint(BaseModel):
     total: float
     ai: float = 0.0
     platform: float = 0.0
+    # The bucket holding now (UTC day, week or month) is still filling up.
+    is_partial: bool = False
+    elapsed_fraction: float = 1.0
 
 
 class AppCloudEstimate(BaseModel):
@@ -193,6 +196,8 @@ class Recommendation(BaseModel):
     effort: str
     status: str = "pending"
     can_apply: bool = False
+    text_key: str | None = None
+    text_params: dict = {}
 
 
 class BudgetRead(BaseModel):

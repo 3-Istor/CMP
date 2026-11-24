@@ -120,7 +120,7 @@ const EMPTY: WizardState = {
   cron: "0 8 * * *",
   instructions: "",
   tools: [],
-  budget: 300_000,
+  budget: 500_000,
   isolation: "runc",
   answers: null,
   actor: null,
@@ -145,7 +145,7 @@ function fromBlock(
     cron: block.trigger?.cron ?? EMPTY.cron,
     instructions: block.instructions ?? "",
     tools: block.tools ?? [],
-    actor: actor ? { instructions: actor.instructions ?? "", tools: actor.tools ?? [], budget: 50_000 } : null,
+    actor: actor ? { instructions: actor.instructions ?? "", tools: actor.tools ?? [], budget: 500_000 } : null,
   };
 }
 

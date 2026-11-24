@@ -27,6 +27,7 @@ export function ScansCard({
 
   function when(scan: SecurityScan): string {
     if (scan.requested_at) return t("scans.requested");
+    if (scan.message_key) return t(`scans.messages.${scan.message_key}`);
     if (scan.status === "unavailable" || scan.status === "missing")
       return scan.message;
     const lastRun = t("scans.lastRun", {

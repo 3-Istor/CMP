@@ -22,12 +22,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.services import audit
+from app.services import audit, managed_equivalent
 from app.services.agents import policy
 from app.services.authz import RequireAdmin, RequireMember
 from app.services.github_service import GitHubAppError
 from app.services.imports import (
     access,
+    copy_mode,
     deploy,
     estimate,
     rebuilds,
@@ -70,6 +71,7 @@ class ImportRequest(BaseModel):
         pattern=r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9_.-]{1,100}$"
     )
     branch: str | None = Field(default=None, max_length=255)
+    source_mode: Literal["in_place", "copy"] = "in_place"
 
 
 class MemoryEdit(BaseModel):
@@ -109,8 +111,12 @@ class SourceSettings(BaseModel):
 async def _recheck_repository(db: Session, claims: dict, source) -> None:
     """
     The caller must still be able to import the bound repository, the same
-    one by id, before a build mints a token on it.
+    one by id, before a build mints a token on it. A copy belongs to the
+    platform org and the project: losing access to the original must not
+    strand it, which is the point of copying.
     """
+    if copy_mode.is_copy(source):
+        return
     try:
         repo = await access.resolve_repository(
             db, claims, source.repo_full_name, repo_id=source.repo_id
@@ -150,8 +156,13 @@ async def create_import(
         raise HTTPException(403, str(exc)) from exc
     except GitHubAppError as exc:
         raise HTTPException(502, f"GitHub could not be read: {exc}") from exc
+    start = (
+        copy_mode.start_copy
+        if body.source_mode == "copy"
+        else service.start_analysis
+    )
     try:
-        run = await service.start_analysis(
+        run = await start(
             db, ctx.project_name, ctx.username, repo, body.branch, ctx.user_id
         )
     except ImportRefused as exc:
@@ -232,7 +243,9 @@ def list_recommendations(
 ):
     """Managed services to move to, and the backing apps not backed up."""
     _enabled()
-    return recommendations.for_project(db, ctx.project_name, app)
+    return managed_equivalent.only_equivalents(
+        recommendations.for_project(db, ctx.project_name, app)
+    )
 
 
 RecommendationId = Annotated[str, FastApiPath(max_length=200)]
@@ -383,6 +396,31 @@ async def open_standard_pr(
     return service.source_view(source)
 
 
+@router.post(
+    "/{project_name}/imports/{source_id}/pull-origin", status_code=202
+)
+async def pull_origin(
+    source_id: str, ctx: RequireAdmin, db: DbSession, request: Request
+):
+    """
+    Pull the original's branch into a pull request on the copy of a
+    copy-mode import. It writes to the copy: step-up, like a rebuild.
+    """
+    _enabled()
+    assert_step_up(ctx.token)
+    try:
+        source = service.get_source(db, ctx.project_name, source_id)
+        run = await copy_mode.pull_origin(db, source, ctx.username)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    audit.note(
+        request,
+        target=source.repo_full_name,
+        origin=source.origin_repo_full_name,
+    )
+    return {"run": service.run_view(run)}
+
+
 @router.put("/{project_name}/imports/{source_id}/settings")
 def update_import_settings(
     source_id: str,
@@ -453,6 +491,23 @@ class PublishedImage(BaseModel):
 
 class PublishCall(WorkerCall):
     services: list[PublishedImage] = Field(max_length=100)
+
+
+class Leak(BaseModel):
+    rule: str = Field(default="", max_length=300)
+    file: str = Field(default="", max_length=1000)
+    commit: str = Field(default="", max_length=64)
+    line: int | None = Field(default=None, ge=0)
+
+
+class CopiedCall(WorkerCall):
+    leaks_total: int = Field(ge=0)
+    leaks: list[Leak] = Field(default_factory=list, max_length=200)
+
+
+class SyncedCall(WorkerCall):
+    branch: str = Field(max_length=64)
+    sha: str = Field(pattern=r"^[0-9a-f]{40}$")
 
 
 class FailCall(WorkerCall):
@@ -558,6 +613,40 @@ async def worker_publish(
     except ImportRefused as exc:
         raise _refused(exc) from exc
     return {"status": "deploying"}
+
+
+@worker.post("/{run_id}/copied", status_code=204)
+async def worker_copied(
+    run_id: str, request: Request, claims: WorkerClaims, db: DbSession
+):
+    body = await _worker_body(
+        request, CopiedCall, settings.IMPORT_WORKER_MAX_BODY_BYTES
+    )
+    run = _run_for(db, run_id, body.attempt_id, claims)
+    try:
+        await copy_mode.receive_copied(
+            db,
+            run,
+            body.leaks_total,
+            [leak.model_dump() for leak in body.leaks],
+        )
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
+    return Response(status_code=204)
+
+
+@worker.post("/{run_id}/synced")
+async def worker_synced(
+    run_id: str, request: Request, claims: WorkerClaims, db: DbSession
+):
+    body = await _worker_body(
+        request, SyncedCall, settings.IMPORT_WORKER_MAX_BODY_BYTES
+    )
+    run = _run_for(db, run_id, body.attempt_id, claims)
+    try:
+        return await copy_mode.receive_synced(db, run, body.branch, body.sha)
+    except ImportRefused as exc:
+        raise _refused(exc) from exc
 
 
 @worker.post("/{run_id}/fail", status_code=204)

@@ -18,6 +18,7 @@ import { AlertTriangle, Download, Loader2, RefreshCw, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PAGE_SIZE_OPTIONS, usePageSize } from "@/components/data/usePageSize";
 import {
   Bar,
   BarChart,
@@ -43,7 +44,6 @@ import { FilterBar } from "./FilterBar";
 import { HeatmapCard, LoginsCard } from "./InsightCards";
 import { NativeSelect } from "./NativeSelect";
 
-const PAGE_SIZE = 100;
 
 type Cursor = { until: string | null; before_id: string | null };
 
@@ -326,7 +326,9 @@ export function AuditView({
   const [filters, setFilters] = useState<ActivityFilters>({
     days: 7,
     app: app ?? null,
+    notable_only: true,
   });
+  const [pageSize, setPageSize] = usePageSize("activity.audit");
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
   const [selected, setSelected] = useState<ActivityEvent | null>(null);
@@ -369,18 +371,18 @@ export function AuditView({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const feed = await getActivity(project, filters);
+      const feed = await getActivity(project, filters, pageSize);
       setEvents(feed.events);
       setFeedUnavailable(feed.unavailable);
       setRetentionDays(feed.retention_days);
-      setMore(feed.events.length >= PAGE_SIZE);
+      setMore(feed.events.length >= pageSize);
       setError(null);
     } catch (e) {
       setError(e);
     } finally {
       setLoading(false);
     }
-  }, [project, filters]);
+  }, [project, filters, pageSize]);
 
   useEffect(() => {
     load();
@@ -642,7 +644,7 @@ export function AuditView({
         <div className="space-y-2">
           <div ref={topRef} className="scroll-mt-4" />
           {events === null ? (
-            [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)
+            Array.from({ length: 20 }, (_, i) => <Skeleton key={i} className="h-14" />)
           ) : events.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
               {back.length > 0 ? t("audit.noMore") : t("audit.empty")}
@@ -662,9 +664,28 @@ export function AuditView({
               <Button variant="outline" onClick={newer} disabled={loading || back.length === 0}>
                 {t("audit.newer")}
               </Button>
-              <span className="text-sm text-muted-foreground">
-                {loading && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
-                {t("audit.page", { page: back.length + 1, size: PAGE_SIZE })}
+              <span className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
+                <span>
+                  {loading && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
+                  {t("audit.page", { page: back.length + 1 })}
+                </span>
+                <label className="flex items-center gap-1.5">
+                  {t("audit.pageSize")}
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      set({});
+                    }}
+                    className="h-8 rounded-md border bg-background px-1.5 text-foreground"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </span>
               <Button variant="outline" onClick={older} disabled={loading || !more}>
                 {t("audit.older")}

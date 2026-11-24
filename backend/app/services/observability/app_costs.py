@@ -42,6 +42,8 @@ def _cost(
                 "rec_type": r.rec_type,
                 "monthly_saving_eur": r.monthly_saving_eur,
                 "justification": r.justification,
+                "text_key": r.text_key,
+                "text_params": r.text_params,
             }
             for r in provider.recommendations(specs)
         ],

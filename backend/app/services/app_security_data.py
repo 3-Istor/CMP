@@ -85,8 +85,11 @@ class DatabaseState(BaseModel):
 
 
 class SecurityDataRead(BaseModel):
-    repo: str
+    repo: str | None
     can_edit: bool
+    # False for an imported app whose repository the platform does not
+    # manage yet: the answer is what the cluster shows, read-only.
+    managed: bool = True
     exposure: ExposureState | None
     database: DatabaseState | None
 

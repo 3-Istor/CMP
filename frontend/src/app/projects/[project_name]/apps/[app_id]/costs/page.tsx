@@ -21,6 +21,7 @@ export default function AppCostsPage() {
           project={projectName}
           appId={appId}
           canAct={can("finops.act")}
+          canSleep={deployment.provider_type === "kubernetes" && can("app.operate")}
         />
       </div>
     </AppSection>

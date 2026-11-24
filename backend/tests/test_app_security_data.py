@@ -379,6 +379,7 @@ def test_get_returns_state_from_both_fullstack_files(client_factory):
     assert response.json() == {
         "repo": "3-istor/shop",
         "can_edit": False,
+        "managed": True,
         "exposure": "project_users",
         "database": {
             "backup": {

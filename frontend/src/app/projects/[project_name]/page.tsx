@@ -6,43 +6,43 @@ import { ProjectAccessReviewCard } from "@/components/access-reviews/ProjectAcce
 import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { ImportsList } from "@/components/imports/ImportsList";
-import { AppCard } from "@/components/projects/AppCard";
+import { AppsList } from "@/components/projects/AppsList";
+import { ProjectHealthBand } from "@/components/projects/ProjectHealthBand";
+import { STATUS_TEXT, StatusDot } from "@/components/app-overview/shared";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { PlacementPanel } from "@/components/placement/PlacementPanel";
 import { ProjectClusterCard } from "@/components/cluster/ProjectClusterCard";
 import { MoveBanner } from "@/components/projects/ProjectLocation";
-import { OpenAppMenu } from "@/components/projects/EnvLinks";
 import { ToolsMenu } from "@/components/projects/ToolsMenu";
 import { SecurityAlert } from "@/components/security/SecurityAlert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { NotConnected } from "@/components/clusters/NotConnected";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   createDeployment,
   getCatalog,
+  getProjectAppsHealth,
   getProjectLinks,
   isNotConnected,
 } from "@/lib/api";
-import { hasScorecard, useScorecards } from "@/lib/scorecard";
+import { attentionCount } from "@/lib/appHealth";
+import { useCardData } from "@/lib/useCardData";
+import { cn } from "@/lib/utils";
 import type { CatalogTemplate, ProjectLink } from "@/types";
 import {
+  ExternalLink,
   FolderKanban,
   Loader2,
   Plus,
   Rocket,
-  RefreshCw,
+  ScrollText,
   Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export default function ProjectPage() {
@@ -52,7 +52,7 @@ export default function ProjectPage() {
   const tNav = useTranslations("projectNav");
   const tRoles = useTranslations("projects");
   const tCommon = useTranslations("common");
-  const tScore = useTranslations("scorecard");
+  const th = useTranslations("projectHome");
   const {
     projectName,
     role,
@@ -65,21 +65,14 @@ export default function ProjectPage() {
     hasActiveDeployments,
   } = useProjectContext();
 
-  const [sortBy, setSortBy] = useState<"name" | "score">("name");
-  const scores = useScorecards(
-    apps.filter(hasScorecard).map((app) => app.id),
-    can("app.viewLogs"),
+  const health = useCardData(
+    `apps-health-${projectName}`,
+    () => getProjectAppsHealth(projectName, "24h", 25_000),
+    { enabled: role !== null, intervalMs: 30_000 },
   );
-  const sortedApps = useMemo(() => {
-    const byName = (a: (typeof apps)[number], b: (typeof apps)[number]) =>
-      a.name.localeCompare(b.name);
-    if (sortBy === "name") return [...apps].sort(byName);
-    return [...apps].sort(
-      (a, b) =>
-        (scores[b.id]?.score ?? -1) - (scores[a.id]?.score ?? -1) ||
-        byName(a, b),
-    );
-  }, [apps, scores, sortBy]);
+  const healthLoading = role === null || (health.loading && !health.data);
+  const attention = health.data ? attentionCount(health.data.apps) : 0;
+  const liveApps = apps.filter((a) => a.status !== "deleted");
 
   // What this user may do here. Every can() is false while the role loads,
   // so action buttons stay absent instead of flashing into view and then
@@ -95,6 +88,8 @@ export default function ProjectPage() {
       .then(setLinks)
       .catch(() => setLinks([]));
   }, [projectName, canViewObservability]);
+
+  const grafana = links.find((l) => l.id.startsWith("grafana") && !l.app);
 
   // Catalog for deploy modal
   const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
@@ -161,11 +156,33 @@ export default function ProjectPage() {
   return (
     <div className="min-h-screen">
       <PageHeader
-        title={<span className="capitalize">{projectName}</span>}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            <span>{projectName}</span>
+            {health.data && liveApps.length > 0 && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
+                  STATUS_TEXT[attention > 0 ? "degraded" : "healthy"],
+                )}
+              >
+                <StatusDot status={attention > 0 ? "degraded" : "healthy"} />
+                {attention > 0 ? th("attention", { count: attention }) : th("allHealthy")}
+              </span>
+            )}
+          </span>
+        }
         description={
           role
-            ? t("kubernetesRole", { role: tRoles(`roles.${role}`) })
-            : t("kubernetes")
+            ? th("description", {
+                count: liveApps.length,
+                cloud: targetCloud ? tNav(`cloud.${targetCloud}`) : t("kubernetes"),
+                role: tRoles(`roles.${role}`),
+              })
+            : th("descriptionNoRole", {
+                count: liveApps.length,
+                cloud: targetCloud ? tNav(`cloud.${targetCloud}`) : t("kubernetes"),
+              })
         }
         icon={FolderKanban}
         breadcrumbs={[
@@ -174,15 +191,26 @@ export default function ProjectPage() {
         ]}
         actions={
           <>
-              {targetCloud && (
-                <Badge variant="outline" className="text-xs">
-                  {tNav(`cloud.${targetCloud}`)}
-                </Badge>
+              {can("app.viewLogs") && (
+                <Link
+                  href={`/projects/${encodeURIComponent(projectName)}/logs`}
+                  className={buttonVariants({ size: "sm", variant: "outline" })}
+                >
+                  <ScrollText aria-hidden />
+                  {th("logs")}
+                </Link>
               )}
-              <Badge variant="outline" className="font-mono text-xs">
-                {t("appCount", { count: apps.length })}
-              </Badge>
-              <OpenAppMenu apps={apps} />
+              {grafana && (
+                <a
+                  href={grafana.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonVariants({ size: "sm", variant: "outline" })}
+                >
+                  {th("grafana")}
+                  <ExternalLink aria-hidden />
+                </a>
+              )}
               {canViewObservability && <ToolsMenu links={links} />}
               {canImport && (
                 <Link
@@ -204,7 +232,6 @@ export default function ProjectPage() {
       />
       <PageBody>
         <MoveBanner />
-        <ProjectClusterCard />
         {canViewObservability && (
           <SecurityAlert
             project={projectName}
@@ -218,37 +245,7 @@ export default function ProjectPage() {
           {role === "owner" || role === "admin" ? (
             <ProjectAccessReviewCard project={projectName} />
           ) : null}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <p className="text-sm text-muted-foreground">
-                {t("description")}
-              </p>
-              {hasActiveDeployments && (
-                <Badge
-                  variant="outline"
-                  className="animate-pulse bg-primary/10 text-primary border-primary/20"
-                >
-                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  {t("live")}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={refreshApps}
-                disabled={loadingApps}
-                title={ta("refresh")}
-                aria-label={ta("refresh")}
-              >
-                <RefreshCw
-                  className={loadingApps ? "animate-spin" : undefined}
-                  aria-hidden
-                />
-              </Button>
-            </div>
-          </div>
+          <ProjectHealthBand data={health.data} loading={healthLoading} />
 
           {/* Inline catalog (shown when user clicks "Deploy App") */}
           {showCatalog && canDeploy && (
@@ -285,14 +282,7 @@ export default function ProjectPage() {
             </div>
           )}
 
-          {/* Apps grid */}
-          {loadingApps ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-40 rounded-xl" />
-              ))}
-            </div>
-          ) : isNotConnected(appsError) ? (
+          {isNotConnected(appsError) ? (
             <NotConnected cloud={isNotConnected(appsError)!.cloud} />
           ) : appsError ? (
             <div className="rounded-xl border border-destructive bg-destructive/5 p-6 text-destructive space-y-2">
@@ -302,7 +292,7 @@ export default function ProjectPage() {
                 {tCommon("retry")}
               </Button>
             </div>
-          ) : apps.length === 0 ? (
+          ) : !loadingApps && apps.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-muted-foreground">
               <Rocket className="h-9 w-9 mb-3 text-muted-foreground" />
               <p className="font-medium">{t("noApps")}</p>
@@ -322,39 +312,32 @@ export default function ProjectPage() {
               )}
             </div>
           ) : (
-            <>
-              <div className="flex items-center justify-end gap-2">
-                <label
-                  htmlFor="app-sort"
-                  className="text-sm text-muted-foreground"
-                >
-                  {tScore("sortBy")}
-                </label>
-                <select
-                  id="app-sort"
-                  value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(e.target.value as "name" | "score")
-                  }
-                  className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground"
-                >
-                  <option value="name">{tScore("sortName")}</option>
-                  <option value="score">{tScore("sortScore")}</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {sortedApps.map((app) => (
-                  <AppCard key={app.id} app={app} projectName={projectName} />
-                ))}
-              </div>
-            </>
+            <AppsList
+              apps={apps}
+              health={health.data?.apps ?? null}
+              loading={loadingApps || healthLoading}
+              projectName={projectName}
+              live={
+                hasActiveDeployments ? (
+                  <Badge
+                    variant="outline"
+                    className="animate-pulse border-primary/20 bg-primary/10 text-primary"
+                  >
+                    {t("live")}
+                  </Badge>
+                ) : null
+              }
+            />
           )}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <GettingStarted />
+            <ProjectClusterCard />
+          </div>
 
           {can("topology.view") && (
             <ImportsList projectName={projectName} canManage={canImport} />
           )}
-
-          <GettingStarted />
 
           <PlacementPanel />
         </div>

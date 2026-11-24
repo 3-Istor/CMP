@@ -7,7 +7,6 @@ import {
 } from "@/components/finops/FinopsFilters";
 import { RecommendationCard } from "@/components/finops/RecommendationCard";
 import { OpenDashboardButton } from "@/components/ui/open-dashboard-button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { getRecommendations } from "@/lib/api";
 import { useFinopsMeta, useFinopsOverview } from "@/lib/hooks";
 import type { Recommendation } from "@/types";
@@ -20,10 +19,12 @@ export function AppCostsPanel({
   project,
   appId,
   canAct,
+  canSleep,
 }: {
   project: string;
   appId: number;
   canAct: boolean;
+  canSleep: boolean;
 }) {
   const t = useTranslations("finops");
   const [filters, setFilters] = useState<FinopsFilterState>({
@@ -75,7 +76,15 @@ export function AppCostsPanel({
       )}
 
       {loading && !data ? (
-        <Skeleton className="h-80 rounded-xl" />
+        <CostCharts
+          loading
+          timeline={[]}
+          breakdown={{ cpu: 0, ram: 0, storage: 0, network: 0 }}
+          forecast={null}
+          granularity={filters.granularity}
+          anomalies={[]}
+          meta={meta}
+        />
       ) : data ? (
         <CostCharts
           timeline={data.timeline}
@@ -99,6 +108,7 @@ export function AppCostsPanel({
               key={rec.id}
               rec={rec}
               canAct={canAct}
+              canSleep={canSleep}
               onChanged={loadRecs}
             />
           ))}

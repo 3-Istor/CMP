@@ -130,7 +130,23 @@ export function FinopsOverviewDashboard({
               <Skeleton key={i} className="h-40 rounded-xl" />
             ))}
           </div>
-          <Skeleton className="h-80 rounded-xl" />
+          <CostCharts
+            loading
+            timeline={[]}
+            breakdown={{ cpu: 0, ram: 0, storage: 0, network: 0 }}
+            forecast={null}
+            granularity={filters.granularity}
+            anomalies={[]}
+            meta={meta}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("overview.appTracking")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AppCostTable apps={[]} loading />
+            </CardContent>
+          </Card>
         </div>
       ) : data ? (
         <>

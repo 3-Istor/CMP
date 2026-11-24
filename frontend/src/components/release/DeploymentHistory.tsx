@@ -4,7 +4,7 @@ import { DeploymentsTable } from "@/components/app-overview/DeploymentsCard";
 import { OverviewCard } from "@/components/app-overview/OverviewCard";
 import { useAppContext } from "@/components/projects/AppContext";
 import { AppSection } from "@/components/projects/AppFrame";
-import { DeploymentLogs } from "@/components/projects/DeploymentLogs";
+import { LogsView } from "@/components/activity/LogsView";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { imageTag } from "@/components/release/format";
 import { DeploymentStepper } from "@/components/stepper/DeploymentStepper";
@@ -140,7 +140,7 @@ export function DeploymentHistory() {
         onConfirm={rollBack}
       />
 
-      <DeploymentLogs deploymentId={appId} deploymentStatus={deployment.status} />
+      <LogsView variant="stream" deploymentId={appId} deploymentStatus={deployment.status} />
     </AppSection>
   );
 }

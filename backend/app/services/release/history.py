@@ -54,6 +54,57 @@ def list_events(
     return query.order_by(ReleaseEvent.id.desc()).limit(limit).all()
 
 
+LIVE_OUTCOMES = ("promoted", "deployed")
+
+
+def _replaced_at(event: ReleaseEvent) -> datetime:
+    return _aware(event.finished_at or event.started_at)
+
+
+def lifetimes(
+    db: Session, deployment_id: int, events: list[ReleaseEvent]
+) -> dict[int, tuple[int | None, int | None]]:
+    """
+    Event id -> (seconds until ready, seconds live) of each row that went
+    live: live until the next revision of the same component went live, or
+    until now. Rows that never went live have neither.
+    """
+    if not events:
+        return {}
+    later = (
+        db.query(ReleaseEvent)
+        .filter(
+            ReleaseEvent.deployment_id == deployment_id,
+            ReleaseEvent.outcome.in_(LIVE_OUTCOMES),
+            ReleaseEvent.id > min(e.id for e in events),
+        )
+        .order_by(ReleaseEvent.id)
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    found = {}
+    for event in events:
+        if event.outcome not in LIVE_OUTCOMES or event.finished_at is None:
+            continue
+        ready_at = _aware(event.finished_at)
+        successor = next(
+            (
+                e
+                for e in later
+                if e.id > event.id
+                and (e.environment, e.component)
+                == (event.environment, event.component)
+            ),
+            None,
+        )
+        until = _replaced_at(successor) if successor else now
+        found[event.id] = (
+            max(0, int((ready_at - _aware(event.started_at)).total_seconds())),
+            max(0, int((until - ready_at).total_seconds())),
+        )
+    return found
+
+
 def _digest(ref: str | None) -> str | None:
     # An event image may carry a tag before the digest, a promotion does not.
     return (ref or "").partition("@")[2] or None
@@ -217,6 +268,17 @@ def sync_event(
     if changed:
         db.commit()
     return latest
+
+
+def close_orphan(db: Session, deployment_id: int) -> None:
+    """
+    Close a canary row left running once its Rollout is gone (the app went
+    back to rolling updates, or was recreated): nothing will settle it.
+    """
+    latest = latest_event(db, deployment_id)
+    if latest is not None and latest.outcome == "running":
+        _finish(latest, "unknown", None)
+        db.commit()
 
 
 def record_action(

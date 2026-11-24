@@ -644,3 +644,18 @@ def test_app_spec_falls_back_to_the_project_app_namespace():
     spec = engine.app_spec_from_deployment(_Row())
 
     assert spec.namespace == "shop-api"
+
+
+def test_rightsizing_text_is_english_with_a_key_the_ui_translates(monkeypatch):
+    # Arrange
+    _vm(monkeypatch, _usage(replicas=1, app=_PER_POD))
+
+    # Act
+    rec = recs.recommendations_for_apps([_app()], REF)[0]
+
+    # Assert
+    assert (rec.title, rec.text_key, sorted(rec.text_params)) == (
+        "Adjust the CPU / RAM requests",
+        "rightsizing",
+        ["cpu", "ram", "window"],
+    )

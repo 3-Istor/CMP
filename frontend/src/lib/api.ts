@@ -61,6 +61,16 @@ export function isNotConnected(err: unknown): { cloud: string } | null {
   return null;
 }
 
+/** A 409 whose detail is `{code: "repo_not_managed"}`: the app's repository is not the platform's to write. */
+export function isRepoNotManaged(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 409) return false;
+  try {
+    return JSON.parse(err.body)?.detail?.code === "repo_not_managed";
+  } catch {
+    return false;
+  }
+}
+
 // ── Access-token cache ────────────────────────────────────────────────────────
 // `getSession()` performs a network round-trip to `/api/auth/session` on every
 // call. With polling hooks (deployments refresh every 3s, plus the sidebar),
@@ -385,11 +395,6 @@ export const getAppsHealth = (ids: number[], maxAgeMs = 0) =>
       .map((id) => `ids=${id}`)
       .join("&")}`,
     maxAgeMs,
-  );
-
-export const getAppMetrics = (deploymentId: number, window = "24h") =>
-  request<import("@/types").AppMetrics>(
-    `/deployments/${deploymentId}/metrics?window=${window}`,
   );
 
 export const getAppEvents = (deploymentId: number, limit = 10) =>
@@ -978,9 +983,10 @@ function activityQuery(
 export const getActivity = (
   project: string | null,
   filters: import("@/types").ActivityFilters,
+  limit = 100,
 ) =>
   request<import("@/types").ActivityFeed>(
-    `/activity?${activityQuery(project, filters)}&limit=100`,
+    `/activity?${activityQuery(project, filters)}&limit=${limit}`,
   );
 
 export const getActivitySummary = (project: string | null, days = 7) =>
@@ -1648,11 +1654,24 @@ export const startImport = (
   project: string,
   repo_full_name: string,
   branch: string | null,
+  source_mode: import("@/types").ImportSourceMode = "in_place",
 ) =>
   request<{ run: import("@/types").ImportRun }>(
     `${projectPath(project)}/imports`,
-    { method: "POST", body: JSON.stringify({ repo_full_name, branch }) },
+    { method: "POST", body: JSON.stringify({ repo_full_name, branch, source_mode }) },
   ).then((r) => r.run);
+
+export const pullImportOrigin = (project: string, sourceId: string) =>
+  request<{ run: import("@/types").ImportRun }>(
+    `${projectPath(project)}/imports/${encodeURIComponent(sourceId)}/pull-origin`,
+    { method: "POST" },
+  ).then((r) => r.run);
+
+export const getImportTasks = (deploymentId: number, maxAgeMs = 30_000) =>
+  cachedGet<import("@/types").ImportTasks>(
+    `/deployments/${deploymentId}/import-tasks`,
+    maxAgeMs,
+  );
 
 export const getImports = (project: string) =>
   request<{ imports: import("@/types").ImportSourceView[] }>(
@@ -1759,19 +1778,113 @@ export function isObsNotAvailable(err: unknown): boolean {
 export const getObsCapabilities = (deploymentId: number) =>
   request<import("@/types/observability").ObsCapabilities>(obs(deploymentId));
 
-export const getObsSignals = (deploymentId: number, range: string) =>
-  request<import("@/types/observability").GoldenSignals>(
-    obs(deploymentId, `/signals${obsQuery({ range })}`),
-  );
-
 export const getObsSlo = (deploymentId: number, range: string) =>
   request<import("@/types/observability").SloStatus>(
     obs(deploymentId, `/slo${obsQuery({ range })}`),
   );
 
-export const getObsDeploys = (deploymentId: number, range: string) =>
-  request<import("@/types/observability").DeployMarker[]>(
-    obs(deploymentId, `/deploys${obsQuery({ range })}`),
+export type SummaryRange = "1h" | "6h" | "24h" | "7d";
+export type AppSummaryKind = "web" | "datastore" | "worker";
+export type AppHealthStatus = "healthy" | "degraded" | "down" | "unknown";
+type Series = (number | null)[];
+
+/** Optional fields are absent when their store has no data or no answer. */
+export type AppSummary = {
+  kind: AppSummaryKind;
+  status: AppHealthStatus;
+  status_reason?: string;
+  tiles: {
+    availability_pct?: number;
+    requests_total?: number;
+    errors_5xx?: number;
+    error_pct?: number;
+    p50_ms?: number;
+    p95_ms?: number;
+    restarts: number;
+    cpu_ratio?: number;
+    mem_ratio?: number;
+    cpu_cores?: number;
+    cpu_request_cores?: number;
+    mem_bytes?: number;
+    mem_limit_bytes?: number;
+    disk_bytes?: number;
+    disk_capacity_bytes?: number;
+    last_backup_at?: string;
+    replicas_ready: number;
+    replicas_desired: number;
+  };
+  /** t in epoch ms; log_* in lines per minute, empty without a logs store. */
+  series: {
+    t: number[];
+    rps?: Series;
+    err_rps?: Series;
+    p95_ms?: Series;
+    log_info: Series;
+    log_warn: Series;
+    log_error: Series;
+    cpu_cores?: Series;
+    mem_bytes?: Series;
+  };
+  deploys: {
+    version: string;
+    at: string;
+    outcome: "live" | "replaced" | "failed" | "running" | "unknown";
+    ready_seconds?: number;
+    live_seconds?: number;
+    by?: string;
+  }[];
+  clients: { app: string; verdict: "allowed" | "denied"; flows: number }[];
+  denied_flows_24h: number;
+  top_errors: { message: string; count: number }[];
+  alerts_firing: number;
+};
+
+export const getAppSummary = (
+  deploymentId: number,
+  range: SummaryRange = "24h",
+  maxAgeMs = 0,
+) =>
+  cachedGet<AppSummary>(
+    `/deployments/${deploymentId}/summary${obsQuery({ range })}`,
+    maxAgeMs,
+  );
+
+export type AppHealthRow = {
+  id: number;
+  name: string;
+  kind: AppSummaryKind;
+  status: AppHealthStatus;
+  status_reason?: string;
+  rps?: number;
+  error_pct?: number;
+  p95_ms?: number;
+  cpu_ratio?: number;
+  mem_ratio?: number;
+  disk_ratio?: number;
+  /** 24 points: requests/s for web apps, CPU cores for the others. */
+  spark: Series;
+  last_deploy?: { version: string; at: string };
+};
+
+/** Apps sorted down, degraded, unknown, healthy, then by name. */
+export type ProjectAppsHealth = {
+  apps: AppHealthRow[];
+  series: {
+    t: number[];
+    rps_by_app: Record<string, Series>;
+    err_pct_by_app: Record<string, Series>;
+    error_logs_per_min: Series;
+  };
+};
+
+export const getProjectAppsHealth = (
+  project: string,
+  range: SummaryRange = "24h",
+  maxAgeMs = 0,
+) =>
+  cachedGet<ProjectAppsHealth>(
+    `/projects/${encodeURIComponent(project)}/apps-health${obsQuery({ range })}`,
+    maxAgeMs,
   );
 
 export const getObsDora = (deploymentId: number, days = 30) =>
@@ -2031,6 +2144,8 @@ export type AppFootprint = {
   memory_bytes: number;
   pods: number;
   measured_at: string;
+  /** Live cAdvisor usage on the project's current cloud; absent elsewhere. */
+  usage?: { cpu_cores: number; mem_bytes: number } | null;
 };
 
 export const getProjectFootprint = (project: string) =>

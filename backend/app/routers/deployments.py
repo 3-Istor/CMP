@@ -17,7 +17,7 @@ from fastapi import (
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from ruamel.yaml import YAML
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -42,6 +42,7 @@ from app.services.github_service import (
     GitHubAppError,
     get_file_content,
     get_org_installation_token,
+    get_repository_id_scoped_token,
     put_file_content,
 )
 from app.services.imports.service import imported_app_names
@@ -51,6 +52,11 @@ from app.services.keycloak_service import (
     get_current_user,
     get_project_role,
     get_user_id_from_token,
+)
+from app.services.kube_client import (
+    ClusterNotConnectedError,
+    KubeUnavailableError,
+    kube_list,
 )
 from app.services.moves import assert_not_moving
 from app.services.project_registry import (
@@ -481,11 +487,18 @@ def _get_kubernetes_deployment_or_404(
     db: Session,
     token: dict,
     minimum: ProjectRole,
+    allow_import: bool = False,
 ) -> Deployment:
     """
     Fetch a Kubernetes deployment the caller may touch, raising
     appropriate HTTP errors if it doesn't exist, they lack the role, it is not
-    Kubernetes-type, imported, or it has no GitHub repo linked.
+    Kubernetes-type, or it has no GitHub repo linked.
+
+    Imported apps pass only with ``allow_import``: the endpoints that go
+    through ``_repo_binding`` afterwards, which refuses an import whose
+    repository the platform does not manage. The others (staging,
+    promotions) follow the template layout and refuse every import before
+    any side effect.
     """
     deployment = _get_app_or_404(db, token, deployment_id, minimum)
 
@@ -495,10 +508,8 @@ def _get_kubernetes_deployment_or_404(
             detail="Day-2 config operations are only available for Kubernetes deployments.",
         )
 
-    # Imported rows carry the customer's repository URL: refused before any
-    # side effect (staging, promotions, config writes).
-    if deployment.template_id.startswith("import-"):
-        raise HTTPException(status_code=409, detail=app_repo.IMPORTED)
+    if app_repo.is_imported(deployment.template_id) and not allow_import:
+        _refuse_import(db, deployment)
 
     if not deployment.github_repo_url:
         raise HTTPException(
@@ -512,8 +523,43 @@ def _get_kubernetes_deployment_or_404(
     return deployment
 
 
+def _refuse_import(db: Session, deployment: Deployment) -> None:
+    try:
+        app_repo.import_binding(db, deployment)
+    except app_repo.RepoNotManaged as exc:
+        raise HTTPException(
+            status_code=409, detail=app_repo.not_managed_detail()
+        ) from exc
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "import_unsupported",
+            "message": "Staging environments and promotions are not "
+            "available for imported apps.",
+        },
+    )
+
+
+def _repo_binding(deployment: Deployment) -> app_repo.ImportBinding | None:
+    """
+    The binding of an imported app, None for a template app. 409 with the
+    ``repo_not_managed`` code while its setup pull request is not switched.
+    """
+    if not app_repo.is_imported(deployment.template_id):
+        return None
+    try:
+        return app_repo.import_binding(object_session(deployment), deployment)
+    except app_repo.RepoNotManaged as exc:
+        raise HTTPException(
+            status_code=409, detail=app_repo.not_managed_detail()
+        ) from exc
+
+
 def _extract_repo_full_name(deployment: Deployment) -> str:
-    """``owner/repo`` of the repository created for *deployment*, or 409."""
+    """``owner/repo`` the platform manages for *deployment*, or 409."""
+    binding = _repo_binding(deployment)
+    if binding is not None:
+        return binding.repo
     try:
         return app_repo.bound_repo(
             deployment.github_repo_url,
@@ -523,6 +569,14 @@ def _extract_repo_full_name(deployment: Deployment) -> str:
         )
     except app_repo.RepoNotBound as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def _values_files(deployment: Deployment) -> tuple[str, str]:
+    """(exposure file, database file) of the app in its repository."""
+    binding = _repo_binding(deployment)
+    if binding is not None:
+        return binding.values_file, binding.values_file
+    return security_data.values_files_for(_app_type_of(deployment))
 
 
 def _deep_merge(base: Any, updates: Any) -> Any:
@@ -547,17 +601,27 @@ def _deep_merge(base: Any, updates: Any) -> Any:
     return updates
 
 
-async def _get_github_token_for_deployment(_deployment: Deployment) -> str:
+async def _get_github_token_for_deployment(deployment: Deployment) -> str:
     """
     Retrieve a fresh GitHub installation token for the given deployment.
 
-    App repositories live in the platform org, so the org installation is
-    used. The installation ID a client stored in ``app_config`` is ignored.
+    Template app repositories live in the platform org, so the org
+    installation is used; the installation ID a client stored in
+    ``app_config`` is ignored. A switched import gets a token of the
+    installation it was proven through, limited to its one repository.
 
     Raises:
+        HTTPException 409, an import whose repository is not managed.
         HTTPException 502, if GitHub token exchange fails.
     """
+    binding = _repo_binding(deployment)
     try:
+        if binding is not None:
+            return await get_repository_id_scoped_token(
+                str(binding.installation_id),
+                [binding.repo_id],
+                {"contents": "write", "metadata": "read"},
+            )
         return await get_org_installation_token()
     except GitHubAppError as exc:
         raise HTTPException(
@@ -566,7 +630,11 @@ async def _get_github_token_for_deployment(_deployment: Deployment) -> str:
         ) from exc
 
 
-def _config_file_for(app_type: str, component: str | None) -> str:
+def _config_file_for(deployment: Deployment, component: str | None) -> str:
+    binding = _repo_binding(deployment)
+    if binding is not None:
+        return binding.values_file
+    app_type = _app_type_of(deployment)
     if app_type != "fullstack":
         return security_data.SINGLE_VALUES_FILE
     if component in (None, "frontend"):
@@ -606,10 +674,10 @@ async def get_deployment_config(
         502, GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token, ProjectRole.MEMBER
+        deployment_id, db, token, ProjectRole.MEMBER, allow_import=True
     )
     app_type = _app_type_of(deployment)
-    file_path = _config_file_for(app_type, component)
+    file_path = _config_file_for(deployment, component)
     # Named gh_token so it cannot shadow the caller's JWT above.
     gh_token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment)
@@ -635,7 +703,12 @@ async def get_deployment_config(
     return {
         "repo": repo,
         "file_path": file_path,
-        "components": _FULLSTACK_COMPONENTS if app_type == "fullstack" else [],
+        "components": (
+            _FULLSTACK_COMPONENTS
+            if app_type == "fullstack"
+            and not app_repo.is_imported(deployment.template_id)
+            else []
+        ),
         # SHA must be echoed back by the frontend in PATCH requests
         "_sha": sha,
         "config": dict(parsed),
@@ -703,9 +776,9 @@ async def update_deployment_config(
         502, GitHub API error, or the chart could not be read.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token, ProjectRole.ADMIN
+        deployment_id, db, token, ProjectRole.ADMIN, allow_import=True
     )
-    file_path = _config_file_for(_app_type_of(deployment), component)
+    file_path = _config_file_for(deployment, component)
 
     # Validate _sha is present in the body
     sha: str | None = payload.pop("_sha", None)
@@ -863,6 +936,30 @@ async def _load_values_file(
     return parsed, sha
 
 
+def _cluster_exposure(
+    db: Session, deployment: Deployment
+) -> security_data.ExposureState | None:
+    """
+    What the cluster serves for an imported app: its route comes from the
+    platform (registry ``public``), never from a values file, and an import
+    has no SSO preset, so a route means public. None when there is no route
+    or the cluster cannot be read.
+    """
+    namespace = (
+        deployment.k8s_namespace
+        or f"{deployment.project_id}-{deployment.name}"
+    )
+    try:
+        routes = kube_list(
+            f"/apis/gateway.networking.k8s.io/v1/namespaces/{namespace}"
+            "/httproutes",
+            cloud=project_cloud(db, deployment.project_id),
+        )
+    except (ClusterNotConnectedError, KubeUnavailableError):
+        return None
+    return "public" if routes else None
+
+
 @router.get(
     "/{deployment_id}/security-data",
     response_model=security_data.SecurityDataRead,
@@ -872,19 +969,39 @@ async def get_security_data(
     token_payload: CurrentUser,
     db: Session = Depends(get_db),
 ) -> security_data.SecurityDataRead:
+    """
+    Exposure and database backups. An imported app reads its exposure from
+    the cluster; its database settings only once the platform manages its
+    repository. Until then the answer is read-only, never a 409.
+    """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token_payload, ProjectRole.MEMBER
+        deployment_id, db, token_payload, ProjectRole.MEMBER, allow_import=True
     )
     can_edit = is_cnp_admin(token_payload) or (
         get_project_role(token_payload.get("sub", ""), deployment.project_id)
         == "admin"
     )
+    imported = app_repo.is_imported(deployment.template_id)
+    cluster_exposure = (
+        await run_in_threadpool(_cluster_exposure, db, deployment)
+        if imported
+        else None
+    )
+    if imported:
+        try:
+            app_repo.import_binding(db, deployment)
+        except app_repo.RepoNotManaged:
+            return security_data.SecurityDataRead(
+                repo=None,
+                can_edit=False,
+                managed=False,
+                exposure=cluster_exposure,
+                database=None,
+            )
 
     token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment)
-    exposure_file, database_file = security_data.values_files_for(
-        _app_type_of(deployment)
-    )
+    exposure_file, database_file = _values_files(deployment)
 
     exposure_values, _ = await _load_values_file(token, repo, exposure_file)
     database_values = exposure_values
@@ -897,9 +1014,13 @@ async def get_security_data(
         repo=repo,
         can_edit=can_edit,
         exposure=(
-            security_data.read_exposure(exposure_values)
-            if security_data.has_ingress(exposure_values)
-            else None
+            cluster_exposure
+            if imported
+            else (
+                security_data.read_exposure(exposure_values)
+                if security_data.has_ingress(exposure_values)
+                else None
+            )
         ),
         database=(
             security_data.DatabaseState(
@@ -927,14 +1048,12 @@ async def update_security_data(
     message of each file instead, for the confirmation dialog.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token_payload, ProjectRole.ADMIN
+        deployment_id, db, token_payload, ProjectRole.ADMIN, allow_import=True
     )
 
     token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment)
-    exposure_file, database_file = security_data.values_files_for(
-        _app_type_of(deployment)
-    )
+    exposure_file, database_file = _values_files(deployment)
 
     patches: dict[str, dict] = {}
     labels: dict[str, list[str]] = {}

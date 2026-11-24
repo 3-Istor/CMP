@@ -25,11 +25,3 @@ export function clockTime(iso: string, locale: string): string {
   });
 }
 
-export function duration(start: string, end: string | null): string {
-  if (!end) return "-";
-  const seconds = Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000));
-  if (seconds < 60) return `${seconds} s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
-  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
-}

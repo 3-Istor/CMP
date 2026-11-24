@@ -41,7 +41,6 @@ from sqlalchemy.orm import Session
 from app.models.deployment import Deployment
 from app.models.finops import ProjectBudget, RecommendationState
 from app.models.project import Project
-from app.models.security import SecurityScan
 from app.services import app_health
 from app.services.finops.provider import get_cost_provider
 from app.services.security import store
@@ -232,13 +231,7 @@ def assemble(criteria: list[Criterion]) -> Scorecard:
 
 def _read_security(db: Session, deployment: Deployment) -> SecurityInput:
     project = deployment.project_id or ""
-    scanned = any(
-        (row.last_run_at or row.collected_at) is not None
-        for row in db.query(SecurityScan).filter(
-            SecurityScan.project == project,
-            SecurityScan.app == deployment.name,
-        )
-    )
+    scanned = deployment.name in store.scanned_apps(db, project)
     items = store.for_audience(
         store.merged_findings(db, project, date.today(), app=deployment.name),
         platform=False,

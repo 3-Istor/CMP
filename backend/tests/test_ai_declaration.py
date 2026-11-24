@@ -331,3 +331,38 @@ def test_the_kill_switch_is_never_slowed_down_below_critical():
     }
 
     assert outcomes == {"allow"}
+
+
+def test_a_project_that_never_set_a_budget_is_capped_at_one_million():
+    project = ProjectAi.of({"spec": {"ai": {"enabled": False}}})
+
+    assert project.daily_token_budget == 1_000_000
+
+
+def test_a_project_that_removed_its_cap_keeps_none():
+    project = ProjectAi.of({"spec": {"ai": {"dailyTokenBudget": 0}}})
+
+    assert project.daily_token_budget == 0
+
+
+def test_suggested_tools_list_wildcards_first_then_by_name():
+    # Act
+    item = catalog._template(  # pylint: disable=protected-access
+        {
+            "id": "reader",
+            "suggestedTools": [
+                {"name": "web_search"},
+                {"name": "shop.*"},
+                {"name": "fetch"},
+                {"name": "*"},
+            ],
+        }
+    )
+
+    # Assert
+    assert [t["name"] for t in item["suggested_tools"]] == [
+        "*",
+        "shop.*",
+        "fetch",
+        "web_search",
+    ]

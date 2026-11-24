@@ -1,6 +1,7 @@
 "use client";
 
 import { LogsView } from "@/components/activity/LogsView";
+import { logsQueryFromParams } from "@/components/activity/logsQuery";
 import { useAppContext } from "@/components/projects/AppContext";
 import { AppSection } from "@/components/projects/AppFrame";
 import { useProjectContext } from "@/components/projects/ProjectContext";
@@ -12,13 +13,15 @@ function AppLogs() {
   const { projectName } = useProjectContext();
   const router = useRouter();
   const pathname = usePathname();
-  const trace = useSearchParams().get("trace");
+  const search = useSearchParams();
+  const trace = search.get("trace");
   return (
     <LogsView
       project={projectName}
       namespace={deployment.k8s_namespace ?? `${projectName}-${deployment.name}`}
       appId={appId}
       trace={trace}
+      initialQuery={logsQueryFromParams(search)}
       onClearTrace={() => router.replace(pathname)}
     />
   );

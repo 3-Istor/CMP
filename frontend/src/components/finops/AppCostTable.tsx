@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import type { AppCostRow } from "@/types";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -33,76 +34,82 @@ function Trend({ pct }: { pct: number | null }) {
 }
 
 /** Liste exhaustive des applications, triée par coût mensuel décroissant. */
-export function AppCostTable({ apps }: { apps: AppCostRow[] }) {
+export function AppCostTable({
+  apps,
+  loading = false,
+}: {
+  apps: AppCostRow[];
+  loading?: boolean;
+}) {
   const t = useTranslations("finops");
   const locale = intlLocale(useLocale());
 
-  if (apps.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        {t("appCost.empty")}
-      </p>
-    );
-  }
+  const columns: DataColumn<AppCostRow>[] = [
+    {
+      key: "name",
+      header: t("common.application"),
+      cell: (app) => <span className="font-medium">{app.name}</span>,
+      sortable: true,
+    },
+    {
+      key: "project_id",
+      header: t("common.project"),
+      sortable: true,
+      cell: (app) =>
+        app.project_id ? (
+          <Badge variant="outline" className="font-normal">
+            {app.project_id}
+          </Badge>
+        ) : (
+          t("common.na")
+        ),
+    },
+    {
+      key: "cost_per_day_eur",
+      header: t("appCost.costPerDay"),
+      align: "right",
+      sortable: true,
+      cell: (app) => formatEUR(app.cost_per_day_eur, "EUR", locale),
+    },
+    {
+      key: "cost_month_estimate_eur",
+      header: t("appCost.costPerMonth"),
+      align: "right",
+      sortable: true,
+      cell: (app) => formatEUR(app.cost_month_estimate_eur, "EUR", locale),
+    },
+    {
+      key: "platform_eur",
+      header: <span title={t("resourceHints.platform")}>{t("appCost.ofWhichPlatform")}</span>,
+      align: "right",
+      sortable: true,
+      className: "text-muted-foreground",
+      cell: (app) => formatEUR(app.platform_eur ?? 0, "EUR", locale),
+    },
+    {
+      key: "trend_pct",
+      header: t("appCost.trend"),
+      align: "right",
+      sortable: true,
+      cell: (app) => (
+        <div className="flex justify-end">
+          <Trend pct={app.trend_pct} />
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="overflow-x-auto" tabIndex={0}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <th className="px-3 py-2 font-medium">{t("common.application")}</th>
-            <th className="px-3 py-2 font-medium">{t("common.project")}</th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("appCost.costPerDay")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("appCost.costPerMonth")}
-            </th>
-            <th
-              className="px-3 py-2 text-right font-medium"
-              title={t("resourceHints.platform")}
-            >
-              {t("appCost.ofWhichPlatform")}
-            </th>
-            <th className="px-3 py-2 text-right font-medium">
-              {t("appCost.trend")}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {apps.map((app) => (
-            <tr
-              key={app.app_id}
-              className="border-b border-border/50 transition-colors hover:bg-accent/50"
-            >
-              <td className="px-3 py-2 font-medium">{app.name}</td>
-              <td className="px-3 py-2">
-                {app.project_id ? (
-                  <Badge variant="outline" className="font-normal">
-                    {app.project_id}
-                  </Badge>
-                ) : (
-                  t("common.na")
-                )}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatEUR(app.cost_per_day_eur, "EUR", locale)}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {formatEUR(app.cost_month_estimate_eur, "EUR", locale)}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                {formatEUR(app.platform_eur ?? 0, "EUR", locale)}
-              </td>
-              <td className="px-3 py-2">
-                <div className="flex justify-end">
-                  <Trend pct={app.trend_pct} />
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      rows={apps}
+      loading={loading}
+      rowKey={(app) => app.app_id}
+      storageKey="finops.appCost"
+      initialSort={{ key: "cost_month_estimate_eur", direction: "desc" }}
+      searchable
+      searchKeys={["name", "project_id"]}
+      empty={{ title: t("appCost.empty") }}
+    />
   );
 }

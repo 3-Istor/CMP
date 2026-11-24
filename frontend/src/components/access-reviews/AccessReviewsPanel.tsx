@@ -13,9 +13,11 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 
+import { DataTable, type DataColumn } from "@/components/data/DataTable";
 import { errorMessage } from "@/components/activity/labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Card,
   CardContent,
@@ -107,10 +109,28 @@ export function AccessReviewsPanel() {
 
   if (data === null) {
     return (
-      <Loader2
-        className="h-5 w-5 animate-spin text-muted-foreground"
-        aria-label={t("loading")}
-      />
+      <div className="space-y-6" aria-busy>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("campaigns.title")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-40" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("detail.platformTitle")}</CardTitle>
+              <CardDescription>{t("detail.platformDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-40" />
+            </CardContent>
+          </Card>
+        </div>
+        <InactiveAccounts data={null} onChange={load} />
+      </div>
     );
   }
 
@@ -334,6 +354,7 @@ function CampaignDetail({
               me={me}
               onDone={onChange}
               showSubject
+              storageKey="accessReviews.platform"
             />
           )}
         </CardContent>
@@ -353,6 +374,7 @@ function CampaignDetail({
               me={me}
               onDone={onChange}
               showSubject
+              storageKey="accessReviews.projects"
             />
           )}
         </CardContent>
@@ -427,13 +449,13 @@ function InactiveAccounts({
   data,
   onChange,
 }: {
-  data: AccessReviewOverview;
+  data: AccessReviewOverview | null;
   onChange: () => void;
 }) {
   const t = useTranslations("accessReviews");
   const format = useFormat();
   const captionId = useId();
-  const s = data.settings;
+  const s = data?.settings;
 
   const keep = async (account: InactiveAccount) => {
     try {
@@ -445,94 +467,88 @@ function InactiveAccounts({
     }
   };
 
+  const columns: DataColumn<InactiveAccount>[] = [
+    {
+      key: "username",
+      header: t("table.member"),
+      sortable: true,
+      className: "font-medium",
+      cell: (a) => a.username,
+    },
+    {
+      key: "last_login_at",
+      header: t("table.lastLogin"),
+      sortable: true,
+      cell: (a) =>
+        a.last_login_at ? (
+          <LastLogin value={a.last_login_at} />
+        ) : (
+          <span className="text-muted-foreground">
+            {t("inactive.notSince", { date: format.date(a.tracked_since) })}
+          </span>
+        ),
+    },
+    {
+      key: "state",
+      header: t("inactive.state"),
+      cell: (a) =>
+        a.disabled_at ? (
+          <Badge variant="destructive">
+            {t("inactive.disabled", { date: format.date(a.disabled_at) })}
+          </Badge>
+        ) : (
+          <Badge variant="outline">
+            {a.disable_due_at
+              ? t("inactive.disableDue", { date: format.date(a.disable_due_at) })
+              : t("inactive.reported")}
+          </Badge>
+        ),
+    },
+    {
+      key: "actions",
+      header: <span className="sr-only">{t("table.actions")}</span>,
+      align: "right",
+      cell: (a) =>
+        data?.can_manage && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => keep(a)}
+            aria-label={t("actions.keepAccount", { user: a.username })}
+          >
+            <UserCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+            {a.disabled_at ? t("actions.enable") : t("actions.keepActive")}
+          </Button>
+        ),
+    },
+  ];
+
   return (
     <Card>
       <CardHeader>
         <CardTitle id={captionId}>{t("inactive.title")}</CardTitle>
         <CardDescription>
-          {t("inactive.description", { days: s.inactive_after_days })}{" "}
-          {s.inactive_disable_enabled
-            ? t("inactive.disableOn", { days: s.inactive_grace_days })
-            : t("inactive.disableOff")}
+          {s ? (
+            <>
+              {t("inactive.description", { days: s.inactive_after_days })}{" "}
+              {s.inactive_disable_enabled
+                ? t("inactive.disableOn", { days: s.inactive_grace_days })
+                : t("inactive.disableOff")}
+            </>
+          ) : (
+            <span className="inline-block h-4 w-80 max-w-full animate-pulse rounded bg-muted align-middle" />
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {data.accounts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("inactive.empty")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" aria-labelledby={captionId}>
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th scope="col" className="py-2 pr-3 font-medium">
-                    {t("table.member")}
-                  </th>
-                  <th scope="col" className="py-2 pr-3 font-medium">
-                    {t("table.lastLogin")}
-                  </th>
-                  <th scope="col" className="py-2 pr-3 font-medium">
-                    {t("inactive.state")}
-                  </th>
-                  <th scope="col" className="py-2 font-medium">
-                    <span className="sr-only">{t("table.actions")}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.accounts.map((a) => (
-                  <tr key={a.user_id}>
-                    <td className="py-2 pr-3 font-medium">{a.username}</td>
-                    <td className="py-2 pr-3">
-                      {a.last_login_at ? (
-                        <LastLogin value={a.last_login_at} />
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {t("inactive.notSince", {
-                            date: format.date(a.tracked_since),
-                          })}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3">
-                      {a.disabled_at ? (
-                        <Badge variant="destructive">
-                          {t("inactive.disabled", {
-                            date: format.date(a.disabled_at),
-                          })}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">
-                          {a.disable_due_at
-                            ? t("inactive.disableDue", {
-                                date: format.date(a.disable_due_at),
-                              })
-                            : t("inactive.reported")}
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="py-2 text-right">
-                      {data.can_manage && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => keep(a)}
-                          aria-label={t("actions.keepAccount", {
-                            user: a.username,
-                          })}
-                        >
-                          <UserCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                          {a.disabled_at
-                            ? t("actions.enable")
-                            : t("actions.keepActive")}
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          columns={columns}
+          rows={data?.accounts ?? []}
+          rowKey={(a) => a.user_id}
+          loading={!data}
+          storageKey="accessReviews.inactive"
+          empty={{ title: t("inactive.empty") }}
+        />
       </CardContent>
     </Card>
   );

@@ -666,3 +666,51 @@ def test_an_unreachable_store_is_reported_as_unavailable(vlogs):
         asyncio.run(
             src.log_label_values("shop", "pod", NOW, NOW + timedelta(hours=1))
         )
+
+
+def _vault_line(actor, operation, path="project-shop/data/web/db"):
+    return json.dumps(
+        {
+            "auth": {"display_name": actor},
+            "request": {"path": path, "operation": operation},
+        }
+    )
+
+
+def test_vault_reads_by_a_platform_service_account_are_not_notable():
+    # Act
+    event = src.vault_event(
+        PROJECTS,
+        NOW,
+        _vault_line(
+            "kubernetes-arcl-cmp-arcl-cmp",
+            "read",
+            "project-shop/data/system/x",
+        ),
+    )
+
+    # Assert
+    assert event.notable is False
+
+
+def test_vault_reads_by_a_person_stay_notable():
+    assert src.vault_event(
+        PROJECTS, NOW, _vault_line("oidc-alice", "read")
+    ).notable
+
+
+def test_vault_writes_by_a_platform_service_account_stay_notable():
+    event = src.vault_event(
+        PROJECTS, NOW, _vault_line("kubernetes-arcl-cmp-arcl-cmp", "update")
+    )
+
+    assert event.notable
+
+
+@pytest.mark.parametrize("operation", ["read", "list"])
+def test_vault_secret_reads_are_hidden_with_the_other_reads(operation):
+    event = src.vault_event(
+        PROJECTS, NOW, _vault_line("oidc-alice", operation)
+    )
+
+    assert event.is_read

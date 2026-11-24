@@ -171,8 +171,9 @@ export type ExposurePreset =
   | "project_admins";
 
 export interface SecurityData {
-  repo: string;
+  repo: string | null;
   can_edit: boolean;
+  managed: boolean;
   exposure: ExposurePreset | "custom" | null;
   database: {
     backup: {
@@ -386,6 +387,10 @@ export interface CostSeriesPoint {
   ai?: number;
   platform?: number;
   total: number;
+  /** The bucket holding now (UTC day, week or month) is still filling up. */
+  is_partial?: boolean;
+  /** Share of the bucket elapsed, 0 to 1, on the UTC clock. */
+  elapsed_fraction?: number;
 }
 
 export interface AppCostRow {
@@ -567,6 +572,8 @@ export interface Recommendation {
   effort: "low" | "medium" | "high";
   status: "pending" | "applied" | "ignored" | "notified";
   can_apply: boolean;
+  text_key?: string | null;
+  text_params?: Record<string, string | number>;
 }
 
 export interface CostAlert {
@@ -661,6 +668,8 @@ export interface SecurityScan {
   source: "kyverno" | "trivy-operator" | "ci" | "cnpg" | "exposure" | "cilium";
   status: "ok" | "error" | "missing" | "unavailable";
   message: string;
+  /** Translated in place of `message` when set. */
+  message_key?: "workflow_not_run" | "no_repository" | "trivy_absent" | null;
   last_run_at: string | null;
   next_run_at: string | null;
   collected_at: string | null;
@@ -670,8 +679,9 @@ export interface SecurityScan {
 export interface SecurityAppSummary {
   app: string;
   deployment_id: number | null;
-  score: number;
-  grade: string;
+  /** Null until a scanner looked at the app. */
+  score: number | null;
+  grade: string | null;
   actions: number;
   core: number;
 }
@@ -680,8 +690,10 @@ export interface SecuritySummary {
   project: string;
   app: string | null;
   view: SecurityView;
-  score: number;
-  grade: string;
+  scan_state?: "scanned" | "not_scanned";
+  not_scanned_reason?: "workflow_not_run" | "no_repository" | "no_scan_yet" | null;
+  score: number | null;
+  grade: string | null;
   actions: number;
   core: number;
   excepted: number;
@@ -703,8 +715,8 @@ export interface SecurityTrendPoint {
 
 export interface SecurityProjectOverview {
   project: string;
-  score: number;
-  grade: string;
+  score: number | null;
+  grade: string | null;
   actions: number;
   core: number;
 }
@@ -947,7 +959,8 @@ export type ReleaseOutcome =
   | "aborted_manual"
   | "superseded"
   | "deployed"
-  | "failed";
+  | "failed"
+  | "unknown";
 
 export interface ReleaseActor {
   user: string;
@@ -972,6 +985,8 @@ export interface ReleaseEvent {
   environment: "prod" | "staging";
   component: string | null;
   rollback_promotion_id: number | null;
+  ready_seconds?: number | null;
+  live_seconds?: number | null;
 }
 
 export interface ReleaseSettings {
@@ -1272,25 +1287,6 @@ export interface FinopsCarbon {
 }
 
 // ── App overview ──────────────────────────────────────────────────────────────
-
-export interface MetricPoint {
-  time: string;
-  value: number;
-}
-
-export interface MetricSeries {
-  points: MetricPoint[];
-  current: number | null;
-}
-
-export interface AppMetrics {
-  window: string;
-  step_seconds: number;
-  requests_per_second: MetricSeries | null;
-  errors_5xx_percent: MetricSeries | null;
-  cpu_millicores: MetricSeries | null;
-  cpu_request_millicores: number | null;
-}
 
 export type AppLogLevel = "error" | "warn" | "info" | "debug";
 
@@ -1621,7 +1617,7 @@ export interface ImportFailure {
 export interface ImportRun {
   id: string;
   source_id: string;
-  kind: "analyze" | "build";
+  kind: "analyze" | "build" | "sync";
   sha: string;
   status: ImportRunStatus;
   plan: ImportPlan | { edits: ImportPlanEdits } | null;
@@ -1720,6 +1716,47 @@ export interface ImportSourceView {
   auto_rebuild: boolean;
   rebuild_pending: ImportRebuildPending | null;
   standard_repo: ImportStandardRepo | null;
+  source_mode: ImportSourceMode;
+  origin_repo_full_name: string | null;
+  copy: ImportCopyState | null;
   runs: ImportRun[];
   services: ImportServiceView[];
+}
+
+export type ImportSourceMode = "in_place" | "copy";
+
+/** The copy of the original repository in the platform org (copy mode). */
+export interface ImportCopyState {
+  state: "pending" | "copied" | "failed";
+  at?: string;
+  leaks_total?: number;
+  error?: string;
+}
+
+export type ImportTaskKey = "deploy" | "route" | "setup_pr" | "code_scanning" | "tracing";
+export type ImportTaskUnlock = "delivery" | "settings" | "security.code" | "traces";
+
+export interface ImportTask {
+  key: ImportTaskKey;
+  label: string;
+  done: boolean;
+  params: Record<string, string>;
+  unlocks: ImportTaskUnlock[];
+  action: { kind: "pr" | "link" | "agent"; href: string } | null;
+}
+
+/** What is left to bring an imported app to parity with a template app. */
+export interface ImportTasks {
+  imported: boolean;
+  managed: boolean;
+  source_id: string | null;
+  repo_full_name: string | null;
+  source_mode: ImportSourceMode | null;
+  origin_repo_full_name: string | null;
+  setup_pr: { state: ImportStandardRepo["state"]; url: string | null } | null;
+  import_href: string | null;
+  agent_href: string | null;
+  tasks: ImportTask[];
+  done: number;
+  total: number;
 }

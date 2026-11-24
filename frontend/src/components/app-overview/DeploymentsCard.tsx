@@ -1,15 +1,11 @@
 "use client";
 
-import { imageTag, OUTCOME_TONE, TONE } from "@/components/release/format";
+import { imageTag, lifetimeLabel, OUTCOME_TONE, TONE } from "@/components/release/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { OpenDashboardButton } from "@/components/ui/open-dashboard-button";
-import { getReleaseHistory } from "@/lib/api";
-import { useCardData } from "@/lib/useCardData";
 import type { ReleaseEvent } from "@/types";
 import { useLocale, useTranslations } from "next-intl";
-import { dateTime, duration } from "./format";
-import { OverviewCard } from "./OverviewCard";
+import { dateTime } from "./format";
 
 export function DeploymentsTable({
   events,
@@ -19,6 +15,7 @@ export function DeploymentsTable({
   onRollback?: (event: ReleaseEvent) => void;
 }) {
   const t = useTranslations("appPage.deployments");
+  const tRelease = useTranslations("release");
   const locale = useLocale();
   const showComponent = new Set(events.map((e) => e.component)).size > 1;
   return (
@@ -75,7 +72,7 @@ export function DeploymentsTable({
                   {dateTime(e.started_at, locale)}
                 </td>
                 <td className="py-2 pr-4 font-mono text-xs tabular-nums">
-                  {duration(e.started_at, e.finished_at)}
+                  {lifetimeLabel(e, tRelease) || "-"}
                 </td>
                 {onRollback && (
                   <td className="py-2">
@@ -92,46 +89,5 @@ export function DeploymentsTable({
         </tbody>
       </table>
     </div>
-  );
-}
-
-export function DeploymentsCard({
-  appId,
-  base,
-  canOpen,
-}: {
-  appId: number;
-  base: string;
-  canOpen: boolean;
-}) {
-  const t = useTranslations("appPage.deployments");
-  const history = useCardData(
-    `deployments-${appId}`,
-    () => getReleaseHistory(appId),
-    { intervalMs: 30_000 },
-  );
-  return (
-    <OverviewCard
-      title={t("recent")}
-      action={
-        canOpen ? (
-          <OpenDashboardButton href={`${base}/delivery`} label={t("open")} />
-        ) : undefined
-      }
-      state={{
-        loading: history.loading,
-        error: history.error,
-        forbidden: history.forbidden,
-        stale: history.stale,
-        updatedAt: history.updatedAt,
-        hasData: history.data !== null,
-        empty: history.data !== null && history.data.length === 0,
-        retry: history.retry,
-      }}
-      emptyText={t("empty")}
-      skeletonClassName="h-48 w-full"
-    >
-      <DeploymentsTable events={(history.data ?? []).slice(0, 5)} />
-    </OverviewCard>
   );
 }

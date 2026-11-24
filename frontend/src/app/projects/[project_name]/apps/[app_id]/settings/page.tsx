@@ -2,6 +2,11 @@
 
 import { AppIconPanel } from "@/components/app-icon/AppIconPanel";
 import { EnvironmentsTab } from "@/components/environments/EnvironmentsTab";
+import {
+  isUnmanagedImport,
+  RepoNotManagedNotice,
+  useImportTasks,
+} from "@/components/imports/ImportTasks";
 import { SloTargetsCard } from "@/components/observability/SloTargetsCard";
 import { useObsCapabilities } from "@/components/observability/shared";
 import { AppConfigPanel } from "@/components/projects/AppConfigPanel";
@@ -128,6 +133,8 @@ function SearchHighlight({ children }: { children: React.ReactNode }) {
   );
 }
 
+// scroll-mt-40 on each section: where a section jumped to sits under the sticky header.
+const SECTION_OFFSET_PX = 160;
 const SECTIONS = ["general", "secrets", "delivery", "slo", "security", "advanced", "danger"] as const;
 
 function SettingsSection({
@@ -168,6 +175,8 @@ export default function AppSettingsPage() {
   const [importFailed, setImportFailed] = useState(false);
   const [importAttempt, setImportAttempt] = useState(0);
   const imported = deployment.template_id.startsWith("import-");
+  const importTasks = useImportTasks();
+  const unmanaged = isUnmanagedImport(importTasks) ? importTasks : null;
   const canDelete = can("app.delete");
   const canImport = can("import.manage");
   useEffect(() => {
@@ -224,18 +233,30 @@ export default function AppSettingsPage() {
   const sectionsKey = visibleSections.join();
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.find((e) => e.isIntersecting);
-        if (visible) setActive(visible.target.id);
-      },
-      { rootMargin: "-160px 0px -60% 0px" },
-    );
-    sectionsKey.split(",").forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
+    const ids = sectionsKey.split(",");
+    const update = () => {
+      const atBottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 2;
+      // Short last sections never reach the top: the page bottom selects the last one.
+      if (atBottom) {
+        setActive(ids[ids.length - 1]);
+        return;
+      }
+      let current = ids[0];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= SECTION_OFFSET_PX + 8) current = id;
+      }
+      setActive(current);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
   }, [allowed, sectionsKey]);
 
 
@@ -277,6 +298,7 @@ export default function AppSettingsPage() {
               <li key={id}>
                 <a
                   href={`#${id}`}
+                  onClick={() => setActive(id)}
                   aria-current={active === id ? "location" : undefined}
                   className={cn(
                     "block rounded-md px-3 py-1.5 transition-colors",
@@ -301,7 +323,11 @@ export default function AppSettingsPage() {
             <AppIconPanel />
             {isRunning && (
               <div id="security-data" className="scroll-mt-40">
-                <SecurityDataPanel deploymentId={appId} project={projectName} />
+                <SecurityDataPanel
+                  deploymentId={appId}
+                  project={projectName}
+                  notManaged={unmanaged && <RepoNotManagedNotice tasks={unmanaged} compact />}
+                />
               </div>
             )}
           </SettingsSection>
@@ -322,11 +348,17 @@ export default function AppSettingsPage() {
               title={ts("sections.delivery.title")}
               description={ts("sections.delivery.description")}
             >
-              <ReleaseSettingsCard
-                deploymentId={appId}
-                inProgress={releaseInProgress}
-              />
-              <EnvironmentsTab deploymentId={appId} mode="settings" />
+              {unmanaged ? (
+                <RepoNotManagedNotice tasks={unmanaged} />
+              ) : (
+                <>
+                  <ReleaseSettingsCard
+                    deploymentId={appId}
+                    inProgress={releaseInProgress}
+                  />
+                  <EnvironmentsTab deploymentId={appId} mode="settings" />
+                </>
+              )}
             </SettingsSection>
           )}
 
@@ -363,7 +395,9 @@ export default function AppSettingsPage() {
             title={ts("sections.advanced.title")}
             description={ts("sections.advanced.description")}
           >
-            {isRunning ? (
+            {unmanaged ? (
+              <RepoNotManagedNotice tasks={unmanaged} />
+            ) : isRunning ? (
               <SearchHighlight>
                 <AppConfigPanel
                   deploymentId={appId}
@@ -440,6 +474,8 @@ export default function AppSettingsPage() {
               </Card>
             </SettingsSection>
           )}
+          {/* Room under the last section, so the nav can bring any section to the top. */}
+          <div aria-hidden className="hidden h-[calc(100vh-20rem)] lg:block" />
         </div>
       </div>
 

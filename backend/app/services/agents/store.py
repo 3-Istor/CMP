@@ -279,6 +279,16 @@ def exchange_code(code: str, client_id: str) -> IssuedTokens | None:
             last_used_at=now(),
             expires_at=now() + timedelta(days=settings.AGENT_REFRESH_TTL_DAYS),
         )
+        # A reconnecting client would otherwise pile up one grant per
+        # sign-in under the same name in the user's connected apps.
+        for older in db.scalars(
+            select(AgentGrant).where(
+                AgentGrant.revoked_at.is_(None),
+                AgentGrant.username == grant.username,
+                AgentGrant.client_name == grant.client_name,
+            )
+        ).all():
+            _revoke(db, older)
         db.add(grant)
         db.delete(row)
         db.flush()

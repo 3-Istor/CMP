@@ -7,13 +7,17 @@ import {
   applyRecommendation,
   ignoreRecommendation,
   notifyRecommendation,
+  sleepDeployment,
 } from "@/lib/api";
 import type { Recommendation } from "@/types";
-import { ArrowRight, BarChart3, Bell, Check, Loader2, X } from "lucide-react";
+import { ArrowRight, BarChart3, Bell, Check, Loader2, Lock, Moon, X } from "lucide-react";
+import { projectHref } from "@/components/layout/projectSections";
+import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatEUR, intlLocale } from "./format";
+import { useRecommendationText } from "./recommendationText";
 
 function ConfigBox({
   title,
@@ -52,6 +56,7 @@ export function RecommendationCard({
   rec,
   onChanged,
   canAct = true,
+  canSleep = false,
 }: {
   rec: Recommendation;
   onChanged?: () => void;
@@ -61,11 +66,29 @@ export function RecommendationCard({
    * repository and ArgoCD then changes what is running.
    */
   canAct?: boolean;
+  /** Whether the viewer may put the app to sleep (app.operate), for an inactivity recommendation. */
+  canSleep?: boolean;
 }) {
   const t = useTranslations("finops");
+  const text = useRecommendationText()(rec);
   const locale = intlLocale(useLocale());
   const [busy, setBusy] = useState<string | null>(null);
   const done = rec.status !== "pending";
+
+  const sleeps = rec.rec_type === "inactivity";
+
+  const sleep = async () => {
+    setBusy("sleep");
+    try {
+      await sleepDeployment(rec.app_id);
+      toast.success(t("recommendation.sleeping", { app: rec.app_name }));
+      onChanged?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("recommendation.actionFailed"));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const run = async (
     action: "apply" | "ignore" | "notify",
@@ -94,7 +117,7 @@ export function RecommendationCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-medium">{rec.title}</h3>
+              <h3 className="font-medium">{text.title}</h3>
               <Badge variant="secondary">
                 {t(`recommendation.type.${rec.rec_type}`)}
               </Badge>
@@ -141,10 +164,39 @@ export function RecommendationCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <BarChart3 className="h-3.5 w-3.5" />
-            {rec.justification}
+            {text.justification}
           </p>
           <Badge variant="outline">{t(`recommendation.effort.${rec.effort}`)}</Badge>
         </div>
+
+        {!done && sleeps && (
+          <div className="flex flex-wrap items-center gap-2">
+            {canSleep ? (
+              <Button size="sm" disabled={busy !== null} onClick={sleep}>
+                {busy === "sleep" ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Moon className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {t("recommendation.sleepNow")}
+              </Button>
+            ) : (
+              <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <Lock className="h-3.5 w-3.5" />
+                {rec.project_id ? (
+                  <Link
+                    href={projectHref(rec.project_id, "members")}
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    {t("recommendation.askOwner")}
+                  </Link>
+                ) : (
+                  t("recommendation.askOwner")
+                )}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Actions: admins only. Everyone else still sees the finding and
             the estimated saving above. */}
@@ -154,48 +206,53 @@ export function RecommendationCard({
           </p>
         )}
         {!done && canAct && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={busy !== null || !rec.can_apply}
-              title={
-                rec.can_apply ? undefined : t("recommendation.cannotAutoApply")
-              }
-              onClick={() => run("apply", () => applyRecommendation(rec.id))}
-            >
-              {busy === "apply" ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Check className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {t("recommendation.apply")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy !== null}
-              onClick={() => run("notify", () => notifyRecommendation(rec.id))}
-            >
-              {busy === "notify" ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Bell className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {t("recommendation.notify")}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy !== null}
-              onClick={() => run("ignore", () => ignoreRecommendation(rec.id))}
-            >
-              {busy === "ignore" ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <X className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {t("recommendation.ignore")}
-            </Button>
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={sleeps ? "outline" : "default"}
+                disabled={busy !== null || !rec.can_apply}
+                onClick={() => run("apply", () => applyRecommendation(rec.id))}
+              >
+                {busy === "apply" ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {t("recommendation.apply")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy !== null}
+                onClick={() => run("notify", () => notifyRecommendation(rec.id))}
+              >
+                {busy === "notify" ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Bell className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {t("recommendation.notify")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy !== null}
+                onClick={() => run("ignore", () => ignoreRecommendation(rec.id))}
+              >
+                {busy === "ignore" ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <X className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {t("recommendation.ignore")}
+              </Button>
+            </div>
+            {!rec.can_apply && (
+              <p className="text-xs text-muted-foreground">
+                {t("recommendation.cannotAutoApply")}
+              </p>
+            )}
           </div>
         )}
       </CardContent>

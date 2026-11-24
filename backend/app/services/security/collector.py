@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
+from app.services import app_repo
 from app.services import app_security_data as security_data
 from app.services.clusters.state import cluster_states, project_cloud
 from app.services.github_service import (
@@ -35,6 +36,7 @@ from app.services.github_service import (
     get_org_installation_token,
     list_open_pulls,
 )
+from app.services.imports.service import image_name
 from app.services.kube_client import (
     OUTSIDE_CLUSTER_NOTICE,
     ClusterNotConnectedError,
@@ -52,6 +54,8 @@ from app.services.security.model import CLUSTER_SOURCES, Source
 logger = logging.getLogger(__name__)
 
 K8S_TEMPLATE = "k3s-gitops-app"
+IMPORT_TEMPLATES = ("import-service", "import-backing")
+SCANNED_TEMPLATES = (K8S_TEMPLATE, *IMPORT_TEMPLATES)
 PROJECT_LABEL = "cnp.3istor.com/project"
 REPORT_ARTIFACT = "cnp-security-report"
 REPORT_FILE = "cnp-security-report.json"
@@ -97,13 +101,38 @@ class ProjectApps:
     project: str
     apps: list[sources.AppRef]
     deployments: dict[str, Deployment]
+    # Imported apps: scanned in the cluster by namespace, in their
+    # repository only once the platform manages it (AppRef.repo set).
+    imported: frozenset[str] = frozenset()
+
+
+def _app_ref(db: Session, project: str, row: Deployment) -> sources.AppRef:
+    namespace = row.k8s_namespace or f"{project}-{row.name}"
+    if not app_repo.is_imported(row.template_id):
+        return sources.AppRef(
+            name=row.name,
+            namespace=namespace,
+            repo=repo_full_name(row.github_repo_url),
+        )
+    try:
+        repo = app_repo.import_binding(db, row).repo
+    except app_repo.RepoNotManaged:
+        repo = None
+    # Trivy reports the repository without the registry server.
+    registry, _, path = image_name(project, row.name).partition("/")
+    return sources.AppRef(
+        name=row.name,
+        namespace=namespace,
+        repo=repo,
+        image=path if "." in registry else f"{registry}/{path}",
+    )
 
 
 def kubernetes_projects(db: Session) -> list[ProjectApps]:
     rows = (
         db.query(Deployment)
         .filter(
-            Deployment.template_id == K8S_TEMPLATE,
+            Deployment.template_id.in_(SCANNED_TEMPLATES),
             Deployment.status == DeploymentStatus.RUNNING,
             Deployment.project_id.isnot(None),
         )
@@ -115,15 +144,13 @@ def kubernetes_projects(db: Session) -> list[ProjectApps]:
     return [
         ProjectApps(
             project=project,
-            apps=[
-                sources.AppRef(
-                    name=d.name,
-                    namespace=f"{project}-{d.name}",
-                    repo=repo_full_name(d.github_repo_url),
-                )
-                for d in deployments
-            ],
+            apps=[_app_ref(db, project, d) for d in deployments],
             deployments={d.name: d for d in deployments},
+            imported=frozenset(
+                d.name
+                for d in deployments
+                if app_repo.is_imported(d.template_id)
+            ),
         )
         for project, deployments in sorted(by_project.items())
     ]
@@ -388,7 +415,12 @@ async def collect_github_app(
             branch,
             scan.artifact_id,
         )
-        preset = await _read_exposure(token, app.repo, deployment, branch)
+        # An import's route comes from the platform, not from a values file.
+        preset = (
+            None
+            if app.name in entry.imported
+            else await _read_exposure(token, app.repo, deployment, branch)
+        )
         workflow = await _read_optional(
             token, app.repo, app_settings.WORKFLOW_FILE, branch
         )
@@ -485,6 +517,8 @@ async def collect_project(
         fresh += await collect_cluster(db, entry)
     policy = await project_policy(entry.project) if github else None
     for app in entry.apps:
+        if app.name in entry.imported and not app.repo:
+            continue
         requested = store.scan_state(db, entry.project, app.name, Source.CI)
         if github or requested.requested_at is not None:
             fresh += await collect_github_app(db, entry, app, policy)

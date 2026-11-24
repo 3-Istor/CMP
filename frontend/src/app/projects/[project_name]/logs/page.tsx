@@ -1,6 +1,7 @@
 "use client";
 
 import { LogsView } from "@/components/activity/LogsView";
+import { logsQueryFromParams } from "@/components/activity/logsQuery";
 import { projectHref } from "@/components/layout/projectSections";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ScrollText } from "lucide-react";
@@ -35,6 +36,7 @@ function ProjectLogs() {
           project={projectName}
           namespace={namespace}
           appId={Number.isInteger(app) && app > 0 ? app : undefined}
+          initialQuery={logsQueryFromParams(search)}
           fullPage
         />
       </main>

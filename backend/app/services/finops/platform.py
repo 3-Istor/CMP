@@ -21,7 +21,7 @@ from app.core.config import settings
 NOT_A_PROJECT = ("platform", "__idle__")
 IDLE = "__idle__"
 UNCOVERED_NAMESPACE = "__uncovered__"
-UNCOVERED_NAME = "Plateforme non couverte"
+UNCOVERED_NAME = "Uncovered platform"
 
 
 def app_slots() -> int:

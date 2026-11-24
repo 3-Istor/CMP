@@ -18,7 +18,7 @@ from app.services import app_security_data as security_data
 from app.services.environments import layout
 from app.services.grafana_service import GRAFANA_BASE_URL
 from app.services.kube_client import KubeUnavailableError, kube_list
-from app.services.observability.grafana_project import APP_DASHBOARD_UID
+from app.services.observability.grafana_dashboards import APP_UID
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +62,8 @@ def argocd_application_url(name: str) -> str:
 
 def grafana_app_url(org: int, app: str, namespace: str) -> str:
     return (
-        f"{GRAFANA_BASE_URL}/d/{APP_DASHBOARD_UID}?orgId={org}"
-        f"&var-app={quote(app)}&var-namespace={quote(namespace)}"
+        f"{GRAFANA_BASE_URL}/d/{APP_UID}?orgId={org}"
+        f"&var-app={quote(app)}&var-env={quote(namespace)}"
     )
 
 

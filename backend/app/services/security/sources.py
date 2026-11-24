@@ -29,13 +29,18 @@ class AppRef:
     name: str
     namespace: str
     repo: str | None
+    # An imported app's image, registry server left out: the import builds
+    # it under its own prefix, not under the repository's name.
+    image: str | None = None
 
     def owns_image(self, repository: str) -> bool:
         """Images the app's CI builds: ``<owner>/<repo>`` or ``<owner>/<repo>/<component>``."""
+        repository = repository.lower()
+        if self.image and repository == self.image.lower():
+            return True
         if not self.repo:
             return False
         repo = self.repo.lower()
-        repository = repository.lower()
         return repository == repo or repository.startswith(f"{repo}/")
 
 

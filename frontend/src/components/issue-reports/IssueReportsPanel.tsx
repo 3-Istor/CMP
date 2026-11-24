@@ -1,12 +1,13 @@
 "use client";
 
-import { ClipboardCopy, Loader2, ShieldAlert } from "lucide-react";
+import { ClipboardCopy, ShieldAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { errorMessage } from "@/components/activity/labels";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApiError, getIssueReports, setIssueReportStatus } from "@/lib/api";
@@ -109,10 +110,23 @@ export function IssueReportsPanel() {
       </div>
 
       {reports === null ? (
-        <Loader2
-          className="h-5 w-5 animate-spin text-muted-foreground"
-          aria-label={t("loading")}
-        />
+        <ul className="space-y-3" aria-busy aria-label={t("loading")}>
+          {[0, 1, 2].map((i) => (
+            <li key={i}>
+              <Card>
+                <CardContent className="space-y-3">
+                  <Skeleton className="h-5 w-64" />
+                  <Skeleton className="h-5 w-full max-w-lg" />
+                  <Skeleton className="h-4 w-80" />
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-32" />
+                    <Skeleton className="h-8 w-28" />
+                  </div>
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ul>
       ) : reports.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("empty")}</p>
       ) : (

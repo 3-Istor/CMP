@@ -10,7 +10,7 @@
       "security": "Security",
       "activity": "Activity",
       "alerts": "Alerts",
-      "assistants": "AI assistants",
+      "assistants": "MCP",
       "docs": "Docs",
       "projects": "Projects",
       "apps": "Apps",
@@ -90,10 +90,7 @@
     },
     "page": {
       "kubernetes": "Kubernetes project",
-      "kubernetesRole": "Kubernetes project · {role}",
-      "appCount": "{count, plural, one {# app} other {# apps}}",
       "live": "Live updates",
-      "description": "Applications deployed in this project.",
       "templatesTitle": "Select a Kubernetes template",
       "templatesLoading": "Loading templates…",
       "noTemplates": "No Kubernetes templates available.",
@@ -376,7 +373,8 @@
       "confirmDescription": "A commit will be pushed to {repo}, then Argo CD will apply it.",
       "confirm": "Confirm and commit",
       "saved": "Settings saved. ArgoCD will apply them in a few moments.",
-      "saveFailed": "Failed to save: {message}"
+      "saveFailed": "Failed to save: {message}",
+      "notManaged": "These settings are managed in the app repository."
     }
   },
   "finops": {
@@ -543,7 +541,10 @@
       "apply": "Apply",
       "notify": "Notify",
       "ignore": "Ignore",
-      "actionFailed": "Action failed"
+      "actionFailed": "Action failed",
+      "sleepNow": "Sleep now",
+      "sleeping": "{app} is going to sleep.",
+      "askOwner": "Ask a project owner for operator access"
     },
     "recommendations": {
       "sortLabel": "Sort by",
@@ -669,18 +670,45 @@
     },
     "timeline": {
       "inProgress": "in progress",
-      "partialDay": "Today so far: {partial} at {hour} h, projected {projected}",
       "forecast": "Forecast",
       "forecastValue": "{value} ({low} – {high})",
       "forecastRange": "Forecast range",
       "forecastLegend": "Forecast ({confidence} %)",
-      "today": "Today (projected)",
       "anomaly": "Anomaly",
       "anomalyDetail": "Anomaly · {app}: {cost} (median {baseline})",
-      "cause": "Likely cause: {cause}"
+      "cause": "Likely cause: {cause}",
+      "soFarDetail": "So far: {partial} ({pct} % elapsed), projected {projected}",
+      "soFar": "{unit, select, daily {Today} weekly {This week} other {This month}} so far ({pct} % elapsed, UTC)",
+      "projectedEnd": "Projected end of {unit, select, daily {day} weekly {week} other {month}}"
     },
     "donut": {
       "total": "Total"
+    },
+    "recommendationText": {
+      "inactivity": {
+        "title": "Hibernate (inactive)",
+        "justification": "No significant network traffic for 7 days. Use Sleep now in the app's menu."
+      },
+      "replicas": {
+        "title": "Reduce the replica count",
+        "justification": "CPU p95 over {window} is {pct}% of the requests (< 50%)."
+      },
+      "rightsizing": {
+        "title": "Adjust the CPU / RAM requests",
+        "justification": "Over {window}, CPU p95 is at {cpu}% and memory p99 at {ram}% of the requests."
+      },
+      "simulatedReplicas": {
+        "title": "Reduce the replica count",
+        "justification": "The average load over {days} days is {pct}% of capacity (< 60%)."
+      },
+      "simulatedRightsizing": {
+        "title": "Adjust the CPU / RAM limits",
+        "justification": "Observed peaks never exceeded {pct}% of the quotas over {days} days."
+      },
+      "simulatedStorage": {
+        "title": "Reduce the storage volume",
+        "justification": "Only {pct}% of the provisioned storage is used."
+      }
     }
   },
   "security": {
@@ -853,7 +881,8 @@
       "finding": "Finding",
       "by": "By",
       "reject": "Reject",
-      "rejected": "Exception rejected"
+      "rejected": "Exception rejected",
+      "actions": "Actions"
     },
     "exceptions": {
       "empty": "No ignored alert.",
@@ -880,7 +909,12 @@
       "nextRun": "next {when}",
       "rerun": "Run again",
       "started": "Scan started",
-      "firstRun": "The collector's first run will happen in a few minutes."
+      "firstRun": "The collector's first run will happen in a few minutes.",
+      "messages": {
+        "workflow_not_run": "The workflow has not run on the default branch yet",
+        "no_repository": "No linked GitHub repository",
+        "trivy_absent": "Trivy Operator is not installed"
+      }
     },
     "alerts": {
       "title": "Discord alerts",
@@ -975,6 +1009,15 @@
     "guarantees": {
       "isolation": "Isolated from other projects",
       "privileged": "Privileged pods refused"
+    },
+    "notScanned": {
+      "title": "Not scanned yet",
+      "short": "Not scanned",
+      "reasons": {
+        "workflow_not_run": "The security workflow has not run on the default branch yet. The score appears after the first scan.",
+        "no_repository": "No GitHub repository is linked, so the code is not scanned. The score appears after the first image scan.",
+        "no_scan_yet": "No scanner has looked at this app yet. The score appears after the first scan."
+      }
     }
   },
   "activity": {
@@ -1168,7 +1211,7 @@
       "noMore": "No more events",
       "newer": "Newer",
       "older": "Older",
-      "page": "Page {page} · {size} events per page",
+      "page": "Page {page}",
       "retention": "Events are kept {days} days.",
       "detail": {
         "title": "Event details",
@@ -1186,7 +1229,8 @@
         "allFrom": "All activity from {actor}",
         "showRaw": "Show raw data",
         "hideRaw": "Hide raw data"
-      }
+      },
+      "pageSize": "Events per page"
     },
     "logs": {
       "aria": {
@@ -1199,14 +1243,10 @@
       "allNamespaces": "All namespaces",
       "allPods": "All pods",
       "allContainers": "All containers",
-      "allLevels": "All levels",
-      "errors": "Errors",
-      "warnings": "Warnings",
       "search": "Search…",
       "searchButton": "Search",
       "lineWrap": "Wrap lines",
       "timestamp": "Timestamp",
-      "lineCount": "{count, plural, one {# line} other {# lines}}",
       "download": "Download the displayed lines",
       "openNewTab": "Open in a new tab",
       "exitFullscreen": "Exit full screen (Esc)",
@@ -1215,15 +1255,36 @@
       "follow": "Follow",
       "showStream": "Show this stream",
       "hideStream": "Hide this stream",
-      "showContext": "Show the minute around this line",
-      "contextBanner": "Context: one minute before and after the selected line, same container.",
+      "contextBanner": "Context: 20 lines before and after the selected line, same container.",
       "backToResults": "Back to results",
       "noLines": "No lines match these filters.",
-      "info": "Info",
-      "debug": "Debug",
       "traceFilter": "Lines of trace {id}",
       "clearTrace": "Show all lines",
-      "openTrace": "Open the trace"
+      "openTrace": "Open the trace",
+      "levels": {
+        "label": "Level",
+        "all": "All",
+        "error": "Error",
+        "warn": "Warn",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "regex": "Regular expression, applied to the loaded lines",
+      "invalidRegex": "Invalid regular expression",
+      "matchCount": "{count, plural, one {# match} other {# matches}}",
+      "expand": "Expand",
+      "dialogTitle": "Logs",
+      "streamConnected": "Connected",
+      "streamWaiting": "Waiting for the stream",
+      "contextBannerLoaded": "Context: 20 lines before and after the selected line, among the loaded lines.",
+      "details": {
+        "noFields": "Plain text line, no structured fields.",
+        "context": "Show context ±20 lines",
+        "copyLine": "Copy line",
+        "copied": "Line copied",
+        "copyLink": "Copy link",
+        "linkCopied": "Link copied, with the current filters"
+      }
     },
     "volume": {
       "title": "Log volume",
@@ -1536,7 +1597,7 @@
   },
   "agents": {
     "meta": {
-      "title": "Connect your AI assistant · CNP",
+      "title": "Connect an MCP client · CNP",
       "description": "Use CNP from Claude, ChatGPT, Codex, OpenCode, Cursor or VS Code: create, change and release apps in plain language."
     },
     "never": "never",
@@ -1715,14 +1776,15 @@
       "rulesNote": "While an alert fires on an app, aborting or retrying its rollout is always allowed. Every action is in the Activity tab, with the assistant that did it."
     },
     "connected": {
-      "title": "Connected AI assistants",
+      "title": "Connected MCP clients",
       "description": "Assistants that act on CNP with your rights. Disconnecting one cuts its access immediately.",
       "connectOne": "Connect one",
       "empty": "No assistant connected.",
       "meta": "{scope} · connected {created} · last used {lastUsed}",
       "revoked": "{name} disconnected",
       "revokeFailed": "Could not disconnect the assistant. Try again.",
-      "disconnect": "Disconnect"
+      "disconnect": "Disconnect",
+      "clientMeta": "{count, plural, one {# session} other {# sessions}} · last used {lastUsed}"
     },
     "confirmation": {
       "done": {
@@ -1744,7 +1806,7 @@
       "review": "Review the plan"
     },
     "connectAi": {
-      "title": "Connect your AI assistant to CNP",
+      "title": "Connect an MCP client to CNP",
       "lead": "Ask in plain language, the assistant creates the app, writes the code, releases it and follows the rollout, with your company login and your rights.",
       "install": "Install",
       "setUp": "Set up",
@@ -2262,9 +2324,10 @@
       "promoted": "Promoted",
       "aborted_auto": "Auto-rejected",
       "aborted_manual": "Aborted",
-      "superseded": "Superseded",
+      "superseded": "Replaced",
       "deployed": "Deployed",
-      "failed": "Failed"
+      "failed": "Failed",
+      "unknown": "Unknown"
     },
     "errors": {
       "readState": "Could not read the release state: {error}"
@@ -2278,7 +2341,7 @@
         "outcome": "Result",
         "progress": "Progress",
         "startedAt": "Started",
-        "duration": "Duration"
+        "duration": "Timing"
       },
       "forced": "Forced",
       "reason": "Reason: {reason}"
@@ -2503,6 +2566,10 @@
       "rolling": "Rolling",
       "canary": "Canary",
       "bluegreen": "Blue/green"
+    },
+    "lifetime": {
+      "readyIn": "ready in {duration}",
+      "live": "live {duration}"
     }
   },
   "appPage": {
@@ -2514,37 +2581,14 @@
       "openGrafana": "Open in Grafana, external link",
       "openArgo": "Open {name} in Argo CD, external link"
     },
-    "metrics": {
-      "requests": "Requests/s",
-      "errors": "5xx errors (%)",
-      "cpu": "CPU (millicores)",
-      "cost": "Cost this month",
-      "noTraffic": "No traffic data",
-      "noData": "No data",
-      "noCost": "No cost for this application",
-      "perSecond": "req/s",
-      "last24h": "Last 24 h",
-      "cpuRequest": "Last 24 h, request {value} m",
-      "costNote": "Month to date, estimate {estimate}"
-    },
-    "components": {
-      "title": "Components"
-    },
-    "logs": {
-      "recent": "Recent logs",
-      "open": "Open logs",
-      "region": "Application logs"
-    },
     "deployments": {
-      "recent": "Recent deployments",
-      "open": "Open deployments",
       "history": "Deployment history",
       "empty": "No deployment recorded",
       "version": "Version",
       "outcome": "Outcome",
       "who": "By",
       "when": "When",
-      "duration": "Duration",
+      "duration": "Timing",
       "automatic": "Automatic",
       "forced": "Forced",
       "env": "Env",
@@ -2563,9 +2607,10 @@
         "promoted": "Promoted",
         "aborted_auto": "Automatically rejected",
         "aborted_manual": "Aborted",
-        "superseded": "Superseded",
+        "superseded": "Replaced",
         "deployed": "Deployed",
-        "failed": "Failed"
+        "failed": "Failed",
+        "unknown": "Unknown"
       }
     },
     "events": {
@@ -2578,16 +2623,10 @@
     "console": {
       "title": "Deployment console",
       "download": "Download logs",
-      "clear": "Clear console",
-      "minimize": "Minimize",
-      "maximize": "Maximize",
       "expand": "Expand console",
       "collapse": "Collapse console",
-      "filter": "Filter logs",
-      "matches": "{count, plural, one {# match} other {# matches}}",
       "noMatch": "No line matches the filter.",
-      "empty": "The console is empty. Waiting for deployment activity.",
-      "cleared": "--- Console cleared ---"
+      "empty": "The console is empty. Waiting for deployment activity."
     },
     "deploymentStatus": {
       "pending": "Pending",
@@ -2847,9 +2886,6 @@
   "scorecard": {
     "title": "Score",
     "badgeLabel": "Score {grade}, {score} out of {max}",
-    "sortBy": "Sort by:",
-    "sortName": "Name",
-    "sortScore": "Score",
     "criteria": {
       "security": "Security",
       "cost": "Cost",
@@ -3501,7 +3537,21 @@
       "branch": "Branch",
       "branchHelp": "The analysis reads the branch head and keeps that commit for every later step.",
       "analyze": "Analyze",
-      "moreRepos": "Add repositories"
+      "moreRepos": "Add repositories",
+      "modeLegend": "Where the code lives",
+      "mode": {
+        "default": "default",
+        "yourRepo": "your repository",
+        "in_place": {
+          "label": "Use the repository in place",
+          "hint": "3-Istor reads {repo} and opens pull requests there. Your repo stays the source of truth."
+        },
+        "copy": {
+          "label": "Copy into the 3-Istor organization",
+          "hint": "We clone the repository into 3-Istor and deploy from the copy. The original keeps running where it is, untouched. Good for a dual run. Changes made on one side are not synced to the other."
+        }
+      },
+      "copyNote": "The platform copies every branch and tag into a private repository of the organization, then scans the copied history for leaked secrets."
     },
     "stageState": {
       "pending": "Waiting",
@@ -3652,6 +3702,14 @@
           "succeeded": "Deployed",
           "failed": "Failed",
           "cancelled": "Cancelled"
+        },
+        "sync": {
+          "queued": "Pull queued",
+          "claimed": "Pulling changes",
+          "running": "Pulling changes",
+          "succeeded": "Pull request opened",
+          "failed": "Pull failed",
+          "cancelled": "Pull cancelled"
         }
       },
       "autoRebuild": "Rebuild on push",
@@ -3687,7 +3745,13 @@
           "deploy": "kept in deploy/: check it is not meant for another deployment",
           "workflow": "kept: check it does not build or deploy these services too"
         }
-      }
+      },
+      "copiedFrom": "Copied from {origin}",
+      "pull": "Pull changes from the original",
+      "pullOf": "Pull changes from {origin}",
+      "pullStarted": "Fetching {origin}: a pull request opens in the copy.",
+      "pullFailed": "Changes could not be pulled: {message}",
+      "copyLeaks": "{count, plural, one {# possible secret was} other {# possible secrets were}} found in the history of {repo}. Rotate them, then remove them from the history."
     },
     "draftNote": "{user}'s assistant proposed these changes. Review them: you apply the import yourself, with your passkey.",
     "failure": {
@@ -3826,7 +3890,29 @@
       "failed": "The action failed: {message}",
       "notBackedUp": "Not backed up",
       "alternative": "The data of this container is not backed up. Managed, backed up alternative: {target}.",
-      "alternativeGeneric": "The data of this container is not backed up. The platform offers managed, backed up Postgres and S3 buckets."
+      "alternativeGeneric": "The data of this container is not backed up, and the platform has no managed equivalent for this engine.",
+      "reasons": {
+        "elasticsearch-to-postgres": {
+          "advised": "The searches found are bool, match and term queries: managed Postgres full text search (tsvector, GIN index) covers them and frees Elasticsearch's memory.",
+          "evaluate": "Elasticsearch may serve aggregations, fuzzy or nested queries, or no query was found. Managed Postgres full text search is to be evaluated against these uses."
+        },
+        "local-storage-to-bucket": {
+          "advised": "The service seems to write files to its local disk, lost on every redeploy. A managed S3 bucket keeps them and shares them between replicas.",
+          "evaluate": "The service seems to write files to its local disk, lost on every redeploy. A managed S3 bucket keeps them and shares them between replicas."
+        },
+        "minio-to-bucket": {
+          "advised": "A managed S3 bucket speaks the same API as MinIO: change the endpoint and the keys, with no storage container to run or back up.",
+          "evaluate": "A managed S3 bucket speaks the same API as MinIO: change the endpoint and the keys, with no storage container to run or back up."
+        },
+        "mongodb-to-postgres": {
+          "advised": "Managed, backed up Postgres covers MongoDB documents with JSONB columns and GIN indexes, and removes a database container without backups.",
+          "evaluate": "Managed, backed up Postgres covers MongoDB documents with JSONB columns and GIN indexes, and removes a database container without backups."
+        },
+        "neo4j-to-postgres": {
+          "advised": "The Cypher queries found follow one relationship at a time: an indexed link table in managed Postgres replaces them and frees Neo4j's memory.",
+          "evaluate": "Neo4j may serve traversals over several relationships, or no query was found. Managed Postgres (link tables, recursive queries) is to be evaluated against these traversals."
+        }
+      }
     },
     "estimate": {
       "title": "Resources and cost",
@@ -3850,6 +3936,34 @@
       "diffEmpty": "No change.",
       "added": "{app} will be added.",
       "removed": "{app} is no longer in the plan: it stays deployed until the import is deleted."
+    },
+    "finish": {
+      "title": "Finish the import",
+      "heading": "Finish the import · {done} of {total} done",
+      "assignAgent": "Assign to an agent",
+      "openSetupPr": "Open setup PR",
+      "done": "Done",
+      "todo": "To do",
+      "unlocks": "unlocks {what}",
+      "unlock": {
+        "delivery": "Delivery",
+        "settings": "Settings",
+        "security_code": "Security › Code",
+        "traces": "Traces"
+      },
+      "tasks": {
+        "deploy": "Build and deploy from the repository",
+        "route": "Route public traffic ({hostname})",
+        "setup_pr": "Merge the setup PR: CI, signed images, release from tags",
+        "code_scanning": "Enable code scanning",
+        "tracing": "Add tracing (OpenTelemetry)"
+      },
+      "notManagedTitle": "Managed in your repository",
+      "notManagedReason": "These settings are managed in your repository until the setup pull request is merged. Merge the setup pull request to manage them here.",
+      "finishAction": "Finish the import",
+      "noTracesTitle": "No traces from {app}",
+      "noTracesReason": "This app does not send OpenTelemetry spans. nginx needs the otel module, and other services need the OTel SDK. The platform already sets the endpoint for you.",
+      "howToTrace": "How to add tracing"
     }
   },
   "obs": {
@@ -3863,7 +3977,7 @@
     },
     "notAvailable": {
       "title": "Not available yet",
-      "metrics": "Golden signals appear once the platform metrics store is connected.",
+      "metrics": "Traffic and error charts appear once the platform metrics store is connected.",
       "logs": "This log explorer appears once the platform logs store is connected.",
       "traces": "Traces appear once the platform traces store is connected and the project has a traces tenant.",
       "alerts": "Alerts appear once the platform alert chain is connected.",
@@ -3872,21 +3986,6 @@
     "error": "Could not load this data. {message}",
     "retry": "Retry",
     "openGrafana": "Open in Grafana",
-    "signals": {
-      "title": "Golden signals",
-      "description": "Requests, errors and latency measured at the gateway, prod only.",
-      "noTraffic": "No traffic yet: the gateway counts a route from its first request. This is not an error.",
-      "rate": "Requests per second",
-      "errors": "5xx share",
-      "p95": "Latency p95",
-      "p50": "Latency p50",
-      "now": "Now: {value}",
-      "chartLabel": "{name} over the period, last value {value}",
-      "deployMarker": "Deploy {version} ({outcome})",
-      "routes": "Routes",
-      "route": "Route",
-      "noRoutes": "No route received traffic over the period."
-    },
     "slo": {
       "title": "Error budget",
       "description": "What is left of the budget over {days} days, and how fast it burns.",
@@ -3907,13 +4006,6 @@
       "saved": "Targets saved. The rules are rewritten within a minute.",
       "ownersOnly": "Only project admins and owners change the targets.",
       "invalid": "Availability is 90 to 99.99 %, latency 50 to 99.9 %."
-    },
-    "delivery": {
-      "title": "Delivery",
-      "deploysPerWeek": "Deploys per week",
-      "changeFailure": "Change failure rate",
-      "window": "Over {days} days: {deploys} deploys, {failed} failed",
-      "none": "No prod deploy recorded over {days} days."
     },
     "topErrors": {
       "title": "Most frequent errors",
@@ -4170,7 +4262,8 @@
       "tokensToday": "tokens today of {budget}",
       "budgetLabel": "Daily budget of {name}",
       "costToday": "{cost} today",
-      "settingsMissing": "Settings not found in the repository"
+      "settingsMissing": "Settings not found in the repository",
+      "resetsAt": "resets at {time}"
     },
     "trigger": {
       "chat": "Chat",
@@ -4221,7 +4314,8 @@
       "enableFirst": "Enable AI access to create an agent.",
       "assistantsTitle": "Connected assistants",
       "assistantsHint": "Claude, ChatGPT and other assistants acting on the project through the CMP MCP server.",
-      "usageUnavailable": "Usage unavailable: the AI gateway does not answer yet."
+      "usageUnavailable": "Usage unavailable: the AI gateway does not answer yet.",
+      "resetsAt": "Resets at {time}"
     },
     "backend": {
       "ok": "Online",
@@ -4466,7 +4560,8 @@
       "costMonth": "Cost this month",
       "requests": "Requests",
       "errorRate": "Error rate",
-      "refusals": "{count, plural, =0 {No refusal} one {# refusal} other {# refusals}}"
+      "refusals": "{count, plural, =0 {No refusal} one {# refusal} other {# refusals}}",
+      "resetsAt": "Resets at {time}"
     },
     "traces": {
       "error": "Could not read the traces.",
@@ -4597,5 +4692,235 @@
     "sourceIs": "{cloud} is {state}.",
     "back": "Back",
     "runsOn": "Runs on"
+  },
+  "data": {
+    "table": {
+      "search": "Search",
+      "noMatch": "No row matches this search.",
+      "empty": "Nothing to show yet.",
+      "rowsPerPage": "Rows per page",
+      "pageOf": "Page {page} of {count}",
+      "page": "Page {page}",
+      "previous": "Previous page",
+      "next": "Next page"
+    },
+    "chart": {
+      "noData": "No data for this period.",
+      "partial": "in progress",
+      "projected": "projected {value}",
+      "deployMarker": "Deploy {label} at {time}"
+    }
+  },
+  "appOverview": {
+    "reasons": {
+      "asleep": "Asleep",
+      "errors_5xx": "5xx errors",
+      "alerts_firing": "Alert firing",
+      "no_ready_replica": "No ready replica",
+      "missing": "Missing in the cluster",
+      "argo_degraded": "Degraded in Argo CD",
+      "restarts": "Restarting",
+      "not_observed": "Not observed yet"
+    },
+    "badges": {
+      "imported": "Imported",
+      "datastore": "Datastore",
+      "worker": "Worker",
+      "internal": "Internal only"
+    },
+    "header": {
+      "liveSince": "{version} live since {date}",
+      "logs": "Logs",
+      "restart": "Restart",
+      "rollbackTo": "Roll back to {version}",
+      "grafana": "Grafana",
+      "openApp": "Open app",
+      "backupNow": "Back up now",
+      "backupStarted": "Backup started: {list}"
+    },
+    "units": {
+      "s": "s",
+      "m": "m",
+      "h": "h",
+      "d": "d"
+    },
+    "tiles": {
+      "availability": "Availability · 24 h",
+      "availabilityHint": "{errors} failed of {requests}",
+      "requests": "Requests · 24 h",
+      "requestsHint": "{rate} req/s on average",
+      "errors": "Errors 5xx · 24 h",
+      "errorsHint": "{pct} of requests",
+      "latency": "Latency p95 · 24 h",
+      "latencyHint": "p50 {value}",
+      "restarts": "Restarts · 24 h",
+      "restartsHint": "{ready}/{desired} replicas",
+      "restartsMemHint": "{ready}/{desired} replicas · Mem {pct} of limit",
+      "noTraffic": "No traffic yet",
+      "cpu": "CPU · of request",
+      "cpuHint": "{used} of {request} CPU",
+      "memory": "Memory · of limit",
+      "memoryHint": "{used} of {limit}",
+      "disk": "Disk",
+      "diskHint": "{pct} of {capacity}",
+      "noVolume": "No volume measured",
+      "lastBackup": "Last backup",
+      "noBackup": "No backup recorded"
+    },
+    "traffic": {
+      "title": "Traffic and errors",
+      "description": "Requests reaching the app through the gateway. Vertical lines mark deploys.",
+      "requests": "Requests/s",
+      "errors": "5xx/s",
+      "p95": "p95 latency",
+      "range": "Time range",
+      "noTraffic": "No traffic yet",
+      "noTrafficReason": "The gateway counts a route from its first request. This is not an error."
+    },
+    "resources": {
+      "title": "Resources",
+      "description": "Usage against request and limit. 100 % is the CPU request and the memory limit.",
+      "cpu": "CPU, % of request",
+      "memory": "Memory, % of limit",
+      "empty": "No usage measured",
+      "emptyReason": "The cluster metrics have no sample for this app over the period.",
+      "threshold": "Request / limit"
+    },
+    "deployments": {
+      "title": "Deployments",
+      "all": "All",
+      "description": "Last 3 to prod",
+      "live": "Live",
+      "replaced": "Replaced",
+      "failed": "Failed",
+      "running": "Deploying",
+      "unknown": "Unknown",
+      "readyIn": "ready in {duration}",
+      "liveFor": "live {duration}",
+      "logs": "Logs",
+      "rollback": "Roll back",
+      "empty": "No prod deploy yet",
+      "emptyReason": "Deploys appear here once a version reaches prod."
+    },
+    "logVolume": {
+      "title": "Log volume",
+      "description": "Lines per minute by level. A spike here is often the first sign.",
+      "info": "info",
+      "warn": "warn",
+      "error": "error",
+      "empty": "No log lines",
+      "emptyReason": "Nothing was logged over the period, or the app has no log store."
+    },
+    "recentLogs": "Recent logs",
+    "topErrors": {
+      "title": "Most frequent errors",
+      "description": "Grouped log errors, 24 h",
+      "none": "No error line over 24 h"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "description": "Firing now",
+      "none": "No alert firing",
+      "seeRules": "See rules",
+      "firing": "{count, plural, one {# alert firing} other {# alerts firing}}",
+      "open": "Open alerts"
+    },
+    "talksTo": {
+      "title": "Talks to",
+      "description": "Observed in the last hour (Hubble)",
+      "none": "No flow observed in the last hour",
+      "denied": "{count, plural, one {# denied flow} other {# denied flows}} in 24 h"
+    },
+    "clients": {
+      "title": "Connected clients",
+      "description": "Flows seen in the last hour (Hubble)",
+      "verdict": "{verdict, select, denied {denied} other {allowed}} · {flows} flows"
+    },
+    "weekly": {
+      "title": "Weekly view",
+      "reliability": "Reliability target · 7 d",
+      "reliabilityNoTarget": "No target set",
+      "reliabilityNoTargetHint": "Set an availability target in Settings",
+      "reliabilityBudget": "{pct} of the error budget left",
+      "reliabilityNoData": "Not enough traffic to measure yet",
+      "delivery": "Delivery · 30 d",
+      "deploys": "{count, plural, one {deploy} other {deploys}}",
+      "deliveryHint": "{failed} failed · {perWeek} per week",
+      "deliveryNone": "No prod deploy over 30 days",
+      "score": "Score",
+      "scoreHint": "{count, plural, =0 {Nothing to improve} one {# to improve} other {# to improve}}",
+      "scoreNone": "Score not computed yet",
+      "cost": "Cost · this month",
+      "costHint": "estimate {estimate}",
+      "costNone": "No cost recorded yet for this app",
+      "unavailable": "Not available for this app"
+    }
+  },
+  "projectHome": {
+    "attention": "{count, plural, one {# app needs attention} other {# apps need attention}}",
+    "allHealthy": "All apps healthy",
+    "description": "{count, plural, one {# app} other {# apps}} · {cloud} · you are {role}",
+    "descriptionNoRole": "{count, plural, one {# app} other {# apps}} · {cloud}",
+    "logs": "Logs",
+    "grafana": "Grafana",
+    "band": {
+      "requests": "Requests/s",
+      "requestsSub": "24 h · by app",
+      "errors": "Errors 5xx",
+      "errorsSub": "24 h · by app, % of requests",
+      "errorLogs": "Error logs/min",
+      "errorLogsSub": "24 h",
+      "allApps": "all apps",
+      "peak": "{app} · {value} at {time}",
+      "empty": "No data yet",
+      "emptyReason": "Appears once the apps receive traffic."
+    },
+    "apps": {
+      "title": "Apps",
+      "sort": "Sort: needs attention first",
+      "filter": "Type",
+      "all": "All types",
+      "web": "Services",
+      "datastore": "Datastores",
+      "worker": "Workers",
+      "app": "App",
+      "rps": "Req/s",
+      "errors": "5xx",
+      "p95": "p95",
+      "spark": "24 h",
+      "lastDeploy": "Last deploy",
+      "cpu": "CPU {pct}",
+      "mem": "Mem {pct}",
+      "disk": "disk {pct}",
+      "open": "Open {name}",
+      "more": "{count, plural, one {+ # more app, healthy ({names})} other {+ # more apps, all healthy ({names})}}",
+      "noMatch": "No app of this type",
+      "kinds": {
+        "service": "Service",
+        "frontend": "Frontend",
+        "datastore": "Datastore",
+        "worker": "Worker"
+      },
+      "deploying": "Deploying",
+      "failed": "Deploy failed",
+      "deleting": "Deleting",
+      "sparkLabel": "{name}, 24 h"
+    },
+    "where": {
+      "title": "Where it runs",
+      "state": "{cloud} · {state}",
+      "reserved": "Reserved",
+      "reservedHint": "sum of pod requests",
+      "using": "Using now",
+      "usingHint": "{cpu} · {mem} of reserved",
+      "usingNone": "Live usage not available on this cloud",
+      "none": "Not measured yet"
+    },
+    "gettingStarted": {
+      "next": "Next:",
+      "hide": "hide",
+      "showSteps": "Show all steps",
+      "hideSteps": "Hide steps"
+    }
   }
 }

@@ -33,6 +33,7 @@ export const OUTCOME_TONE: Record<ReleaseOutcome, keyof typeof TONE> = {
   superseded: "muted",
   deployed: "ok",
   failed: "bad",
+  unknown: "muted",
 };
 
 export function isVisibleStep(step: { kind: ReleaseStepKind }): boolean {
@@ -86,13 +87,19 @@ export function formatDuration(
   return t("duration.hoursMinutes", { hours, minutes: minutes % 60 });
 }
 
-export function durationBetween(
-  start: string,
-  end: string | null,
+/** "ready in 1 min 30 s · live 2h 5", empty for a row that never went live. */
+export function lifetimeLabel(
+  event: { ready_seconds?: number | null; live_seconds?: number | null },
   t: Translate,
 ): string {
-  if (!end) return "";
-  return formatDuration((Date.parse(end) - Date.parse(start)) / 1000, t);
+  const parts = [];
+  if (event.ready_seconds != null) {
+    parts.push(t("lifetime.readyIn", { duration: formatDuration(event.ready_seconds, t) }));
+  }
+  if (event.live_seconds != null) {
+    parts.push(t("lifetime.live", { duration: formatDuration(event.live_seconds, t) }));
+  }
+  return parts.join(" · ");
 }
 
 export function formatMetricValue(
@@ -149,7 +156,8 @@ export function errorMessage(e: unknown): string {
   const text = e instanceof Error ? e.message : String(e);
   try {
     const detail = JSON.parse(text).detail;
-    return typeof detail === "string" ? detail : text;
+    if (typeof detail === "string") return detail;
+    return typeof detail?.message === "string" ? detail.message : text;
   } catch {
     return text;
   }

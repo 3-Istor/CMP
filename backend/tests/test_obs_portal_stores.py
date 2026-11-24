@@ -28,7 +28,7 @@ from app.models.project import Project
 from app.routers import app_observability as router
 from app.services import authz, keycloak_service
 from app.services.keycloak_service import get_current_user
-from app.services.observability import grafana_project as gp
+from app.services.observability import grafana_dashboards as gd
 from app.services.observability import silences, stores
 from tests import obs_seed
 from tests.obs_stack import free_port, need, store, wait_for_trace
@@ -228,6 +228,15 @@ def test_slo_status_reads_the_budget_the_rules_record(api):
     assert round(left["availability"], 2) == 0.62
 
 
+def test_an_app_without_requests_keeps_its_whole_budget(api):
+    body = _get(api, IDLE_APP, "/slo", range="1h").json()
+
+    assert [
+        (o["budget_remaining"], o["insufficient_traffic"])
+        for o in body["objectives"]
+    ] == [(1.0, True), (1.0, True)]
+
+
 def test_slo_burn_rate_is_the_error_ratio_over_the_budget(api):
     body = _get(api, SHOP_APP, "/slo", range="1h").json()
 
@@ -406,16 +415,23 @@ def test_a_silence_from_the_portal_covers_the_apps_alert(api, stack):
 
 
 def _panel_queries():
-    for dashboard in (gp.app_dashboard(), gp.project_dashboard()):
+    builders = [gd.home_dashboard] + [build for _, build in gd.DASHBOARDS]
+    for dashboard in (build() for build in builders):
         for panel in dashboard["panels"]:
-            yield dashboard["uid"], panel["title"], panel["targets"][0]["expr"]
+            for target in panel.get("targets", []):
+                yield dashboard["uid"], panel["title"], target["expr"]
 
 
 @pytest.mark.parametrize("uid,title,expr", list(_panel_queries()))
 def test_every_dashboard_query_runs_on_victoriametrics(
     stack, uid, title, expr
 ):
-    query = expr.replace("$app", "web").replace("$namespace", "shop-web")
+    query = (
+        expr.replace("$app", "web")
+        .replace("$env", "shop-web")
+        .replace("$__range_s", "86400")
+        .replace("$__range", "24h")
+    )
 
     response = httpx.get(
         f"{stack['metrics']}/api/v1/query", params={"query": query}
@@ -425,13 +441,13 @@ def test_every_dashboard_query_runs_on_victoriametrics(
 
 
 def test_the_budget_panel_reads_the_recorded_series(stack):
-    budget = next(p for p in gp.app_dashboard()["panels"] if p["id"] == 4)[
-        "targets"
-    ][0]["expr"]
+    budget = gd.budget_left(gd.APP_SEL)
 
     found = httpx.get(
         f"{stack['metrics']}/api/v1/query",
-        params={"query": budget.replace("$app", "web")},
+        params={
+            "query": budget.replace("$app", "web").replace("$env", "shop-web")
+        },
     ).json()["data"]["result"]
 
     assert {r["metric"]["cnp_slo"] for r in found} == {

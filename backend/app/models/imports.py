@@ -30,6 +30,16 @@ def _uuid() -> str:
 class RunKind(str, enum.Enum):
     ANALYZE = "analyze"
     BUILD = "build"
+    # Pull changes from the original of a copy-mode import into a branch
+    # of the copy, for a pull request.
+    SYNC = "sync"
+
+
+class SourceMode(str, enum.Enum):
+    IN_PLACE = "in_place"
+    # The workflow mirrors the repository into the platform org and the
+    # import reads the copy; the original is never written.
+    COPY = "copy"
 
 
 class RunStatus(str, enum.Enum):
@@ -82,6 +92,19 @@ class ImportSource(Base):
     # deploy/ values and the standard CI in the repository. Once merged and
     # switched, Argo CD reads the repository and its CI builds the images.
     standard_repo: Mapped[dict | None] = mapped_column(JSON)
+    source_mode: Mapped[str] = mapped_column(
+        String(16),
+        default=SourceMode.IN_PLACE.value,
+        server_default=SourceMode.IN_PLACE.value,
+    )
+    # Copy mode: the repository the copy was mirrored from, proven through
+    # origin_installation_id; repo_* and installation_id name the copy.
+    origin_repo_full_name: Mapped[str | None] = mapped_column(String(200))
+    origin_repo_id: Mapped[int | None] = mapped_column(Integer)
+    origin_installation_id: Mapped[int | None] = mapped_column(Integer)
+    # {state: pending|copied, at, leaks_total, leaks}: the mirror and the
+    # leak scan of its history.
+    copy: Mapped[dict | None] = mapped_column(JSON)
 
     runs: Mapped[list["ImportRun"]] = relationship(
         back_populates="source",

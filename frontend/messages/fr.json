@@ -10,7 +10,7 @@
       "security": "Sécurité",
       "activity": "Activité",
       "alerts": "Alertes",
-      "assistants": "Assistants IA",
+      "assistants": "MCP",
       "docs": "Documentation",
       "projects": "Projets",
       "apps": "Applications",
@@ -90,10 +90,7 @@
     },
     "page": {
       "kubernetes": "Projet Kubernetes",
-      "kubernetesRole": "Projet Kubernetes · {role}",
-      "appCount": "{count, plural, one {# app} other {# apps}}",
       "live": "Mises à jour en direct",
-      "description": "Applications déployées dans ce projet.",
       "templatesTitle": "Choisir un modèle Kubernetes",
       "templatesLoading": "Chargement des modèles…",
       "noTemplates": "Aucun modèle Kubernetes disponible.",
@@ -376,7 +373,8 @@
       "confirmDescription": "Un commit sera poussé sur {repo}, puis Argo CD l'appliquera.",
       "confirm": "Confirmer et commiter",
       "saved": "Paramètres enregistrés. ArgoCD les appliquera dans quelques instants.",
-      "saveFailed": "Échec de l'enregistrement : {message}"
+      "saveFailed": "Échec de l'enregistrement : {message}",
+      "notManaged": "Ces réglages sont gérés dans le repo de l'app."
     }
   },
   "finops": {
@@ -543,7 +541,10 @@
       "apply": "Appliquer",
       "notify": "Notifier",
       "ignore": "Ignorer",
-      "actionFailed": "Action échouée"
+      "actionFailed": "Action échouée",
+      "sleepNow": "Mettre en veille",
+      "sleeping": "{app} se met en veille.",
+      "askOwner": "Demandez l'accès opérateur à un propriétaire du projet"
     },
     "recommendations": {
       "sortLabel": "Trier par",
@@ -669,18 +670,45 @@
     },
     "timeline": {
       "inProgress": "en cours",
-      "partialDay": "En cours : {partial} à {hour} h, projeté {projected}",
       "forecast": "Prévision",
       "forecastValue": "{value} ({low} – {high})",
       "forecastRange": "Intervalle de prévision",
       "forecastLegend": "Prévision ({confidence} %)",
-      "today": "Jour en cours (projeté)",
       "anomaly": "Anomalie",
       "anomalyDetail": "Anomalie · {app} : {cost} (médiane {baseline})",
-      "cause": "Cause probable : {cause}"
+      "cause": "Cause probable : {cause}",
+      "soFarDetail": "Jusqu'ici : {partial} ({pct} % écoulé), projeté {projected}",
+      "soFar": "{unit, select, daily {Aujourd'hui} weekly {Cette semaine} other {Ce mois}} jusqu'ici ({pct} % écoulé, UTC)",
+      "projectedEnd": "Fin {unit, select, daily {de journée} weekly {de semaine} other {de mois}} projetée"
     },
     "donut": {
       "total": "Total"
+    },
+    "recommendationText": {
+      "inactivity": {
+        "title": "Mettre en hibernation (inactivité)",
+        "justification": "Aucun trafic réseau significatif depuis 7 jours. Utilisez Sleep now dans le menu de l'app."
+      },
+      "replicas": {
+        "title": "Réduire le nombre de replicas",
+        "justification": "Le CPU au p95 sur {window} représente {pct} % des requests (< 50 %)."
+      },
+      "rightsizing": {
+        "title": "Ajuster les requests CPU / RAM",
+        "justification": "Sur {window}, le CPU au p95 est à {cpu} % et la mémoire au p99 à {ram} % des requests."
+      },
+      "simulatedReplicas": {
+        "title": "Réduire le nombre de replicas",
+        "justification": "La charge moyenne sur {days} jours est de {pct} % des capacités (< 60 %)."
+      },
+      "simulatedRightsizing": {
+        "title": "Ajuster les limites CPU / RAM",
+        "justification": "Les pics observés n'ont jamais dépassé {pct} % des quotas sur {days} jours."
+      },
+      "simulatedStorage": {
+        "title": "Réduire le volume de stockage",
+        "justification": "Le stockage n'est utilisé qu'à {pct} % de sa capacité provisionnée."
+      }
     }
   },
   "security": {
@@ -853,7 +881,8 @@
       "finding": "Alerte",
       "by": "Par",
       "reject": "Rejeter",
-      "rejected": "Exception rejetée"
+      "rejected": "Exception rejetée",
+      "actions": "Actions"
     },
     "exceptions": {
       "empty": "Aucune alerte ignorée.",
@@ -880,7 +909,12 @@
       "nextRun": "prochain {when}",
       "rerun": "Relancer",
       "started": "Scan lancé",
-      "firstRun": "Premier passage du collecteur dans quelques minutes."
+      "firstRun": "Premier passage du collecteur dans quelques minutes.",
+      "messages": {
+        "workflow_not_run": "Le workflow n'a pas encore tourné sur la branche par défaut",
+        "no_repository": "Pas de repo GitHub lié",
+        "trivy_absent": "Trivy Operator absent"
+      }
     },
     "alerts": {
       "title": "Alertes Discord",
@@ -975,6 +1009,15 @@
     "guarantees": {
       "isolation": "Isolé des autres projets",
       "privileged": "Pods privilégiés refusés"
+    },
+    "notScanned": {
+      "title": "Pas encore analysée",
+      "short": "Non analysée",
+      "reasons": {
+        "workflow_not_run": "Le workflow de sécurité n'a pas encore tourné sur la branche par défaut. Le score apparaît après la première analyse.",
+        "no_repository": "Aucun repo GitHub n'est lié, le code n'est donc pas analysé. Le score apparaît après la première analyse de l'image.",
+        "no_scan_yet": "Aucun scanner n'a encore analysé cette app. Le score apparaît après la première analyse."
+      }
     }
   },
   "activity": {
@@ -1168,7 +1211,7 @@
       "noMore": "Plus d'événements",
       "newer": "Plus récent",
       "older": "Plus ancien",
-      "page": "Page {page} · {size} événements par page",
+      "page": "Page {page}",
       "retention": "Les événements sont gardés {days} jours.",
       "detail": {
         "title": "Détail de l'événement",
@@ -1186,7 +1229,8 @@
         "allFrom": "Toute l'activité de {actor}",
         "showRaw": "Voir les données brutes",
         "hideRaw": "Masquer les données brutes"
-      }
+      },
+      "pageSize": "Événements par page"
     },
     "logs": {
       "aria": {
@@ -1199,14 +1243,10 @@
       "allNamespaces": "Tous les namespaces",
       "allPods": "Tous les pods",
       "allContainers": "Tous les conteneurs",
-      "allLevels": "Tous les niveaux",
-      "errors": "Erreurs",
-      "warnings": "Avertissements",
       "search": "Rechercher…",
       "searchButton": "Rechercher",
       "lineWrap": "Retour à la ligne",
       "timestamp": "Horodatage",
-      "lineCount": "{count, plural, one {# ligne} other {# lignes}}",
       "download": "Télécharger les lignes affichées",
       "openNewTab": "Ouvrir dans un nouvel onglet",
       "exitFullscreen": "Quitter le plein écran (Échap)",
@@ -1215,15 +1255,36 @@
       "follow": "Suivre",
       "showStream": "Afficher ce flux",
       "hideStream": "Masquer ce flux",
-      "showContext": "Voir la minute autour de cette ligne",
-      "contextBanner": "Contexte : une minute avant et après la ligne choisie, même conteneur.",
+      "contextBanner": "Contexte : 20 lignes avant et après la ligne choisie, même conteneur.",
       "backToResults": "Retour aux résultats",
       "noLines": "Aucune ligne pour ces filtres.",
-      "info": "Info",
-      "debug": "Debug",
       "traceFilter": "Lignes de la trace {id}",
       "clearTrace": "Voir toutes les lignes",
-      "openTrace": "Ouvrir la trace"
+      "openTrace": "Ouvrir la trace",
+      "levels": {
+        "label": "Niveau",
+        "all": "Tous",
+        "error": "Erreur",
+        "warn": "Avert.",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "regex": "Expression régulière, appliquée aux lignes chargées",
+      "invalidRegex": "Expression régulière invalide",
+      "matchCount": "{count, plural, one {# résultat} other {# résultats}}",
+      "expand": "Agrandir",
+      "dialogTitle": "Logs",
+      "streamConnected": "Connecté",
+      "streamWaiting": "En attente du flux",
+      "contextBannerLoaded": "Contexte : 20 lignes avant et après la ligne choisie, parmi les lignes chargées.",
+      "details": {
+        "noFields": "Ligne en texte simple, sans champs structurés.",
+        "context": "Voir le contexte ±20 lignes",
+        "copyLine": "Copier la ligne",
+        "copied": "Ligne copiée",
+        "copyLink": "Copier le lien",
+        "linkCopied": "Lien copié, avec les filtres en cours"
+      }
     },
     "volume": {
       "title": "Volume de logs",
@@ -1536,7 +1597,7 @@
   },
   "agents": {
     "meta": {
-      "title": "Connecter votre assistant IA · CNP",
+      "title": "Connecter un client MCP · CNP",
       "description": "Utilisez CNP depuis Claude, ChatGPT, Codex, OpenCode, Cursor ou VS Code : créez, modifiez et publiez des applications en langage courant."
     },
     "never": "jamais",
@@ -1715,14 +1776,15 @@
       "rulesNote": "Pendant qu'une alerte est active sur une application, annuler ou relancer son déploiement progressif reste toujours permis. Chaque action figure dans l'onglet Activité, avec l'assistant qui l'a faite."
     },
     "connected": {
-      "title": "Assistants IA connectés",
+      "title": "Clients MCP connectés",
       "description": "Assistants qui agissent sur CNP avec vos droits. Déconnecter un assistant coupe son accès immédiatement.",
       "connectOne": "Connecter un assistant",
       "empty": "Aucun assistant connecté.",
       "meta": "{scope} · connecté {created} · dernière utilisation {lastUsed}",
       "revoked": "{name} déconnecté",
       "revokeFailed": "Impossible de déconnecter l'assistant. Réessayez.",
-      "disconnect": "Déconnecter"
+      "disconnect": "Déconnecter",
+      "clientMeta": "{count, plural, one {# session} other {# sessions}} · dernière utilisation {lastUsed}"
     },
     "confirmation": {
       "done": {
@@ -1744,7 +1806,7 @@
       "review": "Relire le plan"
     },
     "connectAi": {
-      "title": "Connectez votre assistant IA à CNP",
+      "title": "Connectez un client MCP à CNP",
       "lead": "Demandez en langage courant : l'assistant crée l'application, écrit le code, la publie et suit le déploiement, avec votre connexion d'entreprise et vos droits.",
       "install": "Installation",
       "setUp": "Mise en place",
@@ -2264,7 +2326,8 @@
       "aborted_manual": "Abandonnée",
       "superseded": "Remplacée",
       "deployed": "Déployée",
-      "failed": "Échouée"
+      "failed": "Échouée",
+      "unknown": "Inconnue"
     },
     "errors": {
       "readState": "Impossible de lire l'état de la release : {error}"
@@ -2278,7 +2341,7 @@
         "outcome": "Résultat",
         "progress": "Progression",
         "startedAt": "Démarrée",
-        "duration": "Durée"
+        "duration": "Durées"
       },
       "forced": "Forcée",
       "reason": "Motif : {reason}"
@@ -2503,6 +2566,10 @@
       "rolling": "Rolling",
       "canary": "Canary",
       "bluegreen": "Bleu/vert"
+    },
+    "lifetime": {
+      "readyIn": "prête en {duration}",
+      "live": "en ligne {duration}"
     }
   },
   "appPage": {
@@ -2514,37 +2581,14 @@
       "openGrafana": "Ouvrir dans Grafana, lien externe",
       "openArgo": "Ouvrir {name} dans Argo CD, lien externe"
     },
-    "metrics": {
-      "requests": "Requêtes/s",
-      "errors": "Erreurs 5xx (%)",
-      "cpu": "CPU (millicores)",
-      "cost": "Coût du mois",
-      "noTraffic": "Pas de données de trafic",
-      "noData": "Pas de données",
-      "noCost": "Pas de coût pour cette application",
-      "perSecond": "req/s",
-      "last24h": "Sur 24 h",
-      "cpuRequest": "Sur 24 h, demande {value} m",
-      "costNote": "Cumul du mois, estimation {estimate}"
-    },
-    "components": {
-      "title": "Composants"
-    },
-    "logs": {
-      "recent": "Logs récents",
-      "open": "Ouvrir les logs",
-      "region": "Logs de l'application"
-    },
     "deployments": {
-      "recent": "Derniers déploiements",
-      "open": "Ouvrir les déploiements",
       "history": "Historique des déploiements",
       "empty": "Aucun déploiement enregistré",
       "version": "Version",
       "outcome": "Résultat",
       "who": "Par",
       "when": "Quand",
-      "duration": "Durée",
+      "duration": "Durées",
       "automatic": "Automatique",
       "forced": "Forcée",
       "env": "Env",
@@ -2565,7 +2609,8 @@
         "aborted_manual": "Abortée",
         "superseded": "Remplacée",
         "deployed": "Déployée",
-        "failed": "Échouée"
+        "failed": "Échouée",
+        "unknown": "Inconnue"
       }
     },
     "events": {
@@ -2578,16 +2623,10 @@
     "console": {
       "title": "Console de déploiement",
       "download": "Télécharger les logs",
-      "clear": "Vider la console",
-      "minimize": "Réduire",
-      "maximize": "Agrandir",
       "expand": "Déplier la console",
       "collapse": "Replier la console",
-      "filter": "Filtrer les logs",
-      "matches": "{count, plural, one {# résultat} other {# résultats}}",
       "noMatch": "Aucune ligne ne correspond au filtre.",
-      "empty": "La console est vide. En attente d'une activité de déploiement.",
-      "cleared": "--- Console vidée ---"
+      "empty": "La console est vide. En attente d'une activité de déploiement."
     },
     "deploymentStatus": {
       "pending": "En attente",
@@ -2847,9 +2886,6 @@
   "scorecard": {
     "title": "Score",
     "badgeLabel": "Score {grade}, {score} sur {max}",
-    "sortBy": "Trier par :",
-    "sortName": "Nom",
-    "sortScore": "Score",
     "criteria": {
       "security": "Sécurité",
       "cost": "Coût",
@@ -3501,7 +3537,21 @@
       "branch": "Branche",
       "branchHelp": "L'analyse lit la tête de la branche et garde ce commit pour toutes les étapes suivantes.",
       "analyze": "Analyser",
-      "moreRepos": "Ajouter des repos"
+      "moreRepos": "Ajouter des repos",
+      "modeLegend": "Où vit le code",
+      "mode": {
+        "default": "par défaut",
+        "yourRepo": "votre repo",
+        "in_place": {
+          "label": "Utiliser le repo en place",
+          "hint": "3-Istor lit {repo} et y ouvre des pull requests. Votre repo reste la source de vérité."
+        },
+        "copy": {
+          "label": "Copier dans l'organisation 3-Istor",
+          "hint": "Nous clonons le repo dans 3-Istor et déployons depuis la copie. L'original continue de tourner là où il est, sans changement. Utile pour un double run. Les changements faits d'un côté ne sont pas répercutés de l'autre."
+        }
+      },
+      "copyNote": "La plateforme copie toutes les branches et tous les tags dans un repo privé de l'organisation, puis cherche des secrets fuités dans l'historique copié."
     },
     "stageState": {
       "pending": "En attente",
@@ -3652,6 +3702,14 @@
           "succeeded": "Déployé",
           "failed": "Échec",
           "cancelled": "Annulé"
+        },
+        "sync": {
+          "queued": "Récupération en attente",
+          "claimed": "Récupération en cours",
+          "running": "Récupération en cours",
+          "succeeded": "Pull request ouverte",
+          "failed": "Récupération en échec",
+          "cancelled": "Récupération annulée"
         }
       },
       "autoRebuild": "Reconstruire au push",
@@ -3687,7 +3745,13 @@
           "deploy": "conservé dans deploy/ : vérifiez qu'il ne sert pas à un autre déploiement",
           "workflow": "conservé : vérifiez qu'il ne construit ni ne déploie aussi ces services"
         }
-      }
+      },
+      "copiedFrom": "Copié depuis {origin}",
+      "pull": "Récupérer les changements de l'original",
+      "pullOf": "Récupérer les changements de {origin}",
+      "pullStarted": "Lecture de {origin} : une pull request s'ouvre dans la copie.",
+      "pullFailed": "Les changements n'ont pas pu être récupérés : {message}",
+      "copyLeaks": "{count, plural, one {# secret possible trouvé} other {# secrets possibles trouvés}} dans l'historique de {repo}. Changez-les, puis retirez-les de l'historique."
     },
     "draftNote": "L'assistant de {user} a proposé ces changements. Relisez-les : c'est vous qui appliquez l'import, avec votre passkey.",
     "failure": {
@@ -3826,7 +3890,29 @@
       "failed": "L'action n'a pas abouti : {message}",
       "notBackedUp": "Non sauvegardé",
       "alternative": "Les données de ce conteneur ne sont pas sauvegardées. Alternative gérée et sauvegardée : {target}.",
-      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées. La plateforme propose Postgres et des buckets S3 gérés, sauvegardés."
+      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées, et la plateforme n'a pas d'équivalent managé pour ce moteur.",
+      "reasons": {
+        "elasticsearch-to-postgres": {
+          "advised": "Les recherches trouvées sont des requêtes bool, match et term : la recherche plein texte de Postgres managé (tsvector, index GIN) les couvre et libère la mémoire d'Elasticsearch.",
+          "evaluate": "Elasticsearch sert peut-être des agrégations, du flou ou des requêtes imbriquées, ou aucune requête n'a été trouvée. La recherche plein texte de Postgres managé est à évaluer selon ces usages."
+        },
+        "local-storage-to-bucket": {
+          "advised": "Le service semble écrire des fichiers sur son disque local, perdus à chaque redéploiement. Un bucket S3 managé les conserve et les partage entre répliques.",
+          "evaluate": "Le service semble écrire des fichiers sur son disque local, perdus à chaque redéploiement. Un bucket S3 managé les conserve et les partage entre répliques."
+        },
+        "minio-to-bucket": {
+          "advised": "Un bucket S3 managé parle la même API que MinIO : il suffit de changer l'endpoint et les clés, sans conteneur de stockage à faire tourner ni à sauvegarder.",
+          "evaluate": "Un bucket S3 managé parle la même API que MinIO : il suffit de changer l'endpoint et les clés, sans conteneur de stockage à faire tourner ni à sauvegarder."
+        },
+        "mongodb-to-postgres": {
+          "advised": "Postgres managé (sauvegardé) couvre les documents MongoDB avec des colonnes JSONB et des index GIN. Cela retire un conteneur de base sans sauvegarde.",
+          "evaluate": "Postgres managé (sauvegardé) couvre les documents MongoDB avec des colonnes JSONB et des index GIN. Cela retire un conteneur de base sans sauvegarde."
+        },
+        "neo4j-to-postgres": {
+          "advised": "Les requêtes Cypher trouvées ne parcourent qu'une relation à la fois : une table de liaison indexée dans Postgres managé les remplace et libère la mémoire de Neo4j.",
+          "evaluate": "Neo4j sert peut-être des parcours sur plusieurs relations, ou aucune requête n'a été trouvée. Postgres managé (tables de liaison, requêtes récursives) est à évaluer selon ces parcours."
+        }
+      }
     },
     "estimate": {
       "title": "Ressources et coût",
@@ -3850,6 +3936,34 @@
       "diffEmpty": "Aucun changement.",
       "added": "{app} sera ajoutée.",
       "removed": "{app} n'est plus dans le plan : elle reste déployée jusqu'à la suppression de l'import."
+    },
+    "finish": {
+      "title": "Terminer l'import",
+      "heading": "Terminer l'import · {done} sur {total} faites",
+      "assignAgent": "Confier à un agent",
+      "openSetupPr": "Ouvrir la PR de mise en place",
+      "done": "Fait",
+      "todo": "À faire",
+      "unlocks": "débloque {what}",
+      "unlock": {
+        "delivery": "Livraison",
+        "settings": "Réglages",
+        "security_code": "Sécurité › Code",
+        "traces": "Traces"
+      },
+      "tasks": {
+        "deploy": "Construire et déployer depuis le repo",
+        "route": "Router le trafic public ({hostname})",
+        "setup_pr": "Fusionner la PR de mise en place : CI, images signées, release depuis les tags",
+        "code_scanning": "Activer l'analyse du code",
+        "tracing": "Ajouter le tracing (OpenTelemetry)"
+      },
+      "notManagedTitle": "Géré dans votre repo",
+      "notManagedReason": "Ces réglages sont gérés dans votre repo tant que la pull request de mise en place n'est pas fusionnée. Fusionnez-la pour les gérer ici.",
+      "finishAction": "Terminer l'import",
+      "noTracesTitle": "Aucune trace de {app}",
+      "noTracesReason": "Cette app n'envoie pas de spans OpenTelemetry. nginx a besoin du module otel, les autres services du SDK OTel. La plateforme règle déjà l'endpoint pour vous.",
+      "howToTrace": "Ajouter le tracing"
     }
   },
   "obs": {
@@ -3863,7 +3977,7 @@
     },
     "notAvailable": {
       "title": "Pas encore disponible",
-      "metrics": "Les signaux dorés apparaissent quand la base de métriques de la plateforme est branchée.",
+      "metrics": "Les graphes de trafic et d'erreurs apparaissent quand la base de métriques de la plateforme est branchée.",
       "logs": "Cet explorateur apparaît quand la base de logs de la plateforme est branchée.",
       "traces": "Les traces apparaissent quand la base de traces est branchée et que le projet a son tenant.",
       "alerts": "Les alertes apparaissent quand la chaîne d'alerte de la plateforme est branchée.",
@@ -3872,21 +3986,6 @@
     "error": "Impossible de charger ces données. {message}",
     "retry": "Réessayer",
     "openGrafana": "Ouvrir dans Grafana",
-    "signals": {
-      "title": "Signaux dorés",
-      "description": "Requêtes, erreurs et latence mesurées à la gateway, prod seulement.",
-      "noTraffic": "Pas encore de trafic : la gateway compte une route à partir de sa première requête. Ce n'est pas une erreur.",
-      "rate": "Requêtes par seconde",
-      "errors": "Part de 5xx",
-      "p95": "Latence p95",
-      "p50": "Latence p50",
-      "now": "Maintenant : {value}",
-      "chartLabel": "{name} sur la période, dernière valeur {value}",
-      "deployMarker": "Déploiement {version} ({outcome})",
-      "routes": "Routes",
-      "route": "Route",
-      "noRoutes": "Aucune route n'a reçu de trafic sur la période."
-    },
     "slo": {
       "title": "Budget d'erreur",
       "description": "Ce qui reste du budget sur {days} jours, et à quel rythme il brûle.",
@@ -3907,13 +4006,6 @@
       "saved": "Objectifs enregistrés. Les règles sont réécrites dans la minute.",
       "ownersOnly": "Seuls les admins et l'owner du projet changent les objectifs.",
       "invalid": "Disponibilité de 90 à 99,99 %, latence de 50 à 99,9 %."
-    },
-    "delivery": {
-      "title": "Livraison",
-      "deploysPerWeek": "Déploiements par semaine",
-      "changeFailure": "Taux d'échec des changements",
-      "window": "Sur {days} jours : {deploys} déploiements, {failed} en échec",
-      "none": "Aucun déploiement en prod sur {days} jours."
     },
     "topErrors": {
       "title": "Erreurs les plus fréquentes",
@@ -4170,7 +4262,8 @@
       "tokensToday": "tokens aujourd'hui sur {budget}",
       "budgetLabel": "Budget du jour de {name}",
       "costToday": "{cost} aujourd'hui",
-      "settingsMissing": "Réglages introuvables dans le dépôt"
+      "settingsMissing": "Réglages introuvables dans le dépôt",
+      "resetsAt": "remise à zéro à {time}"
     },
     "trigger": {
       "chat": "Chat",
@@ -4221,7 +4314,8 @@
       "enableFirst": "Activez l'accès à l'IA pour créer un agent.",
       "assistantsTitle": "Assistants connectés",
       "assistantsHint": "Claude, ChatGPT et les autres assistants qui agissent sur le projet par le serveur MCP de la CMP.",
-      "usageUnavailable": "Consommation indisponible : la gateway IA ne répond pas encore."
+      "usageUnavailable": "Consommation indisponible : la gateway IA ne répond pas encore.",
+      "resetsAt": "Remise à zéro à {time}"
     },
     "backend": {
       "ok": "En ligne",
@@ -4466,7 +4560,8 @@
       "costMonth": "Coût du mois",
       "requests": "Requêtes",
       "errorRate": "Taux d'erreur",
-      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}"
+      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}",
+      "resetsAt": "Remise à zéro à {time}"
     },
     "traces": {
       "error": "Impossible de lire les traces.",
@@ -4597,5 +4692,235 @@
     "sourceIs": "{cloud} est {state}.",
     "back": "Retour",
     "runsOn": "Tourne sur"
+  },
+  "data": {
+    "table": {
+      "search": "Rechercher",
+      "noMatch": "Aucune ligne ne correspond à cette recherche.",
+      "empty": "Rien à afficher pour l'instant.",
+      "rowsPerPage": "Lignes par page",
+      "pageOf": "Page {page} sur {count}",
+      "page": "Page {page}",
+      "previous": "Page précédente",
+      "next": "Page suivante"
+    },
+    "chart": {
+      "noData": "Aucune donnée sur cette période.",
+      "partial": "en cours",
+      "projected": "projection {value}",
+      "deployMarker": "Déploiement {label} à {time}"
+    }
+  },
+  "appOverview": {
+    "reasons": {
+      "asleep": "En veille",
+      "errors_5xx": "Erreurs 5xx",
+      "alerts_firing": "Alerte en cours",
+      "no_ready_replica": "Aucun réplica prêt",
+      "missing": "Absente du cluster",
+      "argo_degraded": "Dégradée dans Argo CD",
+      "restarts": "Redémarrages",
+      "not_observed": "Pas encore observée"
+    },
+    "badges": {
+      "imported": "Importée",
+      "datastore": "Datastore",
+      "worker": "Worker",
+      "internal": "Interne uniquement"
+    },
+    "header": {
+      "liveSince": "{version} en ligne depuis le {date}",
+      "logs": "Logs",
+      "restart": "Redémarrer",
+      "rollbackTo": "Revenir à {version}",
+      "grafana": "Grafana",
+      "openApp": "Ouvrir l'app",
+      "backupNow": "Sauvegarder maintenant",
+      "backupStarted": "Sauvegarde lancée : {list}"
+    },
+    "units": {
+      "s": "s",
+      "m": "min",
+      "h": "h",
+      "d": "j"
+    },
+    "tiles": {
+      "availability": "Disponibilité · 24 h",
+      "availabilityHint": "{errors} en échec sur {requests}",
+      "requests": "Requêtes · 24 h",
+      "requestsHint": "{rate} req/s en moyenne",
+      "errors": "Erreurs 5xx · 24 h",
+      "errorsHint": "{pct} des requêtes",
+      "latency": "Latence p95 · 24 h",
+      "latencyHint": "p50 {value}",
+      "restarts": "Redémarrages · 24 h",
+      "restartsHint": "{ready}/{desired} réplicas",
+      "restartsMemHint": "{ready}/{desired} réplicas · Mém. {pct} de la limite",
+      "noTraffic": "Pas encore de trafic",
+      "cpu": "CPU · de la request",
+      "cpuHint": "{used} sur {request} CPU",
+      "memory": "Mémoire · de la limite",
+      "memoryHint": "{used} sur {limit}",
+      "disk": "Disque",
+      "diskHint": "{pct} de {capacity}",
+      "noVolume": "Aucun volume mesuré",
+      "lastBackup": "Dernière sauvegarde",
+      "noBackup": "Aucune sauvegarde enregistrée"
+    },
+    "traffic": {
+      "title": "Trafic et erreurs",
+      "description": "Requêtes arrivant à l'app par la gateway. Les lignes verticales marquent les déploiements.",
+      "requests": "Requêtes/s",
+      "errors": "5xx/s",
+      "p95": "Latence p95",
+      "range": "Période",
+      "noTraffic": "Pas encore de trafic",
+      "noTrafficReason": "La gateway compte une route dès sa première requête. Ce n'est pas une erreur."
+    },
+    "resources": {
+      "title": "Ressources",
+      "description": "Consommation face à la request et à la limite. 100 % correspond à la request CPU et à la limite mémoire.",
+      "cpu": "CPU, % de la request",
+      "memory": "Mémoire, % de la limite",
+      "threshold": "Request / limite",
+      "empty": "Aucune consommation mesurée",
+      "emptyReason": "Les métriques du cluster n'ont aucun échantillon pour cette app sur la période."
+    },
+    "deployments": {
+      "title": "Déploiements",
+      "all": "Tous",
+      "description": "Les 3 derniers en prod",
+      "live": "En ligne",
+      "replaced": "Remplacé",
+      "failed": "Échoué",
+      "running": "En cours",
+      "unknown": "Inconnu",
+      "readyIn": "prêt en {duration}",
+      "liveFor": "en ligne {duration}",
+      "logs": "Logs",
+      "rollback": "Revenir",
+      "empty": "Aucun déploiement en prod",
+      "emptyReason": "Les déploiements apparaissent ici dès qu'une version arrive en prod."
+    },
+    "logVolume": {
+      "title": "Volume de logs",
+      "description": "Lignes par minute et par niveau. Un pic ici est souvent le premier signe.",
+      "info": "info",
+      "warn": "warn",
+      "error": "error",
+      "empty": "Aucune ligne de log",
+      "emptyReason": "Rien n'a été journalisé sur la période, ou l'app n'a pas de stockage de logs."
+    },
+    "recentLogs": "Logs récents",
+    "topErrors": {
+      "title": "Erreurs les plus fréquentes",
+      "description": "Erreurs de logs regroupées, 24 h",
+      "none": "Aucune ligne d'erreur sur 24 h"
+    },
+    "alerts": {
+      "title": "Alertes",
+      "description": "En cours",
+      "none": "Aucune alerte en cours",
+      "seeRules": "Voir les règles",
+      "firing": "{count, plural, one {# alerte en cours} other {# alertes en cours}}",
+      "open": "Ouvrir les alertes"
+    },
+    "talksTo": {
+      "title": "Parle à",
+      "description": "Observé sur la dernière heure (Hubble)",
+      "none": "Aucun flux observé sur la dernière heure",
+      "denied": "{count, plural, one {# flux refusé} other {# flux refusés}} en 24 h"
+    },
+    "clients": {
+      "title": "Clients connectés",
+      "description": "Flux vus sur la dernière heure (Hubble)",
+      "verdict": "{verdict, select, denied {refusé} other {autorisé}} · {flows} flux"
+    },
+    "weekly": {
+      "title": "Vue hebdo",
+      "reliability": "Objectif de fiabilité · 7 j",
+      "reliabilityNoTarget": "Aucun objectif",
+      "reliabilityNoTargetHint": "Définissez un objectif de disponibilité dans Paramètres",
+      "reliabilityBudget": "{pct} du budget d'erreur restant",
+      "reliabilityNoData": "Pas encore assez de trafic pour mesurer",
+      "delivery": "Delivery · 30 j",
+      "deploys": "{count, plural, one {déploiement} other {déploiements}}",
+      "deliveryHint": "{failed} en échec · {perWeek} par semaine",
+      "deliveryNone": "Aucun déploiement en prod sur 30 jours",
+      "score": "Score",
+      "scoreHint": "{count, plural, =0 {Rien à améliorer} one {# point à améliorer} other {# points à améliorer}}",
+      "scoreNone": "Score pas encore calculé",
+      "cost": "Coût · ce mois-ci",
+      "costHint": "estimation {estimate}",
+      "costNone": "Aucun coût enregistré pour cette app",
+      "unavailable": "Non disponible pour cette app"
+    }
+  },
+  "projectHome": {
+    "attention": "{count, plural, one {# app demande votre attention} other {# apps demandent votre attention}}",
+    "allHealthy": "Toutes les apps vont bien",
+    "description": "{count, plural, one {# app} other {# apps}} · {cloud} · vous êtes {role}",
+    "descriptionNoRole": "{count, plural, one {# app} other {# apps}} · {cloud}",
+    "logs": "Logs",
+    "grafana": "Grafana",
+    "band": {
+      "requests": "Requêtes/s",
+      "requestsSub": "24 h · par app",
+      "errors": "Erreurs 5xx",
+      "errorsSub": "24 h · par app, % des requêtes",
+      "errorLogs": "Logs d'erreur/min",
+      "errorLogsSub": "24 h",
+      "allApps": "toutes les apps",
+      "peak": "{app} · {value} à {time}",
+      "empty": "Pas encore de données",
+      "emptyReason": "Apparaît dès que les apps reçoivent du trafic."
+    },
+    "apps": {
+      "title": "Apps",
+      "sort": "Tri : à surveiller d'abord",
+      "filter": "Type",
+      "all": "Tous les types",
+      "web": "Services",
+      "datastore": "Datastores",
+      "worker": "Workers",
+      "app": "App",
+      "rps": "Req/s",
+      "errors": "5xx",
+      "p95": "p95",
+      "spark": "24 h",
+      "lastDeploy": "Dernier déploiement",
+      "cpu": "CPU {pct}",
+      "mem": "Mém. {pct}",
+      "disk": "disque {pct}",
+      "open": "Ouvrir {name}",
+      "more": "{count, plural, one {+ # autre app, en bonne santé ({names})} other {+ # autres apps, toutes en bonne santé ({names})}}",
+      "noMatch": "Aucune app de ce type",
+      "kinds": {
+        "service": "Service",
+        "frontend": "Frontend",
+        "datastore": "Datastore",
+        "worker": "Worker"
+      },
+      "deploying": "Déploiement",
+      "failed": "Déploiement échoué",
+      "deleting": "Suppression",
+      "sparkLabel": "{name}, 24 h"
+    },
+    "where": {
+      "title": "Où ça tourne",
+      "state": "{cloud} · {state}",
+      "reserved": "Réservé",
+      "reservedHint": "somme des requests des pods",
+      "using": "Utilisé maintenant",
+      "usingHint": "{cpu} · {mem} du réservé",
+      "usingNone": "Consommation en direct indisponible sur ce cloud",
+      "none": "Pas encore mesuré"
+    },
+    "gettingStarted": {
+      "next": "Étape suivante :",
+      "hide": "masquer",
+      "showSteps": "Voir toutes les étapes",
+      "hideSteps": "Masquer les étapes"
+    }
   }
 }
