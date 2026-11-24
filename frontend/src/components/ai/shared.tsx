@@ -24,9 +24,10 @@ export function useAiFormat() {
   const now = useNow({ updateInterval: 60_000 });
   return {
     relative: (value: string) => formatter.relativeTime(new Date(value), now),
+    // Compact at every size, so a card's "50K" and a detail's budget read alike.
     tokens: (value: number) =>
       new Intl.NumberFormat(locale, {
-        notation: value >= 100_000 ? "compact" : "standard",
+        notation: "compact",
         maximumFractionDigits: 1,
       }).format(value),
     eur: (value: number) =>
