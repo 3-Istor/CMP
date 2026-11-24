@@ -20,10 +20,12 @@ export function AppCostsPanel({
   project,
   appId,
   canAct,
+  canSleep,
 }: {
   project: string;
   appId: number;
   canAct: boolean;
+  canSleep: boolean;
 }) {
   const t = useTranslations("finops");
   const [filters, setFilters] = useState<FinopsFilterState>({
@@ -99,6 +101,7 @@ export function AppCostsPanel({
               key={rec.id}
               rec={rec}
               canAct={canAct}
+              canSleep={canSleep}
               onChanged={loadRecs}
             />
           ))}

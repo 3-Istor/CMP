@@ -543,7 +543,11 @@
       "apply": "Appliquer",
       "notify": "Notifier",
       "ignore": "Ignorer",
-      "actionFailed": "Action échouée"
+      "actionFailed": "Action échouée",
+      "sleepNow": "Mettre en veille",
+      "sleeping": "{app} se met en veille.",
+      "sleepNeedsAccess": "Un accès élevé est nécessaire pour mettre cette app en veille.",
+      "requestAccess": "Demander l'accès"
     },
     "recommendations": {
       "sortLabel": "Trier par",

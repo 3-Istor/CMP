@@ -543,7 +543,11 @@
       "apply": "Apply",
       "notify": "Notify",
       "ignore": "Ignore",
-      "actionFailed": "Action failed"
+      "actionFailed": "Action failed",
+      "sleepNow": "Sleep now",
+      "sleeping": "{app} is going to sleep.",
+      "sleepNeedsAccess": "Requires elevated access to put this app to sleep.",
+      "requestAccess": "Request access"
     },
     "recommendations": {
       "sortLabel": "Sort by",
