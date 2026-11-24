@@ -30,6 +30,7 @@ from app.routers import (
     environments,
     finops,
     finops_finance,
+    import_tasks,
     imports,
     infra,
     issue_reports,
@@ -474,6 +475,7 @@ app.include_router(security.router, prefix="/api")
 app.include_router(security_alerts.router, prefix="/api")
 app.include_router(security_databases.router, prefix="/api")
 app.include_router(secrets_presence.router, prefix="/api")
+app.include_router(import_tasks.router, prefix="/api")
 app.include_router(scorecard.router, prefix="/api")
 app.include_router(topology.router, prefix="/api")
 

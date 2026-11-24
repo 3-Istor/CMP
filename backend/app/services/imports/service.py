@@ -181,6 +181,13 @@ def source_view(source: ImportSource) -> dict:
         "auto_rebuild": source.auto_rebuild,
         "rebuild_pending": source.rebuild_pending,
         "standard_repo": source.standard_repo,
+        "source_mode": source.source_mode,
+        "origin_repo_full_name": source.origin_repo_full_name,
+        "copy": (
+            {k: v for k, v in source.copy.items() if k != "leaks"}
+            if source.copy
+            else None
+        ),
         "runs": [run_view(r) for r in source.runs[-5:]],
         "services": [service_view(s) for s in source.services],
     }
@@ -860,9 +867,13 @@ async def claim(db: Session, run: ImportRun, claims: dict) -> dict:
         workflow_run_id=str(claims["run_id"]),
         workflow_run_attempt=str(claims["run_attempt"]),
     )
+    # Imported here: copy_mode builds on this module.
+    from app.services.imports import copy_mode
+
     recipes = _recipes(run) if run.kind == RunKind.BUILD.value else []
     try:
         token = await _repo_token(run.source)
+        copy = await copy_mode.claim_copy(run)
     except GitHubAppError as exc:
         _transition(
             db,
@@ -875,7 +886,7 @@ async def claim(db: Session, run: ImportRun, claims: dict) -> dict:
             "Could not mint the repository token", 502
         ) from exc
     _system_event(run, "import.claim", True, workflow_run=claims["run_id"])
-    return {
+    answer = {
         "run_id": run.id,
         "kind": run.kind,
         "project": run.source.project_name,
@@ -889,6 +900,16 @@ async def claim(db: Session, run: ImportRun, claims: dict) -> dict:
         "archive_max_bytes": ARCHIVE_MAX_BYTES,
         "recipes": recipes,
     }
+    if copy is not None:
+        answer["copy"] = copy
+    return answer
+
+
+def finish_sync(db: Session, run: ImportRun, report: dict) -> None:
+    _transition(
+        db, run, RunStatus.CLAIMED.value, RunStatus.SUCCEEDED, report=report
+    )
+    _system_event(run, "import.sync", True, pull=report.get("pull"))
 
 
 def receive_plan(db: Session, run: ImportRun, plan: dict) -> None:

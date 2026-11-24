@@ -12,20 +12,58 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.roles import ProjectRole
+from app.models.deployment import Deployment
 from app.routers.deployments import (
-    _app_type_of,
     _extract_repo_full_name,
     _get_github_token_for_deployment,
     _get_kubernetes_deployment_or_404,
     _load_values_file,
+    _values_files,
 )
-from app.services import app_security_data as security_data
-from app.services import secret_presence, vault_client
+from app.services import app_repo, secret_presence, vault_client
+from app.services.imports import generate
 from app.services.keycloak_service import get_current_user
 
 router = APIRouter(prefix="/deployments", tags=["Secrets"])
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+
+async def _repo_values(deployment: Deployment) -> list[dict[str, Any]]:
+    gh_token = await _get_github_token_for_deployment(deployment)
+    repo = _extract_repo_full_name(deployment)
+    files = list(dict.fromkeys(reversed(_values_files(deployment))))
+    values_files: list[dict[str, Any]] = []
+    for file_path in files:
+        values, _ = await _load_values_file(gh_token, repo, file_path)
+        values_files.append(values)
+    return values_files
+
+
+def _import_values(
+    db: Session, deployment: Deployment
+) -> list[dict[str, Any]]:
+    """
+    The secrets block the import generated for the app, from its spec: the
+    same whether or not its repository is managed, and no GitHub call.
+    """
+    found = app_repo.import_source_of(db, deployment.id)
+    if found is None:
+        return []
+    source, service = found
+    spec = generate.AppSpec.from_dict(service.spec or {})
+    if not generate.needs_secret(spec):
+        return []
+    return [
+        {
+            "secrets": {
+                "enabled": True,
+                "vaultPath": f"project-{source.project_name}/"
+                f"{generate.secret_path(service.app_name)}",
+                "keys": sorted({e["env"] for e in spec.secret_env}),
+            }
+        }
+    ]
 
 
 @router.get(
@@ -38,19 +76,12 @@ async def get_secret_presence(
     db: Session = Depends(get_db),
 ) -> secret_presence.SecretPresence:
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token, ProjectRole.MEMBER
+        deployment_id, db, token, ProjectRole.MEMBER, allow_import=True
     )
-    gh_token = await _get_github_token_for_deployment(deployment)
-    repo = _extract_repo_full_name(deployment)
-    files = list(
-        dict.fromkeys(
-            reversed(security_data.values_files_for(_app_type_of(deployment)))
-        )
-    )
-    values_files: list[dict[str, Any]] = []
-    for file_path in files:
-        values, _ = await _load_values_file(gh_token, repo, file_path)
-        values_files.append(values)
+    if app_repo.is_imported(deployment.template_id):
+        values_files = _import_values(db, deployment)
+    else:
+        values_files = await _repo_values(deployment)
 
     expected = secret_presence.expected_names(values_files)
     try:

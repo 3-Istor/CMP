@@ -32,6 +32,7 @@ from app.routers.deployments import (
     _get_github_token_for_deployment,
     _get_kubernetes_deployment_or_404,
     _load_values_file,
+    _repo_binding,
     _yaml,
 )
 from app.schemas.release import (
@@ -403,14 +404,23 @@ async def _choices(
     db: Session, deployment: Deployment
 ) -> tuple[str, str, ReleaseChoices]:
     """The app's GitHub token and repo, and the choices its tags give."""
+    binding = _repo_binding(deployment)
+    if binding is None:
+        try:
+            repo = gitops.repo_of(deployment)
+        except gitops.GitOpsError as exc:
+            raise _conflict(str(exc)) from exc
+        branch = "main"
+    else:
+        repo, branch = binding.repo, binding.branch
     try:
-        repo = gitops.repo_of(deployment)
-    except gitops.GitOpsError as exc:
-        raise _conflict(str(exc)) from exc
-    try:
-        token = await gitops.token_for(deployment)
+        token = (
+            await gitops.token_for(deployment)
+            if binding is None
+            else await _get_github_token_for_deployment(deployment)
+        )
         tags = await repo_ops.list_tags(token, repo)
-        sha, message = await repo_ops.head_commit(token, repo)
+        sha, message = await repo_ops.head_commit(token, repo, branch)
     except (gitops.GitOpsError, GitHubAppError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     staging = await run_in_threadpool(
@@ -476,6 +486,9 @@ async def create_release_tag(
 
 
 def _release_files(deployment: Deployment) -> list[str]:
+    binding = _repo_binding(deployment)
+    if binding is not None:
+        return [binding.values_file]
     return list(
         dict.fromkeys(security_data.values_files_for(_app_type_of(deployment)))
     )
@@ -518,6 +531,7 @@ async def get_release_settings(
         db,
         token,
         ProjectRole.MEMBER,
+        True,
     )
     can_edit = await run_in_threadpool(
         _holds, db, token, deployment, ProjectRole.ADMIN
@@ -566,6 +580,7 @@ async def update_release_settings(
         db,
         token,
         ProjectRole.ADMIN,
+        True,
     )
     view = (await run_in_threadpool(_compute, db, deployment, source))[0]
     if (
