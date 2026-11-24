@@ -570,6 +570,8 @@ export interface Recommendation {
   effort: "low" | "medium" | "high";
   status: "pending" | "applied" | "ignored" | "notified";
   can_apply: boolean;
+  text_key?: string | null;
+  text_params?: Record<string, string | number>;
 }
 
 export interface CostAlert {

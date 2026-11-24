@@ -298,11 +298,12 @@ def _advice(
             Recommendation(
                 id=f"{app.id}:inactivity",
                 rec_type="inactivity",
-                title="Mettre en hibernation (inactivité)",
+                title="Hibernate (inactive)",
                 justification=(
-                    "Aucun trafic réseau entrant significatif depuis 7 jours. "
+                    "No significant inbound network traffic for 7 days. "
                     + SLEEP_HINT
                 ),
+                text_key="inactivity",
                 current={"cpu_cores": round(cpu_req, 2), "status": "running"},
                 recommended={"replicas": 0, "status": "hibernated"},
                 monthly_saving_eur=round(
@@ -330,11 +331,16 @@ def _advice(
                 Recommendation(
                     id=f"{app.id}:replicas",
                     rec_type="replicas",
-                    title="Réduire le nombre de replicas",
+                    title="Reduce the replica count",
                     justification=(
-                        f"Le CPU au p95 sur {WINDOW} représente "
-                        f"{cpu_ratio * 100:.0f}% des requests (< 50%)."
+                        f"CPU p95 over {WINDOW} is {cpu_ratio * 100:.0f}% "
+                        f"of the requests (< 50%)."
                     ),
+                    text_key="replicas",
+                    text_params={
+                        "window": WINDOW,
+                        "pct": round(cpu_ratio * 100),
+                    },
                     current={"replicas": replicas},
                     recommended={"replicas": target},
                     monthly_saving_eur=round(
@@ -392,11 +398,17 @@ def _advice(
         Recommendation(
             id=f"{app.id}:rightsizing",
             rec_type="rightsizing",
-            title="Ajuster les requests CPU / RAM",
+            title="Adjust the CPU / RAM requests",
             justification=(
-                f"Sur {WINDOW}, le CPU au p95 est à {cpu_ratio * 100:.0f}% "
-                f"et la mémoire au p99 à {ram_ratio * 100:.0f}% des requests."
+                f"Over {WINDOW}, CPU p95 is at {cpu_ratio * 100:.0f}% and "
+                f"memory p99 at {ram_ratio * 100:.0f}% of the requests."
             ),
+            text_key="rightsizing",
+            text_params={
+                "window": WINDOW,
+                "cpu": round(cpu_ratio * 100),
+                "ram": round(ram_ratio * 100),
+            },
             current={
                 "cpu_cores": round(pod_cpu, 2),
                 "ram_gb": round(pod_ram, 2),

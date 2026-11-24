@@ -196,6 +196,8 @@ class Recommendation(BaseModel):
     effort: str
     status: str = "pending"
     can_apply: bool = False
+    text_key: str | None = None
+    text_params: dict = {}
 
 
 class BudgetRead(BaseModel):

@@ -681,6 +681,32 @@
     },
     "donut": {
       "total": "Total"
+    },
+    "recommendationText": {
+      "inactivity": {
+        "title": "Hibernate (inactive)",
+        "justification": "No significant network traffic for 7 days. Use Sleep now in the app's menu."
+      },
+      "replicas": {
+        "title": "Reduce the replica count",
+        "justification": "CPU p95 over {window} is {pct}% of the requests (< 50%)."
+      },
+      "rightsizing": {
+        "title": "Adjust the CPU / RAM requests",
+        "justification": "Over {window}, CPU p95 is at {cpu}% and memory p99 at {ram}% of the requests."
+      },
+      "simulatedReplicas": {
+        "title": "Reduce the replica count",
+        "justification": "The average load over {days} days is {pct}% of capacity (< 60%)."
+      },
+      "simulatedRightsizing": {
+        "title": "Adjust the CPU / RAM limits",
+        "justification": "Observed peaks never exceeded {pct}% of the quotas over {days} days."
+      },
+      "simulatedStorage": {
+        "title": "Reduce the storage volume",
+        "justification": "Only {pct}% of the provisioned storage is used."
+      }
     }
   },
   "security": {

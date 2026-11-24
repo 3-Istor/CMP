@@ -3,6 +3,7 @@
 import { Progress } from "@/components/ui/progress";
 import { getObsCosts } from "@/lib/api";
 import { useCardData } from "@/lib/useCardData";
+import { useRecommendationText } from "@/components/finops/recommendationText";
 import { useTranslations } from "next-intl";
 import { CardState, Section, useObsFormat } from "./shared";
 
@@ -34,6 +35,7 @@ function UsageBar({
 export function CostPerRequestCard({ appId }: { appId: number }) {
   const t = useTranslations("obs.costs");
   const { number, euro } = useObsFormat();
+  const recText = useRecommendationText();
   const card = useCardData(`obs-costs-${appId}`, () => getObsCosts(appId));
   return (
     <Section
@@ -102,8 +104,8 @@ export function CostPerRequestCard({ appId }: { appId: number }) {
                   {c.recommendations.map((r) => (
                     <li key={`${r.rec_type}-${r.title}`} className="flex flex-wrap justify-between gap-2 p-3 text-sm">
                       <div className="min-w-0">
-                        <p className="font-medium">{r.title}</p>
-                        <p className="text-xs text-muted-foreground">{r.justification}</p>
+                        <p className="font-medium">{recText(r).title}</p>
+                        <p className="text-xs text-muted-foreground">{recText(r).justification}</p>
                       </div>
                       <span className="shrink-0 font-medium tabular-nums">
                         {t("monthly", { amount: euro(r.monthly_saving_eur) })}

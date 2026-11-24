@@ -153,6 +153,8 @@ export interface WasteHint {
   rec_type: string;
   monthly_saving_eur: number;
   justification: string;
+  text_key?: string | null;
+  text_params?: Record<string, string | number>;
 }
 
 export interface AppCosts {

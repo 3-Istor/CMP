@@ -42,11 +42,15 @@ class Recommendation:
     effort: str  # low | medium | high
     # k8s patch merged into the app's values file (None → cannot auto-apply)
     patch: dict | None = field(default=None)
+    # The frontend translates title and justification from these; the English
+    # text stays for the MCP tools and the notifications.
+    text_key: str | None = None
+    text_params: dict = field(default_factory=dict)
 
 
 # Hibernation is not applied by commit: the chart renders
 # `replicaCount | default 1`, so 0 would keep one pod running.
-SLEEP_HINT = "« Sleep now » dans le menu de l'app."
+SLEEP_HINT = "Use Sleep now in the app's menu."
 
 
 def k8s_resources(
@@ -112,11 +116,16 @@ def recommendations_for_app(
                     app_name=app.name,
                     project_id=app.project_id,
                     rec_type="replicas",
-                    title="Réduire le nombre de replicas",
+                    title="Reduce the replica count",
                     justification=(
-                        f"La charge moyenne sur {_ANALYSIS_WINDOW_DAYS} jours est de "
-                        f"{load * 100:.0f}% des capacités (< 60%)."
+                        f"The average load over {_ANALYSIS_WINDOW_DAYS} days "
+                        f"is {load * 100:.0f}% of capacity (< 60%)."
                     ),
+                    text_key="simulatedReplicas",
+                    text_params={
+                        "days": _ANALYSIS_WINDOW_DAYS,
+                        "pct": round(load * 100),
+                    },
                     current={"replicas": q.replicas},
                     recommended={"replicas": target},
                     monthly_saving_eur=_saving(app, new_q, ref),
@@ -148,12 +157,17 @@ def recommendations_for_app(
                     app_name=app.name,
                     project_id=app.project_id,
                     rec_type="rightsizing",
-                    title="Ajuster les limites CPU / RAM",
+                    title="Adjust the CPU / RAM limits",
                     justification=(
-                        f"Les pics observés n'ont jamais dépassé "
-                        f"{max(cpu_peak, ram_peak) * 100:.0f}% des quotas sur "
-                        f"{_ANALYSIS_WINDOW_DAYS} jours."
+                        f"Observed peaks never exceeded "
+                        f"{max(cpu_peak, ram_peak) * 100:.0f}% of the quotas "
+                        f"over {_ANALYSIS_WINDOW_DAYS} days."
                     ),
+                    text_key="simulatedRightsizing",
+                    text_params={
+                        "days": _ANALYSIS_WINDOW_DAYS,
+                        "pct": round(max(cpu_peak, ram_peak) * 100),
+                    },
                     current={"cpu_cores": q.cpu_cores, "ram_gb": q.ram_gb},
                     recommended={"cpu_cores": new_cpu, "ram_gb": new_ram},
                     monthly_saving_eur=_saving(app, new_q, ref),
@@ -181,10 +195,11 @@ def recommendations_for_app(
                 app_name=app.name,
                 project_id=app.project_id,
                 rec_type="inactivity",
-                title="Mettre en hibernation (inactivité)",
+                title="Hibernate (inactive)",
                 justification=(
-                    f"Aucun trafic réseau significatif depuis 7 jours. {SLEEP_HINT}"
+                    f"No significant network traffic for 7 days. {SLEEP_HINT}"
                 ),
+                text_key="inactivity",
                 current={"replicas": q.replicas, "status": "running"},
                 recommended={"replicas": 0, "status": "hibernated"},
                 monthly_saving_eur=_saving(app, replace(q, replicas=0), ref),
@@ -206,11 +221,13 @@ def recommendations_for_app(
                     app_name=app.name,
                     project_id=app.project_id,
                     rec_type="storage",
-                    title="Réduire le volume de stockage",
+                    title="Reduce the storage volume",
                     justification=(
-                        f"Le stockage n'est utilisé qu'à {storage_avg * 100:.0f}% "
-                        f"de sa capacité provisionnée."
+                        f"Only {storage_avg * 100:.0f}% of the provisioned "
+                        f"storage is used."
                     ),
+                    text_key="simulatedStorage",
+                    text_params={"pct": round(storage_avg * 100)},
                     current={"storage_gb": q.storage_gb},
                     recommended={"storage_gb": target},
                     monthly_saving_eur=_saving(app, new_q, ref),

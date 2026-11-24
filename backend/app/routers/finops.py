@@ -987,6 +987,8 @@ def get_recommendations(
                 effort=r.effort,
                 status=states.get(r.id, "pending"),
                 can_apply=r.patch is not None,
+                text_key=r.text_key,
+                text_params=r.text_params,
             )
         )
     return result

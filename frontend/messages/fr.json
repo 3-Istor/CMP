@@ -681,6 +681,32 @@
     },
     "donut": {
       "total": "Total"
+    },
+    "recommendationText": {
+      "inactivity": {
+        "title": "Mettre en hibernation (inactivité)",
+        "justification": "Aucun trafic réseau significatif depuis 7 jours. Utilisez Sleep now dans le menu de l'app."
+      },
+      "replicas": {
+        "title": "Réduire le nombre de replicas",
+        "justification": "Le CPU au p95 sur {window} représente {pct} % des requests (< 50 %)."
+      },
+      "rightsizing": {
+        "title": "Ajuster les requests CPU / RAM",
+        "justification": "Sur {window}, le CPU au p95 est à {cpu} % et la mémoire au p99 à {ram} % des requests."
+      },
+      "simulatedReplicas": {
+        "title": "Réduire le nombre de replicas",
+        "justification": "La charge moyenne sur {days} jours est de {pct} % des capacités (< 60 %)."
+      },
+      "simulatedRightsizing": {
+        "title": "Ajuster les limites CPU / RAM",
+        "justification": "Les pics observés n'ont jamais dépassé {pct} % des quotas sur {days} jours."
+      },
+      "simulatedStorage": {
+        "title": "Réduire le volume de stockage",
+        "justification": "Le stockage n'est utilisé qu'à {pct} % de sa capacité provisionnée."
+      }
     }
   },
   "security": {
