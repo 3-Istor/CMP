@@ -685,6 +685,32 @@
     },
     "donut": {
       "total": "Total"
+    },
+    "recommendationText": {
+      "inactivity": {
+        "title": "Mettre en hibernation (inactivité)",
+        "justification": "Aucun trafic réseau significatif depuis 7 jours. Utilisez Sleep now dans le menu de l'app."
+      },
+      "replicas": {
+        "title": "Réduire le nombre de replicas",
+        "justification": "Le CPU au p95 sur {window} représente {pct} % des requests (< 50 %)."
+      },
+      "rightsizing": {
+        "title": "Ajuster les requests CPU / RAM",
+        "justification": "Sur {window}, le CPU au p95 est à {cpu} % et la mémoire au p99 à {ram} % des requests."
+      },
+      "simulatedReplicas": {
+        "title": "Réduire le nombre de replicas",
+        "justification": "La charge moyenne sur {days} jours est de {pct} % des capacités (< 60 %)."
+      },
+      "simulatedRightsizing": {
+        "title": "Ajuster les limites CPU / RAM",
+        "justification": "Les pics observés n'ont jamais dépassé {pct} % des quotas sur {days} jours."
+      },
+      "simulatedStorage": {
+        "title": "Réduire le volume de stockage",
+        "justification": "Le stockage n'est utilisé qu'à {pct} % de sa capacité provisionnée."
+      }
     }
   },
   "security": {
@@ -884,7 +910,12 @@
       "nextRun": "prochain {when}",
       "rerun": "Relancer",
       "started": "Scan lancé",
-      "firstRun": "Premier passage du collecteur dans quelques minutes."
+      "firstRun": "Premier passage du collecteur dans quelques minutes.",
+      "messages": {
+        "workflow_not_run": "Le workflow n'a pas encore tourné sur la branche par défaut",
+        "no_repository": "Pas de repo GitHub lié",
+        "trivy_absent": "Trivy Operator absent"
+      }
     },
     "alerts": {
       "title": "Alertes Discord",
@@ -979,6 +1010,15 @@
     "guarantees": {
       "isolation": "Isolé des autres projets",
       "privileged": "Pods privilégiés refusés"
+    },
+    "notScanned": {
+      "title": "Pas encore analysée",
+      "short": "Non analysée",
+      "reasons": {
+        "workflow_not_run": "Le workflow de sécurité n'a pas encore tourné sur la branche par défaut. Le score apparaît après la première analyse.",
+        "no_repository": "Aucun repo GitHub n'est lié, le code n'est donc pas analysé. Le score apparaît après la première analyse de l'image.",
+        "no_scan_yet": "Aucun scanner n'a encore analysé cette app. Le score apparaît après la première analyse."
+      }
     }
   },
   "activity": {
@@ -2287,7 +2327,8 @@
       "aborted_manual": "Abandonnée",
       "superseded": "Remplacée",
       "deployed": "Déployée",
-      "failed": "Échouée"
+      "failed": "Échouée",
+      "unknown": "Inconnue"
     },
     "errors": {
       "readState": "Impossible de lire l'état de la release : {error}"
@@ -2301,7 +2342,7 @@
         "outcome": "Résultat",
         "progress": "Progression",
         "startedAt": "Démarrée",
-        "duration": "Durée"
+        "duration": "Durées"
       },
       "forced": "Forcée",
       "reason": "Motif : {reason}"
@@ -2526,6 +2567,10 @@
       "rolling": "Rolling",
       "canary": "Canary",
       "bluegreen": "Bleu/vert"
+    },
+    "lifetime": {
+      "readyIn": "prête en {duration}",
+      "live": "en ligne {duration}"
     }
   },
   "appPage": {
@@ -2567,7 +2612,7 @@
       "outcome": "Résultat",
       "who": "Par",
       "when": "Quand",
-      "duration": "Durée",
+      "duration": "Durées",
       "automatic": "Automatique",
       "forced": "Forcée",
       "env": "Env",
@@ -2588,7 +2633,8 @@
         "aborted_manual": "Abortée",
         "superseded": "Remplacée",
         "deployed": "Déployée",
-        "failed": "Échouée"
+        "failed": "Échouée",
+        "unknown": "Inconnue"
       }
     },
     "events": {
@@ -3843,7 +3889,29 @@
       "failed": "L'action n'a pas abouti : {message}",
       "notBackedUp": "Non sauvegardé",
       "alternative": "Les données de ce conteneur ne sont pas sauvegardées. Alternative gérée et sauvegardée : {target}.",
-      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées. La plateforme propose Postgres et des buckets S3 gérés, sauvegardés."
+      "alternativeGeneric": "Les données de ce conteneur ne sont pas sauvegardées, et la plateforme n'a pas d'équivalent managé pour ce moteur.",
+      "reasons": {
+        "elasticsearch-to-postgres": {
+          "advised": "Les recherches trouvées sont des requêtes bool, match et term : la recherche plein texte de Postgres managé (tsvector, index GIN) les couvre et libère la mémoire d'Elasticsearch.",
+          "evaluate": "Elasticsearch sert peut-être des agrégations, du flou ou des requêtes imbriquées, ou aucune requête n'a été trouvée. La recherche plein texte de Postgres managé est à évaluer selon ces usages."
+        },
+        "local-storage-to-bucket": {
+          "advised": "Le service semble écrire des fichiers sur son disque local, perdus à chaque redéploiement. Un bucket S3 managé les conserve et les partage entre répliques.",
+          "evaluate": "Le service semble écrire des fichiers sur son disque local, perdus à chaque redéploiement. Un bucket S3 managé les conserve et les partage entre répliques."
+        },
+        "minio-to-bucket": {
+          "advised": "Un bucket S3 managé parle la même API que MinIO : il suffit de changer l'endpoint et les clés, sans conteneur de stockage à faire tourner ni à sauvegarder.",
+          "evaluate": "Un bucket S3 managé parle la même API que MinIO : il suffit de changer l'endpoint et les clés, sans conteneur de stockage à faire tourner ni à sauvegarder."
+        },
+        "mongodb-to-postgres": {
+          "advised": "Postgres managé (sauvegardé) couvre les documents MongoDB avec des colonnes JSONB et des index GIN. Cela retire un conteneur de base sans sauvegarde.",
+          "evaluate": "Postgres managé (sauvegardé) couvre les documents MongoDB avec des colonnes JSONB et des index GIN. Cela retire un conteneur de base sans sauvegarde."
+        },
+        "neo4j-to-postgres": {
+          "advised": "Les requêtes Cypher trouvées ne parcourent qu'une relation à la fois : une table de liaison indexée dans Postgres managé les remplace et libère la mémoire de Neo4j.",
+          "evaluate": "Neo4j sert peut-être des parcours sur plusieurs relations, ou aucune requête n'a été trouvée. Postgres managé (tables de liaison, requêtes récursives) est à évaluer selon ces parcours."
+        }
+      }
     },
     "estimate": {
       "title": "Ressources et coût",
@@ -4187,7 +4255,8 @@
       "tokensToday": "tokens aujourd'hui sur {budget}",
       "budgetLabel": "Budget du jour de {name}",
       "costToday": "{cost} aujourd'hui",
-      "settingsMissing": "Réglages introuvables dans le dépôt"
+      "settingsMissing": "Réglages introuvables dans le dépôt",
+      "resetsAt": "remise à zéro à {time}"
     },
     "trigger": {
       "chat": "Chat",
@@ -4238,7 +4307,8 @@
       "enableFirst": "Activez l'accès à l'IA pour créer un agent.",
       "assistantsTitle": "Assistants connectés",
       "assistantsHint": "Claude, ChatGPT et les autres assistants qui agissent sur le projet par le serveur MCP de la CMP.",
-      "usageUnavailable": "Consommation indisponible : la gateway IA ne répond pas encore."
+      "usageUnavailable": "Consommation indisponible : la gateway IA ne répond pas encore.",
+      "resetsAt": "Remise à zéro à {time}"
     },
     "backend": {
       "ok": "En ligne",
@@ -4483,7 +4553,8 @@
       "costMonth": "Coût du mois",
       "requests": "Requêtes",
       "errorRate": "Taux d'erreur",
-      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}"
+      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}",
+      "resetsAt": "Remise à zéro à {time}"
     },
     "traces": {
       "error": "Impossible de lire les traces.",

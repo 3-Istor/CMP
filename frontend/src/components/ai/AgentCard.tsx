@@ -82,6 +82,7 @@ export function AgentCard({ agent }: { agent: Agent }) {
           />
           <p className="text-xs tabular-nums text-muted-foreground">
             {t("costToday", { cost: f.eur(agent.usage_today?.cost_eur ?? 0) })}
+            {agent.usage_resets_at && <> · {t("resetsAt", { time: f.clock(agent.usage_resets_at) })}</>}
           </p>
         </div>
         <Sparkline points={usage.data?.series.map((p) => p.tokens) ?? []} tone={suspended ? "muted" : "primary"} />

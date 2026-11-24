@@ -9,7 +9,7 @@ desired replica count of its workload in an annotation.
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -54,6 +54,8 @@ SEVERITY = (
 class _Observed:
     pods: list[dict[str, Any]]
     replica_sets: list[dict[str, Any]]
+    # Backing services (databases, caches) run as StatefulSets: no ReplicaSet.
+    stateful_sets: list[dict[str, Any]] = field(default_factory=list)
 
 
 def worst(states: list[str]) -> str:
@@ -81,11 +83,17 @@ def _is_crashlooping(pod: dict[str, Any]) -> bool:
     )
 
 
-def desired_replicas(replica_sets: list[dict[str, Any]]) -> int | None:
-    """None when there is no ReplicaSet to read; 0 when the workload is scaled down."""
-    if not replica_sets:
+def desired_replicas(
+    replica_sets: list[dict[str, Any]],
+    stateful_sets: list[dict[str, Any]] = (),
+) -> int | None:
+    """None when there is no workload to read; 0 when it is scaled down."""
+    if not replica_sets and not stateful_sets:
         return None
-    desired = 0
+    desired = max(
+        (sts.get("spec", {}).get("replicas") or 0 for sts in stateful_sets),
+        default=0,
+    )
     for rs in replica_sets:
         if not rs.get("spec", {}).get("replicas"):
             continue
@@ -135,13 +143,14 @@ def classify(
     asleep: bool,
     restarts: int | None,
     now: datetime,
+    stateful_sets: list[dict[str, Any]] = (),
 ) -> tuple[str, str | None, int, int]:
     """(state, reason, ready, desired) of one component."""
     live = [
         p for p in pods if not p.get("metadata", {}).get("deletionTimestamp")
     ]
     ready = sum(1 for p in live if _is_ready(p))
-    desired = desired_replicas(replica_sets)
+    desired = desired_replicas(replica_sets, stateful_sets)
     if asleep:
         return "asleep", "sleeping", ready, 0
     if desired is None and not live:
@@ -235,6 +244,11 @@ def _observe(
                 selector,
                 cloud=cloud,
             ),
+            stateful_sets=kube_list(
+                f"/apis/apps/v1/namespaces/{namespace}/statefulsets",
+                selector,
+                cloud=cloud,
+            ),
         )
     schedules = kube_list(SCHEDULES_PATH.format(namespace), cloud=cloud)
     return observed, schedules
@@ -285,6 +299,7 @@ def _read_app_health(
             layout.chart_fullname(project, app, component) in sleeping,
             recent,
             now,
+            data.stateful_sets,
         )
         sync, health = applications.get(
             layout.application(project, app, component, "prod"), (None, None)

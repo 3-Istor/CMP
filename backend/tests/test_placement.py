@@ -1,8 +1,12 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.core.database import get_db
+from app.core.database import Base, get_db
+from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import TargetCloud
 from app.routers import placement as router
 from app.services import placement
@@ -155,6 +159,9 @@ def client(monkeypatch):
         ]
 
     monkeypatch.setattr(placement.project_registry, "list_records", records)
+    monkeypatch.setattr(
+        placement, "visible_app_counts", lambda db: {"demo": 1}
+    )
     monkeypatch.setattr(
         router, "project_cloud", lambda db, name: TargetCloud.ONPREM
     )
@@ -382,3 +389,35 @@ def test_iot_on_prem_project(client, monkeypatch):
             "cnpg-iot-optispace-backend-stg-db",
         ),
     ]
+
+
+def test_app_count_is_the_cmp_apps_not_the_registry_entries():
+    # Arrange: the registry also lists an agent; the CMP holds one app
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as db:
+        for id_, status in (
+            (1, DeploymentStatus.RUNNING),
+            (2, DeploymentStatus.DELETED),
+        ):
+            db.add(
+                Deployment(
+                    id=id_,
+                    name=f"app{id_}",
+                    template_id="k3s-gitops-app",
+                    project_id="demo",
+                    provider_type=ProviderType.KUBERNETES,
+                    status=status,
+                )
+            )
+        db.commit()
+
+        # Act
+        counts = placement.visible_app_counts(db)
+
+    # Assert
+    assert counts == {"demo": 1}

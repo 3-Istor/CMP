@@ -1005,3 +1005,17 @@ def test_the_server_never_exposes_a_raw_query_tool():
     names = {t.name for t in mcp_server.mcp._tool_manager.list_tools()}
 
     assert not names & {"query", "query_range", "logsql", "promql"}
+
+
+def test_signing_in_again_from_the_same_client_revokes_the_older_grant(cmp):
+    # Arrange
+    first = _connect(cmp)
+
+    # Act
+    second = _connect(cmp)
+
+    # Assert
+    assert (
+        store.load_access(first["access_token"]) is None,
+        store.load_access(second["access_token"]) is not None,
+    ) == (True, True)

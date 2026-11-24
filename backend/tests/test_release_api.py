@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest import mock
 
@@ -913,3 +913,63 @@ class TestCutRelease:
 
         assert (read.status_code, cut.status_code) == (403, 403)
         github.create_tag.assert_not_awaited()
+
+
+def test_history_splits_time_to_ready_from_time_live(
+    session_factory, keycloak
+):
+    # Arrange: 1.1 ready in 90 s, live until 1.2 was ready at t0 + 3750 s
+    t0 = datetime(2026, 11, 20, 9, 0, tzinfo=timezone.utc)
+    with session_factory() as db:
+        for revision, start, ready in (
+            (1, t0, t0 + timedelta(seconds=90)),
+            (2, t0 + timedelta(hours=1), t0 + timedelta(hours=1, seconds=150)),
+        ):
+            db.add(
+                ReleaseEvent(
+                    deployment_id=7,
+                    revision=revision,
+                    image=f"ghcr.io/3-istor/web:1.{revision}",
+                    strategy="rolling",
+                    started_at=start,
+                    finished_at=ready,
+                    outcome="deployed",
+                    forced=False,
+                    environment="prod",
+                    component="app",
+                )
+            )
+        db.commit()
+    client = _client(session_factory, FakeSource(None))
+
+    # Act
+    rows = client.get("/api/deployments/7/releases").json()
+
+    # Assert
+    by_revision = {r["revision"]: r for r in rows}
+    assert (
+        by_revision[1]["ready_seconds"],
+        by_revision[1]["live_seconds"],
+    ) == (
+        90,
+        3750 - 90,
+    )
+    assert by_revision[2]["ready_seconds"] == 150
+
+
+def test_a_canary_row_left_running_closes_as_unknown_once_the_rollout_is_gone(
+    session_factory, keycloak
+):
+    # Arrange
+    client = _client(session_factory, FakeSource(_paused()))
+    client.get("/api/deployments/7/release")
+
+    # Act
+    client = _client(session_factory, FakeSource(None))
+    client.get("/api/deployments/7/release")
+
+    # Assert
+    rows = client.get("/api/deployments/7/releases").json()
+    assert [(r["outcome"], r["live_seconds"]) for r in rows] == [
+        ("unknown", None)
+    ]

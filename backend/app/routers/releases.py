@@ -135,9 +135,13 @@ def list_releases(
         db, deployment_id, limit, environment, component, version
     )
     targets = history.rollback_targets(db, deployment, events)
+    lifetimes = history.lifetimes(db, deployment_id, events)
     rows = [ReleaseEventRead.model_validate(e) for e in events]
     for row in rows:
         row.rollback_promotion_id = targets.get(row.id)
+        row.ready_seconds, row.live_seconds = lifetimes.get(
+            row.id, (None, None)
+        )
     return rows
 
 

@@ -271,6 +271,8 @@ class WasteHint(BaseModel):
     rec_type: str
     monthly_saving_eur: float
     justification: str
+    text_key: str | None = None
+    text_params: dict = {}
 
 
 class Usage(BaseModel):

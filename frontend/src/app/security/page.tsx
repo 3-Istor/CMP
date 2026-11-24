@@ -73,7 +73,7 @@ function SecurityInner() {
             return (
               <option key={p.name} value={p.name}>
                 {p.name}
-                {o ? ` · ${o.grade}` : ""}
+                {o?.grade ? ` · ${o.grade}` : ""}
                 {o?.core ? ` · ${t("core", { count: o.core })}` : ""}
               </option>
             );

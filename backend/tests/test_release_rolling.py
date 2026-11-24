@@ -394,3 +394,41 @@ def test_a_backfilled_row_with_an_old_start_has_no_end(session_factory):
         False,
         True,
     ]
+
+
+def test_a_running_row_past_the_progress_deadline_closes_as_unknown(
+    session_factory,
+):
+    # Arrange: the Deployment is gone, nothing settles the newest revision
+    long_ago = datetime.now(timezone.utc) - timedelta(hours=2)
+    with session_factory() as db:
+        sync_rolling(db, 7, [_revision(1, "running", started_at=long_ago)])
+
+    # Act
+    with session_factory() as db:
+        changed = sync_rolling(
+            db, 7, [_revision(1, "running", started_at=long_ago)]
+        )
+
+    # Assert
+    row = _rows(session_factory)[1]
+    assert (changed, row.outcome, row.finished_at is not None) == (
+        1,
+        "unknown",
+        True,
+    )
+
+
+def test_a_running_row_within_the_progress_deadline_stays_running(
+    session_factory,
+):
+    # Arrange
+    with session_factory() as db:
+        sync_rolling(db, 7, [_revision(1, "running")])
+
+    # Act
+    with session_factory() as db:
+        changed = sync_rolling(db, 7, [_revision(1, "running")])
+
+    # Assert
+    assert (changed, _rows(session_factory)[1].outcome) == (0, "running")

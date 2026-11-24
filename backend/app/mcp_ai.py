@@ -24,6 +24,7 @@ from app.mcp_server import (
 )
 from app.services import audit
 from app.services.ai import declaration
+from app.services.ai.usage import APP_DAILY_TOKEN_BUDGET
 
 AGENT_FIELDS = (
     "description",
@@ -123,7 +124,7 @@ async def enable_app_ai(  # pylint: disable=too-many-arguments
     project: str,
     app: Annotated[str, Field(description="App name in the project")],
     enabled: bool = True,
-    daily_token_budget: Annotated[int, Field(ge=0)] = 50_000,
+    daily_token_budget: Annotated[int, Field(ge=0)] = APP_DAILY_TOKEN_BUDGET,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
     preview: PREVIEW = False,

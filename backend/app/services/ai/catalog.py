@@ -121,6 +121,17 @@ def _with_recommended(defaults: Any, recommended: Any) -> dict:
     return block
 
 
+def _sorted_tools(tools: Any) -> list:
+    """Wildcard patterns (a whole server's tools) first, then by name."""
+
+    def name(tool: Any) -> str:
+        return str(tool.get("name", "") if isinstance(tool, dict) else tool)
+
+    return sorted(
+        list(tools or []), key=lambda t: ("*" not in name(t), name(t))
+    )
+
+
 def _template(raw: Any) -> dict | None:
     """app-templates agents/<id>.yaml (format: agents/README.md there). In a
     pair the reader is the template itself and the actor has its own block."""
@@ -136,7 +147,7 @@ def _template(raw: Any) -> dict | None:
         "icon": str(raw.get("icon") or "bot"),
         "recommended": dict(raw.get("recommended") or {}),
         "defaults": defaults,
-        "suggested_tools": list(raw.get("suggestedTools") or []),
+        "suggested_tools": _sorted_tools(raw.get("suggestedTools")),
         "risk_notes": list(raw.get("riskNotes") or []),
         "pair": (
             {
@@ -144,8 +155,8 @@ def _template(raw: Any) -> dict | None:
                 "actor": _with_recommended(
                     actor.get("defaults"), actor.get("recommended")
                 ),
-                "actor_suggested_tools": list(
-                    actor.get("suggestedTools") or []
+                "actor_suggested_tools": _sorted_tools(
+                    actor.get("suggestedTools")
                 ),
             }
             if isinstance(pair, dict)

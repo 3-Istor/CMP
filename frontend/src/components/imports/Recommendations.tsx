@@ -53,7 +53,9 @@ export function RecommendationItem({
           <Badge variant="outline">{t("gain", { mib: item.gain_mem_mib })}</Badge>
         )}
       </div>
-      <p className="text-sm text-muted-foreground">{item.reason}</p>
+      <p className="text-sm text-muted-foreground">
+        {t.has(`reasons.${item.rule}.${item.level}`) ? t(`reasons.${item.rule}.${item.level}`) : item.reason}
+      </p>
       {item.evidence.length > 0 && (
         <p className="font-mono text-xs text-muted-foreground">
           {item.evidence.map((e) => `${e.file}:${e.line}`).join(", ")}

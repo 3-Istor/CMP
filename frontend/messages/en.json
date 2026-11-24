@@ -685,6 +685,32 @@
     },
     "donut": {
       "total": "Total"
+    },
+    "recommendationText": {
+      "inactivity": {
+        "title": "Hibernate (inactive)",
+        "justification": "No significant network traffic for 7 days. Use Sleep now in the app's menu."
+      },
+      "replicas": {
+        "title": "Reduce the replica count",
+        "justification": "CPU p95 over {window} is {pct}% of the requests (< 50%)."
+      },
+      "rightsizing": {
+        "title": "Adjust the CPU / RAM requests",
+        "justification": "Over {window}, CPU p95 is at {cpu}% and memory p99 at {ram}% of the requests."
+      },
+      "simulatedReplicas": {
+        "title": "Reduce the replica count",
+        "justification": "The average load over {days} days is {pct}% of capacity (< 60%)."
+      },
+      "simulatedRightsizing": {
+        "title": "Adjust the CPU / RAM limits",
+        "justification": "Observed peaks never exceeded {pct}% of the quotas over {days} days."
+      },
+      "simulatedStorage": {
+        "title": "Reduce the storage volume",
+        "justification": "Only {pct}% of the provisioned storage is used."
+      }
     }
   },
   "security": {
@@ -884,7 +910,12 @@
       "nextRun": "next {when}",
       "rerun": "Run again",
       "started": "Scan started",
-      "firstRun": "The collector's first run will happen in a few minutes."
+      "firstRun": "The collector's first run will happen in a few minutes.",
+      "messages": {
+        "workflow_not_run": "The workflow has not run on the default branch yet",
+        "no_repository": "No linked GitHub repository",
+        "trivy_absent": "Trivy Operator is not installed"
+      }
     },
     "alerts": {
       "title": "Discord alerts",
@@ -979,6 +1010,15 @@
     "guarantees": {
       "isolation": "Isolated from other projects",
       "privileged": "Privileged pods refused"
+    },
+    "notScanned": {
+      "title": "Not scanned yet",
+      "short": "Not scanned",
+      "reasons": {
+        "workflow_not_run": "The security workflow has not run on the default branch yet. The score appears after the first scan.",
+        "no_repository": "No GitHub repository is linked, so the code is not scanned. The score appears after the first image scan.",
+        "no_scan_yet": "No scanner has looked at this app yet. The score appears after the first scan."
+      }
     }
   },
   "activity": {
@@ -2285,9 +2325,10 @@
       "promoted": "Promoted",
       "aborted_auto": "Auto-rejected",
       "aborted_manual": "Aborted",
-      "superseded": "Superseded",
+      "superseded": "Replaced",
       "deployed": "Deployed",
-      "failed": "Failed"
+      "failed": "Failed",
+      "unknown": "Unknown"
     },
     "errors": {
       "readState": "Could not read the release state: {error}"
@@ -2301,7 +2342,7 @@
         "outcome": "Result",
         "progress": "Progress",
         "startedAt": "Started",
-        "duration": "Duration"
+        "duration": "Timing"
       },
       "forced": "Forced",
       "reason": "Reason: {reason}"
@@ -2526,6 +2567,10 @@
       "rolling": "Rolling",
       "canary": "Canary",
       "bluegreen": "Blue/green"
+    },
+    "lifetime": {
+      "readyIn": "ready in {duration}",
+      "live": "live {duration}"
     }
   },
   "appPage": {
@@ -2567,7 +2612,7 @@
       "outcome": "Outcome",
       "who": "By",
       "when": "When",
-      "duration": "Duration",
+      "duration": "Timing",
       "automatic": "Automatic",
       "forced": "Forced",
       "env": "Env",
@@ -2586,9 +2631,10 @@
         "promoted": "Promoted",
         "aborted_auto": "Automatically rejected",
         "aborted_manual": "Aborted",
-        "superseded": "Superseded",
+        "superseded": "Replaced",
         "deployed": "Deployed",
-        "failed": "Failed"
+        "failed": "Failed",
+        "unknown": "Unknown"
       }
     },
     "events": {
@@ -3843,7 +3889,29 @@
       "failed": "The action failed: {message}",
       "notBackedUp": "Not backed up",
       "alternative": "The data of this container is not backed up. Managed, backed up alternative: {target}.",
-      "alternativeGeneric": "The data of this container is not backed up. The platform offers managed, backed up Postgres and S3 buckets."
+      "alternativeGeneric": "The data of this container is not backed up, and the platform has no managed equivalent for this engine.",
+      "reasons": {
+        "elasticsearch-to-postgres": {
+          "advised": "The searches found are bool, match and term queries: managed Postgres full text search (tsvector, GIN index) covers them and frees Elasticsearch's memory.",
+          "evaluate": "Elasticsearch may serve aggregations, fuzzy or nested queries, or no query was found. Managed Postgres full text search is to be evaluated against these uses."
+        },
+        "local-storage-to-bucket": {
+          "advised": "The service seems to write files to its local disk, lost on every redeploy. A managed S3 bucket keeps them and shares them between replicas.",
+          "evaluate": "The service seems to write files to its local disk, lost on every redeploy. A managed S3 bucket keeps them and shares them between replicas."
+        },
+        "minio-to-bucket": {
+          "advised": "A managed S3 bucket speaks the same API as MinIO: change the endpoint and the keys, with no storage container to run or back up.",
+          "evaluate": "A managed S3 bucket speaks the same API as MinIO: change the endpoint and the keys, with no storage container to run or back up."
+        },
+        "mongodb-to-postgres": {
+          "advised": "Managed, backed up Postgres covers MongoDB documents with JSONB columns and GIN indexes, and removes a database container without backups.",
+          "evaluate": "Managed, backed up Postgres covers MongoDB documents with JSONB columns and GIN indexes, and removes a database container without backups."
+        },
+        "neo4j-to-postgres": {
+          "advised": "The Cypher queries found follow one relationship at a time: an indexed link table in managed Postgres replaces them and frees Neo4j's memory.",
+          "evaluate": "Neo4j may serve traversals over several relationships, or no query was found. Managed Postgres (link tables, recursive queries) is to be evaluated against these traversals."
+        }
+      }
     },
     "estimate": {
       "title": "Resources and cost",
@@ -4187,7 +4255,8 @@
       "tokensToday": "tokens today of {budget}",
       "budgetLabel": "Daily budget of {name}",
       "costToday": "{cost} today",
-      "settingsMissing": "Settings not found in the repository"
+      "settingsMissing": "Settings not found in the repository",
+      "resetsAt": "resets at {time}"
     },
     "trigger": {
       "chat": "Chat",
@@ -4238,7 +4307,8 @@
       "enableFirst": "Enable AI access to create an agent.",
       "assistantsTitle": "Connected assistants",
       "assistantsHint": "Claude, ChatGPT and other assistants acting on the project through the CMP MCP server.",
-      "usageUnavailable": "Usage unavailable: the AI gateway does not answer yet."
+      "usageUnavailable": "Usage unavailable: the AI gateway does not answer yet.",
+      "resetsAt": "Resets at {time}"
     },
     "backend": {
       "ok": "Online",
@@ -4483,7 +4553,8 @@
       "costMonth": "Cost this month",
       "requests": "Requests",
       "errorRate": "Error rate",
-      "refusals": "{count, plural, =0 {No refusal} one {# refusal} other {# refusals}}"
+      "refusals": "{count, plural, =0 {No refusal} one {# refusal} other {# refusals}}",
+      "resetsAt": "Resets at {time}"
     },
     "traces": {
       "error": "Could not read the traces.",

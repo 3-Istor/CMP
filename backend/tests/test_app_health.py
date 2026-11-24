@@ -74,7 +74,7 @@ def _deployment(app_type="static", provider=ProviderType.KUBERNETES):
     )
 
 
-def _cluster(pods=(), rs=(), schedules=(), apps=()):
+def _cluster(pods=(), rs=(), schedules=(), apps=(), sts=()):
     """kube_list answers keyed on the API path; per-component for fullstack."""
 
     def kube_list(path, params=None, cloud=None):
@@ -83,6 +83,8 @@ def _cluster(pods=(), rs=(), schedules=(), apps=()):
             return [p for p in pods if _wanted(p, selector)]
         if path.endswith("/replicasets"):
             return [r for r in rs if _wanted(r, selector)]
+        if path.endswith("/statefulsets"):
+            return list(sts)
         if path.endswith("/offhoursschedules"):
             return list(schedules)
         return list(apps)
@@ -505,3 +507,33 @@ def test_a_project_guest_reads_the_health_of_its_app(
         200,
         "healthy",
     )
+
+
+def _sts(replicas):
+    return {
+        "metadata": {"creationTimestamp": _ts(60)},
+        "spec": {"replicas": replicas},
+    }
+
+
+def test_a_statefulset_backing_service_reads_its_replicas():
+    # Act
+    health = _health(
+        _deployment(), _cluster(pods=[_pod("redis-0")], sts=[_sts(1)])
+    )
+
+    # Assert
+    component = _only(health)
+    assert (health.status, component.ready, component.desired) == (
+        "healthy",
+        1,
+        1,
+    )
+
+
+def test_a_statefulset_scaled_to_zero_is_not_unknown():
+    # Act
+    health = _health(_deployment(), _cluster(sts=[_sts(0)]))
+
+    # Assert
+    assert (health.status, _only(health).reason) == ("down", "scaled_to_zero")

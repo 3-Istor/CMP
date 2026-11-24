@@ -37,7 +37,7 @@ export function FavoritesSection({ onRetried }: { onRetried: () => void }) {
             onRetried={onRetried}
             deletingApps={countDeleting(apps, p.name)}
             health={health[p.name]}
-            grade={security.find((s) => s.project === p.name)?.grade}
+            grade={security.find((s) => s.project === p.name)?.grade ?? undefined}
           />
         ))}
         {favApps.map(({ app, projectName }) => (

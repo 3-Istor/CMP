@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.services import audit
+from app.services import audit, managed_equivalent
 from app.services.agents import policy
 from app.services.authz import RequireAdmin, RequireMember
 from app.services.github_service import GitHubAppError
@@ -232,7 +232,9 @@ def list_recommendations(
 ):
     """Managed services to move to, and the backing apps not backed up."""
     _enabled()
-    return recommendations.for_project(db, ctx.project_name, app)
+    return managed_equivalent.only_equivalents(
+        recommendations.for_project(db, ctx.project_name, app)
+    )
 
 
 RecommendationId = Annotated[str, FastApiPath(max_length=200)]

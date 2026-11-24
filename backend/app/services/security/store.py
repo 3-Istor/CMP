@@ -114,6 +114,23 @@ def scan_state(
     return row
 
 
+# The scans that look at an app's code and image. Kyverno and the backups
+# are collected for every app whether it was ever scanned or not.
+APP_SCANNERS = (Source.TRIVY_OPERATOR.value, Source.CI.value)
+
+
+def scanned_apps(db: Session, project: str) -> set[str]:
+    """Apps of *project* that at least one scanner has looked at."""
+    return {
+        app
+        for (app,) in db.query(SecurityScan.app).filter(
+            SecurityScan.project == project,
+            SecurityScan.source.in_(APP_SCANNERS),
+            SecurityScan.last_run_at.isnot(None),
+        )
+    }
+
+
 def scans(db: Session, project: str, app: str | None) -> list[SecurityScan]:
     query = db.query(SecurityScan).filter(SecurityScan.project == project)
     if app is not None:

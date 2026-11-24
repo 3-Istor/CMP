@@ -67,6 +67,9 @@ export function AgentOverview() {
             <p className="text-2xl font-semibold tabular-nums">{f.tokens(used)}</p>
             <p className="text-sm text-muted-foreground">/ {f.tokens(budget)} {t("tokensPerDay")}</p>
             <p className="text-xs text-muted-foreground">{t("hardCap")}</p>
+            {u.resets_at && (
+              <p className="text-xs text-muted-foreground">{t("resetsAt", { time: f.clock(u.resets_at) })}</p>
+            )}
           </div>
         </div>
         <div className={cn(panel, "flex flex-col gap-3")}>

@@ -16,6 +16,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatEUR, intlLocale } from "./format";
+import { useRecommendationText } from "./recommendationText";
 
 function ConfigBox({
   title,
@@ -68,6 +69,7 @@ export function RecommendationCard({
   canSleep?: boolean;
 }) {
   const t = useTranslations("finops");
+  const text = useRecommendationText()(rec);
   const locale = intlLocale(useLocale());
   const [busy, setBusy] = useState<string | null>(null);
   const done = rec.status !== "pending";
@@ -114,7 +116,7 @@ export function RecommendationCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-medium">{rec.title}</h3>
+              <h3 className="font-medium">{text.title}</h3>
               <Badge variant="secondary">
                 {t(`recommendation.type.${rec.rec_type}`)}
               </Badge>
@@ -161,7 +163,7 @@ export function RecommendationCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <BarChart3 className="h-3.5 w-3.5" />
-            {rec.justification}
+            {text.justification}
           </p>
           <Badge variant="outline">{t(`recommendation.effort.${rec.effort}`)}</Badge>
         </div>

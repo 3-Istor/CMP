@@ -38,5 +38,7 @@ async def project_placement(
 @router.get("/placement")
 async def platform_placement(
     _: Annotated[dict, Depends(require_platform_admin)],
+    db: Session = Depends(get_db),
 ) -> dict:
-    return await placement.platform_placement()
+    counts = await run_in_threadpool(placement.visible_app_counts, db)
+    return await placement.platform_placement(counts)

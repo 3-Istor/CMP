@@ -343,3 +343,26 @@ def test_a_project_that_removed_its_cap_keeps_none():
     project = ProjectAi.of({"spec": {"ai": {"dailyTokenBudget": 0}}})
 
     assert project.daily_token_budget == 0
+
+
+def test_suggested_tools_list_wildcards_first_then_by_name():
+    # Act
+    item = catalog._template(  # pylint: disable=protected-access
+        {
+            "id": "reader",
+            "suggestedTools": [
+                {"name": "web_search"},
+                {"name": "shop.*"},
+                {"name": "fetch"},
+                {"name": "*"},
+            ],
+        }
+    )
+
+    # Assert
+    assert [t["name"] for t in item["suggested_tools"]] == [
+        "*",
+        "shop.*",
+        "fetch",
+        "web_search",
+    ]

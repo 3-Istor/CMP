@@ -181,9 +181,10 @@ function ModelsCard({ ai }: { ai: ProjectAi }) {
   );
 }
 
-function BudgetCard({ ai, today, month, unavailable }: {
+function BudgetCard({ ai, today, resetsAt, month, unavailable }: {
   ai: ProjectAi;
   today: AiUsageItem[];
+  resetsAt?: string;
   month: AiUsageItem[];
   unavailable: boolean;
 }) {
@@ -221,6 +222,7 @@ function BudgetCard({ ai, today, month, unavailable }: {
         ) : (
           <p className="text-xs text-muted-foreground">{t("alertAt", { pct: ALERT_PCT })}</p>
         )}
+        {resetsAt && <p className="text-xs text-muted-foreground">{t("resetsAt", { time: f.clock(resetsAt) })}</p>}
       </div>
     </div>
   );
@@ -235,7 +237,7 @@ function GrantDialog({ open, onOpenChange, candidates, onGranted }: {
   const t = useTranslations("ai.grant");
   const { projectName } = useProjectContext();
   const [app, setApp] = useState("");
-  const [budget, setBudget] = useState(50_000);
+  const [budget, setBudget] = useState(500_000);
   const [busy, setBusy] = useState(false);
   const appId = useId();
   const budgetId = useId();
@@ -466,6 +468,7 @@ export function ProjectAiTab() {
               <BudgetCard
                 ai={current}
                 today={today.data?.items ?? []}
+                resetsAt={today.data?.resets_at}
                 month={month.data?.items ?? []}
                 unavailable={!today.loading && !today.data}
               />

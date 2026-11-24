@@ -32,6 +32,9 @@ _READS = {"get", "list", "watch"}
 _RBAC = "rbac.authorization.k8s.io"
 # The operator syncing VaultSecrets reads project secrets all day.
 _VAULT_MACHINES = ("kubernetes-vault-secrets-operator",)
+# Vault's Kubernetes auth names a service account kubernetes-<ns>-<sa>: the
+# CMP and the platform controllers reading what they run on, never a person.
+_VAULT_SERVICE_ACCOUNT = "kubernetes-"
 
 _REGEX_SPECIAL = set(r"\.+*?()|[]{}^$")
 
@@ -287,6 +290,7 @@ def vault_event(projects: set[str], when: datetime, line: str) -> Event | None:
         return None
     project = _project_of_path(path, projects)
     operation = request.get("operation", "")
+    reading = operation in ("read", "list")
     error = raw.get("error")
     secret = (
         path.removeprefix(f"project-{project}/").removeprefix("data/")
@@ -300,7 +304,8 @@ def vault_event(projects: set[str], when: datetime, line: str) -> Event | None:
         actor=actor,
         action=f"vault.{operation}",
         notable=bool(project)
-        and operation in ("read", "create", "update", "delete"),
+        and operation in ("read", "create", "update", "delete")
+        and not (reading and actor.startswith(_VAULT_SERVICE_ACCOUNT)),
         project=project,
         app=(secret.split("/", 1)[0] or None) if project else None,
         target=secret,
@@ -308,7 +313,7 @@ def vault_event(projects: set[str], when: datetime, line: str) -> Event | None:
         status_code=None,
         source_ip=request.get("remote_address"),
         details={"path": path, "error": error},
-        is_read=operation == "list",
+        is_read=reading,
     )
 
 

@@ -81,6 +81,8 @@ export interface Agent {
   /** Null while the tool catalogue cannot be read. */
   risk?: AgentRisk | null;
   usage_today?: { tokens: number; cost_usd: number; cost_eur: number };
+  /** Next 00:00 UTC, when the daily token quota resets. */
+  usage_resets_at?: string;
   updated_at?: string | null;
 }
 
@@ -149,10 +151,12 @@ export interface AiUsageItem {
 export interface AiUsage {
   period: string;
   items: AiUsageItem[];
+  resets_at?: string;
 }
 
 export interface AgentUsage extends AiUsageItem {
   series: { t: string; tokens: number; cost_usd?: number }[];
+  resets_at?: string;
 }
 
 export interface AiBackend {
