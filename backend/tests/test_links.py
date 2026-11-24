@@ -501,7 +501,7 @@ class TestAppLinks:
 
         assert (link["url"], link["requires"]) == (
             "https://grafana.3istor.com/d/cnp-app-signals"
-            "?orgId=5&var-app=web&var-namespace=shop-web",
+            "?orgId=5&var-app=web&var-env=shop-web",
             "grafana_member",
         )
 

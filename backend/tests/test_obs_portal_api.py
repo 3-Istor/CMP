@@ -471,7 +471,7 @@ def test_capabilities_link_the_app_dashboard(make):
 
     assert body["grafana_url"] == (
         "https://grafana.3istor.com/d/cnp-app-signals"
-        "?orgId=7&var-app=web&var-namespace=shop-web"
+        "?orgId=7&var-app=web&var-env=shop-web"
     )
 
 
