@@ -270,6 +270,33 @@ async def observed_flows(
     return True, flows
 
 
+async def denied_flows(
+    namespace: str, cloud: str, window: str
+) -> float | None:
+    """
+    Flows dropped over *window* where *namespace* is the source or the
+    destination, whatever the peer; None when VictoriaMetrics cannot be read.
+    """
+    if not _NAME.match(namespace):
+        raise ValueError(f"invalid namespace {namespace!r}")
+    outgoing = f'verdict="DROPPED", source_namespace="{namespace}"'
+    incoming = (
+        f'verdict="DROPPED", destination_namespace="{namespace}", '
+        f'source_namespace!="{namespace}"'
+    )
+    query = " + ".join(
+        f"(sum(increase({FLOW_METRIC}{{{sel}}}[{window}])) or vector(0))"
+        for sel in (outgoing, incoming)
+    )
+    try:
+        async with httpx.AsyncClient(base_url=VMSELECT, timeout=10) as client:
+            rows = await _vm_query(client, query, cloud)
+    except MetricsUnavailableError as exc:
+        logger.warning("Dropped flows of %s not readable: %s", namespace, exc)
+        return None
+    return float(rows[0]["value"][1]) if rows else 0.0
+
+
 # ── Nodes ───────────────────────────────────────────────────────────────────
 
 
@@ -290,7 +317,7 @@ def _kind(record_app: dict | None, row: Deployment | None) -> str:
     return "static"
 
 
-def _argo_by_name(project: str) -> dict[str, dict]:
+def argo_by_name(project: str) -> dict[str, dict]:
     """The project's Argo CD Applications by name; empty when unreadable."""
     try:
         items = kube_list(
@@ -303,7 +330,7 @@ def _argo_by_name(project: str) -> dict[str, dict]:
     return {item["metadata"]["name"]: item for item in items}
 
 
-def _asleep_by_namespace(
+def asleep_by_namespace(
     project: str, cloud: TargetCloud
 ) -> dict[str, bool] | None:
     """Whether a schedule sleeps in each namespace; None when unreadable."""
@@ -330,8 +357,8 @@ async def _cluster_state(
 ) -> tuple[dict[str, dict], dict[str, bool] | None]:
     """(Argo Applications by name, asleep by namespace); kube calls, threaded."""
     return await asyncio.gather(
-        asyncio.to_thread(_argo_by_name, project),
-        asyncio.to_thread(_asleep_by_namespace, project, cloud),
+        asyncio.to_thread(argo_by_name, project),
+        asyncio.to_thread(asleep_by_namespace, project, cloud),
     )
 
 
