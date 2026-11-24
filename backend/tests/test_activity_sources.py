@@ -432,6 +432,53 @@ def test_members_get_no_login_breakdown(client_for):
     assert summary["logins"] is None
 
 
+def test_summary_counts_every_event_of_the_period_not_only_the_newest(
+    client_for,
+):
+    client = client_for(
+        "admin",
+        [event("vault", "alice", "vault.read", m) for m in range(1, 6002)],
+    )
+
+    summary = client.get("/api/activity/summary?project=shop").json()
+
+    assert summary["actions"]["value"] == 6001
+
+
+def test_member_summary_counts_only_their_own_kubectl_and_no_logins(
+    client_for,
+):
+    client = client_for(
+        "member",
+        [
+            event("kubernetes", "alice@3istor.com", "kubernetes.exec", 10),
+            event("kubernetes", "bob@3istor.com", "kubernetes.exec", 20),
+            event("keycloak", "bob", "keycloak.login_error", 30),
+        ],
+    )
+
+    summary = client.get("/api/activity/summary?project=shop").json()
+
+    assert (summary["actions"]["value"], summary["top_actors"]) == (
+        1,
+        [["alice@3istor.com", 1]],
+    )
+
+
+def test_summary_ranks_the_addresses_failed_logins_come_from(client_for):
+    client = client_for(
+        "admin",
+        [
+            event("keycloak", "bob", "keycloak.login_error", 10),
+            event("keycloak", "eve", "keycloak.login_error", 20),
+        ],
+    )
+
+    logins = client.get("/api/activity/summary?project=shop").json()["logins"]
+
+    assert logins["top_failed_ips"] == [["10.0.0.1", 2]]
+
+
 def test_platform_status_is_for_cnp_admins_only(client_for):
     client = client_for("admin", [])
 

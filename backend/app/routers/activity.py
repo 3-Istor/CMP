@@ -20,7 +20,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import and_, false, or_, select, true
+from sqlalchemy import and_, false, func, or_, select, true
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -346,7 +346,7 @@ def _collected_rows(
     return list(db.scalars(stmt))
 
 
-async def _collect(
+def _collect(
     db: Session,
     project: str | None,
     wanted: set[str],
@@ -466,23 +466,27 @@ async def list_activity(
     if role == "member":
         wanted -= {"keycloak"}
         me = frozenset(_identities(token))
-    events, unavailable = await _collect(
-        db,
-        project,
-        wanted,
-        start,
-        end,
-        limit,
-        include_reads,
-        RowFilter(app, actor, action, notable_only, me),
-        before_id,
-    )
-    kept = _filter(events, role, token, actor, action, app, notable_only)
-    return ActivityFeed(
-        events=_with_app_ids(db, kept[:limit]),
-        unavailable=unavailable,
-        retention_days=settings.AUDIT_RETENTION_DAYS,
-    )
+
+    def read() -> ActivityFeed:
+        events, unavailable = _collect(
+            db,
+            project,
+            wanted,
+            start,
+            end,
+            limit,
+            include_reads,
+            RowFilter(app, actor, action, notable_only, me),
+            before_id,
+        )
+        kept = _filter(events, role, token, actor, action, app, notable_only)
+        return ActivityFeed(
+            events=_with_app_ids(db, kept[:limit]),
+            unavailable=unavailable,
+            retention_days=settings.AUDIT_RETENTION_DAYS,
+        )
+
+    return await run_in_threadpool(read)
 
 
 def _with_app_ids(
@@ -514,81 +518,184 @@ async def activity_summary(
 ) -> ActivitySummary:
     """Indicators against the period before, and counts per day and source."""
     role = await _role(token, project)
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=2 * days)
-    events, unavailable = await _collect(
-        db, project, set(ALL_SOURCES), start, end, 5000, False
+    me = frozenset(_identities(token)) if role == "member" else None
+    return await run_in_threadpool(
+        _summarize, db, role, me, project, days, datetime.now(timezone.utc)
     )
-    kept = _filter(events, role, token, None, None, None, False)
+
+
+class _Bucket(NamedTuple):
+    """Events sharing a source, actor, action and UTC hour."""
+
+    source: str
+    actor: str
+    action: str
+    notable: bool
+    hour: datetime
+    current: bool
+    count: int
+
+
+def _hour(value: str) -> datetime:
+    return datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+
+
+def _buckets(
+    db: Session,
+    project: str | None,
+    me: frozenset[str] | None,
+    start: datetime,
+    middle: datetime,
+    end: datetime,
+) -> list[_Bucket]:
+    """
+    Counts grouped in SQL: the window holds hundreds of thousands of events
+    (Vault alone logs ~13k a day), too many to load as rows.
+    """
+    collected = set(ALL_SOURCES) - {"cmp"}
+    if me is not None:
+        collected -= {"keycloak"}
+    rec = ActivityRecord
+    hour = func.strftime("%Y-%m-%d %H:00:00", rec.time)
+    current = rec.time >= middle
+    stmt = select(
+        rec.source,
+        rec.actor,
+        rec.action,
+        rec.notable,
+        hour,
+        current,
+        func.count(),
+    ).where(
+        rec.source.in_(collected),
+        rec.time >= start,
+        rec.time < end,
+        rec.is_read.is_(False),
+    )
+    if project:
+        stmt = stmt.where(rec.project == project)
+    if me is not None:
+        stmt = stmt.where(
+            or_(rec.source.not_in(("kubernetes", "vault")), rec.actor.in_(me))
+        )
+    stmt = stmt.group_by(
+        rec.source, rec.actor, rec.action, rec.notable, hour, current
+    )
+    buckets = [
+        _Bucket(s, a, act, bool(n), _hour(h), bool(c), k)
+        for s, a, act, n, h, c, k in db.execute(stmt)
+    ]
+    cmp_hour = func.strftime("%Y-%m-%d %H:00:00", AuditEvent.created_at)
+    cmp_current = AuditEvent.created_at >= middle
+    cmp_stmt = select(
+        AuditEvent.actor,
+        AuditEvent.action,
+        cmp_hour,
+        cmp_current,
+        func.count(),
+    ).where(AuditEvent.created_at >= start, AuditEvent.created_at < end)
+    if project:
+        cmp_stmt = cmp_stmt.where(AuditEvent.project == project)
+    cmp_stmt = cmp_stmt.group_by(
+        AuditEvent.actor, AuditEvent.action, cmp_hour, cmp_current
+    )
+    buckets += [
+        _Bucket("cmp", a, act, act in NOTABLE, _hour(h), bool(c), k)
+        for a, act, h, c, k in db.execute(cmp_stmt)
+    ]
+    return buckets
+
+
+def _summarize(
+    db: Session,
+    role: str,
+    me: frozenset[str] | None,
+    project: str | None,
+    days: int,
+    end: datetime,
+) -> ActivitySummary:
     middle = end - timedelta(days=days)
-    current = [e for e in kept if e.time >= middle]
-    previous = [e for e in kept if e.time < middle]
+    start = middle - timedelta(days=days)
+    buckets = _buckets(db, project, me, start, middle, end)
+    actions = [b for b in buckets if b.source != "keycloak"]
+    by_people = [b for b in actions if b.source != "deployment"]
 
-    def actions(evts):
-        return [e for e in evts if e.source != "keycloak"]
+    def kpi(rows: list[_Bucket], weigh=lambda b: b.count) -> Kpi:
+        return Kpi(
+            value=sum(weigh(b) for b in rows if b.current),
+            previous=sum(weigh(b) for b in rows if not b.current),
+        )
 
-    def people(evts):
-        return {
-            e.actor for e in actions(evts) if e.source not in ("deployment",)
-        }
-
-    def failures(evts):
-        return [e for e in evts if e.action == "keycloak.login_error"]
+    def people(current: bool) -> int:
+        return len({b.actor for b in by_people if b.current == current})
 
     per_day: dict[date, Counter] = defaultdict(Counter)
-    for e in actions(current):
-        per_day[e.time.date()][e.source] += 1
-    first = middle.date()
-    days_list = [
-        DayCount(
-            day=first + timedelta(days=i),
-            counts=dict(per_day.get(first + timedelta(days=i), {})),
-        )
-        for i in range(days + 1)
-    ]
-    top = Counter(
-        e.actor for e in actions(current) if e.source != "deployment"
-    )
+    top: Counter = Counter()
     heatmap = [[0] * 24 for _ in range(7)]
-    for e in actions(current):
-        if e.source != "deployment":
-            local = e.time.astimezone(PARIS)
-            heatmap[local.weekday()][local.hour] += 1
+    for b in actions:
+        if b.current:
+            per_day[b.hour.date()][b.source] += b.count
+    for b in by_people:
+        if b.current:
+            top[b.actor] += b.count
+            local = b.hour.astimezone(PARIS)
+            heatmap[local.weekday()][local.hour] += b.count
+    first = middle.date()
+    failures = [b for b in buckets if b.action == "keycloak.login_error"]
     return ActivitySummary(
-        actions=Kpi(
-            value=len(actions(current)), previous=len(actions(previous))
-        ),
-        people=Kpi(value=len(people(current)), previous=len(people(previous))),
-        notable=Kpi(
-            value=sum(e.notable for e in current),
-            previous=sum(e.notable for e in previous),
-        ),
-        login_failures=(
-            None
-            if role == "member"
-            else Kpi(
-                value=len(failures(current)), previous=len(failures(previous))
+        actions=kpi(actions),
+        people=Kpi(value=people(True), previous=people(False)),
+        notable=kpi(buckets, lambda b: b.count if b.notable else 0),
+        login_failures=None if role == "member" else kpi(failures),
+        days=[
+            DayCount(
+                day=first + timedelta(days=i),
+                counts=dict(per_day.get(first + timedelta(days=i), {})),
             )
-        ),
-        days=days_list,
+            for i in range(days + 1)
+        ],
         top_actors=top.most_common(5),
         heatmap=heatmap,
-        logins=None if role == "member" else _logins(current, first, days),
-        unavailable=unavailable,
+        logins=(
+            None
+            if role == "member"
+            else _logins(db, project, buckets, middle, end, first, days)
+        ),
+        unavailable=[],
     )
 
 
-def _logins(events: list[ActivityEvent], first: date, days: int) -> Logins:
+def _logins(
+    db: Session,
+    project: str | None,
+    buckets: list[_Bucket],
+    middle: datetime,
+    end: datetime,
+    first: date,
+    days: int,
+) -> Logins:
     per_day: dict[date, Counter] = defaultdict(Counter)
     failed_users: Counter = Counter()
+    for b in buckets:
+        if not b.current:
+            continue
+        if b.action == "keycloak.login":
+            per_day[b.hour.date()]["success"] += b.count
+        elif b.action == "keycloak.login_error":
+            per_day[b.hour.date()]["failure"] += b.count
+            failed_users[b.actor or "?"] += b.count
+    stmt = select(ActivityRecord.source_ip, func.count()).where(
+        ActivityRecord.source == "keycloak",
+        ActivityRecord.action == "keycloak.login_error",
+        ActivityRecord.time >= middle,
+        ActivityRecord.time < end,
+        ActivityRecord.is_read.is_(False),
+    )
+    if project:
+        stmt = stmt.where(ActivityRecord.project == project)
     failed_ips: Counter = Counter()
-    for e in events:
-        if e.action == "keycloak.login":
-            per_day[e.time.date()]["success"] += 1
-        elif e.action == "keycloak.login_error":
-            per_day[e.time.date()]["failure"] += 1
-            failed_users[e.actor or "?"] += 1
-            failed_ips[e.source_ip or "?"] += 1
+    for ip, count in db.execute(stmt.group_by(ActivityRecord.source_ip)):
+        failed_ips[ip or "?"] += count
     return Logins(
         days=[
             LoginDay(
@@ -613,6 +720,12 @@ async def denied_flows(
     """Flows a network policy dropped on the project's side, by pair and port."""
     await _role(token, project)
     since = datetime.now(timezone.utc) - timedelta(days=days)
+    return await run_in_threadpool(_denied_flows, db, project, since)
+
+
+def _denied_flows(
+    db: Session, project: str, since: datetime
+) -> list[DeniedFlow]:
     rows = db.scalars(
         select(ActivityRecord).where(
             ActivityRecord.source == "network",
@@ -692,7 +805,8 @@ async def export_activity(
     """The filtered feed as CSV or JSON, limited to what the role may see."""
     role = await _role(token, project)
     start, end = _window(since, until)
-    events, _ = await _collect(
+    events, _ = await run_in_threadpool(
+        _collect,
         db,
         project,
         _sources(source),
@@ -853,11 +967,14 @@ async def platform_status(
         last_success, last_schedule = await run_in_threadpool(_archive_status)
     except KubeUnavailableError:
         last_success = last_schedule = None
+    rows = await run_in_threadpool(
+        lambda: list(db.scalars(select(ActivityCursor)))
+    )
     cursors = {
         c.source: (
             c.until if c.until.tzinfo else c.until.replace(tzinfo=timezone.utc)
         )
-        for c in db.scalars(select(ActivityCursor))
+        for c in rows
     }
     return PlatformStatus(
         alerts=sorted(alerts, key=lambda a: a.since, reverse=True),
