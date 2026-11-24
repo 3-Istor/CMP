@@ -9,7 +9,7 @@ import { useFormat } from "@/lib/useFormat";
 import { cn } from "@/lib/utils";
 import type { AgentTrace, RefusalReason } from "@/types/ai";
 import { AlertCircle, ExternalLink, ShieldCheck, Users } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useAgentContext } from "./AgentFrame";
 import { CapabilityMap, type CapabilityNode } from "./CapabilityMap";
 import { RiskBadge, RingGauge, Sparkline, useAiFormat } from "./shared";
@@ -29,7 +29,6 @@ function LoadError({ message }: { message: string }) {
 export function AgentOverview() {
   const t = useTranslations("ai.overview");
   const tReason = useTranslations("ai.refusal");
-  const format = useFormatter();
   const f = useAiFormat();
   const { project, agent } = useAgentContext();
   const today = useCardData(`agent-usage-1d-${project}-${agent.name}`, () => getAgentUsage(project, agent.name, "1d"), {
@@ -73,15 +72,8 @@ export function AgentOverview() {
             <h2 className="text-sm font-semibold">{t("budget")}</h2>
             <p className="text-2xl font-semibold tabular-nums">{loading ? pulse : f.tokens(used)}</p>
             <p className="text-sm text-muted-foreground">/ {f.tokens(budget)} {t("tokensPerDay")}</p>
-            {u?.resets_at && (
-              <p className="text-xs text-muted-foreground">
-                {t("resetsAt", {
-                  time: format.dateTime(new Date(u.resets_at), { hour: "2-digit", minute: "2-digit" }),
-                })}
-              </p>
-            )}
             <p className="text-xs text-muted-foreground">{t("hardCap")}</p>
-            {u.resets_at && (
+            {u?.resets_at && (
               <p className="text-xs text-muted-foreground">{t("resetsAt", { time: f.clock(u.resets_at) })}</p>
             )}
           </div>

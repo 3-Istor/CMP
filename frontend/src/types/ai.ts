@@ -158,7 +158,6 @@ export interface AgentUsage extends AiUsageItem {
   /** When the daily quota resets (ISO, UTC), if the backend reports it. */
   resets_at?: string;
   series: { t: string; tokens: number; cost_usd?: number }[];
-  resets_at?: string;
 }
 
 export interface AiBackend {
