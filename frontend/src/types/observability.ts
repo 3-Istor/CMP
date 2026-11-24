@@ -49,6 +49,8 @@ export interface SloObjective {
   error_ratio: number | null;
   burn_rate_1h: number | null;
   burn_rate_6h: number | null;
+  requests_in_period: number;
+  insufficient_traffic: boolean;
   trend: ObsPoint[];
 }
 

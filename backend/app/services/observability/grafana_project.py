@@ -31,6 +31,7 @@ from app.services.grafana_service import (
     _grafana_org_name,
     _title_case_project_name,
 )
+from app.services.observability.slo import BUDGET_LOOKBACK
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,8 @@ def app_dashboard() -> dict:
         _panel(
             4,
             "Error budget left",
-            f"slo:period_error_budget_remaining:ratio{{{app}}}",
+            f"last_over_time(slo:period_error_budget_remaining:ratio{{{app}}}"
+            f"[{BUDGET_LOOKBACK}])",
             (0, 8, 8, 6),
             "percentunit",
             "stat",
@@ -172,7 +174,8 @@ def app_dashboard() -> dict:
             5,
             "Burn rate over 1 h",
             f"slo:sli_error:ratio_rate1h{{{app}}}"
-            f" / on (cnp_project, cnp_app, cnp_slo) slo:error_budget:ratio{{{app}}}",
+            " / on (cnp_project, cnp_app, cnp_slo) last_over_time("
+            f"slo:error_budget:ratio{{{app}}}[{BUDGET_LOOKBACK}])",
             (8, 8, 8, 6),
             "short",
             "stat",
@@ -247,7 +250,8 @@ def project_dashboard() -> dict:
         _panel(
             3,
             "Availability budget left",
-            f"slo:period_error_budget_remaining:ratio{{{avail}}}",
+            "last_over_time(slo:period_error_budget_remaining:ratio"
+            f"{{{avail}}}[{BUDGET_LOOKBACK}])",
             (0, 8, 12, 8),
             "percentunit",
             "bargauge",
@@ -256,7 +260,8 @@ def project_dashboard() -> dict:
         _panel(
             4,
             "Latency budget left",
-            'slo:period_error_budget_remaining:ratio{cnp_slo="latency"}',
+            "last_over_time(slo:period_error_budget_remaining:ratio"
+            f'{{cnp_slo="latency"}}[{BUDGET_LOOKBACK}])',
             (12, 8, 12, 8),
             "percentunit",
             "bargauge",

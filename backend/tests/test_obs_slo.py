@@ -127,6 +127,33 @@ def test_the_period_window_follows_the_period():
     assert "slo:sli_error:ratio_rate7d" in records
 
 
+def test_no_rule_reads_a_series_recorded_in_its_own_slower_group():
+    # Within a group vmalert aligns timestamps to the interval: a series
+    # recorded every 5 minutes is out of the instant lookback when the next
+    # rule of the same group reads it.
+    budget = next(g for g in slo.groups(APP) if g["interval"] == "5m")
+    recorded = {r["record"] for r in budget["rules"]}
+
+    assert not any(
+        name in rule["expr"] for rule in budget["rules"] for name in recorded
+    )
+
+
+def test_every_app_records_its_latency_quantiles_under_its_namespace():
+    quantiles = [
+        r for r in _rules() if r.get("record", "").startswith("cnp_slo:lat")
+    ]
+
+    assert {r["record"]: r["labels"] for r in quantiles} == {
+        f"cnp_slo:latency_seconds:{q}_5m": {
+            "cnp_project": "shop",
+            "cnp_app": "web",
+            "namespace": "shop-web",
+        }
+        for q in ("p50", "p95", "p99")
+    }
+
+
 def test_the_object_is_owned_by_the_cmp_in_its_namespace():
     meta = slo.render(APP)["metadata"]
 

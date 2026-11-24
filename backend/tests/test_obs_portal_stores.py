@@ -228,6 +228,15 @@ def test_slo_status_reads_the_budget_the_rules_record(api):
     assert round(left["availability"], 2) == 0.62
 
 
+def test_an_app_without_requests_keeps_its_whole_budget(api):
+    body = _get(api, IDLE_APP, "/slo", range="1h").json()
+
+    assert [
+        (o["budget_remaining"], o["insufficient_traffic"])
+        for o in body["objectives"]
+    ] == [(1.0, True), (1.0, True)]
+
+
 def test_slo_burn_rate_is_the_error_ratio_over_the_budget(api):
     body = _get(api, SHOP_APP, "/slo", range="1h").json()
 
