@@ -11,6 +11,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -177,6 +178,9 @@ def _summary(
             if used
             else None
         ),
+        "usage_resets_at": ai_usage.utc_day(datetime.now(timezone.utc))[
+            1
+        ].isoformat(),
         "updated_at": (
             row.updated_at.isoformat() if row and row.updated_at else None
         ),

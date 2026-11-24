@@ -23,6 +23,10 @@ from app.mcp_server import (
     tool_errors,
 )
 from app.services import audit
+from app.services.ai.usage import (
+    APP_DAILY_TOKEN_BUDGET,
+    PROJECT_DAILY_TOKEN_CAP,
+)
 
 AGENT_FIELDS = (
     "description",
@@ -69,7 +73,7 @@ async def set_project_ai(  # pylint: disable=too-many-arguments
         Field(description="Allowed models, e.g. claude-haiku-5-5"),
     ],
     web_search: bool = False,
-    daily_token_budget: Annotated[int, Field(ge=0)] = 0,
+    daily_token_budget: Annotated[int, Field(ge=0)] = PROJECT_DAILY_TOKEN_CAP,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
     preview: PREVIEW = False,
@@ -120,7 +124,7 @@ async def enable_app_ai(  # pylint: disable=too-many-arguments
     project: str,
     app: Annotated[str, Field(description="App name in the project")],
     enabled: bool = True,
-    daily_token_budget: Annotated[int, Field(ge=0)] = 50_000,
+    daily_token_budget: Annotated[int, Field(ge=0)] = APP_DAILY_TOKEN_BUDGET,
     user_confirmed: bool = False,
     confirmation_id: str | None = None,
     preview: PREVIEW = False,

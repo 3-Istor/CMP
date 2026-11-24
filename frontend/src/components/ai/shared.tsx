@@ -24,6 +24,8 @@ export function useAiFormat() {
   const now = useNow({ updateInterval: 60_000 });
   return {
     relative: (value: string) => formatter.relativeTime(new Date(value), now),
+    clock: (value: string) =>
+      new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(new Date(value)),
     tokens: (value: number) =>
       new Intl.NumberFormat(locale, {
         notation: value >= 100_000 ? "compact" : "standard",

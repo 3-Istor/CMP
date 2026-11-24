@@ -4176,7 +4176,8 @@
       "tokensToday": "tokens aujourd'hui sur {budget}",
       "budgetLabel": "Budget du jour de {name}",
       "costToday": "{cost} aujourd'hui",
-      "settingsMissing": "Réglages introuvables dans le dépôt"
+      "settingsMissing": "Réglages introuvables dans le dépôt",
+      "resetsAt": "remise à zéro à {time}"
     },
     "trigger": {
       "chat": "Chat",
@@ -4227,7 +4228,8 @@
       "enableFirst": "Activez l'accès à l'IA pour créer un agent.",
       "assistantsTitle": "Assistants connectés",
       "assistantsHint": "Claude, ChatGPT et les autres assistants qui agissent sur le projet par le serveur MCP de la CMP.",
-      "usageUnavailable": "Consommation indisponible : la gateway IA ne répond pas encore."
+      "usageUnavailable": "Consommation indisponible : la gateway IA ne répond pas encore.",
+      "resetsAt": "Remise à zéro à {time}"
     },
     "backend": {
       "ok": "En ligne",
@@ -4472,7 +4474,8 @@
       "costMonth": "Coût du mois",
       "requests": "Requêtes",
       "errorRate": "Taux d'erreur",
-      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}"
+      "refusals": "{count, plural, =0 {Aucun refus} one {# refus} other {# refus}}",
+      "resetsAt": "Remise à zéro à {time}"
     },
     "traces": {
       "error": "Impossible de lire les traces.",

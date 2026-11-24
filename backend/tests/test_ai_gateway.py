@@ -3,6 +3,7 @@ the gateway and the stores replaced by recorded answers."""
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest import mock
 
@@ -530,3 +531,32 @@ def test_an_unusable_answer_is_a_gateway_error(draft_world):
 
     with pytest.raises(gateway.GatewayError):
         asyncio.run(draft.draft("Un résumé", None, "draft"))
+
+
+def test_today_usage_counts_since_midnight_utc_and_resets_at_the_next(
+    monkeypatch,
+):
+    # Arrange
+    queries = []
+
+    def handler(request):
+        queries.append(request.url.params["query"])
+        return httpx.Response(200, json=_vector())
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(
+        ai_usage.httpx,
+        "AsyncClient",
+        lambda **kw: real(transport=httpx.MockTransport(handler), **kw),
+    )
+    monkeypatch.setattr(ai_usage, "usd_per_eur", lambda: 1.1)
+    now = datetime(2026, 11, 24, 1, 30, tzinfo=timezone.utc)
+
+    # Act
+    asyncio.run(ai_usage.today_by_azp("alpha", now=now))
+
+    # Assert
+    assert "[5400s]" in queries[0]
+    assert ai_usage.utc_day(now)[1] == datetime(
+        2026, 11, 25, tzinfo=timezone.utc
+    )

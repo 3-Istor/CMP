@@ -4176,7 +4176,8 @@
       "tokensToday": "tokens today of {budget}",
       "budgetLabel": "Daily budget of {name}",
       "costToday": "{cost} today",
-      "settingsMissing": "Settings not found in the repository"
+      "settingsMissing": "Settings not found in the repository",
+      "resetsAt": "resets at {time}"
     },
     "trigger": {
       "chat": "Chat",
@@ -4227,7 +4228,8 @@
       "enableFirst": "Enable AI access to create an agent.",
       "assistantsTitle": "Connected assistants",
       "assistantsHint": "Claude, ChatGPT and other assistants acting on the project through the CMP MCP server.",
-      "usageUnavailable": "Usage unavailable: the AI gateway does not answer yet."
+      "usageUnavailable": "Usage unavailable: the AI gateway does not answer yet.",
+      "resetsAt": "Resets at {time}"
     },
     "backend": {
       "ok": "Online",
@@ -4472,7 +4474,8 @@
       "costMonth": "Cost this month",
       "requests": "Requests",
       "errorRate": "Error rate",
-      "refusals": "{count, plural, =0 {No refusal} one {# refusal} other {# refusals}}"
+      "refusals": "{count, plural, =0 {No refusal} one {# refusal} other {# refusals}}",
+      "resetsAt": "Resets at {time}"
     },
     "traces": {
       "error": "Could not read the traces.",

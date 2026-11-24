@@ -31,6 +31,9 @@ PERIODS = {"1d": "1d", "7d": "7d", "30d": "30d"}
 SERIES_STEP = {"1d": 3600, "7d": 86400, "30d": 86400}
 REFUSAL_REASONS = ("budget", "policy", "ratelimit", "guardrail")
 WARNING_RATIO = 0.8
+# Defaults offered when AI is turned on: tokens per UTC day.
+APP_DAILY_TOKEN_BUDGET = 500_000
+PROJECT_DAILY_TOKEN_CAP = 1_000_000
 LABEL_VALUE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 # USD per MTok: input, output, cache read (decisions of 2026-11-22). The
 # gateway's cost series is the reference; this prices a test chat live.
@@ -114,12 +117,17 @@ async def usage(
     project: str, period: str, azp: str | None = None
 ) -> list[dict[str, Any]]:
     """
-    One row per caller (``azp``) of the project over *period*.
+    One row per caller (``azp``) of the project over *period*, "1d" being
+    the UTC calendar day so far (what the daily quota counts).
 
     Raises:
         UsageUnavailable: VictoriaMetrics could not be read.
     """
-    window = PERIODS[period]
+    window = (
+        f"{utc_day(datetime.now(timezone.utc))[0]}s"
+        if period == "1d"
+        else PERIODS[period]
+    )
     sel = _selector(project, azp)
     queries = {
         "tokens": f"sum by (azp, direction) (increase({TOKENS}{sel}[{window}]))",
@@ -177,9 +185,24 @@ async def usage(
     return sorted(rows.values(), key=lambda r: -r["cost_usd"])
 
 
-async def today_by_azp(project: str | None = None) -> dict[str, dict]:
+def utc_day(now: datetime) -> tuple[int, datetime]:
     """
-    Tokens (cache reads left out) and cost of the last day per caller, of
+    Seconds elapsed since 00:00 UTC and the next 00:00 UTC: the token quota
+    resets then (the gateway's rate limit counts per UTC day), so usage is
+    read over the calendar day, not a rolling 24 h.
+    """
+    midnight = now.astimezone(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    elapsed = max(1, int((now - midnight).total_seconds()))
+    return elapsed, midnight + timedelta(days=1)
+
+
+async def today_by_azp(
+    project: str | None = None, now: datetime | None = None
+) -> dict[str, dict]:
+    """
+    Tokens (cache reads left out) and cost since 00:00 UTC per caller, of
     one project or of all: one MetricsQL query for every agent of a list.
 
     Raises:
@@ -188,9 +211,10 @@ async def today_by_azp(project: str | None = None) -> dict[str, dict]:
     labels = f'__name__=~"{TOKENS}|{COST}",direction!="cache"'
     if project is not None:
         labels += "," + _selector(project)[1:-1]
+    elapsed, _ = utc_day(now or datetime.now(timezone.utc))
     query = (
         f"sum by (azp, __name__) "
-        f"(increase({{{labels}}}[1d]) keep_metric_names)"
+        f"(increase({{{labels}}}[{elapsed}s]) keep_metric_names)"
     )
     async with httpx.AsyncClient(timeout=15.0) as client:
         samples = await _query(client, query)
