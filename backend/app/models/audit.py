@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -42,10 +42,25 @@ class ActivityRecord(Base):
     """
 
     __tablename__ = "activity_events"
+    # No index on source alone: with five values, SQLite still picks it for
+    # "source IN (...)" and sorts the whole table instead of walking time.
+    # The window index covers the summary's GROUP BY without table reads.
+    __table_args__ = (
+        Index(
+            "ix_activity_events_window",
+            "time",
+            "source",
+            "is_read",
+            "project",
+            "actor",
+            "action",
+            "notable",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     external_id: Mapped[str] = mapped_column(String(80), unique=True)
-    source: Mapped[str] = mapped_column(String(16), index=True)
+    source: Mapped[str] = mapped_column(String(16))
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     project: Mapped[str | None] = mapped_column(String(100), index=True)
     app: Mapped[str | None] = mapped_column(String(100))
