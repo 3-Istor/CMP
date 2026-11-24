@@ -23,7 +23,7 @@ import csv
 import io
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -81,7 +81,13 @@ from app.services.authz import (
     is_cnp_admin,
     is_finops,
 )
-from app.services.finops import anomalies, estimate, platform, reconciliation
+from app.services.finops import (
+    anomalies,
+    engine,
+    estimate,
+    platform,
+    reconciliation,
+)
 from app.services.finops.forecast import forecast_for_apps
 from app.services.finops.ingest import carbon, fx
 from app.services.finops.provider import (
@@ -315,7 +321,11 @@ def get_overview(
     start, end = period_to_range(period)
     timeline = [
         CostSeriesPoint(**p)
-        for p in provider.timeline(apps, start, end, granularity)
+        for p in engine.mark_partial(
+            provider.timeline(apps, start, end, granularity),
+            granularity,
+            datetime.now(timezone.utc),
+        )
     ]
     app_rows = [AppCostRow(**r) for r in provider.app_rows(apps)]
 
@@ -853,6 +863,7 @@ def get_timeline(
                 if r != resource:
                     p[r] = 0.0
             p["total"] = p.get(resource, 0.0)
+    engine.mark_partial(points, granularity, datetime.now(timezone.utc))
     return [CostSeriesPoint(**p) for p in points]
 
 

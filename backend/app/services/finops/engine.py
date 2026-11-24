@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from app.services.finops import pricing, usage
 
@@ -225,6 +225,41 @@ def aggregate_series(
             }
         )
     return out
+
+
+def _bucket_bounds(day: date, granularity: str) -> tuple[datetime, datetime]:
+    if granularity == "weekly":
+        first = day - timedelta(days=day.weekday())
+        last = first + timedelta(days=7)
+    elif granularity == "monthly":
+        first = day.replace(day=1)
+        last = (first + timedelta(days=32)).replace(day=1)
+    else:
+        first, last = day, day + timedelta(days=1)
+    return (
+        datetime.combine(first, datetime.min.time(), timezone.utc),
+        datetime.combine(last, datetime.min.time(), timezone.utc),
+    )
+
+
+def mark_partial(
+    points: list[dict], granularity: str, now: datetime
+) -> list[dict]:
+    """
+    Flag the bucket still filling up (the UTC day the ingest's day_window
+    stops at now, or the week / month holding it) with how much of it has
+    elapsed, so a chart does not read it as a drop.
+    """
+    for point in points:
+        start, end = _bucket_bounds(
+            date.fromisoformat(point["date"]), granularity
+        )
+        is_partial = start <= now < end
+        point["is_partial"] = is_partial
+        point["elapsed_fraction"] = (
+            round((now - start) / (end - start), 4) if is_partial else 1.0
+        )
+    return points
 
 
 def month_cost(app: AppSpec, ref: date) -> float:

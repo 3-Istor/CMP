@@ -386,6 +386,9 @@ export interface CostSeriesPoint {
   ai?: number;
   platform?: number;
   total: number;
+  /** The bucket holding now (UTC day, week or month) is still filling up. */
+  is_partial?: boolean;
+  elapsed_fraction?: number;
 }
 
 export interface AppCostRow {
