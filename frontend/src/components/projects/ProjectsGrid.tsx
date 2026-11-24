@@ -67,7 +67,7 @@ export function ProjectsGrid({
           onRetried={onRetried}
           deletingApps={countDeleting(apps, p.name)}
           health={health[p.name]}
-          grade={security.find((s) => s.project === p.name)?.grade}
+          grade={security.find((s) => s.project === p.name)?.grade ?? undefined}
         />
       ))}
     </div>

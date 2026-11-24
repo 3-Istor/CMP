@@ -880,7 +880,12 @@
       "nextRun": "next {when}",
       "rerun": "Run again",
       "started": "Scan started",
-      "firstRun": "The collector's first run will happen in a few minutes."
+      "firstRun": "The collector's first run will happen in a few minutes.",
+      "messages": {
+        "workflow_not_run": "The workflow has not run on the default branch yet",
+        "no_repository": "No linked GitHub repository",
+        "trivy_absent": "Trivy Operator is not installed"
+      }
     },
     "alerts": {
       "title": "Discord alerts",
@@ -975,6 +980,15 @@
     "guarantees": {
       "isolation": "Isolated from other projects",
       "privileged": "Privileged pods refused"
+    },
+    "notScanned": {
+      "title": "Not scanned yet",
+      "short": "Not scanned",
+      "reasons": {
+        "workflow_not_run": "The security workflow has not run on the default branch yet. The score appears after the first scan.",
+        "no_repository": "No GitHub repository is linked, so the code is not scanned. The score appears after the first image scan.",
+        "no_scan_yet": "No scanner has looked at this app yet. The score appears after the first scan."
+      }
     }
   },
   "activity": {

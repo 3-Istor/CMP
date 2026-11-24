@@ -664,6 +664,8 @@ export interface SecurityScan {
   source: "kyverno" | "trivy-operator" | "ci" | "cnpg" | "exposure" | "cilium";
   status: "ok" | "error" | "missing" | "unavailable";
   message: string;
+  /** Translated in place of `message` when set. */
+  message_key?: "workflow_not_run" | "no_repository" | "trivy_absent" | null;
   last_run_at: string | null;
   next_run_at: string | null;
   collected_at: string | null;
@@ -673,8 +675,9 @@ export interface SecurityScan {
 export interface SecurityAppSummary {
   app: string;
   deployment_id: number | null;
-  score: number;
-  grade: string;
+  /** Null until a scanner looked at the app. */
+  score: number | null;
+  grade: string | null;
   actions: number;
   core: number;
 }
@@ -683,8 +686,10 @@ export interface SecuritySummary {
   project: string;
   app: string | null;
   view: SecurityView;
-  score: number;
-  grade: string;
+  scan_state?: "scanned" | "not_scanned";
+  not_scanned_reason?: "workflow_not_run" | "no_repository" | "no_scan_yet" | null;
+  score: number | null;
+  grade: string | null;
   actions: number;
   core: number;
   excepted: number;
@@ -706,8 +711,8 @@ export interface SecurityTrendPoint {
 
 export interface SecurityProjectOverview {
   project: string;
-  score: number;
-  grade: string;
+  score: number | null;
+  grade: string | null;
   actions: number;
   core: number;
 }

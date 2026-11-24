@@ -187,6 +187,8 @@ class ScanRead(BaseModel):
     source: str
     status: str
     message: str
+    # What the frontend translates in place of the collector's own message.
+    message_key: str | None = None
     last_run_at: datetime | None
     next_run_at: datetime | None
     collected_at: datetime | None
@@ -196,8 +198,9 @@ class ScanRead(BaseModel):
 class AppSummary(BaseModel):
     app: str
     deployment_id: int | None
-    score: int
-    grade: str
+    # None until a scanner looked at the app: no score is not a perfect one.
+    score: int | None
+    grade: str | None
     actions: int
     core: int
 
@@ -214,8 +217,11 @@ class Summary(BaseModel):
     project: str
     app: str | None
     view: View
-    score: int
-    grade: str
+    scan_state: Literal["scanned", "not_scanned"] = "scanned"
+    # Why nothing was scanned yet, a key the frontend translates.
+    not_scanned_reason: str | None = None
+    score: int | None
+    grade: str | None
     actions: int
     core: int
     excepted: int
@@ -237,8 +243,8 @@ class TrendPoint(BaseModel):
 
 class ProjectOverview(BaseModel):
     project: str
-    score: int
-    grade: str
+    score: int | None
+    grade: str | None
     actions: int
     core: int
 
@@ -312,12 +318,20 @@ def _finding_read(
     )
 
 
+SCAN_MESSAGE_KEYS = {
+    ("ci", "missing"): "workflow_not_run",
+    ("ci", "unavailable"): "no_repository",
+    ("trivy-operator", "unavailable"): "trivy_absent",
+}
+
+
 def _scan_read(s: SecurityScan) -> ScanRead:
     return ScanRead(
         app=s.app or None,
         source=s.source,
         status=s.status,
         message=s.message,
+        message_key=SCAN_MESSAGE_KEYS.get((s.source, s.status)),
         last_run_at=s.last_run_at,
         next_run_at=s.next_run_at,
         collected_at=s.collected_at,
@@ -347,6 +361,14 @@ def _guarantees(
     ]
 
 
+def _not_scanned_reason(scans: list[SecurityScan]) -> str:
+    keys = {SCAN_MESSAGE_KEYS.get((s.source, s.status)) for s in scans}
+    for key in ("workflow_not_run", "no_repository"):
+        if key in keys:
+            return key
+    return "no_scan_yet"
+
+
 def _summary(
     db: Session, project: str, app: str | None, view: View
 ) -> Summary:
@@ -367,18 +389,24 @@ def _summary(
         .order_by(Deployment.id)
     }
     app_names = sorted(set(deployment_ids) | {m.app for m in items if m.app})
+    scanned = store.scanned_apps(db, project)
     apps = []
     app_scores = []
     for name in app_names:
         subset = [m.scored() for m in items if m.app == name]
-        value = scoring.score(subset)
-        app_scores.append(value)
+        value = scoring.score(subset) if name in scanned else None
+        if value is not None:
+            app_scores.append(value)
         apps.append(
             AppSummary(
                 app=name,
                 deployment_id=deployment_ids.get(name),
                 score=value,
-                grade=scoring.grade(value, scoring.has_core(subset)),
+                grade=(
+                    None
+                    if value is None
+                    else scoring.grade(value, scoring.has_core(subset))
+                ),
                 actions=len(scoring.actionable(subset)),
                 core=sum(
                     1
@@ -388,25 +416,36 @@ def _summary(
             )
         )
 
-    if app is None:
+    project_scans = store.scans(db, project, app)
+    if app is None and app_scores:
         value = scoring.project_score(
             app_scores, [m.scored() for m in items if m.app is None]
         )
-    else:
+    elif app is not None and app in scanned:
         value = scoring.score(scored)
+    else:
+        value = None
     open_ = scoring.actionable(scored)
     return Summary(
         project=project,
         app=app,
         view=view,
+        scan_state="not_scanned" if value is None else "scanned",
+        not_scanned_reason=(
+            _not_scanned_reason(project_scans) if value is None else None
+        ),
         score=value,
-        grade=scoring.grade(value, scoring.has_core(scored)),
+        grade=(
+            None
+            if value is None
+            else scoring.grade(value, scoring.has_core(scored))
+        ),
         actions=len(open_),
         core=sum(1 for f in open_ if f.tier is Tier.CORE),
         excepted=sum(1 for m in scoped if m.excepted),
         segments=[SegmentRead(**vars(s)) for s in scoring.segments(scored)],
         apps=apps if app is None else [a for a in apps if a.app == app],
-        scans=[_scan_read(s) for s in store.scans(db, project, app)],
+        scans=[_scan_read(s) for s in project_scans],
         guarantees=_guarantees(everything, project_cloud(db, project)),
     )
 

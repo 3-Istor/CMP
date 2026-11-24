@@ -310,13 +310,22 @@ export function SecurityDashboard({
                 <CardTitle>{t("dashboard.score")}</CardTitle>
               </CardHeader>
               <CardContent>
-                <ScoreRing
-                  score={summary.score}
-                  grade={summary.grade}
-                  actions={summary.actions}
-                  segments={summary.segments}
-                  onSelect={showCategory}
-                />
+                {summary.score === null || summary.grade === null ? (
+                  <div role="status" className="space-y-1">
+                    <p className="text-lg font-semibold">{t("notScanned.title")}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t(`notScanned.reasons.${summary.not_scanned_reason ?? "no_scan_yet"}`)}
+                    </p>
+                  </div>
+                ) : (
+                  <ScoreRing
+                    score={summary.score}
+                    grade={summary.grade}
+                    actions={summary.actions}
+                    segments={summary.segments}
+                    onSelect={showCategory}
+                  />
+                )}
                 {summary.excepted > 0 && (
                   <p className="mt-3 text-xs text-muted-foreground">
                     {t("dashboard.excepted", { count: summary.excepted })}
@@ -454,7 +463,7 @@ export function SecurityDashboard({
                               </Link>
                             </td>
                             <td className="py-2 tabular-nums">
-                              {a.score} · {a.grade}
+                              {a.score === null ? t("notScanned.short") : `${a.score} · ${a.grade}`}
                             </td>
                             <td className="py-2 tabular-nums">{a.actions}</td>
                             <td

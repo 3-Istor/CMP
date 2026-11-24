@@ -880,7 +880,12 @@
       "nextRun": "prochain {when}",
       "rerun": "Relancer",
       "started": "Scan lancé",
-      "firstRun": "Premier passage du collecteur dans quelques minutes."
+      "firstRun": "Premier passage du collecteur dans quelques minutes.",
+      "messages": {
+        "workflow_not_run": "Le workflow n'a pas encore tourné sur la branche par défaut",
+        "no_repository": "Pas de repo GitHub lié",
+        "trivy_absent": "Trivy Operator absent"
+      }
     },
     "alerts": {
       "title": "Alertes Discord",
@@ -975,6 +980,15 @@
     "guarantees": {
       "isolation": "Isolé des autres projets",
       "privileged": "Pods privilégiés refusés"
+    },
+    "notScanned": {
+      "title": "Pas encore analysée",
+      "short": "Non analysée",
+      "reasons": {
+        "workflow_not_run": "Le workflow de sécurité n'a pas encore tourné sur la branche par défaut. Le score apparaît après la première analyse.",
+        "no_repository": "Aucun repo GitHub n'est lié, le code n'est donc pas analysé. Le score apparaît après la première analyse de l'image.",
+        "no_scan_yet": "Aucun scanner n'a encore analysé cette app. Le score apparaît après la première analyse."
+      }
     }
   },
   "activity": {
