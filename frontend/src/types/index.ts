@@ -1273,25 +1273,6 @@ export interface FinopsCarbon {
 
 // ── App overview ──────────────────────────────────────────────────────────────
 
-export interface MetricPoint {
-  time: string;
-  value: number;
-}
-
-export interface MetricSeries {
-  points: MetricPoint[];
-  current: number | null;
-}
-
-export interface AppMetrics {
-  window: string;
-  step_seconds: number;
-  requests_per_second: MetricSeries | null;
-  errors_5xx_percent: MetricSeries | null;
-  cpu_millicores: MetricSeries | null;
-  cpu_request_millicores: number | null;
-}
-
 export type AppLogLevel = "error" | "warn" | "info" | "debug";
 
 export interface AppEvent {

@@ -30,6 +30,8 @@ export interface TimeSeries {
   /** Series sharing a stack id are stacked. */
   stack?: string;
   dashed?: boolean;
+  /** Plots on a second axis at the right, for a unit the left axis does not share. */
+  axis?: "right";
 }
 
 export interface TimePoint {
@@ -59,6 +61,7 @@ export interface TimeChartProps {
   /** Shown instead of the chart when there is no point to draw. */
   empty?: EmptyStateProps;
   yFormat?: (value: number) => string;
+  yFormatRight?: (value: number) => string;
   /** The accessible name of the chart. */
   label?: string;
   /** Shows the legend under the chart; on by default with two series or more. */
@@ -83,6 +86,7 @@ export function TimeChart({
   loading = false,
   empty,
   yFormat,
+  yFormatRight,
   label,
   legend,
   className,
@@ -91,6 +95,10 @@ export function TimeChart({
   const t = useTranslations("data.chart");
   const hatch = `hatch-${useId().replace(/:/g, "")}`;
   const yFmt = yFormat ?? ((v: number) => format.number(v, { notation: "compact" }));
+  const yFmtRight = yFormatRight ?? yFmt;
+  const hasRight = series.some((s) => s.axis === "right");
+  const fmtOf = (key: unknown) =>
+    series.find((s) => s.key === key)?.axis === "right" ? yFmtRight : yFmt;
   const clock = (ms: number) =>
     format.dateTime(new Date(ms), { hour: "2-digit", minute: "2-digit" });
   const stamp = (ms: number) =>
@@ -160,11 +168,21 @@ export function TimeChart({
               tickLine={false}
               tickFormatter={yFmt}
             />
+            {hasRight && (
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                width={56}
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                tickFormatter={yFmtRight}
+              />
+            )}
             <Tooltip
               contentStyle={TOOLTIP_STYLE}
               labelFormatter={(v) => stamp(Number(v))}
               formatter={(value, name) => [
-                value == null ? "-" : yFmt(Number(value)),
+                value == null ? "-" : fmtOf(name)(Number(value)),
                 series.find((s) => s.key === name)?.label ?? String(name),
               ]}
             />
@@ -197,6 +215,7 @@ export function TimeChart({
                     key={s.key}
                     dataKey={s.key}
                     stackId={s.stack}
+                    yAxisId={s.axis ?? 0}
                     fill={s.color}
                     isAnimationActive={false}
                   />
@@ -209,6 +228,7 @@ export function TimeChart({
                     type="monotone"
                     dataKey={s.key}
                     stackId={s.stack}
+                    yAxisId={s.axis ?? 0}
                     stroke={s.color}
                     fill={s.color}
                     fillOpacity={0.2}
@@ -223,6 +243,7 @@ export function TimeChart({
                   key={s.key}
                   type="monotone"
                   dataKey={s.key}
+                  yAxisId={s.axis ?? 0}
                   stroke={s.color}
                   strokeWidth={2}
                   strokeDasharray={dash}

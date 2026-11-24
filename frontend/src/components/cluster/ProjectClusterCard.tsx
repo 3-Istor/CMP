@@ -1,42 +1,73 @@
 "use client";
 
+import { Panel } from "@/components/app-overview/shared";
+import { StatTile } from "@/components/data/StatTile";
+import { CLOUD_META } from "@/components/finops/format";
+import { useObsFormat } from "@/components/observability/shared";
 import { useProjectContext } from "@/components/projects/ProjectContext";
-import type { DeploymentStatus } from "@/types";
-import { AppChip, appKind } from "./AppChip";
-import { ClusterCard } from "./ClusterCard";
-import { FootprintLine, FootprintTotal, useProjectFootprint } from "./Footprint";
+import { CloudStateBadge } from "@/components/ui/cloud-state-badge";
+import { useTranslations } from "next-intl";
+import { memoryLabel, useProjectFootprint } from "./Footprint";
 import { MovePopover } from "./MovePopover";
-import { ProjectRow } from "./ProjectRow";
 import { useClusterStates } from "./useClusterStates";
 
-const HEALTH: Partial<Record<DeploymentStatus, string>> = { running: "up", degraded: "degraded", failed: "down" };
+const SUB: Record<string, string> = { onprem: "K3s · hub", aws: "EKS", gcp: "GKE" };
 
-/** The project's cluster as one card, with the two-click move. */
+/** Where the project runs: what it reserves next to what it uses now, with the two-click move. */
 export function ProjectClusterCard() {
-  const { projectName, targetCloud, apps, can, move, setMove } = useProjectContext();
+  const t = useTranslations("projectHome.where");
+  const tState = useTranslations("placement.state");
+  const { number, percent } = useObsFormat();
+  const { projectName, targetCloud, can, move, setMove } = useProjectContext();
   const { states, memory } = useClusterStates();
   const rows = useProjectFootprint(projectName, targetCloud);
+  const loading = rows === null;
   if (!targetCloud) return null;
   const state = states?.[targetCloud] ?? "unknown";
+  const measuredRows = rows ?? [];
+  const cpu = measuredRows.reduce((s, r) => s + r.cpu, 0);
+  const mem = measuredRows.reduce((s, r) => s + r.memory_bytes, 0);
+  const measured = measuredRows.filter((r) => r.usage);
+  const usedCpu = measured.reduce((s, r) => s + (r.usage?.cpu_cores ?? 0), 0);
+  const usedMem = measured.reduce((s, r) => s + (r.usage?.mem_bytes ?? 0), 0);
+  const stateLabel = tState.has(state) ? tState(state) : state;
   return (
-    <ClusterCard cloud={targetCloud} state={state} memoryPct={memory[targetCloud]} className="mb-6 max-w-xl">
-      <ProjectRow
-        name={projectName}
-        moving={!!move}
-        total={<FootprintTotal rows={rows} up={state === "up"} />}
-        apps={apps
-          .filter((a) => a.status !== "deleted")
-          .map((a) => (
-            <AppChip key={a.id} name={a.name} kind={appKind(a.name, a.template_id, a.template_category)} state={HEALTH[a.status] ?? "unknown"}
-              footprint={rows.find((r) => r.app === a.name) && <FootprintLine row={rows.find((r) => r.app === a.name)!} />}
-            />
-          ))}
-        action={
-          !move && can("project.move") ? (
-            <MovePopover project={projectName} cloud={targetCloud} states={states} memory={memory} onStarted={setMove} />
-          ) : undefined
-        }
-      />
-    </ClusterCard>
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          {t("title")}
+          <CloudStateBadge state={state}>
+            {t("state", { cloud: CLOUD_META[targetCloud].label, state: stateLabel })}
+          </CloudStateBadge>
+        </span>
+      }
+      description={SUB[targetCloud]}
+      action={
+        !move && can("project.move") ? (
+          <MovePopover project={projectName} cloud={targetCloud} states={states} memory={memory} onStarted={setMove} />
+        ) : undefined
+      }
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <StatTile
+          label={t("reserved")}
+          loading={loading}
+          value={measuredRows.length ? `${number(cpu, 2)} CPU · ${memoryLabel(mem)}` : null}
+          hint={measuredRows.length ? t("reservedHint") : t("none")}
+          className="[&>p:nth-child(2)]:text-base"
+        />
+        <StatTile
+          label={t("using")}
+          loading={loading}
+          value={measured.length ? `${number(usedCpu, 2)} CPU · ${memoryLabel(usedMem)}` : null}
+          hint={
+            measured.length && cpu && mem
+              ? t("usingHint", { cpu: percent(usedCpu / cpu, 0), mem: percent(usedMem / mem, 0) })
+              : t("usingNone")
+          }
+          className="[&>p:nth-child(2)]:text-base"
+        />
+      </div>
+    </Panel>
   );
 }

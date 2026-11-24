@@ -13,25 +13,6 @@ export interface ObsCapabilities {
   grafana_url: string;
 }
 
-export interface RouteSignals {
-  route: string;
-  requests_per_second: number;
-  error_percent: number;
-  p50_ms: number | null;
-  p95_ms: number | null;
-}
-
-export interface GoldenSignals {
-  range: string;
-  step_seconds: number;
-  no_traffic: boolean;
-  rate: ObsPoint[];
-  error_percent: ObsPoint[];
-  p50_ms: ObsPoint[];
-  p95_ms: ObsPoint[];
-  routes: RouteSignals[];
-}
-
 export interface SloSettings {
   project: string;
   app: string;
@@ -55,15 +36,6 @@ export interface SloObjective {
 export interface SloStatus {
   settings: SloSettings;
   objectives: SloObjective[];
-}
-
-export interface DeployMarker {
-  time: string;
-  finished_at: string | null;
-  version: string | null;
-  strategy: string;
-  outcome: string;
-  component: string | null;
 }
 
 export interface Dora {

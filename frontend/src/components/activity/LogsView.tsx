@@ -10,7 +10,7 @@ import {
   searchObsLogs,
 } from "@/lib/api";
 import { NotConnected } from "@/components/clusters/NotConnected";
-import { TopErrors } from "@/components/observability/OverviewObservability";
+import { TopErrors } from "@/components/observability/TopErrors";
 import { useObsCapabilities } from "@/components/observability/shared";
 import { cn } from "@/lib/utils";
 import type { LogFilters, LogTargets } from "@/types";
