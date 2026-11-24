@@ -682,7 +682,11 @@ def test_vault_reads_by_a_platform_service_account_are_not_notable():
     event = src.vault_event(
         PROJECTS,
         NOW,
-        _vault_line("kubernetes-arcl-cmp-arcl-cmp", "read", "project-shop/data/system/x"),
+        _vault_line(
+            "kubernetes-arcl-cmp-arcl-cmp",
+            "read",
+            "project-shop/data/system/x",
+        ),
     )
 
     # Assert
@@ -690,7 +694,9 @@ def test_vault_reads_by_a_platform_service_account_are_not_notable():
 
 
 def test_vault_reads_by_a_person_stay_notable():
-    assert src.vault_event(PROJECTS, NOW, _vault_line("oidc-alice", "read")).notable
+    assert src.vault_event(
+        PROJECTS, NOW, _vault_line("oidc-alice", "read")
+    ).notable
 
 
 def test_vault_writes_by_a_platform_service_account_stay_notable():
@@ -703,6 +709,8 @@ def test_vault_writes_by_a_platform_service_account_stay_notable():
 
 @pytest.mark.parametrize("operation", ["read", "list"])
 def test_vault_secret_reads_are_hidden_with_the_other_reads(operation):
-    event = src.vault_event(PROJECTS, NOW, _vault_line("oidc-alice", operation))
+    event = src.vault_event(
+        PROJECTS, NOW, _vault_line("oidc-alice", operation)
+    )
 
     assert event.is_read

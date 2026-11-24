@@ -400,7 +400,10 @@ def test_app_count_is_the_cmp_apps_not_the_registry_entries():
     )
     Base.metadata.create_all(engine)
     with sessionmaker(bind=engine)() as db:
-        for id_, status in ((1, DeploymentStatus.RUNNING), (2, DeploymentStatus.DELETED)):
+        for id_, status in (
+            (1, DeploymentStatus.RUNNING),
+            (2, DeploymentStatus.DELETED),
+        ):
             db.add(
                 Deployment(
                     id=id_,

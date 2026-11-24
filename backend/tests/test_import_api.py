@@ -1358,7 +1358,10 @@ def test_a_rewrite_onto_postgres_is_never_offered_as_the_managed_alternative(
     ).json()
 
     # Assert
-    assert (body["recommendations"], body["backing"][0]["managed_alternative"]) == (
+    assert (
+        body["recommendations"],
+        body["backing"][0]["managed_alternative"],
+    ) == (
         [],
         None,
     )

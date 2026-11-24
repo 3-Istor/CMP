@@ -915,7 +915,9 @@ class TestCutRelease:
         github.create_tag.assert_not_awaited()
 
 
-def test_history_splits_time_to_ready_from_time_live(session_factory, keycloak):
+def test_history_splits_time_to_ready_from_time_live(
+    session_factory, keycloak
+):
     # Arrange: 1.1 ready in 90 s, live until 1.2 was ready at t0 + 3750 s
     t0 = datetime(2026, 11, 20, 9, 0, tzinfo=timezone.utc)
     with session_factory() as db:
@@ -945,7 +947,10 @@ def test_history_splits_time_to_ready_from_time_live(session_factory, keycloak):
 
     # Assert
     by_revision = {r["revision"]: r for r in rows}
-    assert (by_revision[1]["ready_seconds"], by_revision[1]["live_seconds"]) == (
+    assert (
+        by_revision[1]["ready_seconds"],
+        by_revision[1]["live_seconds"],
+    ) == (
         90,
         3750 - 90,
     )

@@ -39,11 +39,11 @@ from app.services.ai import (
     service,
 )
 from app.services.ai import usage as ai_usage
+from app.services.ai.declaration import ProjectAi, client_id
 from app.services.ai.usage import (
     APP_DAILY_TOKEN_BUDGET,
     PROJECT_DAILY_TOKEN_CAP,
 )
-from app.services.ai.declaration import ProjectAi, client_id
 from app.services.authz import (
     ProjectContext,
     RequireAdmin,

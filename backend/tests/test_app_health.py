@@ -510,7 +510,10 @@ def test_a_project_guest_reads_the_health_of_its_app(
 
 
 def _sts(replicas):
-    return {"metadata": {"creationTimestamp": _ts(60)}, "spec": {"replicas": replicas}}
+    return {
+        "metadata": {"creationTimestamp": _ts(60)},
+        "spec": {"replicas": replicas},
+    }
 
 
 def test_a_statefulset_backing_service_reads_its_replicas():

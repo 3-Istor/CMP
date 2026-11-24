@@ -201,7 +201,13 @@ def test_record_all_keeps_recording_other_clusters_when_onprem_is_down(
 ):
     # Arrange: app 7 runs on-prem (down), app 8 on AWS (up)
     with session_factory() as db:
-        db.add(Project(project_name="lab", owner_username="o", target_cloud=TargetCloud.AWS))
+        db.add(
+            Project(
+                project_name="lab",
+                owner_username="o",
+                target_cloud=TargetCloud.AWS,
+            )
+        )
         db.add(
             Deployment(
                 id=8,
