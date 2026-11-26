@@ -1080,8 +1080,48 @@ def test_gcp_detailed_sql_emits_credit_rows(gcp_settings):
     client = httpx.Client(transport=httpx.MockTransport(handler))
     lines = gcp_focus.fetch_lines(TODAY, WINDOW, SINCE, usd_at_1_25, client)
 
-    assert "UNNEST(credits)" in json.loads(captured[0].content)["query"]
+    query = json.loads(captured[0].content)["query"]
+    assert "UNNEST(credits)" in query
+    assert (
+        "'Other' AS ServiceCategory"
+        not in query.split("UNNEST(credits)")[0].split("UNION ALL")[1]
+    )
+    assert "WHEN 'Compute Engine'" in query.split("UNION ALL")[1]
     assert sorted((ln.project or "", ln.x_cost_eur) for ln in lines) == [
         ("", 2.0),
         (focus.CREDITS, -2.0),
     ]
+
+
+def test_ingest_drops_stale_lines_of_a_produced_day_only(wired, monkeypatch):
+    old = datetime(2026, 10, 1)
+    other_day = date(2026, 10, 26)
+    fresh = _tagged("gcp", 3.0, "qcm", rid="fresh")
+    with wired() as db:
+        upsert(
+            db,
+            [
+                _tagged("gcp", 9.0, "qcm", rid="stale"),
+                _tagged(
+                    "gcp", 8.0, "qcm", rid="stale-other-day", day=other_day
+                ),
+                _tagged("aws", 7.0, "qcm", rid="stale"),
+            ],
+        )
+        for row in db.scalars(select(CostLineItem)):
+            row.x_ingested_at = old
+        db.commit()
+    monkeypatch.setattr(gcp_focus, "enabled", lambda: True)
+    monkeypatch.setattr(gcp_focus, "fetch_lines", lambda *a: [fresh])
+
+    ingest.ingest_once(TODAY)
+
+    with wired() as db:
+        kept = {
+            (r.x_source, r.resource_id)
+            for r in db.scalars(select(CostLineItem))
+        }
+    assert ("gcp_focus", "stale") not in kept
+    assert ("gcp_focus", "fresh") in kept
+    assert ("gcp_focus", "stale-other-day") in kept
+    assert ("aws_focus", "stale") in kept

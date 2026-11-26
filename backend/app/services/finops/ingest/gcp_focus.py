@@ -103,7 +103,14 @@ UNION ALL
 SELECT
   FORMAT_DATE('%F', DATE(usage_start_time)) AS Day,
   service.description AS ServiceName,
-  'Other' AS ServiceCategory,
+  CASE service.description
+    WHEN 'Compute Engine' THEN 'Compute'
+    WHEN 'Kubernetes Engine' THEN 'Compute'
+    WHEN 'Cloud Storage' THEN 'Storage'
+    WHEN 'BigQuery' THEN 'Analytics'
+    WHEN 'Networking' THEN 'Networking'
+    ELSE 'Other'
+  END AS ServiceCategory,
   'Credit' AS ChargeCategory,
   IFNULL(resource.global_name, IFNULL(resource.name, '')) AS ResourceId,
   IFNULL(ANY_VALUE(resource.name), '') AS ResourceName,

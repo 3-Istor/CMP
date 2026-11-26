@@ -9,7 +9,7 @@ import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
@@ -199,8 +199,21 @@ def _ingest_cloud_billing(
         if not is_enabled:
             continue
         try:
+            started = datetime.now(timezone.utc).replace(tzinfo=None)
             lines = module.fetch_lines(today, window, since, rate_for)
             written[f"{cloud}_focus"] += upsert(db, lines)
+            # Lines this pass no longer produces (e.g. a dropped project),
+            # only on days it did produce lines for.
+            db.execute(
+                delete(CostLineItem).where(
+                    CostLineItem.x_source == f"{cloud}_focus",
+                    CostLineItem.charge_period_start.in_(
+                        {line.charge_period_start for line in lines}
+                    ),
+                    CostLineItem.x_ingested_at < started,
+                )
+            )
+            db.commit()
             written[f"{cloud}_split"] += split.split_cloud(
                 db, cloud, {line.charge_period_start.date() for line in lines}
             )
