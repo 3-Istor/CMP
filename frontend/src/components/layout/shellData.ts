@@ -46,8 +46,10 @@ export interface PageEntry {
   isActive: (pathname: string) => boolean;
   /** Shown only to members of one of these platform groups. */
   platformRoles?: string[];
-  /** Hidden from finops and guest-only users: needs a member+ project, infra or auditor. */
+  /** Hidden from finops and guest-only users: needs a member+ project or infra. */
   needsMemberProject?: true;
+  /** security-auditor sees it without a project role. */
+  auditorSees?: true;
 }
 
 export function isPageVisible(
@@ -60,7 +62,7 @@ export function isPageVisible(
     !page.needsMemberProject ||
     ctx.hasMemberProject ||
     roles.includes("infra") ||
-    roles.includes("security-auditor")
+    (!!page.auditorSees && roles.includes("security-auditor"))
   );
 }
 
@@ -101,6 +103,7 @@ export const PLATFORM_PAGES: PageEntry[] = [
     icon: Shield,
     isActive: (pathname) => pathname.startsWith("/security"),
     needsMemberProject: true,
+    auditorSees: true,
   },
   {
     key: "activity",
@@ -108,6 +111,7 @@ export const PLATFORM_PAGES: PageEntry[] = [
     icon: History,
     isActive: (pathname) => pathname.startsWith("/activity"),
     needsMemberProject: true,
+    auditorSees: true,
   },
   {
     key: "alerts",
@@ -115,18 +119,21 @@ export const PLATFORM_PAGES: PageEntry[] = [
     icon: BellRing,
     isActive: (pathname) => pathname.startsWith("/alerts"),
     needsMemberProject: true,
+    auditorSees: true,
   },
   {
     key: "agents",
     href: "/agents",
     icon: Bot,
     isActive: (pathname) => pathname === "/agents" || pathname.includes("/ai/agents/"),
+    needsMemberProject: true,
   },
   {
     key: "assistants",
     href: "/connect-ai",
     icon: Plug,
     isActive: (pathname) => pathname.startsWith("/connect-ai"),
+    needsMemberProject: true,
   },
   {
     key: "access",
