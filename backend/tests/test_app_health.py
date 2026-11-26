@@ -75,16 +75,16 @@ def _deployment(app_type="static", provider=ProviderType.KUBERNETES):
 
 
 def _cluster(pods=(), rs=(), schedules=(), apps=(), sts=()):
-    """kube_list answers keyed on the API path; per-component for fullstack."""
+    """kube_list answers keyed on the API path, like the real namespace list."""
 
     def kube_list(path, params=None, cloud=None):
-        selector = (params or {}).get("labelSelector", "")
+        suffix = "-stg" if "-stg/" in path else ""
         if path.endswith("/pods"):
-            return [p for p in pods if _wanted(p, selector)]
+            return _labelled(pods, suffix)
         if path.endswith("/replicasets"):
-            return [r for r in rs if _wanted(r, selector)]
+            return _labelled(rs, suffix)
         if path.endswith("/statefulsets"):
-            return list(sts)
+            return _labelled(sts, suffix)
         if path.endswith("/offhoursschedules"):
             return list(schedules)
         return list(apps)
@@ -92,9 +92,16 @@ def _cluster(pods=(), rs=(), schedules=(), apps=(), sts=()):
     return kube_list
 
 
-def _wanted(item, selector):
-    owner = item.get("component")
-    return owner is None or selector.endswith(f"-{owner}")
+def _labelled(items, suffix=""):
+    """Items without a component belong to every component of the app."""
+    out = []
+    for item in items:
+        owner = item.get("component")
+        for o in [owner] if owner else ("app", "frontend", "backend"):
+            labels = {"app.kubernetes.io/instance": f"shop-web-{o}{suffix}"}
+            meta = {**item.get("metadata", {}), "labels": labels}
+            out.append({**item, "metadata": meta})
+    return out
 
 
 def _vm(restarts):
@@ -144,12 +151,7 @@ def test_staging_health_reads_the_staging_namespace_and_applications():
         app_health._read_app_health(_deployment(), NOW, "staging")
 
     pods = [c for c in calls if c[0].endswith("/pods")]
-    assert pods == [
-        (
-            "/api/v1/namespaces/shop-web-stg/pods",
-            "app.kubernetes.io/instance=shop-web-app-stg",
-        )
-    ]
+    assert pods == [("/api/v1/namespaces/shop-web-stg/pods", None)]
     assert not any(
         "/shop-web/" in c[0] or c[0].endswith("shop-web") for c in calls
     )
@@ -573,3 +575,44 @@ def test_a_statefulset_scaled_to_zero_is_not_unknown():
 
     # Assert
     assert (health.status, _only(health).reason) == ("down", "scaled_to_zero")
+
+
+def test_namespace_is_listed_once_per_kind_whatever_the_components():
+    calls = []
+    inner = _cluster(
+        pods=[
+            {**_pod("fe"), "component": "frontend"},
+            {**_pod("be"), "component": "backend"},
+        ],
+        rs=[
+            {**_rs(1), "component": "frontend"},
+            {**_rs(2), "component": "backend"},
+        ],
+    )
+    foreign = {
+        "metadata": {
+            "name": "db-job",
+            "labels": {"app.kubernetes.io/instance": "other"},
+        }
+    }
+
+    def kube_list(path, params=None, cloud=None):
+        calls.append(path)
+        items = inner(path, params, cloud)
+        return items + [foreign] if path.endswith("/pods") else items
+
+    with mock.patch.object(app_health, "kube_list", kube_list):
+        observed, _ = app_health._observe(
+            "shop",
+            "web",
+            ["frontend", "backend"],
+            app_health.TargetCloud.ONPREM,
+        )
+
+    # 3 kinds + schedules, not 3 per component.
+    assert len(calls) == 4
+    names = {
+        c: [p["metadata"]["name"] for p in o.pods] for c, o in observed.items()
+    }
+    assert names == {"frontend": ["fe"], "backend": ["be"]}
+    assert [len(o.replica_sets) for o in observed.values()] == [1, 1]

@@ -392,6 +392,13 @@ def _project_roles_from_groups(groups: list[dict]) -> dict[str, ProjectRole]:
 _LISTING_TTL = 15
 _listing_cache: dict[str, tuple[list[dict], float]] = {}
 
+# Every authorization check reads the role; a page fires 8-15 of them.
+# add/remove_user_from_project drop it, so a change made through the CMP is
+# seen at once; a change made in the Keycloak console waits out the TTL.
+# Per process: with several replicas, only the TTL bounds the others.
+_ROLE_TTL = _LISTING_TTL
+_role_cache: dict[str, tuple[dict[str, ProjectRole], float]] = {}
+
 
 def fetch_user_projects_live(user_id: str) -> list[dict]:
     """
@@ -452,8 +459,13 @@ def get_user_project_role(
         requests.RequestException: If Keycloak is unreachable, callers turn
             it into a 503 rather than a misleading 403.
     """
-    groups = _fetch_user_groups_or_raise(user_id)
-    return _project_roles_from_groups(groups).get(project_name)
+    cached = _role_cache.get(user_id)
+    if cached and cached[1] > time.monotonic():
+        return cached[0].get(project_name)
+    # A Keycloak error raises before this line: failures are never cached.
+    roles = _project_roles_from_groups(_fetch_user_groups_or_raise(user_id))
+    _role_cache[user_id] = (roles, time.monotonic() + _ROLE_TTL)
+    return roles.get(project_name)
 
 
 def add_user_to_project(username: str, project_name: str, role: str) -> None:
@@ -514,6 +526,7 @@ def add_user_to_project(username: str, project_name: str, role: str) -> None:
     )
     response.raise_for_status()
     _listing_cache.clear()
+    _role_cache.clear()
 
     logger.info(
         "Added user '%s' to group '%s' (role: %s)", username, group_name, role
@@ -589,6 +602,7 @@ def remove_user_from_project(username: str, project_name: str) -> None:
     finally:
         # Also on a partial failure: some groups may already be gone.
         _listing_cache.clear()
+        _role_cache.clear()
 
 
 def project_guests_supported(project_name: str) -> bool:

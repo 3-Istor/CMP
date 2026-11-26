@@ -9,6 +9,8 @@ desired replica count of its workload in an annotation.
 import asyncio
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -29,6 +31,7 @@ from app.services.metrics_isolation import VMSELECT, cluster_filter
 
 logger = logging.getLogger(__name__)
 
+INSTANCE_LABEL = "app.kubernetes.io/instance"
 SLOW_ROLLOUT = timedelta(minutes=5)
 RESTART_THRESHOLD = 3
 SLEEPING_STATES = {"SLEEPING", "MANUAL_SLEEP"}
@@ -225,36 +228,48 @@ def _argocd_applications(
     }
 
 
+def _by_instance(items: list[dict[str, Any]]) -> dict[str, list]:
+    grouped: dict[str, list] = {}
+    for item in items:
+        labels = item.get("metadata", {}).get("labels") or {}
+        grouped.setdefault(labels.get(INSTANCE_LABEL), []).append(item)
+    return grouped
+
+
 def _observe(
     project: str,
     app: str,
     components: list[str],
     cloud: TargetCloud,
     environment: layout.Environment = "prod",
+    pool: ThreadPoolExecutor | None = None,
 ) -> tuple[dict[str, _Observed], list[dict[str, Any]]]:
     namespace = layout.namespace(project, app, environment)
+    # One list per kind for the whole namespace, split by component below.
+    with ThreadPoolExecutor(4) if pool is None else nullcontext(pool) as ex:
+        futures = [
+            ex.submit(kube_list, path, cloud=cloud)
+            for path in (
+                f"/api/v1/namespaces/{namespace}/pods",
+                f"/apis/apps/v1/namespaces/{namespace}/replicasets",
+                f"/apis/apps/v1/namespaces/{namespace}/statefulsets",
+                SCHEDULES_PATH.format(namespace),
+            )
+        ]
+        pods, replica_sets, stateful_sets, schedules = (
+            f.result() for f in futures
+        )
+    pods, replica_sets, stateful_sets = map(
+        _by_instance, (pods, replica_sets, stateful_sets)
+    )
     observed = {}
     for component in components:
-        selector = {
-            "labelSelector": "app.kubernetes.io/instance="
-            + layout.application(project, app, component, environment)
-        }
+        name = layout.application(project, app, component, environment)
         observed[component] = _Observed(
-            pods=kube_list(
-                f"/api/v1/namespaces/{namespace}/pods", selector, cloud=cloud
-            ),
-            replica_sets=kube_list(
-                f"/apis/apps/v1/namespaces/{namespace}/replicasets",
-                selector,
-                cloud=cloud,
-            ),
-            stateful_sets=kube_list(
-                f"/apis/apps/v1/namespaces/{namespace}/statefulsets",
-                selector,
-                cloud=cloud,
-            ),
+            pods=pods.get(name, []),
+            replica_sets=replica_sets.get(name, []),
+            stateful_sets=stateful_sets.get(name, []),
         )
-    schedules = kube_list(SCHEDULES_PATH.format(namespace), cloud=cloud)
     return observed, schedules
 
 
@@ -268,11 +283,20 @@ def _read_app_health(
     components = layout.components(gitops.app_type(deployment))
     cloud_name = gitops.target_cloud(deployment)
     cloud = TargetCloud(cloud_name)
+    # Independent reads run in parallel; both swallow their own errors.
+    pool = ThreadPoolExecutor(6)
+    applications_f = pool.submit(_argocd_applications, project, app)
+    restarts_f = pool.submit(
+        _restarts_by_pod,
+        layout.namespace(project, app, environment),
+        cloud_name,
+    )
     try:
         observed, schedules = _observe(
-            project, app, components, cloud, environment
+            project, app, components, cloud, environment, pool
         )
     except (ClusterNotConnectedError, KubeUnavailableError) as exc:
+        pool.shutdown(wait=False)
         logger.warning("Cluster of %s/%s not reachable: %s", project, app, exc)
         return monitoring_service.AppHealthResponse(
             deployment_name=app,
@@ -288,10 +312,9 @@ def _read_app_health(
         )
 
     sleeping = _sleeping_targets(schedules)
-    applications = _argocd_applications(project, app)
-    restarts = _restarts_by_pod(
-        layout.namespace(project, app, environment), cloud_name
-    )
+    applications = applications_f.result()
+    restarts = restarts_f.result()
+    pool.shutdown()
     results = []
     for component in components:
         data = observed[component]

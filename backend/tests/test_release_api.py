@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest import mock
@@ -973,3 +974,47 @@ def test_a_canary_row_left_running_closes_as_unknown_once_the_rollout_is_gone(
     assert [(r["outcome"], r["live_seconds"]) for r in rows] == [
         ("unknown", None)
     ]
+
+
+def test_choices_read_tags_and_head_concurrently(
+    session_factory, keycloak, github
+):
+    async def tags(*_):
+        await asyncio.sleep(0.2)
+        return ["v1.0.0"]
+
+    async def head(*_):
+        await asyncio.sleep(0.2)
+        return "abc", "msg"
+
+    github.list_tags.side_effect = tags
+    github.head_commit.side_effect = head
+    client = _client(session_factory, FakeSource(None))
+
+    start = time.monotonic()
+    response = client.get("/api/deployments/7/release/choices")
+
+    assert response.status_code == 200
+    assert time.monotonic() - start < 0.35
+
+
+def test_load_all_reads_the_values_files_concurrently():
+    async def slow(token, repo, path):
+        await asyncio.sleep(0.2)
+        return {"p": path}, f"sha-{path}"
+
+    with (
+        mock.patch.object(releases, "_load_values_file", slow),
+        mock.patch.object(releases, "_release_files", lambda d: ["a", "b"]),
+        mock.patch.object(
+            releases,
+            "_get_github_token_for_deployment",
+            mock.AsyncMock(return_value="gh"),
+        ),
+        mock.patch.object(releases, "_extract_repo_full_name", lambda d: "r"),
+    ):
+        start = time.monotonic()
+        _, _, loaded = asyncio.run(releases._load_all(mock.Mock()))
+
+    assert time.monotonic() - start < 0.35
+    assert loaded == [("a", {"p": "a"}, "sha-a"), ("b", {"p": "b"}, "sha-b")]

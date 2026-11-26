@@ -46,8 +46,9 @@ class CostProvider(ABC):
 
     @abstractmethod
     def summary(
-        self, apps: list[AppSpec], ref: date | None = None
-    ) -> dict: ...
+        self, apps: list[AppSpec], ref: date | None = None, savings=True
+    ) -> dict:
+        """``savings=False`` skips the recommendations (potential savings)."""
 
     @abstractmethod
     def month_to_date(
@@ -101,14 +102,23 @@ class SimulatedCostProvider(CostProvider):
     def month_to_date(self, apps, ref=None):
         return engine.month_to_date_cost(apps, ref or date.today())
 
-    def summary(self, apps, ref=None):
+    def summary(self, apps, ref=None, savings=True):
         ref = ref or date.today()
         mtd = engine.month_to_date_cost(apps, ref)
         prev = engine.previous_month_cost(apps, ref)
         projected = engine.projected_month_cost(apps, ref)
         trend_pct = round((mtd - prev) / prev * 100, 1) if prev > 0 else None
-        recs = self.recommendations(apps, ref)
-        potential = round(sum(r.monthly_saving_eur for r in recs), 2)
+        potential = (
+            round(
+                sum(
+                    r.monthly_saving_eur
+                    for r in self.recommendations(apps, ref)
+                ),
+                2,
+            )
+            if savings
+            else None
+        )
         return {
             "month_to_date_eur": mtd,
             "projected_month_eur": projected,
@@ -477,7 +487,7 @@ class RealCostProvider(CostProvider):
                 totals[cloud] = round(-(amount or 0.0), 2)
         return totals
 
-    def summary(self, apps, ref=None):
+    def summary(self, apps, ref=None, savings=True):
         ref = ref or date.today()
         first = ref.replace(day=1)
         last_prev = first - timedelta(days=1)
@@ -490,7 +500,7 @@ class RealCostProvider(CostProvider):
             ).values()
         )
         projected = mtd / len(days) * _days_in_month(ref) if days else 0.0
-        recs = self.recommendations(apps, ref)
+        recs = self.recommendations(apps, ref) if savings else None
         return {
             "month_to_date_eur": round(mtd, 2),
             "projected_month_eur": round(projected, 2),
@@ -499,8 +509,10 @@ class RealCostProvider(CostProvider):
                 round((mtd - prev) / prev * 100, 1) if prev > 0 else None
             ),
             "breakdown": self.breakdown(apps, ref),
-            "potential_savings_eur": round(
-                sum(r.monthly_saving_eur for r in recs), 2
+            "potential_savings_eur": (
+                round(sum(r.monthly_saving_eur for r in recs), 2)
+                if recs is not None
+                else None
             ),
             "app_count": len(apps),
             "currency": pricing.CURRENCY,

@@ -423,8 +423,10 @@ async def _choices(
             if binding is None
             else await _get_github_token_for_deployment(deployment)
         )
-        tags = await repo_ops.list_tags(token, repo)
-        sha, message = await repo_ops.head_commit(token, repo, branch)
+        tags, (sha, message) = await asyncio.gather(
+            repo_ops.list_tags(token, repo),
+            repo_ops.head_commit(token, repo, branch),
+        )
     except (gitops.GitOpsError, GitHubAppError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     staging = await run_in_threadpool(
@@ -513,10 +515,11 @@ async def _load_all(
 ) -> tuple[str, str, list[tuple[str, Any, str]]]:
     gh_token = await _get_github_token_for_deployment(deployment)
     repo = _extract_repo_full_name(deployment)
-    loaded = []
-    for file_path in _release_files(deployment):
-        values, sha = await _load_values_file(gh_token, repo, file_path)
-        loaded.append((file_path, values, sha))
+    files = _release_files(deployment)
+    results = await asyncio.gather(
+        *(_load_values_file(gh_token, repo, f) for f in files)
+    )
+    loaded = [(f, values, sha) for f, (values, sha) in zip(files, results)]
     return gh_token, repo, loaded
 
 

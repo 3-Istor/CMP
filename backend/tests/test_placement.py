@@ -144,7 +144,13 @@ def client(monkeypatch):
     monkeypatch.setattr(
         placement, "kube_list", FakeKube(down={TargetCloud.AWS})
     )
-    monkeypatch.setattr(placement, "fresh_state", lambda cloud: "up")
+    monkeypatch.setattr(placement, "cached_state", lambda cloud: "up")
+
+    async def states():
+        return {}
+
+    monkeypatch.setattr(placement, "cluster_states", states)
+    monkeypatch.setattr(router, "cluster_states", states)
 
     async def records():
         return [
@@ -158,7 +164,9 @@ def client(monkeypatch):
             {"metadata": {"name": "home"}, "spec": {"targetCloud": "onprem"}},
         ]
 
-    monkeypatch.setattr(placement.project_registry, "list_records", records)
+    monkeypatch.setattr(
+        placement.project_registry, "list_records_cached", records
+    )
     monkeypatch.setattr(
         placement, "visible_app_counts", lambda db: {"demo": 1}
     )
@@ -367,7 +375,6 @@ def test_iot_on_prem_project(client, monkeypatch):
         return []
 
     monkeypatch.setattr(placement, "kube_list", read)
-    monkeypatch.setattr(placement, "fresh_state", lambda cloud: "up")
     body = client.get("/api/projects/iot/placement").json()
     onprem = next(c for c in body["clusters"] if c["cloud"] == "onprem")
 
@@ -421,3 +428,27 @@ def test_app_count_is_the_cmp_apps_not_the_registry_entries():
 
     # Assert
     assert counts == {"demo": 1}
+
+
+def test_placement_never_probes_a_cloud_and_lists_nodes_once(
+    client, monkeypatch
+):
+    # A live probe waits up to 3 s per powered-off cloud, on a 5 s poll.
+    def probe(cloud):
+        raise AssertionError(f"live probe of {cloud}")
+
+    monkeypatch.setattr(placement, "fresh_state", probe, raising=False)
+    kube = FakeKube(down={TargetCloud.AWS})
+    calls = []
+
+    def read(path, params=None, cloud=TargetCloud.ONPREM):
+        calls.append((path, cloud))
+        return kube(path, params, cloud)
+
+    monkeypatch.setattr(placement, "kube_list", read)
+
+    assert client.get("/api/placement").status_code == 200
+    assert client.get("/api/projects/demo/placement").status_code == 200
+    node_reads = [c for c in calls if c[0] == "/api/v1/nodes"]
+    # /placement once per cloud, then the project panel once per cloud.
+    assert len(node_reads) == 2 * len(placement.CLOUDS)
