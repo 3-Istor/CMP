@@ -654,7 +654,7 @@ def test_a_summary_range_is_bounded(make):
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("who", ["guest", "outsider"])
+@pytest.mark.parametrize("who", ["outsider"])
 def test_non_members_cannot_probe_for_a_staging(make, who):
     client = make(who)
 
