@@ -29,13 +29,13 @@ from app.routers.observability import SloRead, slo_read
 from app.services import alerts_grafana
 from app.services import app_overview as overview
 from app.services import links
-from app.services.environments import layout, runs
 from app.services.authz import (
     RequireMember,
     assert_project_role,
     is_cnp_admin,
     is_finops,
 )
+from app.services.environments import layout, runs
 from app.services.grafana_service import GRAFANA_BASE_URL
 from app.services.keycloak_service import get_current_user
 from app.services.observability import (
