@@ -15,7 +15,8 @@ from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.routers import alerting, app_observability, app_overview
 from app.models.security import SecurityException
-from app.routers import deployments, finops, imports, projects, releases, security
+from app.routers import deployments, environments, finops, imports, projects
+from app.routers import releases, security
 from app.services.security.model import Tier
 from app.services import app_overview as overview
 from app.services import keycloak_service
@@ -72,6 +73,8 @@ ROWS = {  # under /api
     f"{APP}/observability/costs": (OK, OK, OK, OK, OK, OK, OK, NO),
     f"{APP}/security-data": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{APP}/release/settings": (OK, OK, NO, OK, OK, OK, NO, NO),
+    f"{APP}/environments": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/environments/diff": (OK, OK, NO, OK, OK, OK, OK, NO),
     f"{PRJ}/imports": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{PRJ}/imports/recommendations": (OK, OK, NO, OK, OK, OK, NO, NO),
     "/security/summary?project=shop": (OK, OK, NO, OK, OK, OK, NO, NO),
@@ -274,7 +277,8 @@ def world(monkeypatch):
 def client(world):
     app = FastAPI()
     for module in (
-        projects, deployments, app_overview, imports, alerting, releases
+        projects, deployments, app_overview, imports, alerting, releases,
+        environments,
     ):
         app.include_router(module.router, prefix="/api")
     app.include_router(app_observability.router, prefix="/api")
