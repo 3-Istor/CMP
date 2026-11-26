@@ -26,12 +26,15 @@ export type Capability =
   | "project.protect"
   | "project.export"
   | "project.move"
+  | "app.view"
+  | "app.list"
   | "app.deploy"
   | "app.operate"
   | "app.pause"
   | "app.delete"
   | "app.editIcon"
   | "app.viewLogs"
+  | "app.viewTraces"
   | "app.viewConfig"
   | "app.editConfig"
   | "app.viewSecretsLink"
@@ -46,11 +49,15 @@ export type Capability =
   | "finops.editBudget"
   | "agents.configure"
   | "ai.configure"
+  | "ai.view"
   | "agent.manage"
   | "topology.view"
   | "topology.link"
+  | "import.view"
   | "import.manage"
-  | "security.manage";
+  | "security.view"
+  | "security.manage"
+  | "alerts.view";
 
 /**
  * The weakest role that holds each capability.
@@ -64,16 +71,19 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "project.protect": "admin",
   "project.export": "owner",
   "project.move": "admin",
+  "app.view": "guest",
+  "app.list": "guest",
   "app.deploy": "admin",
   "app.operate": "member",
   "app.pause": "admin",
   "app.delete": "admin",
   "app.editIcon": "member",
   "app.viewLogs": "member",
+  "app.viewTraces": "member",
   "app.viewConfig": "member",
   "app.editConfig": "admin",
   "app.viewSecretsLink": "admin",
-  "app.viewObservability": "member",
+  "app.viewObservability": "guest",
   "release.view": "guest",
   "release.operate": "member",
   "release.configure": "admin",
@@ -85,12 +95,16 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "agents.configure": "admin",
   // Mirrors the ai.configure, agent.create/update/suspend/delete stake actions.
   "ai.configure": "admin",
+  "ai.view": "member",
   "agent.manage": "admin",
   // Mirrors backend routers/topology.py and routers/imports.py.
   "topology.view": "member",
   "topology.link": "admin",
+  "import.view": "member",
   "import.manage": "admin",
+  "security.view": "member",
   "security.manage": "admin",
+  "alerts.view": "member",
 };
 
 /**
