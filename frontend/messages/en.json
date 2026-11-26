@@ -446,6 +446,9 @@
       "weekly": "Weekly",
       "monthly": "Monthly"
     },
+    "cloudSplit": {
+      "credits": "credits −{amount}"
+    },
     "overview": {
       "exportCsv": "Export CSV",
       "exportDisabled": "Export is only available with actual costs.",

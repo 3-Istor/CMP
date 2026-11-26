@@ -166,6 +166,7 @@ export function FinopsOverviewDashboard({
             <CardContent>
               <CloudSplit
                 byCloud={data.by_cloud}
+                creditsByCloud={data.credits_by_cloud}
                 currency={data.summary.currency}
               />
             </CardContent>

@@ -2,8 +2,8 @@
 AWS Data Exports, "FOCUS 1.2 with AWS columns", read from S3 as Parquet.
 
 Layout under ``FINOPS_AWS_EXPORT_PREFIX`` (the export root):
-``metadata/BILLING_PERIOD=YYYY-MM/<name>-Manifest.json`` lists the data files
-of the latest delivery of that period, ``data/BILLING_PERIOD=YYYY-MM/`` holds
+``metadata/billing_period=YYYY-MM/<name>-Manifest.json`` lists the data files
+of the latest delivery of that period, ``data/billing_period=YYYY-MM/`` holds
 them. Older deliveries can still be present, so only the files named by the
 newest manifest are read.
 """
@@ -83,8 +83,13 @@ def _key(*parts: str) -> str:
     return "/".join(p for p in (_root(), *parts) if p)
 
 
+def object_key(bucket: str, entry: str) -> str:
+    """Manifest dataFiles hold full s3://<bucket>/<key> URIs."""
+    return entry.removeprefix(f"s3://{bucket}/")
+
+
 def latest_manifest(s3, bucket: str, period: str) -> dict | None:
-    prefix = _key("metadata", f"BILLING_PERIOD={period}") + "/"
+    prefix = _key("metadata", f"billing_period={period}") + "/"
     newest = None
     pages = s3.get_paginator("list_objects_v2").paginate(
         Bucket=bucket, Prefix=prefix
@@ -171,8 +176,8 @@ def fetch_lines(
         if manifest is None:
             logger.info("FinOps: no AWS export manifest for %s yet", period)
             continue
-        for key in manifest.get("dataFiles", []):
-            _read_parquet(s3, bucket, key, aggregator)
+        for entry in manifest.get("dataFiles", []):
+            _read_parquet(s3, bucket, object_key(bucket, entry), aggregator)
     return aggregator.lines(
         source=SOURCE,
         provider_name=PROVIDER,
