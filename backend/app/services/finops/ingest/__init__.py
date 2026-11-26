@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models.finops import CostLineItem
+from app.models.finops import CostLineItem, MonthClose
 from app.services.activity_sources import namespace_projects
 from app.services.finops.ingest import (
     ai_gateway,
@@ -211,6 +211,9 @@ def _ingest_cloud_billing(
                         {line.charge_period_start for line in lines}
                     ),
                     CostLineItem.x_ingested_at < started,
+                    CostLineItem.billing_period.not_in(
+                        select(MonthClose.billing_period)
+                    ),
                 )
             )
             db.commit()
