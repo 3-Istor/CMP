@@ -43,6 +43,11 @@ const nextConfig: NextConfig = {
         permanent: false,
       })),
       { source: `${app}/config`, destination: `${app}/settings`, permanent: false },
+      ...["/placement", "/emergency"].map((source) => ({
+        source,
+        destination: "/clusters",
+        permanent: false,
+      })),
       ...["activity", "alerts"].map((tab) => ({
         source: `${app}/${tab}`,
         destination: `/projects/:project/${tab}?app=:app`,

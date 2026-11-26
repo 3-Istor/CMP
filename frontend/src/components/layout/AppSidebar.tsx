@@ -8,7 +8,7 @@ import {
   SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useSecurityOverview } from "@/lib/hooks";
+import { useGlobalHealth, useSecurityOverview } from "@/lib/hooks";
 import { usePlatformRoles } from "@/lib/usePlatformRoles";
 import { cn } from "@/lib/utils";
 import {
@@ -133,6 +133,9 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
   const hasCoreAlert = security.some((s) => s.core > 0);
   const projectName = projectFromPath(pathname);
   const platformRoles = usePlatformRoles();
+  const isInfra = platformRoles.includes("infra");
+  const { health } = useGlobalHealth(isInfra ? 30_000 : 0);
+  const clusterDown = isInfra && !!health?.clusters.some((c) => c.state !== "up");
 
   useEffect(() => {
     if (projectName) recordRecentProject(projectName);
@@ -157,8 +160,8 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
       collapsed={collapsed}
       label={t(page.key)}
       count={counts[page.key]}
-      alert={page.key === "security" && hasCoreAlert}
-      alertLabel={t("securityAlert")}
+      alert={(page.key === "security" && hasCoreAlert) || (page.key === "clusters" && clusterDown)}
+      alertLabel={t(page.key === "clusters" ? "clustersAlert" : "securityAlert")}
       onNavigate={onNavigate}
     />
   );
