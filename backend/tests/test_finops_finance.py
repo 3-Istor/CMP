@@ -444,6 +444,59 @@ def test_credits_are_their_own_row_never_a_project():
     ]
 
 
+def test_month_lines_count_split_cloud_nodes_once(factory):
+    split_day, unsplit_day = datetime(2026, 9, 10), datetime(2026, 9, 11)
+    aws = {"provider_name": "AWS", "cloud": "aws", "app": None}
+    with factory() as db:
+        upsert(
+            db,
+            [
+                _line(
+                    "__cluster__",
+                    10.0,
+                    split_day,
+                    "i-1",
+                    x_source="aws_focus",
+                    **aws,
+                ),
+                _line(
+                    "__cluster__",
+                    4.0,
+                    unsplit_day,
+                    "i-1",
+                    x_source="aws_focus",
+                    **aws,
+                ),
+                _line(
+                    "qcm",
+                    10.0,
+                    split_day,
+                    "aws-split/qcm-api",
+                    x_source="aws_split",
+                    **aws,
+                ),
+            ],
+        )
+        lines = finance.month_lines(db, "2026-09")
+
+    assert finance.provider_sums(lines) == [("AWS", 14.0)]
+    assert finance.totals_by_project(lines) == [
+        ("qcm", 10.0),
+        ("(non alloué)", 4.0),
+    ]
+    assert finance.unallocated_pct(lines) == round(4 / 14 * 100, 1)
+
+
+def test_credits_do_not_inflate_the_unallocated_share():
+    lines = [
+        CostLineItem(project="qcm", x_cost_eur=8.0),
+        CostLineItem(project=None, x_cost_eur=2.0),
+        CostLineItem(project="__credits__", x_cost_eur=-5.0),
+    ]
+
+    assert finance.unallocated_pct(lines) == 20.0
+
+
 # ── month close ───────────────────────────────────────────────────────────────
 
 

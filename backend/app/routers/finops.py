@@ -92,6 +92,7 @@ from app.services.finops import (
 )
 from app.services.finops.forecast import forecast_for_apps
 from app.services.finops.ingest import carbon, fx
+from app.services.finops.ingest.split import split_source
 from app.services.finops.provider import (
     REAL_RESOURCES,
     get_cost_provider,
@@ -322,7 +323,7 @@ def get_overview(
             db.scalars(
                 select(CostLineItem.resource_name)
                 .where(
-                    CostLineItem.x_source == f"{cloud}_split",
+                    CostLineItem.x_source == split_source(cloud),
                     CostLineItem.charge_period_start
                     >= datetime.combine(start, datetime.min.time()),
                     CostLineItem.charge_period_start

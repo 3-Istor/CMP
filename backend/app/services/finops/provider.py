@@ -313,9 +313,11 @@ class RealCostProvider(CostProvider):
         return fees
 
     def _days(
-        self, apps, start: date, end: date, cluster=None
+        self, apps, start: date, end: date, cluster=None, lines=None
     ) -> dict[date, dict[str, float]]:
-        days = self._daily(self._lines(apps, start, end))
+        if lines is None:
+            lines = self._lines(apps, start, end)
+        days = self._daily(lines)
         if not any(a.namespace for a in apps):
             return days
         cluster = (
@@ -501,7 +503,8 @@ class RealCostProvider(CostProvider):
             else {}
         )
         for app in apps:
-            days = self._days([app], first, ref, cluster)
+            lines = self._lines([app], first, ref)
+            days = self._days([app], first, ref, cluster, lines)
             totals = {d: sum(slot.values()) for d, slot in days.items()}
             ordered = sorted(totals)
             latest = totals[ordered[-1]] if ordered else 0.0
@@ -530,10 +533,7 @@ class RealCostProvider(CostProvider):
                         if before > 0
                         else None
                     ),
-                    # ponytail: second query per app, fold into _days if slow
-                    "estimated": any(
-                        line[-1] for line in self._lines([app], first, ref)
-                    ),
+                    "estimated": any(line[-1] for line in lines),
                 }
             )
         rows.sort(key=lambda r: r["cost_month_estimate_eur"], reverse=True)

@@ -26,7 +26,7 @@ from app.models.finops import (
     SavingsEntry,
 )
 from app.services.finops import platform
-from app.services.finops.ingest.focus import CREDITS
+from app.services.finops.ingest.focus import CLUSTER, CREDITS
 from app.services.finops.provider import resource_of
 
 PERIOD_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
@@ -95,13 +95,15 @@ def nature(line: CostLineItem) -> str:
 
 
 def is_unallocated(project: str | None) -> bool:
-    return not project or project in _NOT_A_PROJECT
+    return not project or project in _NOT_A_PROJECT or project == CLUSTER
 
 
 def project_label(project: str | None) -> str:
     """Row name of a project; credits get their own row, never a project's."""
     if project == CREDITS:
         return "(crédits)"
+    if project == CLUSTER:
+        return "(non alloué)"
     return project or "(non alloué)"
 
 
@@ -111,15 +113,31 @@ def project_label(project: str | None) -> str:
 def month_lines(
     db: Session, period: str, projects: list[str] | None = None
 ) -> list[CostLineItem]:
-    """Lines of *period*; ``projects`` restricts them, None means all."""
+    """
+    Lines of *period*; ``projects`` restricts them, None means all. Cloud
+    node lines of a split day are dropped: the split lines replace them.
+    """
     query = select(CostLineItem).where(CostLineItem.billing_period == period)
     if projects is not None:
         query = query.where(CostLineItem.project.in_(projects))
-    return list(
+    lines = list(
         db.scalars(
             query.order_by(CostLineItem.charge_period_start, CostLineItem.id)
         )
     )
+    replaced = {
+        (line.cloud, line.charge_period_start)
+        for line in lines
+        if line.x_source.endswith("_split")
+    }
+    return [
+        line
+        for line in lines
+        if not (
+            line.project == CLUSTER
+            and (line.cloud, line.charge_period_start) in replaced
+        )
+    ]
 
 
 def month_savings(
@@ -185,6 +203,7 @@ def provider_sums(lines: list[CostLineItem]) -> list[tuple[str, float]]:
 
 
 def unallocated_pct(lines: list[CostLineItem]) -> float:
+    lines = [line for line in lines if line.project != CREDITS]
     total = sum(line.x_cost_eur or 0.0 for line in lines)
     if total <= 0:
         return 0.0
