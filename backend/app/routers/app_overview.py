@@ -72,8 +72,11 @@ def _kubernetes_app(
     token: dict,
     deployment_id: int,
     env: layout.Environment = "prod",
+    cap: str | None = None,
 ) -> tuple[Deployment, overview.Scope]:
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.MEMBER, cap=cap
+    )
     if env == "staging" and not runs.staging_ready(db, deployment.id):
         raise HTTPException(status_code=404, detail="This app has no staging.")
     if deployment.provider_type != ProviderType.KUBERNETES:
@@ -105,7 +108,9 @@ async def get_app_metrics(
     db: Session = Depends(get_db),
 ) -> AppMetrics:
     """Request rate, 5xx share and CPU of the prod environment."""
-    _, scope = _kubernetes_app(db, token, deployment_id)
+    _, scope = _kubernetes_app(
+        db, token, deployment_id, cap="app.viewObservability"
+    )
     try:
         data = await overview.app_metrics(
             scope, window, datetime.now(timezone.utc)

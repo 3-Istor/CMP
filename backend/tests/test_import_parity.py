@@ -207,7 +207,7 @@ def test_staging_stays_refused_for_a_switched_import(
     with session_factory() as db, mock.patch.object(
         deployments_router,
         "_get_app_or_404",
-        lambda db, token, i, role: db.get(Deployment, i),
+        lambda db, token, i, role, cap=None: db.get(Deployment, i),
     ):
         with pytest.raises(deployments_router.HTTPException) as refused:
             deployments_router._get_kubernetes_deployment_or_404(
@@ -247,7 +247,7 @@ def test_secrets_of_an_import_are_checked_from_its_spec_without_github(
     with mock.patch.object(
         deployments_router,
         "_get_app_or_404",
-        lambda db, token, i, role: db.get(Deployment, i),
+        lambda db, token, i, role, cap=None: db.get(Deployment, i),
     ), mock.patch.object(
         vault_client, "read_key_names", mock.AsyncMock(return_value=[])
     ) as read:

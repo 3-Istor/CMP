@@ -154,15 +154,15 @@ class TestDeploymentListing:
         ):
             yield session_factory
 
-    def test_auditor_lists_every_app_without_its_outputs(self, apps):
+    def test_auditor_lists_every_app_with_its_outputs(self, apps):
         with apps() as db:
             listed = deployments.list_deployments(AUDITOR, db)
 
         assert [(d.name, d.terraform_outputs) for d in listed] == [
-            ("shop-db", None)
+            ("shop-db", json.dumps({"url": "https://shop"}))
         ]
 
-    def test_auditor_reads_no_staging_url_outside_its_projects(self, apps):
+    def test_auditor_reads_the_staging_url_of_every_app(self, apps):
         with apps() as db:
             db.add(
                 AppEnvironment(
@@ -176,13 +176,15 @@ class TestDeploymentListing:
             db.commit()
             listed = deployments.list_deployments(AUDITOR, db)
 
-        assert [d.staging_url for d in listed] == [None]
+        assert [d.staging_url for d in listed] == [
+            "https://shop-db-shop-staging.3istor.com/"
+        ]
 
-    def test_finops_sees_no_app_outside_its_projects(self, apps):
+    def test_finops_lists_every_app(self, apps):
         with apps() as db:
             listed = deployments.list_deployments(FINOPS, db)
 
-        assert listed == []
+        assert [d.name for d in listed] == ["shop-db"]
 
     def test_finops_holds_no_role_on_a_project(
         self, session_factory, no_project_groups
