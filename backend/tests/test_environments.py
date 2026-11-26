@@ -44,7 +44,10 @@ def _pod(
     image, image_id, ready=True, name="cnp-generic-app", status_image=None
 ):
     return {
-        "metadata": {"name": "p"},
+        "metadata": {
+            "name": "p",
+            "labels": {"app.kubernetes.io/instance": "shop-web-app-stg"},
+        },
         "spec": {"containers": [{"name": name, "image": image}]},
         "status": {
             "containerStatuses": [

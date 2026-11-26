@@ -5,6 +5,7 @@ counted over the same days, and the measured usage the recommendations read
 (recommendations_real) against what the app requests.
 """
 
+import asyncio
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -69,14 +70,18 @@ def _idle(request: float | None, used: float | None) -> float | None:
 async def app_costs(
     deployment: Deployment, scope: stores.Scope, now: datetime
 ) -> dict[str, Any]:
-    total, daily, recommendations = await run_in_threadpool(
-        _cost, deployment, now.date()
-    )
-    requests = None
     metrics = stores.capabilities()["metrics"]
-    if metrics:
-        requests = await signals.requests_over(scope, DAYS, now)
-    usage = await run_in_threadpool(_usage, scope)
+
+    async def requests_count() -> int | float | None:
+        return (
+            await signals.requests_over(scope, DAYS, now) if metrics else None
+        )
+
+    (total, daily, recommendations), requests, usage = await asyncio.gather(
+        run_in_threadpool(_cost, deployment, now.date()),
+        requests_count(),
+        run_in_threadpool(_usage, scope),
+    )
     return {
         "days": DAYS,
         "cost_eur": round(total, 4),

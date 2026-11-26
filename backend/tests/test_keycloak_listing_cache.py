@@ -10,8 +10,10 @@ GROUPS = [{"name": "project-demo-members"}]
 @pytest.fixture(autouse=True)
 def _clean():
     kc._listing_cache.clear()
+    kc._role_cache.clear()
     yield
     kc._listing_cache.clear()
+    kc._role_cache.clear()
 
 
 def test_listing_is_served_from_cache_within_the_ttl():
@@ -65,12 +67,64 @@ def test_keycloak_failure_is_not_cached():
     assert f.call_count == 2
 
 
-def test_role_lookup_is_never_cached():
+def test_role_is_served_from_cache_within_the_ttl():
     with mock.patch.object(
         kc, "_fetch_user_groups_or_raise", return_value=GROUPS
     ) as f:
-        kc.get_user_project_role("u1", "demo")
-        kc.get_user_project_role("u1", "demo")
+        assert kc.get_user_project_role("u1", "demo") == "member"
+        assert kc.get_user_project_role("u1", "demo") == "member"
+
+    assert f.call_count == 1
+
+
+def test_role_is_read_again_after_the_ttl():
+    with mock.patch.object(
+        kc, "_fetch_user_groups_or_raise", return_value=GROUPS
+    ) as f:
+        with mock.patch.object(kc.time, "monotonic", return_value=1000.0):
+            kc.get_user_project_role("u1", "demo")
+        with mock.patch.object(
+            kc.time, "monotonic", return_value=1000.0 + kc._ROLE_TTL + 1
+        ):
+            kc.get_user_project_role("u1", "demo")
+
+    assert f.call_count == 2
+
+
+@pytest.mark.parametrize("change", ["add", "remove"])
+def test_membership_change_drops_cached_roles(change):
+    fetch = mock.patch.object(
+        kc, "_fetch_user_groups_or_raise", return_value=GROUPS
+    )
+    with fetch as f:
+        assert kc.get_user_project_role("u1", "demo") == "member"
+        f.return_value = []  # the change below removed the membership
+        with (
+            mock.patch.object(kc, "_get_admin_token", return_value="t"),
+            mock.patch.object(
+                kc, "_find_user_by_username", return_value={"id": "u1"}
+            ),
+            mock.patch.object(kc, "_find_group_by_name", return_value=None),
+            mock.patch.object(kc.requests, "put"),
+        ):
+            if change == "remove":
+                kc.remove_user_from_project("bob", "demo")
+            else:
+                kc._find_group_by_name.return_value = {"id": "g1"}
+                kc.add_user_to_project("bob", "demo", "member")
+
+        assert kc.get_user_project_role("u1", "demo") is None
+
+
+def test_keycloak_failure_on_role_lookup_is_not_cached():
+    with mock.patch.object(
+        kc,
+        "_fetch_user_groups_or_raise",
+        side_effect=[kc.requests.ConnectionError(), GROUPS],
+    ) as f:
+        with pytest.raises(kc.requests.ConnectionError):
+            kc.get_user_project_role("u1", "demo")
+        assert kc.get_user_project_role("u1", "demo") == "member"
 
     assert f.call_count == 2
 

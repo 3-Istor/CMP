@@ -26,9 +26,11 @@ A criterion whose source fails gets 0 with reason source_unavailable.
 Grade: A >= 85, B >= 70, C >= 50, D >= 30, else E.
 """
 
+import asyncio
 import calendar
 import logging
 import time
+import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
@@ -50,6 +52,8 @@ logger = logging.getLogger(__name__)
 
 CRITERION_MAX = 20
 CACHE_TTL_SECONDS = 300
+# A card with an unavailable source is kept briefly so polls do not retry.
+PARTIAL_CACHE_TTL_SECONDS = 30
 RESTARTS_PENALTY_THRESHOLD = 5
 README_DETAILED_LINES = 20
 OPEN_RECOMMENDATION_STATUSES = ("pending", "notified")
@@ -308,7 +312,11 @@ def _read_project_owner(db: Session, deployment: Deployment) -> str | None:
 
 ReadmeReader = Callable[[], Awaitable[str | None]]
 
-_cache: dict[int, tuple[float, Scorecard]] = {}
+_cache: dict[int, tuple[float, float, Scorecard]] = {}
+# One thread at a time per Session: criteria run concurrently.
+_db_locks: weakref.WeakKeyDictionary[Session, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def clear_cache() -> None:
@@ -328,7 +336,9 @@ async def _read_db[T](db: Session, read: Callable[..., T], *args: object) -> T:
         finally:
             db.close()
 
-    return await run_in_threadpool(read_and_release)
+    lock = _db_locks.setdefault(db, asyncio.Lock())
+    async with lock:
+        return await run_in_threadpool(read_and_release)
 
 
 async def _guarded(
@@ -369,13 +379,13 @@ async def compute_scorecard(
         )
 
     return assemble(
-        [
-            await _guarded("security", security),
-            await _guarded("cost", cost),
-            await _guarded("reliability", reliability),
-            await _guarded("documentation", documentation),
-            await _guarded("owner", owner),
-        ]
+        await asyncio.gather(
+            _guarded("security", security),
+            _guarded("cost", cost),
+            _guarded("reliability", reliability),
+            _guarded("documentation", documentation),
+            _guarded("owner", owner),
+        )
     )
 
 
@@ -387,9 +397,10 @@ async def scorecard_for(
     db: Session, deployment: Deployment, read_readme: ReadmeReader
 ) -> Scorecard:
     cached = _cache.get(deployment.id)
-    if cached and _now() - cached[0] < CACHE_TTL_SECONDS:
-        return cached[1]
+    if cached and _now() - cached[0] < cached[1]:
+        return cached[2]
     card = await compute_scorecard(db, deployment, read_readme)
-    if not any("source_unavailable" in c.reasons for c in card.criteria):
-        _cache[deployment.id] = (_now(), card)
+    partial = any("source_unavailable" in c.reasons for c in card.criteria)
+    ttl = PARTIAL_CACHE_TTL_SECONDS if partial else CACHE_TTL_SECONDS
+    _cache[deployment.id] = (_now(), ttl, card)
     return card

@@ -26,7 +26,9 @@ PUBLIC_CLOUDS = (TargetCloud.AWS, TargetCloud.GCP)
 APPS_PATH = "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications"
 APP_PATH = APPS_PATH + "/wireguard-{}"
 PLATFORM_PATH = APPS_PATH + "/platform-{}"
-CACHE_TTL = 60
+# Clusters and Placement show this state; a refresh probes both clouds at
+# once, up to PROBE_TIMEOUT (3 s) each when powered off, in the background.
+CACHE_TTL = 15
 GUARD_RETRIES = 4  # unknown is re-read every GUARD_DELAY s, ~20 s in all
 GUARD_DELAY = 5
 
@@ -163,9 +165,10 @@ async def _cleanup_returned(cloud: TargetCloud) -> None:
 async def _refresh() -> None:
     global _cache, _cached_at
     before = _cache
-    _cache = {
-        c: await run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS
-    }
+    states = await asyncio.gather(
+        *(run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS)
+    )
+    _cache = dict(zip(PUBLIC_CLOUDS, states))
     _cached_at = time.monotonic()
     for cloud in PUBLIC_CLOUDS:
         if _cache[cloud] in _REACHABLE:

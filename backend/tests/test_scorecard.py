@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import date, datetime
 from unittest import mock
 
@@ -403,23 +404,26 @@ def test_scorecard_holds_no_connection_while_it_waits_on_outside_sources(
 ):
     factory = sessionmaker(bind=one_connection_pool)
     client, deployment_id, get_file = client_factory("member", factory=factory)
-    checked_out = {}
 
     def read_costs(deployment):
-        checked_out["cost"] = one_connection_pool.pool.checkedout()
+        # Needs the only connection: times out if a criterion kept it.
         with factory() as db:
             db.execute(text("SELECT 1"))
         return 0.0, []
 
     async def read_readme(**_):
-        checked_out["documentation"] = one_connection_pool.pool.checkedout()
+        await asyncio.sleep(0.2)
+        with factory() as db:
+            db.execute(text("SELECT 1"))
         return LONG_README, "sha"
 
     get_file.side_effect = read_readme
     with mock.patch.object(sc, "_read_costs", read_costs):
-        client.get(scorecard_url(deployment_id))
+        body = client.get(scorecard_url(deployment_id)).json()
 
-    assert checked_out == {"cost": 0, "documentation": 0}
+    assert not any(
+        "source_unavailable" in c["reasons"] for c in body["criteria"]
+    )
 
 
 def test_a_missing_readme_scores_the_documentation_zero(client_factory):
@@ -520,7 +524,7 @@ def test_the_cache_expires_after_five_minutes(client_factory, monkeypatch):
     assert get_file.await_count == 2
 
 
-def test_a_degraded_scorecard_is_not_cached(client_factory):
+def test_a_degraded_scorecard_is_cached_only_briefly(client_factory):
     client, deployment_id, get_file = client_factory(
         "member", readme=GitHubAppError("boom")
     )
@@ -528,7 +532,7 @@ def test_a_degraded_scorecard_is_not_cached(client_factory):
     client.get(scorecard_url(deployment_id))
     client.get(scorecard_url(deployment_id))
 
-    assert get_file.await_count == 2
+    assert get_file.await_count == 1
 
 
 def test_the_cache_does_not_bypass_the_role_check(client_factory, monkeypatch):
@@ -576,6 +580,45 @@ def test_open_recommendations_exclude_applied_and_ignored_ones(
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+def test_criteria_run_concurrently_and_a_failure_is_cached_briefly(
+    session_factory,
+):
+    deployment_id = add_deployment(session_factory, "static")
+    calls = []
+
+    async def slow_readme():
+        calls.append(1)
+        await asyncio.sleep(0.2)
+        raise GitHubAppError("down")
+
+    async def slow_health(deployment):
+        await asyncio.sleep(0.2)
+        return sc.HealthInput(status="healthy", restarts_15m=0)
+
+    async def twice():
+        with session_factory() as db:
+            deployment = db.get(sc.Deployment, deployment_id)
+            first = await sc.scorecard_for(db, deployment, slow_readme)
+            second = await sc.scorecard_for(db, deployment, slow_readme)
+        return first, second
+
+    with (
+        mock.patch.object(sc, "_read_health", slow_health),
+        mock.patch.object(sc, "_read_costs", lambda d: (0.0, [])),
+    ):
+        start = time.monotonic()
+        first, second = _run(twice())
+
+    assert time.monotonic() - start < 0.35
+    assert len(calls) == 1
+    assert second is first
+    assert "source_unavailable" in by_key_of(first, "documentation").reasons
+
+
+def by_key_of(card, key):
+    return next(c for c in card.criteria if c.key == key)
 
 
 def test_a_zero_budget_counts_as_no_budget(session_factory):

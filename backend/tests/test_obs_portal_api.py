@@ -5,6 +5,8 @@ the bounds on ranges and sizes, and "not available yet" when a store is not
 configured.
 """
 
+import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 from urllib.parse import parse_qs
@@ -730,3 +732,31 @@ def test_capabilities_ask_grafana_once_per_project(make):
             _get(client, SHOP, "")
 
     assert org_id.await_count == 1
+
+
+def test_app_costs_reads_cost_requests_and_usage_concurrently():
+    def slow_cost(*_):
+        time.sleep(0.2)
+        return 0.0, [], []
+
+    def slow_usage(*_):
+        time.sleep(0.2)
+
+    async def slow_requests(*_):
+        await asyncio.sleep(0.2)
+        return 10
+
+    now = datetime(2026, 11, 2, tzinfo=timezone.utc)
+    with (
+        mock.patch.object(app_costs, "_cost", slow_cost),
+        mock.patch.object(app_costs, "_usage", slow_usage),
+        mock.patch.object(app_costs.signals, "requests_over", slow_requests),
+        mock.patch.object(
+            app_costs.stores, "capabilities", lambda: {"metrics": True}
+        ),
+    ):
+        start = time.monotonic()
+        body = asyncio.run(app_costs.app_costs(mock.Mock(), mock.Mock(), now))
+
+    assert time.monotonic() - start < 0.5
+    assert body["requests"] == 10

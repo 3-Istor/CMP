@@ -23,7 +23,7 @@ class CostSummary(BaseModel):
     previous_month_eur: float
     trend_pct: float | None = None
     breakdown: Breakdown
-    potential_savings_eur: float
+    potential_savings_eur: float | None
     app_count: int
     currency: str = "EUR"
 
