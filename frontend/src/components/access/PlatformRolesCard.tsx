@@ -29,14 +29,16 @@ import type { KeycloakUserResult, PlatformRole } from "@/types";
 export function PlatformRolesCard() {
   const t = useTranslations("access.platformRoles");
   const [roles, setRoles] = useState<PlatformRole[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getPlatformRoles()
-      .then(setRoles)
-      .catch((err) => {
-        setRoles([]);
-        toast.error(errorMessage(err));
-      });
+    getPlatformRoles().then(
+      (list) => {
+        setRoles(list);
+        setError(null);
+      },
+      (err) => setError(errorMessage(err)),
+    );
   }, []);
 
   useEffect(load, [load]);
@@ -48,7 +50,9 @@ export function PlatformRolesCard() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent>
-        {roles === null ? (
+        {error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : roles === null ? (
           <Skeleton className="h-24" />
         ) : (
           <ul className="divide-y divide-border">
@@ -72,10 +76,17 @@ function GroupRow({ role, onChange }: { role: PlatformRole; onChange: () => void
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) return;
+    let live = true;
     const id = window.setTimeout(() => {
-      searchKeycloakUsers(q).then(setResults, () => setResults([]));
+      searchKeycloakUsers(q).then(
+        (users) => live && setResults(users),
+        () => live && setResults([]),
+      );
     }, 300);
-    return () => window.clearTimeout(id);
+    return () => {
+      live = false;
+      window.clearTimeout(id);
+    };
   }, [query]);
 
   const change = async (username: string, add: boolean) => {
@@ -136,7 +147,10 @@ function GroupRow({ role, onChange }: { role: PlatformRole; onChange: () => void
             aria-label={t("username")}
             placeholder={t("username")}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (e.target.value.trim().length < 2) setResults([]);
+            }}
             list={listId}
             autoComplete="off"
             className="h-8"

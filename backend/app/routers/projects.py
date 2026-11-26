@@ -164,7 +164,10 @@ def search_keycloak_users(
     if len(q.strip()) < 2:
         return []
 
-    if not _administers_any_project(db, token_payload):
+    # infra also searches to grant platform roles.
+    if not is_cnp_admin(token_payload) and not _administers_any_project(
+        db, token_payload
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
