@@ -114,13 +114,49 @@ def _vm(restarts):
     return get
 
 
-def _health(deployment, kube_list, restarts=()):
+def _health(deployment, kube_list, restarts=(), environment="prod"):
     with mock.patch.object(
         app_health, "kube_list", kube_list
     ), mock.patch.object(
         app_health.httpx, "get", _vm({} if restarts == () else restarts)
     ):
-        return app_health._read_app_health(deployment, NOW)
+        return app_health._read_app_health(deployment, NOW, environment)
+
+
+def test_staging_health_reads_the_staging_namespace_and_applications():
+    calls = []
+    queries = []
+
+    def kube_list(path, params=None, cloud=None):
+        calls.append((path, (params or {}).get("labelSelector")))
+        return []
+
+    def get(url, params=None, timeout=None):
+        queries.append(params["query"])
+        return mock.Mock(
+            raise_for_status=lambda: None,
+            json=lambda: {"data": {"result": []}},
+        )
+
+    with mock.patch.object(
+        app_health, "kube_list", kube_list
+    ), mock.patch.object(app_health.httpx, "get", get):
+        app_health._read_app_health(_deployment(), NOW, "staging")
+
+    pods = [c for c in calls if c[0].endswith("/pods")]
+    assert pods == [
+        (
+            "/api/v1/namespaces/shop-web-stg/pods",
+            "app.kubernetes.io/instance=shop-web-app-stg",
+        )
+    ]
+    assert not any(
+        "/shop-web/" in c[0] or c[0].endswith("shop-web") for c in calls
+    )
+    assert any(
+        "/namespaces/shop-web-stg/offhoursschedules" in c[0] for c in calls
+    )
+    assert all('"shop-web-stg"' in q for q in queries)
 
 
 def _only(health):

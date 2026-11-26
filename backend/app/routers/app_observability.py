@@ -676,13 +676,16 @@ async def get_summary(
     deployment_id: int,
     token: CurrentUser,
     range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "24h",
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> AppSummary:
     """
     Above the fold of an app page in one call. Each part that cannot be
     read is left empty rather than failing the whole summary.
     """
-    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
+    _, scope = await run_in_threadpool(
+        _member_app, db, token, deployment_id, env
+    )
 
     async def load() -> AppSummary:
         data = await run_in_threadpool(
@@ -690,7 +693,7 @@ async def get_summary(
         )
         return AppSummary(**await summary.app_summary(data, range_, _now()))
 
-    return await _summaries.get((deployment_id, range_), load)
+    return await _summaries.get((deployment_id, range_, env), load)
 
 
 class LastDeploy(BaseModel):

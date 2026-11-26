@@ -620,6 +620,24 @@ def test_staging_traffic_does_not_mark_a_prod_link_observed(client, world):
     }
 
 
+def test_staging_flows_resolve_staging_namespaces(world):
+    world.flows = [
+        _flow("api-stg", "web-stg", "FORWARDED", 3),
+        _flow("api", "web", "FORWARDED", 9),
+    ]
+
+    available, flows = asyncio.run(
+        topology.observed_flows(
+            "shop", ["web", "api"], "onprem", environment="staging"
+        )
+    )
+
+    assert available
+    assert set(flows) == {("api", "web")}
+    assert flows[("api", "web")]["rps"] == 3
+    assert all("-stg" in q for q in world.queries if "sum by" in q)
+
+
 def test_flow_query_names_prod_namespaces_only(client, world):
     client.get("/api/projects/shop/topology")
 
