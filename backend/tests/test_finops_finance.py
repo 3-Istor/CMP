@@ -432,6 +432,18 @@ def test_statement_pdf_is_available_to_finance_for_any_project(api, seeded):
     assert response.status_code == 200
 
 
+def test_credits_are_their_own_row_never_a_project():
+    lines = [
+        CostLineItem(project="qcm", x_cost_eur=5.0),
+        CostLineItem(project="__credits__", x_cost_eur=-2.0),
+    ]
+
+    assert finance.totals_by_project(lines) == [
+        ("qcm", 5.0),
+        ("(crédits)", -2.0),
+    ]
+
+
 # ── month close ───────────────────────────────────────────────────────────────
 
 

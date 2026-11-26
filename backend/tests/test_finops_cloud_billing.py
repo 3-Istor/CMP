@@ -860,6 +860,20 @@ def test_reconcile_ignores_the_other_cloud(factory):
     assert result["invoice_total_eur"] == 7.0
 
 
+def test_reconcile_puts_credits_apart(factory):
+    credit = _tagged("aws", -2.0, focus.CREDITS, rid="credit")
+    credit.charge_category = "Credit"
+    with factory() as db:
+        upsert(db, [_tagged("aws", 5.0, "qcm"), credit])
+
+        result = reconciliation.reconcile(db, "aws", "2026-10")
+
+    assert result["invoice_total_eur"] == 5.0
+    assert result["allocated_eur"] == 5.0
+    assert result["credits_eur"] == 2.0
+    assert result["gap_eur"] == 0.0
+
+
 def test_reconcile_rejects_an_unknown_provider(factory):
     with factory() as db, pytest.raises(ValueError):
         reconciliation.reconcile(db, "azure", "2026-10")

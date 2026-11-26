@@ -311,16 +311,36 @@ def get_overview(
     deployments = _load_deployments(db, token, project, app)
     provider = get_cost_provider()
     all_apps = _cost_specs(provider, deployments, token, project, app)
-    by_cloud = provider.by_cloud(all_apps)
-    # Applications run on-prem; no application-scoped cost exists on a public
-    # cloud yet, so filtering on one leaves nothing to list.
-    apps = all_apps if cloud in (None, "", "all", "onprem") else []
+    whole_platform = project is None and app is None and _sees_all(token)
+    by_cloud = provider.by_cloud(all_apps, whole_platform=whole_platform)
+    start, end = period_to_range(period)
+    if cloud in (None, "", "all", "onprem"):
+        apps = all_apps
+    elif cloud in ("aws", "gcp"):
+        # Cloud apps: namespaces that got a share of the split invoice.
+        on_cloud = set(
+            db.scalars(
+                select(CostLineItem.resource_name)
+                .where(
+                    CostLineItem.x_source == f"{cloud}_split",
+                    CostLineItem.charge_period_start
+                    >= datetime.combine(start, datetime.min.time()),
+                    CostLineItem.charge_period_start
+                    < datetime.combine(
+                        end + timedelta(days=1), datetime.min.time()
+                    ),
+                )
+                .distinct()
+            )
+        )
+        apps = [a for a in all_apps if a.namespace in on_cloud]
+    else:
+        apps = []
 
     summary_dict = provider.summary(apps)
     summary_dict["breakdown"] = Breakdown(**summary_dict["breakdown"])
     summary = CostSummary(**summary_dict)
 
-    start, end = period_to_range(period)
     timeline = [
         CostSeriesPoint(**p)
         for p in engine.mark_partial(
@@ -352,6 +372,9 @@ def get_overview(
         apps=app_rows,
         timeline=timeline,
         by_cloud=by_cloud,
+        credits_by_cloud=(
+            provider.credits_by_cloud() if whole_platform else {}
+        ),
         savings_ytd=_savings_ytd(db, token, project),
         forecast=forecast,
     )
