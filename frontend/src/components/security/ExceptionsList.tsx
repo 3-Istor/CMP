@@ -28,14 +28,16 @@ const stateOf = (e: SecurityException): Filter =>
 export function ExceptionsList({
   exceptions,
   canAdmin,
-  canReview,
+  cnpAdmin,
+  auditor,
   username,
   onChanged,
 }: {
   exceptions: SecurityException[];
   canAdmin: boolean;
-  /** Platform admin or auditor: may also accept a critical finding. */
-  canReview: boolean;
+  cnpAdmin: boolean;
+  /** Acts on critical exceptions only, as the backend allows. */
+  auditor: boolean;
   username: string;
   onChanged: () => void;
 }) {
@@ -48,6 +50,7 @@ export function ExceptionsList({
   const [picked, setPicked] = useState<Filter | null>(null);
   const filter = picked ?? FILTERS.find((f) => count(f) > 0) ?? "pending";
   const shown = exceptions.filter((e) => stateOf(e) === filter);
+  const reviews = (e: SecurityException) => cnpAdmin || (auditor && e.critical);
 
   async function run(id: number, action: () => Promise<unknown>, done: string) {
     setBusy(id);
@@ -148,7 +151,7 @@ export function ExceptionsList({
                 {!e.expired &&
                   e.pending_approval &&
                   e.author !== username &&
-                  (canReview || (canAdmin && !e.critical)) && (
+                  (reviews(e) || (canAdmin && !e.critical)) && (
                     <Button
                       size="sm"
                       disabled={busy === e.id}
@@ -166,7 +169,7 @@ export function ExceptionsList({
                       {t("exceptions.approve")}
                     </Button>
                   )}
-                {!e.expired && (e.author === username || canAdmin || canReview) && (
+                {!e.expired && (e.author === username || canAdmin || reviews(e)) && (
                   <Button
                     size="sm"
                     variant="outline"

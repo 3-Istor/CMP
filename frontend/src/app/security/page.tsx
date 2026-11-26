@@ -23,6 +23,7 @@ function SecurityInner() {
   const { projects } = useProjects();
   const [overview, setOverview] = useState<SecurityProjectOverview[]>([]);
   const [isCnpAdmin, setIsCnpAdmin] = useState(false);
+  const [platformAdmin, setPlatformAdmin] = useState(false);
   const [username, setUsername] = useState("");
   const [roleKnown, setRoleKnown] = useState(false);
 
@@ -36,6 +37,7 @@ function SecurityInner() {
     getSecurityRole(project)
       .then((r) => {
         setIsCnpAdmin(r.cnp_admin || r.auditor === true);
+        setPlatformAdmin(r.cnp_admin);
         setUsername(r.username);
       })
       .catch(() => setIsCnpAdmin(false))
@@ -64,7 +66,7 @@ function SecurityInner() {
   return (
     <div className="space-y-6">
       {roleKnown ? (
-        isCnpAdmin && <PendingApprovals username={username} />
+        isCnpAdmin && <PendingApprovals username={username} cnpAdmin={platformAdmin} />
       ) : (
         <PendingApprovalsPlaceholder />
       )}

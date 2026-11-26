@@ -629,7 +629,8 @@ export function SecurityDashboard({
         <ExceptionsList
           exceptions={exceptions}
           canAdmin={canAdmin}
-          canReview={role.cnp_admin || role.auditor === true}
+          cnpAdmin={role.cnp_admin}
+          auditor={role.auditor === true}
           username={role.username}
           onChanged={refresh}
         />
