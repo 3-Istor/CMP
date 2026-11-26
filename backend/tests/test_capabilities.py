@@ -81,3 +81,15 @@ def test_min_role_matches_frontend():
     block = src.split("const MIN_ROLE", 1)[1].split("};", 1)[0]
     front = dict(re.findall(r'"([\w.]+)": "(\w+)"', block))
     assert front == {k: v.value for k, v in roles.MIN_ROLE.items()}
+
+
+@pytest.mark.parametrize(
+    ("name", "caps"),
+    [
+        ("AUDITOR_CAPABILITIES", roles.AUDITOR_CAPS),
+        ("FINOPS_CAPABILITIES", roles.FINOPS_CAPS),
+    ],
+)
+def test_platform_caps_match_frontend(name, caps):
+    block = FRONTEND.read_text().split(f"const {name}", 1)[1].split(";", 1)[0]
+    assert set(re.findall(r'"([\w.]+)"', block)) == caps

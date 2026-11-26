@@ -64,7 +64,7 @@ function RecommendationsInner() {
   // Each recommendation belongs to a different project, so the role is looked
   // up per card rather than once for the page.
   const roleByProject = useMemo(() => {
-    const map = new Map<string, ProjectRole>();
+    const map = new Map<string, ProjectRole | null>();
     for (const p of projects) map.set(p.name, p.role);
     return map;
   }, [projects]);

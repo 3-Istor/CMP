@@ -12,7 +12,7 @@ export default function AppSecurityPage() {
     <AppSection
       allowed={
         deployment.provider_type === "kubernetes" &&
-        can("app.viewObservability")
+        can("security.view")
       }
     >
       <SecurityDashboard

@@ -33,10 +33,10 @@ import {
   deleteProject,
   getCustomerAccess,
   getDeletionProtection,
-  getSecurityRole,
   setCustomerAccess,
   setDeletionProtection,
 } from "@/lib/api";
+import { usePlatformRoles } from "@/lib/usePlatformRoles";
 import { Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -118,15 +118,13 @@ export default function ProjectSettingsPage() {
   const canProtect = can("project.protect");
   const canDelete = can("project.delete");
   const canExport = can("project.export");
+  // The project policy is written by platform admins only (PUT /security/policy).
+  const isInfra = usePlatformRoles().includes("infra");
 
   // null until read: a control never shows a state it has not loaded.
   const [protectedOn, setProtectedOn] = useState<boolean | null>(null);
   const [access, setAccess] = useState<CustomerAccess | null>(null);
   const [busy, setBusy] = useState<"protect" | "access" | null>(null);
-  const [securityRole, setSecurityRole] = useState<{
-    admin: boolean;
-    cnpAdmin: boolean;
-  } | null>(null);
   const [confirmUnprotect, setConfirmUnprotect] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -138,14 +136,6 @@ export default function ProjectSettingsPage() {
     getCustomerAccess(projectName).then(
       ({ mode }) => setAccess(mode),
       () => setAccess(null),
-    );
-    getSecurityRole(projectName).then(
-      (r) =>
-        setSecurityRole({
-          admin: r.cnp_admin || r.role === "admin",
-          cnpAdmin: r.cnp_admin,
-        }),
-      () => setSecurityRole({ admin: false, cnpAdmin: false }),
     );
   }, [projectName]);
 
@@ -198,7 +188,7 @@ export default function ProjectSettingsPage() {
   };
 
   return (
-    <ProjectSection title={t("title")} capability="app.viewObservability">
+    <ProjectSection title={t("title")} capability="app.viewConfig">
       <div className="max-w-3xl space-y-12">
         <Section
           title={t("access.title")}
@@ -258,14 +248,12 @@ export default function ProjectSettingsPage() {
           title={t("security.title")}
           description={t("security.description")}
         >
-          {securityRole?.cnpAdmin && <ProjectPolicyCard project={projectName} />}
-          {securityRole && (
-            <AlertsCard
-              project={projectName}
-              app={null}
-              canAdmin={securityRole.admin}
-            />
-          )}
+          {isInfra && <ProjectPolicyCard project={projectName} />}
+          <AlertsCard
+            project={projectName}
+            app={null}
+            canAdmin={can("security.manage")}
+          />
         </Section>
 
         {canExport && (
