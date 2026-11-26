@@ -31,7 +31,6 @@ from app.services import audit, chart_values, terraform_orchestrator
 from app.services.authz import (
     assert_capability,
     assert_project_role,
-    is_auditor,
     is_cnp_admin,
     is_finops,
     reads_platform_security,
@@ -350,16 +349,11 @@ def get_deployment_outputs(
     Access control: any role. These are the app's public endpoints, the URLs
     and IPs already shown on its card.
     """
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.GUEST, cap="app.view"
+    )
 
     if not deployment.terraform_outputs:
-        return {}
-    if (
-        is_auditor(token)
-        and not is_cnp_admin(token)
-        and deployment.project_id
-        not in set(_user_project_names(db, token, live=True))
-    ):
         return {}
 
     try:

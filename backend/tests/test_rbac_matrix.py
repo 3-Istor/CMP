@@ -21,8 +21,10 @@ from app.services.observability import (
     app_costs,
     app_logs,
     app_traces,
+    apps_health,
     signals,
     stores,
+    summary,
 )
 
 IDS = "infra auditor finops owner admin member guest none".split()
@@ -46,6 +48,15 @@ ROWS = {  # under /api
     f"{APP}/config": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{APP}/metrics": (OK, OK, NO, OK, OK, OK, OK, NO),
     f"{APP}/observability/slo": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/observability": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/observability/signals": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/observability/deploys": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/observability/dora": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/summary": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{PRJ}/apps-health": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/outputs": (OK, OK, OK, OK, OK, OK, OK, NO),
+    f"{PRJ}/deletion-protection": (OK, OK, NO, OK, OK, OK, NO, NO),
+    f"{PRJ}/customer-access": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{APP}/observability/traces": (OK, NO, NO, OK, OK, OK, NO, NO),
     f"{APP}/observability/logs": (OK, NO, NO, OK, OK, OK, NO, NO),
     f"{PRJ}/members": (OK, OK, NO, OK, OK, OK, NO, NO),
@@ -56,6 +67,19 @@ ROWS = {  # under /api
     f"{PRJ}/imports": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{PRJ}/imports/recommendations": (OK, OK, NO, OK, OK, OK, NO, NO),
     "/security/summary?project=shop": (OK, OK, NO, OK, OK, OK, NO, NO),
+}
+
+
+SUMMARY = {
+    "kind": "web",
+    "status": "healthy",
+    "tiles": {"restarts": 0, "replicas_ready": 1, "replicas_desired": 1},
+    "series": {"t": [], "log_info": [], "log_warn": [], "log_error": []},
+    "deploys": [],
+    "clients": [],
+    "denied_flows_24h": 0,
+    "top_errors": [{"message": "db timeout", "count": 3}],
+    "alerts_firing": 0,
 }
 
 
@@ -148,6 +172,47 @@ def world(monkeypatch):
         ),
     )
     monkeypatch.setattr(stores, "require", lambda name: None)
+    monkeypatch.setattr(
+        stores,
+        "capabilities",
+        lambda: dict.fromkeys(
+            ("metrics", "logs", "traces", "alerts", "slo"), 1
+        ),
+    )
+    monkeypatch.setattr(
+        signals,
+        "golden_signals",
+        _stub(
+            {
+                "range": "24h",
+                "step_seconds": 60,
+                "no_traffic": True,
+                **dict.fromkeys(("rate", "error_percent", "p50_ms"), []),
+                "p95_ms": [],
+                "routes": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(summary, "read_input", lambda *a: None)
+    monkeypatch.setattr(summary, "app_summary", _stub(SUMMARY))
+    monkeypatch.setattr(apps_health, "read_input", lambda project: None)
+    monkeypatch.setattr(
+        apps_health,
+        "apps_health",
+        _stub(
+            {
+                "apps": [],
+                "series": {
+                    "t": [],
+                    "rps_by_app": {},
+                    "err_pct_by_app": {},
+                    "error_logs_per_min": [],
+                },
+            }
+        ),
+    )
+    monkeypatch.setattr(projects, "is_deletion_protected", _stub(True))
+    monkeypatch.setattr(projects, "get_customer_access", _stub("closed"))
     monkeypatch.setattr(stores, "trace_account", lambda project: 1)
     monkeypatch.setattr(signals, "slo_status", _stub({"objectives": []}))
     monkeypatch.setattr(app_traces, "list_traces", _stub([]))
@@ -198,6 +263,7 @@ def client(world):
     for module in (projects, deployments, app_overview, imports, alerting):
         app.include_router(module.router, prefix="/api")
     app.include_router(app_observability.router, prefix="/api")
+    app.include_router(app_observability.projects_router, prefix="/api")
     app.include_router(security.router, prefix="/api")
 
     def get_session():
@@ -281,3 +347,25 @@ def test_owner_outside_the_admins_group_can_edit(client, world):
     body = client.get("/api/deployments/1/security-data").json()
 
     assert body["can_edit"] is True
+
+
+@pytest.mark.parametrize(
+    ("identity", "errors"),
+    [
+        ((["security-auditor"], None, False), []),
+        (([], "guest", False), []),
+        (([], "member", False), SUMMARY["top_errors"]),
+    ],
+    ids=["auditor", "guest", "member"],
+)
+def test_summary_top_errors_only_for_log_readers(
+    client, world, identity, errors
+):
+    world.be(*identity)
+
+    response = client.get("/api/deployments/1/summary")
+
+    assert (response.status_code, response.json()["top_errors"]) == (
+        200,
+        errors,
+    )

@@ -30,7 +30,7 @@ from app.services import alerts_grafana
 from app.services import app_overview as overview
 from app.services import links
 from app.services.authz import (
-    RequireMember,
+    RequireCap,
     assert_capability,
     is_cnp_admin,
 )
@@ -316,7 +316,9 @@ async def get_capabilities(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> Capabilities:
     """Which tabs have a store behind them."""
-    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
+    _, scope = await run_in_threadpool(
+        _member_app, db, token, deployment_id, cap="app.viewObservability"
+    )
     caps = stores.capabilities()
     # Fluent Bit ships only the on-prem cluster's logs to VictoriaLogs.
     caps["logs"] = caps["logs"] and scope.cloud == "onprem"
@@ -352,7 +354,9 @@ async def get_signals(
     db: Session = Depends(get_db),
 ) -> GoldenSignals:
     """Requests, 5xx share, p50 and p95, overall and per route."""
-    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
+    _, scope = await run_in_threadpool(
+        _member_app, db, token, deployment_id, cap="app.viewObservability"
+    )
     with _reading():
         data = await _signals.get(
             (deployment_id, range_),
@@ -437,7 +441,9 @@ def get_deploys(
     db: Session = Depends(get_db),
 ) -> list[DeployMarker]:
     """Prod rollouts in the range, for the markers on the graphs."""
-    deployment, _ = _member_app(db, token, deployment_id)
+    deployment, _ = _member_app(
+        db, token, deployment_id, cap="app.viewObservability"
+    )
     since = _now() - timedelta(seconds=signals.RANGES[range_])
     return [
         DeployMarker(**m) for m in delivery.markers(db, deployment.id, since)
@@ -455,7 +461,9 @@ def get_dora(
     """Deployment frequency and change failure rate of an environment."""
     if days not in delivery.DORA_DAYS:
         raise HTTPException(status_code=422, detail="days: 7, 30 or 90.")
-    deployment, _ = _member_app(db, token, deployment_id, env)
+    deployment, _ = _member_app(
+        db, token, deployment_id, env, cap="app.viewObservability"
+    )
     return Dora(**delivery.dora(db, deployment.id, days, _now(), env))
 
 
@@ -682,9 +690,24 @@ async def get_summary(
     Above the fold of an app page in one call. Each part that cannot be
     read is left empty rather than failing the whole summary.
     """
-    _, scope = await run_in_threadpool(
-        _member_app, db, token, deployment_id, env
-    )
+    # Top errors are log lines: only for callers who read logs.
+    logs = True
+    try:
+        _, scope = await run_in_threadpool(
+            _member_app, db, token, deployment_id, env, cap="app.viewLogs"
+        )
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+        logs = False
+        _, scope = await run_in_threadpool(
+            _member_app,
+            db,
+            token,
+            deployment_id,
+            env,
+            cap="app.viewObservability",
+        )
 
     async def load() -> AppSummary:
         data = await run_in_threadpool(
@@ -692,7 +715,8 @@ async def get_summary(
         )
         return AppSummary(**await summary.app_summary(data, range_, _now()))
 
-    return await _summaries.get((deployment_id, range_, env), load)
+    found = await _summaries.get((deployment_id, range_, env), load)
+    return found if logs else found.model_copy(update={"top_errors": []})
 
 
 class LastDeploy(BaseModel):
@@ -734,7 +758,7 @@ class AppsHealth(BaseModel):
     response_model_exclude_none=True,
 )
 async def get_apps_health(
-    ctx: RequireMember,
+    ctx: RequireCap("app.viewObservability"),
     range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "24h",
 ) -> AppsHealth:
     """Every app of the project, those that need attention first."""

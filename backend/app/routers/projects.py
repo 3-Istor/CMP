@@ -52,7 +52,6 @@ from app.services import (
 from app.services.authz import (
     RequireAdmin,
     RequireCap,
-    RequireGuest,
     assert_project_role,
     is_auditor,
     is_cnp_admin,
@@ -875,7 +874,9 @@ async def remove_project_member(
 
 
 @router.get("/{project_name}/deletion-protection")
-async def get_deletion_protection(ctx: RequireGuest) -> dict[str, bool]:
+async def get_deletion_protection(
+    ctx: RequireCap("app.viewConfig"),
+) -> dict[str, bool]:
     """Whether the project refuses deletions, of itself and of its apps."""
     try:
         return {"enabled": await is_deletion_protected(ctx.project_name)}
@@ -950,7 +951,9 @@ async def update_deletion_protection(
 
 
 @router.get("/{project_name}/customer-access")
-async def read_customer_access(ctx: RequireGuest) -> dict[str, str]:
+async def read_customer_access(
+    ctx: RequireCap("app.viewConfig"),
+) -> dict[str, str]:
     """How customers get an account: ``closed``, ``companies`` or ``open``."""
     try:
         return {"mode": await get_customer_access(ctx.project_name)}
