@@ -62,7 +62,21 @@ def call(client, method, user, path=""):
     )
 
 
-@pytest.mark.parametrize("user", ["eve", "sam", "fay"])
+# Project roles come from project groups; the owner is a project admin.
+IDENTITIES = {
+    "infra": ["infra"],
+    "auditor": ["security-auditor"],
+    "finops": ["finops"],
+    "owner": ["project-shop-admins"],
+    "admin": ["project-shop-admins"],
+    "member": ["project-shop-members"],
+    "guest": ["project-shop-guests"],
+    "none": [],
+}
+EXPECTED = {"GET": 200, "PUT": 204, "DELETE": 204}
+
+
+@pytest.mark.parametrize("who", IDENTITIES)
 @pytest.mark.parametrize(
     "method,path",
     [
@@ -71,12 +85,26 @@ def call(client, method, user, path=""):
         ("DELETE", "/finops/members/x"),
     ],
 )
-def test_refuses_everyone_outside_infra(client, keycloak, user, method, path):
-    response = call(client, method, user, path)
+def test_only_infra_passes(client, keycloak, who, method, path):
+    token = {
+        "preferred_username": who,
+        "groups": IDENTITIES[who],
+        "acr": "gold",
+        "auth_time": time.time() - 10,
+    }
+    with (
+        mock.patch.object(settings, "STEP_UP_ENABLED", True),
+        mock.patch.object(settings, "STEP_UP_ACR", "gold"),
+        mock.patch.dict(TOKENS, {who: token}),
+    ):
+        response = call(client, method, who, path)
 
-    assert response.status_code == 403
-    keycloak.add.assert_not_called()
-    keycloak.remove.assert_not_called()
+    assert response.status_code == (
+        EXPECTED[method] if who == "infra" else 403
+    )
+    if who != "infra":
+        keycloak.add.assert_not_called()
+        keycloak.remove.assert_not_called()
 
 
 def test_lists_the_three_groups_with_infra_unmanaged(client):
