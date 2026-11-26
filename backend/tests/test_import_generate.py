@@ -337,7 +337,7 @@ def test_service_values_pin_the_digest_and_run_as_the_image_user():
         {"name": "http", "port": 8081, "targetPort": 8081}
     ]
     assert values["secrets"]["vaultPath"] == (
-        "project-epitweet/user-service/imports"
+        "project-epitweet/user-service/prod/secrets"
     )
 
 
@@ -369,11 +369,11 @@ def test_neo4j_and_its_consumer_read_the_generated_secret_from_vault():
     expected = {"enabled": True}
     assert neo4j["secrets"] == {
         **expected,
-        "vaultPath": "project-epitweet/neo4j/imports",
+        "vaultPath": "project-epitweet/neo4j/prod/secrets",
     }
     assert graph["secrets"] == {
         **expected,
-        "vaultPath": "project-epitweet/social-graph-service/imports",
+        "vaultPath": "project-epitweet/social-graph-service/prod/secrets",
     }
     auth = next(e for e in neo4j["env"] if e["name"] == "NEO4J_AUTH")
     assert auth["valueFrom"]["secretKeyRef"]["name"] == "neo4j-secrets"
@@ -785,7 +785,7 @@ def test_managed_database_values_are_backed_up_and_read_the_app_secret():
         "pooler": {"enabled": True},
     }
     assert values["secrets"]["vaultPath"] == (
-        "project-epitweet/user-service/imports"
+        "project-epitweet/user-service/prod/secrets"
     )
 
 

@@ -273,7 +273,7 @@ def test_an_agent_declared_only_in_git_gets_its_client_and_secret(
     client = kc.by_client_id("agent-epitweet-grok-reader")
     assert (
         client["enabled"],
-        vault.kv[("project-epitweet", "grok-reader/ai-oidc")],
+        vault.kv[("project-epitweet", "grok-reader/prod/ai-oidc")],
     ) == (
         True,
         {
@@ -336,7 +336,7 @@ def test_a_right_taken_away_in_git_leaves_the_client(kc, vault, db):
 def test_an_app_with_ai_on_gets_its_client_and_secret(kc, vault, db):
     _run(db, _record(apps=[{"name": "epitweet-mcp", "enabled": True}]))
 
-    assert vault.kv[("project-epitweet", "epitweet-mcp/ai-oidc")][
+    assert vault.kv[("project-epitweet", "epitweet-mcp/prod/ai-oidc")][
         "client_id"
     ] == ("app-epitweet-epitweet-mcp")
 
@@ -374,7 +374,7 @@ def test_prune_deletes_the_orphan_client_and_its_secret(kc, vault, db):
     assert (
         report["deleted"],
         kc.by_client_id("agent-epitweet-grok-reader"),
-        ("project-epitweet", "grok-reader/ai-oidc") in vault.kv,
+        ("project-epitweet", "grok-reader/prod/ai-oidc") in vault.kv,
     ) == (["agent-epitweet-grok-reader"], None, False)
 
 

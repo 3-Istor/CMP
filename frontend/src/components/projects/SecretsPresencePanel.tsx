@@ -36,7 +36,8 @@ const renderCode = (chunks: React.ReactNode) => (
 
 function vaultEditUrl(vaultPath: string): string {
     const [mount, ...path] = vaultPath.split("/");
-    return `${VAULT_URL}/ui/vault/secrets/${mount}/kv/${path.join("/")}/edit`;
+    // Vault's UI wants a nested secret path as one encoded segment.
+    return `${VAULT_URL}/ui/vault/secrets-engines/${mount}/kv/${encodeURIComponent(path.join("/"))}/details`;
 }
 
 export function SecretsPresencePanel({ deploymentId }: Props) {
