@@ -195,7 +195,7 @@ class TestExceptionApproval:
         self, session_factory
     ):
         row = self._approve(
-            session_factory, {**AUDITOR, "acr": "silver"}, Tier.IMPORTANT
+            session_factory, {**AUDITOR, "groups": ["infra"], "acr": "silver"}, Tier.IMPORTANT
         )
 
         assert row.approved_at is not None
