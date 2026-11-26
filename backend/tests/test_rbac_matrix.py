@@ -584,6 +584,7 @@ def test_put_budget(client, world, monkeypatch, identity, who):
         {
             "specs": lambda self, d: [],
             "summary": lambda self, s: {"month_to_date_eur": 0.0},
+            "month_to_date": lambda self, s: 0.0,
         },
     )()
     monkeypatch.setattr(finops, "get_cost_provider", lambda: provider)
