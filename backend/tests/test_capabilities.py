@@ -13,10 +13,12 @@ from app.services import authz, keycloak_service
 FRONTEND = Path(__file__).parents[2] / "frontend/src/lib/permissions.ts"
 
 
-def _check(groups, project_role, cap):
+def _check(groups, project_role, cap, owner=False):
     token = {"sub": "x", "preferred_username": "u", "groups": groups}
     db = mock.MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = None
+    # The owner is recognised from the projects row, not a Keycloak group.
+    row = mock.MagicMock(owner_username="u") if owner else None
+    db.query.return_value.filter.return_value.first.return_value = row
     with mock.patch.object(
         keycloak_service, "get_project_role", lambda u, p: project_role
     ):
@@ -46,6 +48,21 @@ def _check(groups, project_role, cap):
 )
 def test_capability_table(groups, project_role, cap, allowed):
     assert _check(groups, project_role, cap) is allowed
+
+
+@pytest.mark.parametrize(
+    ("project_role", "owner", "cap", "allowed"),
+    [
+        (None, True, "project.export", True),
+        (None, True, "app.deploy", True),
+        ("admin", False, "project.export", False),
+        ("admin", False, "app.deploy", True),
+        ("member", False, "app.viewLogs", True),
+        ("member", False, "app.deploy", False),
+    ],
+)
+def test_project_roles_alone(project_role, owner, cap, allowed):
+    assert _check([], project_role, cap, owner=owner) is allowed
 
 
 def test_platform_cap_sets_stay_within_the_table():
