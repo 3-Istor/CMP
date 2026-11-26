@@ -29,6 +29,7 @@ from app.routers.observability import SloRead, slo_read
 from app.services import alerts_grafana
 from app.services import app_overview as overview
 from app.services import links
+from app.services.environments import layout, runs
 from app.services.authz import (
     RequireMember,
     assert_project_role,
@@ -69,13 +70,15 @@ _grafana_orgs = SwrCache("grafana org", ttl=300)
 # ── Access ───────────────────────────────────────────────────────────────────
 
 
-def _scope(deployment: Deployment) -> stores.Scope:
+def _scope(
+    deployment: Deployment, env: layout.Environment = "prod"
+) -> stores.Scope:
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
             status_code=400, detail="Only Kubernetes apps have this data."
         )
     try:
-        found = overview.scope_of(deployment)
+        found = overview.scope_of(deployment, env)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return stores.Scope(
@@ -83,14 +86,20 @@ def _scope(deployment: Deployment) -> stores.Scope:
         app=found.app,
         namespace=found.namespace,
         cloud=found.cloud.value,
+        environment=env,
     )
 
 
 def _member_app(
-    db: Session, token: dict, deployment_id: int
+    db: Session,
+    token: dict,
+    deployment_id: int,
+    env: layout.Environment = "prod",
 ) -> tuple[Deployment, stores.Scope]:
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
-    return deployment, _scope(deployment)
+    if env == "staging" and not runs.staging_ready(db, deployment.id):
+        raise HTTPException(status_code=404, detail="This app has no staging.")
+    return deployment, _scope(deployment, env)
 
 
 @contextmanager
@@ -456,10 +465,11 @@ async def get_top_errors(
     token: CurrentUser,
     range_: Annotated[str, Query(alias="range", pattern=LOG_RANGE)] = "1h",
     limit: Annotated[int, Query(ge=1, le=20)] = 5,
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> list[ErrorPattern]:
     """The most frequent error lines, numbers folded into one pattern."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, env)
     with _reading():
         rows = await app_logs.top_errors(scope, range_, limit)
     return [ErrorPattern(**r) for r in rows]
@@ -478,10 +488,11 @@ async def search_logs(  # pylint: disable=too-many-arguments
     q: Annotated[str | None, Query(max_length=app_logs.MAX_PHRASE)] = None,
     trace_id: Annotated[str | None, Query(pattern=TRACE_ID)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> list[LogLine]:
-    """Newest first, prod only."""
-    _, scope = _member_app(db, token, deployment_id)
+    """Newest first."""
+    _, scope = _member_app(db, token, deployment_id, env)
     try:
         if q:
             app_logs.phrase(q)

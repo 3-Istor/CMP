@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.environment import AppEnvironment
 from app.routers import app_overview
 from app.services import activity_sources as sources
 from app.services import app_overview as overview
@@ -77,6 +78,21 @@ def session_factory():
                     project_id="shop",
                     provider_type=ProviderType.LEGACY_HYBRID,
                     status=DeploymentStatus.RUNNING,
+                ),
+                Deployment(
+                    id=10,
+                    name="nostg",
+                    template_id="k3s",
+                    project_id="shop",
+                    provider_type=ProviderType.KUBERNETES,
+                    status=DeploymentStatus.RUNNING,
+                ),
+                AppEnvironment(
+                    deployment_id=7,
+                    name="staging",
+                    state="ready",
+                    hostname="web-shop-staging.3istor.com",
+                    updated_at=NOW,
                 ),
             ]
         )
@@ -533,6 +549,43 @@ class TestEvents:
         assert (
             kube_list.call_args.args[0] == "/api/v1/namespaces/shop-web/events"
         )
+
+    def test_staging_scope_reads_the_stg_namespace(self, session_factory):
+        with session_factory() as db:
+            scope = overview.scope_of(db.get(Deployment, 7), "staging")
+        assert scope.namespace == "shop-web-stg"
+        assert scope.environment == "staging"
+
+    def test_events_of_staging_list_the_staging_namespace(
+        self, session_factory, keycloak
+    ):
+        client = _client(session_factory)
+
+        with mock.patch.object(
+            overview, "kube_list", return_value=[]
+        ) as kube_list:
+            response = client.get("/api/deployments/7/events?env=staging")
+
+        assert response.status_code == 200
+        assert (
+            kube_list.call_args.args[0]
+            == "/api/v1/namespaces/shop-web-stg/events"
+        )
+
+    def test_staging_of_an_app_without_staging_is_404(
+        self, session_factory, keycloak
+    ):
+        response = _client(session_factory).get(
+            "/api/deployments/10/events?env=staging"
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "This app has no staging."
+
+    def test_an_unknown_env_is_rejected(self, session_factory, keycloak):
+        response = _client(session_factory).get(
+            "/api/deployments/7/events?env=dev"
+        )
+        assert response.status_code == 422
 
     def test_honours_the_limit(self, session_factory, keycloak):
         items = [

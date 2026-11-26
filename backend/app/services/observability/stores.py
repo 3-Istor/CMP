@@ -49,6 +49,7 @@ class Scope:
     app: str
     namespace: str
     cloud: str
+    environment: str = "prod"
 
 
 @dataclass(frozen=True)
