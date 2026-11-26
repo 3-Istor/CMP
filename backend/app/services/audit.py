@@ -265,6 +265,14 @@ ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/access/requests/{request_id}/deny"): "access.deny",
     ("POST", "/api/access/requests/{request_id}/cancel"): "access.cancel",
     ("POST", "/api/access/requests/{request_id}/end"): "access.end",
+    (
+        "PUT",
+        "/api/platform-roles/{group}/members/{username}",
+    ): "platform_role.add",
+    (
+        "DELETE",
+        "/api/platform-roles/{group}/members/{username}",
+    ): "platform_role.remove",
     ("POST", "/api/issue-reports"): "issue.report",
     ("PATCH", "/api/issue-reports/{report_id}"): "issue.report.update",
     ("POST", "/api/access-reviews/campaigns"): "access_review.start",
@@ -340,6 +348,8 @@ NOTABLE = {
     "access.end",
     "access.expire",
     "access.unmanaged",
+    "platform_role.add",
+    "platform_role.remove",
     "access_review.start",
     "access_review.decide",
     "access_review.escalate",
