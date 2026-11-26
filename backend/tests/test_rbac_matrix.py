@@ -19,6 +19,7 @@ from app.routers import deployments, finops, imports, projects, security
 from app.services.security.model import Tier
 from app.services import app_overview as overview
 from app.services import keycloak_service
+from app.services.environments import runs
 from app.services.imports import service as import_service
 from app.services.observability import (
     app_alerts,
@@ -156,12 +157,13 @@ def world(monkeypatch):
     monkeypatch.setattr(
         overview,
         "scope_of",
-        lambda d: overview.Scope(
+        lambda d, env="prod": overview.Scope(
             d.project_id,
             d.name,
             f"{d.project_id}-{d.name}",
             TargetCloud.ONPREM,
             ["web"],
+            env,
         ),
     )
     monkeypatch.setattr(
@@ -380,6 +382,27 @@ def test_summary_hides_log_lines_and_callers(client, world, identity, shown):
         200,
         shown,
     )
+
+
+@pytest.mark.parametrize(
+    ("identity", "expected"),
+    [
+        (([], "guest", False), (200, [])),
+        ((["finops"], None, False), (403, None)),
+        (([], None, False), (403, None)),
+    ],
+    ids=["guest", "finops", "none"],
+)
+def test_staging_summary_checks_capabilities(
+    client, world, monkeypatch, identity, expected
+):
+    monkeypatch.setattr(runs, "staging_ready", lambda db, deployment_id: True)
+    world.be(*identity)
+
+    response = client.get("/api/deployments/1/summary?env=staging")
+
+    errors = response.json().get("top_errors")
+    assert (response.status_code, errors) == expected
 
 
 def _exception(world, critical, monkeypatch):
