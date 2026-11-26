@@ -77,9 +77,15 @@ def _holds(
 
 
 def _app(
-    db: Session, token: dict, deployment_id: int, role: ProjectRole
+    db: Session,
+    token: dict,
+    deployment_id: int,
+    role: ProjectRole,
+    cap: str | None = None,
 ) -> Deployment:
-    return _get_kubernetes_deployment_or_404(deployment_id, db, token, role)
+    return _get_kubernetes_deployment_or_404(
+        deployment_id, db, token, role, cap=cap
+    )
 
 
 def _conflict(exc: Exception) -> HTTPException:
@@ -272,7 +278,9 @@ def _policy_read(policy: PromotionPolicy) -> PolicyRead:
 def get_environments(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ):
-    deployment = _app(db, token, deployment_id, ProjectRole.GUEST)
+    deployment = _app(
+        db, token, deployment_id, ProjectRole.GUEST, "release.view"
+    )
     row = db.get(AppEnvironment, (deployment.id, "staging"))
     prod_host = runs.public_url(db, deployment, "prod")
     environments = [
@@ -322,7 +330,7 @@ async def get_environments_diff(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ):
     deployment = await run_in_threadpool(
-        _app, db, token, deployment_id, ProjectRole.GUEST
+        _app, db, token, deployment_id, ProjectRole.GUEST, "release.view"
     )
     row = await run_in_threadpool(
         db.get, AppEnvironment, (deployment.id, "staging")
