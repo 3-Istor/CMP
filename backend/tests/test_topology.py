@@ -13,6 +13,7 @@ from app.core.database import Base, get_db
 from app.core.roles import ProjectRole, at_least
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.imports import ImportRun, ImportService, ImportSource
+from app.models.project import Project
 from app.routers import topology as topology_router
 from app.services import authz, keycloak_service, topology, topology_cache
 from app.services.imports import app_links, service
@@ -604,6 +605,35 @@ def test_system_and_unknown_namespaces_are_left_out(client, world):
 
 
 # ── Access, staging, cache and reconciliation ───────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("groups", "role", "owner", "expected"),
+    [
+        (["infra"], None, False, 200),
+        (["security-auditor"], None, False, 200),
+        (["finops"], None, False, 403),
+        ([], None, True, 200),
+        ([], ProjectRole.ADMIN, False, 200),
+        ([], ProjectRole.MEMBER, False, 200),
+        ([], ProjectRole.GUEST, False, 403),
+        ([], None, False, 403),
+    ],
+    ids=["infra", "auditor", "finops", "owner", "admin", "member", "guest", "none"],
+)
+def test_topology_read_per_identity(
+    client, world, groups, role, owner, expected
+):
+    world.roles.clear()
+    if role:
+        world.roles["shop"] = role
+    world.groups = groups
+    if owner:
+        with world.db() as db:
+            db.add(Project(project_name="shop", owner_username="alice"))
+            db.commit()
+
+    assert client.get("/api/projects/shop/topology").status_code == expected
 
 
 def test_security_auditor_reads_the_topology_of_any_project(client, world):
