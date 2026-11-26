@@ -336,6 +336,7 @@ def RequireCap(cap: str) -> type:  # noqa: N802
     per cap so FastAPI resolves it once per request.
     """
     if cap not in _CAP_DEPS:
+        MIN_ROLE[cap]  # unknown capability fails at import, not per request
 
         def _dep(
             project_name: str,
