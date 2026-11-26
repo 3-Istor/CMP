@@ -3311,7 +3311,7 @@
     "detail": {
       "meta": "Started by {by} on {started}, due {due}.",
       "platformTitle": "Platform groups",
-      "platformDescription": "infra, security-auditor and finops. Reviewed by an infra member other than the person concerned. A removal becomes a Terraform task.",
+      "platformDescription": "infra, security-auditor and finops. Reviewed by an infra member other than the person concerned. Removing an infra member becomes a Terraform task.",
       "projectsTitle": "Projects",
       "projectsDescription": "Decided by each project owner, or its admins when the owner is gone. Decisions apply at once.",
       "empty": "Nothing to review here."

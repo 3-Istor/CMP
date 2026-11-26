@@ -3311,7 +3311,7 @@
     "detail": {
       "meta": "Ouverte par {by} le {started}, échéance le {due}.",
       "platformTitle": "Groupes plateforme",
-      "platformDescription": "infra, security-auditor et finops. Revus par un membre d'infra autre que la personne concernée. Un retrait devient une tâche Terraform.",
+      "platformDescription": "infra, security-auditor et finops. Revus par un membre d'infra autre que la personne concernée. Retirer un membre d'infra devient une tâche Terraform.",
       "projectsTitle": "Projets",
       "projectsDescription": "Décidé par le propriétaire de chaque projet, ou ses administrateurs s'il est parti. Les décisions s'appliquent immédiatement.",
       "empty": "Rien à revoir ici."

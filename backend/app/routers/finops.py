@@ -1160,13 +1160,14 @@ def put_budget(
     token: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    """Create/update a project budget, **Project Owner only**."""
+    """Create/update a project budget: the owner or a platform admin."""
     username = _username(token)
     if not (_is_owner(db, project_name, username) or is_cnp_admin(token)):
         raise HTTPException(
             status_code=403,
             detail=(
-                "Seul le Project Owner peut définir le budget de ce projet."
+                "Seul le Project Owner ou un admin plateforme peut définir "
+                "le budget de ce projet."
             ),
         )
     if payload.threshold_warn >= payload.threshold_critical:
