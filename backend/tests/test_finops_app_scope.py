@@ -133,4 +133,6 @@ def test_prod_cost_rows_keep_the_project(client, monkeypatch):
 
 def test_simulated_staging_cost_is_empty(client):
     assert client.get("/api/finops/apps?project=qcm&env=staging").json() == []
-    assert client.get("/api/finops/apps?project=qcm&env=dev").status_code == 422
+    assert (
+        client.get("/api/finops/apps?project=qcm&env=dev").status_code == 422
+    )
