@@ -40,7 +40,7 @@ IDENTITIES = [
     ([], None, False),
 ]
 
-OK, NO = 200, 403
+OK, NO, NF = 200, 403, 404  # NF: allowed, unknown item
 APP, PRJ = "/deployments/1", "/projects/shop"
 ROWS = {  # under /api
     f"{PRJ}/apps": (OK, OK, OK, OK, OK, OK, OK, NO),
@@ -59,6 +59,8 @@ ROWS = {  # under /api
     f"{PRJ}/customer-access": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{APP}/observability/traces": (OK, NO, NO, OK, OK, OK, NO, NO),
     f"{APP}/observability/logs": (OK, NO, NO, OK, OK, OK, NO, NO),
+    f"{APP}/observability/traces/{'a' * 16}": (NF, NO, NO, NF, NF, NF, NO, NO),
+    f"{PRJ}/imports/runs/unknown": (NF, NF, NO, NF, NF, NF, NO, NO),
     f"{PRJ}/members": (OK, OK, NO, OK, OK, OK, NO, NO),
     "/alerting?project=shop": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{APP}/observability/alerts": (OK, OK, NO, OK, OK, OK, NO, NO),
@@ -76,11 +78,12 @@ SUMMARY = {
     "tiles": {"restarts": 0, "replicas_ready": 1, "replicas_desired": 1},
     "series": {"t": [], "log_info": [], "log_warn": [], "log_error": []},
     "deploys": [],
-    "clients": [],
-    "denied_flows_24h": 0,
+    "clients": [{"app": "web", "verdict": "denied", "flows": 2}],
+    "denied_flows_24h": 2,
     "top_errors": [{"message": "db timeout", "count": 3}],
     "alerts_firing": 0,
 }
+SUMMARY_TOPOLOGY = (SUMMARY["clients"], SUMMARY["denied_flows_24h"])
 
 
 class World:
@@ -216,6 +219,7 @@ def world(monkeypatch):
     monkeypatch.setattr(stores, "trace_account", lambda project: 1)
     monkeypatch.setattr(signals, "slo_status", _stub({"objectives": []}))
     monkeypatch.setattr(app_traces, "list_traces", _stub([]))
+    monkeypatch.setattr(app_traces, "trace_detail", _stub(None))
     monkeypatch.setattr(app_logs, "search", _stub([]))
     monkeypatch.setattr(
         app_alerts, "app_alerts", _stub({"alerts": [], "silences": []})
@@ -349,23 +353,25 @@ def test_owner_outside_the_admins_group_can_edit(client, world):
     assert body["can_edit"] is True
 
 
+FIELDS = ("top_errors", "clients", "denied_flows_24h")
+
+
 @pytest.mark.parametrize(
-    ("identity", "errors"),
+    ("identity", "shown"),
     [
-        ((["security-auditor"], None, False), []),
-        (([], "guest", False), []),
-        (([], "member", False), SUMMARY["top_errors"]),
+        ((["security-auditor"], None, False), ([], *SUMMARY_TOPOLOGY)),
+        (([], "guest", False), ([], [], 0)),
+        (([], "member", False), tuple(SUMMARY[f] for f in FIELDS)),
     ],
     ids=["auditor", "guest", "member"],
 )
-def test_summary_top_errors_only_for_log_readers(
-    client, world, identity, errors
-):
+def test_summary_hides_log_lines_and_callers(client, world, identity, shown):
     world.be(*identity)
 
     response = client.get("/api/deployments/1/summary")
 
-    assert (response.status_code, response.json()["top_errors"]) == (
+    body = response.json()
+    assert (response.status_code, tuple(body[f] for f in FIELDS)) == (
         200,
-        errors,
+        shown,
     )
