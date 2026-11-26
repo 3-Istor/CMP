@@ -315,7 +315,9 @@ def test_aws_reads_only_the_files_of_the_newest_manifest(aws_settings):
     stale = {
         old_key: (_parquet([_row(BilledCost=999.0)]), datetime(2026, 10, 1)),
         "cur/cnp/metadata/billing_period=2026-10/old-Manifest.json": (
-            json.dumps({"dataFiles": [f"s3://cnp-billing/{old_key}"]}).encode(),
+            json.dumps(
+                {"dataFiles": [f"s3://cnp-billing/{old_key}"]}
+            ).encode(),
             datetime(2026, 10, 1),
         ),
     }
@@ -449,7 +451,7 @@ def test_gcp_maps_labels_to_project_app_env(gcp_settings):
 
     assert (bucket.project, bucket.app, bucket.env) == ("qcm", "api", "dev")
     assert (bucket.cloud, bucket.provider_name) == ("gcp", "Google Cloud")
-    assert bucket.x_cost_eur == 1.5
+    assert bucket.x_cost_eur == 2.0
 
 
 def test_gcp_marks_gke_node_lines_for_the_split(gcp_settings):
@@ -921,6 +923,7 @@ def test_ingest_once_writes_aws_invoice_and_splits_the_nodes(
         ServiceCategory="Compute",
         ResourceId="i-0abc",
         BillingCurrency="EUR",
+        BilledCost=10.0,
         EffectiveCost=10.0,
         Tags=json.dumps({"eks:cluster-name": "cnp-eks"}),
     )
@@ -950,3 +953,55 @@ def test_ingest_once_keeps_going_when_aws_billing_fails(wired, monkeypatch):
 
     assert written["aws_focus"] == 0
     assert written["saas"] > 0
+
+
+def _focus_lines(*rows, rate_for=usd_at_1_25):
+    agg = focus.DayAggregator("aws", lambda day: True)
+    for row in rows:
+        agg.add(row)
+    return agg.lines(
+        source="aws-focus",
+        provider_name="AWS",
+        cluster_tag="eks_cluster_name",
+        rate_for=rate_for,
+        today=TODAY,
+    )
+
+
+def test_usage_line_costs_its_billed_amount():
+    line = _focus_lines(_row(BilledCost=5.0, EffectiveCost=0.0))[0]
+
+    assert line.x_cost_eur == pytest.approx(4.0)
+
+
+def test_credit_row_goes_to_credits_project():
+    line = _focus_lines(
+        _row(ChargeCategory="Credit", BilledCost=-5.0, EffectiveCost=-5.0)
+    )[0]
+
+    assert line.project == focus.CREDITS == "__credits__"
+    assert line.app is None
+    assert line.x_allocation_method == "unallocated"
+    assert line.x_cost_eur == pytest.approx(-4.0)
+
+
+def test_credit_on_cluster_node_is_not_a_node():
+    line = _focus_lines(
+        _row(
+            ChargeCategory="Credit",
+            ServiceCategory="Compute",
+            BilledCost=-5.0,
+            Tags=json.dumps({"eks:cluster-name": "cnp-eks"}),
+        )
+    )[0]
+
+    assert line.project == focus.CREDITS
+
+
+def test_credit_without_rate_uses_fallback():
+    line = _focus_lines(
+        _row(ChargeCategory="Credit", BilledCost=-5.0),
+        rate_for=lambda cur, day: None,
+    )[0]
+
+    assert line.x_is_estimate is True
