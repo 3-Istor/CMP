@@ -90,7 +90,8 @@ export type ProjectStatus =
 
 export interface Project {
   name: string;
-  role: ProjectRole;
+  /** Null for a platform reader (auditor, finops) with no project role. */
+  role: ProjectRole | null;
   target_cloud: TargetCloud;
   status: ProjectStatus;
   /** What the bootstrap or teardown is doing now, or why it failed. */

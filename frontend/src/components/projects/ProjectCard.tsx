@@ -70,7 +70,7 @@ export function ProjectCard({ project, onRetried, deletingApps = 0, health, grad
     const [retrying, setRetrying] = useState(false);
     const isOwner = project.role === "owner";
     const isAdmin = project.role === "admin" || isOwner;
-    const RoleIcon = ROLE_ICON[project.role] ?? Users;
+    const RoleIcon = (project.role && ROLE_ICON[project.role]) || Users;
     const isCreating = project.status === "provisioning";
     const isDeleting = project.status === "decommissioning";
     const isFailed = isProjectFailed(project);
@@ -130,7 +130,7 @@ export function ProjectCard({ project, onRetried, deletingApps = 0, health, grad
                             <AlertTriangle className="h-3 w-3" />
                             {t("card.failed")}
                         </Badge>
-                    ) : (
+                    ) : project.role && (
                         <Badge
                             variant={
                                 isAdmin
@@ -161,7 +161,9 @@ export function ProjectCard({ project, onRetried, deletingApps = 0, health, grad
                     <Badge variant="outline" className="text-xs">
                         {tNav(`cloud.${project.target_cloud}`)}
                     </Badge>
-                    {t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })}
+                    {project.role
+                        ? t("card.kubernetes", { blurb: t(`roleBlurbs.${project.role}`) })
+                        : t("page.kubernetes")}
                 </CardDescription>
                 {shownHealth && (
                     <p className="text-xs text-muted-foreground">
@@ -222,7 +224,7 @@ export function ProjectCard({ project, onRetried, deletingApps = 0, health, grad
                             {t("card.retry")}
                         </Button>
                     </>
-                ) : (
+                ) : project.role && (
                     <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
                         project-{project.name}-{GROUP_SUFFIX[project.role]}
                     </div>

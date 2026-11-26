@@ -27,7 +27,7 @@ export default function AppOverviewPage() {
   const isKubernetes = current.provider_type === "kubernetes";
   const canViewLogs = can("app.viewLogs");
   const canViewObservability = can("app.viewObservability");
-  const allowed = isKubernetes && canViewLogs;
+  const allowed = isKubernetes && canViewObservability;
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
 
   const env = useAppEnv();
@@ -96,15 +96,17 @@ export default function AppOverviewPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <LogVolumeCard summary={summary} loading={loading} />
-        <Panel title={t("recentLogs")} className="lg:col-span-2">
-          <LogsView project={projectName} namespace={namespace} appId={appId} env={env} variant="compact" />
-        </Panel>
-      </div>
+      {canViewLogs && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <LogVolumeCard summary={summary} loading={loading} />
+          <Panel title={t("recentLogs")} className="lg:col-span-2">
+            <LogsView project={projectName} namespace={namespace} appId={appId} env={env} variant="compact" />
+          </Panel>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <TopErrorsPanel summary={summary} loading={loading} base={base} staging={staging} />
+        {canViewLogs && <TopErrorsPanel summary={summary} loading={loading} base={base} staging={staging} />}
         <AlertsPanel summary={summary} loading={loading} alertsHref={alertsHref} staging={staging} />
         {datastore ? (
           <DeploymentsPanel
@@ -138,7 +140,7 @@ export default function AppOverviewPage() {
             canManage={can("import.manage")}
           />
         )}
-        {belowSeen && <EventsCard appId={appId} env={env} allowed />}
+        {belowSeen && canViewLogs && <EventsCard appId={appId} env={env} allowed />}
       </div>
 
       {rollback.dialog}

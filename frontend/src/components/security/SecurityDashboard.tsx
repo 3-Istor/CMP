@@ -397,6 +397,9 @@ export function SecurityDashboard({
 
   const { summary, findings, trend, exceptions, role } = data;
   const canAdmin = role.cnp_admin || can(role.role, "security.manage");
+  // Scans and exception requests take a project member; role.role is the
+  // project role only, so the auditor reads without these buttons.
+  const canWrite = role.cnp_admin || can(role.role, "security.view");
 
   function showCategory(category: SecurityCategory) {
     const target = `security-${category}`;
@@ -416,7 +419,7 @@ export function SecurityDashboard({
       project={project}
       apps={summary.apps}
       canAdmin={canAdmin}
-      onIgnore={view === "developer" ? setIgnoring : undefined}
+      onIgnore={view === "developer" && canWrite ? setIgnoring : undefined}
     />
   );
 
@@ -497,7 +500,11 @@ export function SecurityDashboard({
                 <CardTitle>{t("dashboard.scans")}</CardTitle>
               </CardHeader>
               <CardContent>
-                <ScansCard project={project} scans={summary.scans} onRequested={refresh} />
+                <ScansCard
+                  project={project}
+                  scans={summary.scans}
+                  onRequested={canWrite ? refresh : undefined}
+                />
               </CardContent>
             </Card>
           </div>

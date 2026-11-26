@@ -16,7 +16,7 @@ function Section() {
   return (
     <ProjectSection
       title={t("activity")}
-      capability="app.viewObservability"
+      capability="app.viewLogs"
       actions={<AppFilter />}
     >
       <ActivityTab

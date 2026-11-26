@@ -19,7 +19,8 @@ export function ScansCard({
 }: {
   project: string;
   scans: SecurityScan[];
-  onRequested: () => void;
+  /** Absent for a read-only viewer: no restart buttons. */
+  onRequested?: () => void;
 }) {
   const t = useTranslations("security");
   const locale = useLocale();
@@ -55,7 +56,7 @@ export function ScansCard({
     try {
       await requestSecurityScan(project, scan.app, scan.source as "ci" | "trivy-operator");
       toast.success(t("scans.started"));
-      onRequested();
+      onRequested?.();
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -91,7 +92,7 @@ export function ScansCard({
                 {scan.status === "error" ? t("scans.readError") : when(scan)}
               </p>
             </div>
-            {RESTARTABLE.has(scan.source) && scan.app && (
+            {onRequested && RESTARTABLE.has(scan.source) && scan.app && (
               <Button
                 size="sm"
                 variant="outline"

@@ -301,7 +301,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const envQuery = useAppEnv() === "staging" ? "?env=staging" : "";
 
   const tabs: TabEntry[] = [
-    { key: "app", segment: "", icon: FileCode, visible: true },
+    { key: "app", segment: "", icon: FileCode, visible: canViewObservability },
     {
       key: "logs",
       segment: "logs",
@@ -312,7 +312,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       key: "traces",
       segment: "traces",
       icon: Waypoints,
-      visible: isKubernetes && canViewObservability && Boolean(obsCaps?.traces),
+      visible: isKubernetes && can("app.viewTraces") && Boolean(obsCaps?.traces),
     },
     {
       key: "delivery",
@@ -330,7 +330,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       key: "security",
       segment: "security",
       icon: Shield,
-      visible: isKubernetes && canViewObservability,
+      visible: isKubernetes && can("security.view"),
     },
     {
       key: "settings",
@@ -670,7 +670,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
-        {isKubernetes && canViewObservability && activeSegment !== "security" && (
+        {isKubernetes && can("security.view") && activeSegment !== "security" && (
           <SecurityAlert
             project={projectName}
             app={current.name}

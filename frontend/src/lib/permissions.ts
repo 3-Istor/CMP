@@ -108,13 +108,34 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
 };
 
 /**
- * What the security-auditor platform group reads on every project, whatever
- * its project role. Mirrors backend routers/topology.py.
+ * Platform-group grants on every project, whatever the project role.
+ * Mirror AUDITOR_CAPS / FINOPS_CAPS in backend/app/core/roles.py
+ * (test_capabilities guards the drift).
  */
-const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(["topology.view"]);
+const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+  "app.view",
+  "app.list",
+  "app.viewObservability",
+  "app.viewConfig",
+  "release.view",
+  "members.view",
+  "finops.view",
+  "topology.view",
+  "security.view",
+  "alerts.view",
+  "import.view",
+]);
+const FINOPS_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+  "app.list",
+  "app.view",
+  "finops.view",
+]);
 
 export function canAsPlatform(platformRoles: readonly string[], capability: Capability): boolean {
-  return platformRoles.includes("security-auditor") && AUDITOR_CAPABILITIES.has(capability);
+  return (
+    (platformRoles.includes("security-auditor") && AUDITOR_CAPABILITIES.has(capability)) ||
+    (platformRoles.includes("finops") && FINOPS_CAPABILITIES.has(capability))
+  );
 }
 
 /**

@@ -1,9 +1,9 @@
 "use client";
 
-import { getSecurityRole } from "@/lib/api";
+import { useCan } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AuditView } from "./AuditView";
 import { LogsView } from "./LogsView";
 
@@ -18,15 +18,8 @@ export function ActivityTab({
 }) {
   const t = useTranslations("activity.tab");
   const [view, setView] = useState<View>("audit");
-  const [role, setRole] = useState<{ admin: boolean } | null>(null);
+  const { can, loading } = useCan(project);
   const scope = app ? "app" : "project";
-
-  useEffect(() => {
-    getSecurityRole(project).then(
-      (r) => setRole({ admin: r.cnp_admin || r.role === "admin" }),
-      () => setRole({ admin: false }),
-    );
-  }, [project]);
 
   return (
     <div className="space-y-6">
@@ -36,31 +29,33 @@ export function ActivityTab({
             ? t("description.audit", { scope })
             : t("description.logs", { scope })}
         </p>
-        <div className="flex rounded-full border p-0.5">
-          {(["audit", "logs"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={cn(
-                "rounded-full px-4 py-1 text-sm transition-colors",
-                view === v
-                  ? "bg-primary/15 font-medium"
-                  : "text-muted-foreground",
-              )}
-            >
-              {t(`views.${v}`)}
-            </button>
-          ))}
-        </div>
+        {can("app.viewLogs") && (
+          <div className="flex rounded-full border p-0.5">
+            {(["audit", "logs"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={cn(
+                  "rounded-full px-4 py-1 text-sm transition-colors",
+                  view === v
+                    ? "bg-primary/15 font-medium"
+                    : "text-muted-foreground",
+                )}
+              >
+                {t(`views.${v}`)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {view === "audit" ? (
-        role && (
+        !loading && (
           <AuditView
             project={project}
             app={app}
             canExport
-            showLogins={role.admin}
+            showLogins={can("members.manage")}
           />
         )
       ) : (
