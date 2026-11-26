@@ -8,6 +8,7 @@ import {
   getProjectLogs,
   isNotConnected,
   searchObsLogs,
+  type AppEnv,
 } from "@/lib/api";
 import { NotConnected } from "@/components/clusters/NotConnected";
 import { TopErrors } from "@/components/observability/TopErrors";
@@ -74,6 +75,8 @@ interface QueryProps {
   namespace?: string;
   /** The app these logs belong to: its observability store is read when it has one. */
   appId?: number;
+  /** Which environment of the app's store is read (prod by default). */
+  env?: AppEnv;
   /** Lines of one trace (the Logs tab's ?trace=). */
   trace?: string | null;
   onClearTrace?: () => void;
@@ -98,7 +101,8 @@ export type LogsViewProps = QueryProps | StreamProps;
  */
 export function LogsView(props: LogsViewProps) {
   if (props.variant === "stream") return <StreamLogs {...props} />;
-  return <QueryLogs {...props} />;
+  // The filters seed their namespace from the props once: a new env starts afresh.
+  return <QueryLogs key={props.env} {...props} />;
 }
 
 function LogsDialog({
@@ -309,6 +313,7 @@ function QueryLogs({
   project,
   namespace,
   appId,
+  env = "prod",
   trace = null,
   onClearTrace,
   fullPage = false,
@@ -381,6 +386,7 @@ function QueryLogs({
         q: serverSearch ?? undefined,
         trace_id: trace ?? undefined,
         limit,
+        env,
       });
       return found.map((r) => ({
         time: r.time,
@@ -392,7 +398,7 @@ function QueryLogs({
         trace_id: r.trace_id,
       }));
     },
-    [obs, appId, project, filters, term, serverSearch, trace, period, namespace, compact],
+    [obs, appId, env, project, filters, term, serverSearch, trace, period, namespace, compact],
   );
 
   const load = useCallback(async () => {
@@ -532,6 +538,7 @@ function QueryLogs({
     else if (namespace || filters.namespace)
       params.set("namespace", namespace ?? filters.namespace ?? "");
     if (trace) params.set("trace", trace);
+    if (env === "staging") params.set("env", env);
     logsQueryToParams(query, params);
     const qs = params.toString();
     return `${window.location.origin}${path}${qs ? `?${qs}` : ""}`;
@@ -564,6 +571,7 @@ function QueryLogs({
   if (namespace) tab.set("namespace", namespace);
   // The new tab reads the same store as this one.
   if (appId != null) tab.set("app", String(appId));
+  if (env === "staging") tab.set("env", env);
   const tabQuery = tab.toString();
   const errorBox =
     error != null &&
@@ -605,6 +613,7 @@ function QueryLogs({
               project={project}
               namespace={namespace}
               appId={appId}
+              env={env}
               trace={trace}
               initialQuery={initialQuery}
               onExit={() => setExpanded(false)}
@@ -845,6 +854,7 @@ function QueryLogs({
               appId={appId}
               base={`/projects/${encodeURIComponent(project)}/apps/${appId}`}
               range={period}
+              env={env}
               onPick={(row) => {
                 const words = row.pattern.split("<N>")[0].trim().slice(0, MAX_SEARCH);
                 setSearchInput(words);

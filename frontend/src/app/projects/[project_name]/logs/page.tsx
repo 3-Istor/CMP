@@ -36,6 +36,7 @@ function ProjectLogs() {
           project={projectName}
           namespace={namespace}
           appId={Number.isInteger(app) && app > 0 ? app : undefined}
+          env={search.get("env") === "staging" ? "staging" : "prod"}
           initialQuery={logsQueryFromParams(search)}
           fullPage
         />

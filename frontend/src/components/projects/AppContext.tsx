@@ -1,13 +1,13 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { cachedAnswer, getDeployment, projectAppsPath } from "@/lib/api";
+import { cachedAnswer, getDeployment, projectAppsPath, type AppEnv } from "@/lib/api";
 import { APPS_REFRESH_MS } from "@/components/layout/ProjectNav";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { pollDue } from "@/lib/hooks";
 import type { Deployment } from "@/types";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -41,6 +41,15 @@ export function useAppContext(): AppContextValue {
   const value = useContext(AppContext);
   if (!value) throw new Error("useAppContext outside AppProvider");
   return value;
+}
+
+export type { AppEnv };
+
+/** `?env=staging` on an app with a staging environment; prod otherwise. */
+export function useAppEnv(): AppEnv {
+  const { deployment } = useAppContext();
+  const search = useSearchParams();
+  return search.get("env") === "staging" && deployment.staging_url ? "staging" : "prod";
 }
 
 export function AppProvider({

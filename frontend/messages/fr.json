@@ -227,7 +227,8 @@
       "deployments": "Déploiements",
       "delivery": "Livraison",
       "settings": "Paramètres",
-      "traces": "Traces"
+      "traces": "Traces",
+      "environment": "Environnement"
     },
     "status": {
       "pending": "En attente",
@@ -4712,6 +4713,7 @@
     }
   },
   "appOverview": {
+    "notMeasuredStaging": "Pas encore mesuré pour staging",
     "reasons": {
       "asleep": "En veille",
       "errors_5xx": "Erreurs 5xx",

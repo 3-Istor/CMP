@@ -97,7 +97,17 @@ export function DeploymentsPanel({
   );
 }
 
-export function TopErrorsPanel({ summary, loading, base }: { summary: AppSummary | null; loading: boolean; base: string }) {
+export function TopErrorsPanel({
+  summary,
+  loading,
+  base,
+  staging = false,
+}: {
+  summary: AppSummary | null;
+  loading: boolean;
+  base: string;
+  staging?: boolean;
+}) {
   const t = useTranslations("appOverview.topErrors");
   const { number } = useObsFormat();
   const rows = summary?.top_errors ?? [];
@@ -112,7 +122,7 @@ export function TopErrorsPanel({ summary, loading, base }: { summary: AppSummary
           {rows.map((r) => (
             <li key={r.message}>
               <Link
-                href={`${base}/logs?q=${encodeURIComponent(r.message.slice(0, 200))}`}
+                href={`${base}/logs?q=${encodeURIComponent(r.message.slice(0, 200))}${staging ? "&env=staging" : ""}`}
                 className="flex items-baseline justify-between gap-3 hover:underline"
               >
                 <code className="min-w-0 truncate">{r.message}</code>
@@ -130,16 +140,21 @@ export function AlertsPanel({
   summary,
   loading,
   alertsHref,
+  staging = false,
 }: {
   summary: AppSummary | null;
   loading: boolean;
   alertsHref: string;
+  staging?: boolean;
 }) {
   const t = useTranslations("appOverview.alerts");
+  const tOv = useTranslations("appOverview");
   const firing = summary?.alerts_firing ?? 0;
   return (
     <Panel title={t("title")} description={t("description")}>
-      {loading ? (
+      {staging ? (
+        <EmptyState compact title={tOv("notMeasuredStaging")} />
+      ) : loading ? (
         <SkeletonLines count={1} />
       ) : firing > 0 ? (
         <div className="flex items-center justify-between gap-2">

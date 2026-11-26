@@ -1,6 +1,6 @@
 "use client";
 
-import { cachedGet, getAppSummary, type SummaryRange } from "@/lib/api";
+import { cachedGet, getAppSummary, type AppEnv, type SummaryRange } from "@/lib/api";
 import { useCardData } from "@/lib/useCardData";
 import type { ReleaseEvent } from "@/types";
 import { useEffect, useRef, useState } from "react";
@@ -8,10 +8,10 @@ import { useEffect, useRef, useState } from "react";
 // The frame header, the overview and a hover on the project list ask for the same summary: one answer serves all three.
 const SHARED_MS = 25_000;
 
-export function useAppSummary(appId: number, range: SummaryRange, enabled: boolean) {
+export function useAppSummary(appId: number, range: SummaryRange, enabled: boolean, env: AppEnv = "prod") {
   return useCardData(
-    `summary-${appId}-${range}`,
-    () => getAppSummary(appId, range, SHARED_MS),
+    `summary-${appId}-${range}-${env}`,
+    () => getAppSummary(appId, range, SHARED_MS, env),
     { enabled, intervalMs: 30_000 },
   );
 }

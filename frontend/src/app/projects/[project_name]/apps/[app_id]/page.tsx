@@ -10,7 +10,7 @@ import { Panel } from "@/components/app-overview/shared";
 import { DatastoreStatusBand, WebStatusBand } from "@/components/app-overview/StatusBand";
 import { WeeklyView } from "@/components/app-overview/WeeklyView";
 import { ManagedServicesCard } from "@/components/imports/Recommendations";
-import { useAppContext } from "@/components/projects/AppContext";
+import { useAppContext, useAppEnv } from "@/components/projects/AppContext";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SummaryRange } from "@/lib/api";
@@ -30,15 +30,18 @@ export default function AppOverviewPage() {
   const allowed = isKubernetes && canViewLogs;
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
 
+  const env = useAppEnv();
+  const staging = env === "staging";
   const [range, setRange] = useState<SummaryRange>("24h");
-  const day = useAppSummary(appId, "24h", allowed);
-  const chart = useAppSummary(appId, range, allowed && range !== "24h");
+  const day = useAppSummary(appId, "24h", allowed, env);
+  const chart = useAppSummary(appId, range, allowed && range !== "24h", env);
   const chartCard = range === "24h" ? day : chart;
   const summary = day.data;
   const loading = day.loading && !summary;
   const chartLoading = chartCard.loading && !chartCard.data;
 
-  const rollback = useRollback(appId, summary?.deploys ?? [], allowed && can("release.operate"));
+  // Rollback acts on prod: not offered on staging deploys.
+  const rollback = useRollback(appId, summary?.deploys ?? [], allowed && !staging && can("release.operate"));
   const [belowRef, belowSeen] = useInView<HTMLDivElement>();
 
   if (!isKubernetes) {
@@ -51,7 +54,8 @@ export default function AppOverviewPage() {
     summary?.kind ??
     (appKind(current.name, current.template_id, current.template_category) === "db" ? "datastore" : "web");
   const datastore = kind === "datastore";
-  const namespace = current.k8s_namespace ?? `${projectName}-${current.name}`;
+  const prodNamespace = current.k8s_namespace ?? `${projectName}-${current.name}`;
+  const namespace = staging ? `${prodNamespace}-stg` : prodNamespace;
   const alertsHref = `/projects/${encodeURIComponent(projectName)}/alerts`;
 
   return (
@@ -95,13 +99,13 @@ export default function AppOverviewPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <LogVolumeCard summary={summary} loading={loading} />
         <Panel title={t("recentLogs")} className="lg:col-span-2">
-          <LogsView project={projectName} namespace={namespace} appId={appId} variant="compact" />
+          <LogsView project={projectName} namespace={namespace} appId={appId} env={env} variant="compact" />
         </Panel>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <TopErrorsPanel summary={summary} loading={loading} base={base} />
-        <AlertsPanel summary={summary} loading={loading} alertsHref={alertsHref} />
+        <TopErrorsPanel summary={summary} loading={loading} base={base} staging={staging} />
+        <AlertsPanel summary={summary} loading={loading} alertsHref={alertsHref} staging={staging} />
         {datastore ? (
           <DeploymentsPanel
             deploys={summary?.deploys ?? []}
@@ -119,6 +123,7 @@ export default function AppOverviewPage() {
         appId={appId}
         projectName={projectName}
         base={base}
+        env={env}
         repoUrl={current.github_repo_url}
         canViewObservability={canViewObservability}
         canViewFinops={can("finops.view")}
@@ -133,7 +138,7 @@ export default function AppOverviewPage() {
             canManage={can("import.manage")}
           />
         )}
-        {belowSeen && <EventsCard appId={appId} allowed />}
+        {belowSeen && <EventsCard appId={appId} env={env} allowed />}
       </div>
 
       {rollback.dialog}
