@@ -22,6 +22,8 @@ from app.core.database import SessionLocal
 from app.models.finops import CostLineItem
 from app.services.finops import engine, platform, pricing, recommendations_real
 from app.services.finops.engine import AppSpec
+from app.services.finops.ingest.focus import CLUSTER, CREDITS
+from app.services.finops.ingest.split import invoice_source, split_source
 from app.services.finops.recommendations import (
     Recommendation,
     recommendations_for_apps,
@@ -64,11 +66,18 @@ class CostProvider(ABC):
         return self.timeline(apps, start, end, "daily")
 
     def by_cloud(
-        self, apps: list[AppSpec], ref: date | None = None
+        self,
+        apps: list[AppSpec],
+        ref: date | None = None,
+        whole_platform: bool = False,
     ) -> dict[str, float]:
         """Month-to-date cost per cloud; everything is on-prem by default."""
         total = self.summary(apps, ref)["month_to_date_eur"]
         return {"onprem": total, "aws": 0.0, "gcp": 0.0}
+
+    def credits_by_cloud(self, ref: date | None = None) -> dict[str, float]:
+        """Month-to-date cloud credits (positive amounts); none by default."""
+        return {}
 
 
 class SimulatedCostProvider(CostProvider):
@@ -135,6 +144,7 @@ class SimulatedCostProvider(CostProvider):
 
 REAL_RESOURCES = ("cpu", "ram", "storage", "network", "ai", "platform")
 _CLOUDS = ("onprem", "aws", "gcp")
+_PUBLIC = ("aws", "gcp")
 _BY_SERVICE = {
     "Kubernetes CPU": "cpu",
     "Kubernetes GPU": "cpu",
@@ -160,6 +170,16 @@ def resource_of(service_name: str, service_category: str) -> str:
 
 def _days_in_month(ref: date) -> int:
     return calendar.monthrange(ref.year, ref.month)[1]
+
+
+def _within(start: date, end: date) -> tuple:
+    """Conditions for lines charged from *start* to *end*, both included."""
+    return (
+        CostLineItem.charge_period_start
+        >= datetime.combine(start, datetime.min.time()),
+        CostLineItem.charge_period_start
+        < datetime.combine(end + timedelta(days=1), datetime.min.time()),
+    )
 
 
 class RealCostProvider(CostProvider):
@@ -189,8 +209,12 @@ class RealCostProvider(CostProvider):
         query = (
             select(CostLineItem.resource_name, CostLineItem.project)
             .where(
-                CostLineItem.x_source == "opencost",
-                CostLineItem.cloud == "onprem",
+                or_(
+                    (CostLineItem.x_source == "opencost")
+                    & (CostLineItem.cloud == "onprem"),
+                    # Cloud apps: their namespaces in the split invoice.
+                    CostLineItem.x_source.like("%\\_split", escape="\\"),
+                ),
                 CostLineItem.charge_period_start
                 >= datetime.combine(
                     ref - timedelta(days=90), datetime.min.time()
@@ -289,9 +313,11 @@ class RealCostProvider(CostProvider):
         return fees
 
     def _days(
-        self, apps, start: date, end: date, cluster=None
+        self, apps, start: date, end: date, cluster=None, lines=None
     ) -> dict[date, dict[str, float]]:
-        days = self._daily(self._lines(apps, start, end))
+        if lines is None:
+            lines = self._lines(apps, start, end)
+        days = self._daily(lines)
         if not any(a.namespace for a in apps):
             return days
         cluster = (
@@ -318,6 +344,7 @@ class RealCostProvider(CostProvider):
             CostLineItem.service_category,
             CostLineItem.cloud,
             CostLineItem.x_cost_eur,
+            CostLineItem.x_is_estimate,
         ).where(
             CostLineItem.charge_period_start
             >= datetime.combine(start, datetime.min.time()),
@@ -343,7 +370,7 @@ class RealCostProvider(CostProvider):
         days: dict[date, dict[str, float]] = defaultdict(
             lambda: {r: 0.0 for r in REAL_RESOURCES}
         )
-        for start, _name, service, category, _cloud, cost in lines:
+        for start, _name, service, category, _cloud, cost, _est in lines:
             days[start.date()][resource_of(service, category)] += cost
         return days
 
@@ -373,10 +400,12 @@ class RealCostProvider(CostProvider):
                 totals[r] += slot[r]
         return {r: round(v, 2) for r, v in totals.items()}
 
-    def by_cloud(self, apps, ref=None):
+    def by_cloud(self, apps, ref=None, whole_platform=False):
         ref = ref or date.today()
         totals = {c: 0.0 for c in _CLOUDS}
-        for *_head, cloud, cost in self._lines(apps, ref.replace(day=1), ref):
+        for *_head, cloud, cost, _est in self._lines(
+            apps, ref.replace(day=1), ref
+        ):
             totals[cloud] = totals.get(cloud, 0.0) + cost
         if any(a.namespace for a in apps):
             totals["onprem"] += sum(
@@ -384,7 +413,56 @@ class RealCostProvider(CostProvider):
                     apps, self.cluster_days(ref.replace(day=1), ref)
                 ).values()
             )
+        if whole_platform:
+            totals.update(self._invoices(ref.replace(day=1), ref))
         return {c: round(v, 2) for c, v in totals.items()}
+
+    def _invoices(self, start: date, end: date) -> dict[str, float]:
+        """
+        Whole public cloud invoices before credits: node lines of split days
+        give way to the split lines that replace them (see ``split``).
+        """
+        sources = [
+            f(c) for c in _PUBLIC for f in (invoice_source, split_source)
+        ]
+        query = select(
+            CostLineItem.cloud,
+            CostLineItem.project,
+            CostLineItem.charge_period_start,
+            CostLineItem.x_source,
+            CostLineItem.x_cost_eur,
+        ).where(CostLineItem.x_source.in_(sources), *_within(start, end))
+        with self._session_factory() as db:
+            rows = db.execute(query).all()
+        split = {
+            (cloud, when)
+            for cloud, _p, when, source, _c in rows
+            if source == split_source(cloud)
+        }
+        totals = {c: 0.0 for c in _PUBLIC}
+        for cloud, project, when, _source, cost in rows:
+            if project == CREDITS or (
+                project == CLUSTER and (cloud, when) in split
+            ):
+                continue
+            totals[cloud] += cost
+        return totals
+
+    def credits_by_cloud(self, ref=None):
+        ref = ref or date.today()
+        query = (
+            select(CostLineItem.cloud, func.sum(CostLineItem.x_cost_eur))
+            .where(
+                CostLineItem.project == CREDITS,
+                *_within(ref.replace(day=1), ref),
+            )
+            .group_by(CostLineItem.cloud)
+        )
+        totals = {c: 0.0 for c in _PUBLIC}
+        with self._session_factory() as db:
+            for cloud, amount in db.execute(query).all():
+                totals[cloud] = round(-(amount or 0.0), 2)
+        return totals
 
     def summary(self, apps, ref=None):
         ref = ref or date.today()
@@ -425,7 +503,8 @@ class RealCostProvider(CostProvider):
             else {}
         )
         for app in apps:
-            days = self._days([app], first, ref, cluster)
+            lines = self._lines([app], first, ref)
+            days = self._days([app], first, ref, cluster, lines)
             totals = {d: sum(slot.values()) for d, slot in days.items()}
             ordered = sorted(totals)
             latest = totals[ordered[-1]] if ordered else 0.0
@@ -454,6 +533,7 @@ class RealCostProvider(CostProvider):
                         if before > 0
                         else None
                     ),
+                    "estimated": any(line[-1] for line in lines),
                 }
             )
         rows.sort(key=lambda r: r["cost_month_estimate_eur"], reverse=True)

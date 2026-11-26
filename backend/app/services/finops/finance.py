@@ -26,6 +26,7 @@ from app.models.finops import (
     SavingsEntry,
 )
 from app.services.finops import platform
+from app.services.finops.ingest.focus import CLUSTER, CREDITS
 from app.services.finops.provider import resource_of
 
 PERIOD_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
@@ -94,7 +95,16 @@ def nature(line: CostLineItem) -> str:
 
 
 def is_unallocated(project: str | None) -> bool:
-    return not project or project in _NOT_A_PROJECT
+    return not project or project in _NOT_A_PROJECT or project == CLUSTER
+
+
+def project_label(project: str | None) -> str:
+    """Row name of a project; credits get their own row, never a project's."""
+    if project == CREDITS:
+        return "(crédits)"
+    if project == CLUSTER:
+        return "(non alloué)"
+    return project or "(non alloué)"
 
 
 # ── Reads ─────────────────────────────────────────────────────────────────────
@@ -103,15 +113,31 @@ def is_unallocated(project: str | None) -> bool:
 def month_lines(
     db: Session, period: str, projects: list[str] | None = None
 ) -> list[CostLineItem]:
-    """Lines of *period*; ``projects`` restricts them, None means all."""
+    """
+    Lines of *period*; ``projects`` restricts them, None means all. Cloud
+    node lines of a split day are dropped: the split lines replace them.
+    """
     query = select(CostLineItem).where(CostLineItem.billing_period == period)
     if projects is not None:
         query = query.where(CostLineItem.project.in_(projects))
-    return list(
+    lines = list(
         db.scalars(
             query.order_by(CostLineItem.charge_period_start, CostLineItem.id)
         )
     )
+    replaced = {
+        (line.cloud, line.charge_period_start)
+        for line in lines
+        if line.x_source.endswith("_split")
+    }
+    return [
+        line
+        for line in lines
+        if not (
+            line.project == CLUSTER
+            and (line.cloud, line.charge_period_start) in replaced
+        )
+    ]
 
 
 def month_savings(
@@ -161,7 +187,7 @@ def totals_by_provider(
 def totals_by_project(lines: list[CostLineItem]) -> list[tuple[str, float]]:
     acc: dict[str, float] = defaultdict(float)
     for line in lines:
-        acc[line.project or "(non alloué)"] += line.x_cost_eur or 0.0
+        acc[project_label(line.project)] += line.x_cost_eur or 0.0
     return sorted(
         ((k, round(v, 2)) for k, v in acc.items()), key=lambda r: -r[1]
     )
@@ -177,6 +203,7 @@ def provider_sums(lines: list[CostLineItem]) -> list[tuple[str, float]]:
 
 
 def unallocated_pct(lines: list[CostLineItem]) -> float:
+    lines = [line for line in lines if line.project != CREDITS]
     total = sum(line.x_cost_eur or 0.0 for line in lines)
     if total <= 0:
         return 0.0
@@ -260,7 +287,7 @@ def build_xlsx(
     )
     bases: dict[str, set[str]] = defaultdict(set)
     for line in lines:
-        bases[line.project or "(non alloué)"].add(line.x_pricing_basis)
+        bases[project_label(line.project)].add(line.x_pricing_basis)
     for project, cost in totals_by_project(lines):
         center = centers.get(project)
         _append(
@@ -291,7 +318,7 @@ def build_xlsx(
     grid: dict[tuple[str, str, str], float] = defaultdict(float)
     for line in lines:
         key = (
-            line.project or "(non alloué)",
+            project_label(line.project),
             line.provider_name,
             line.x_pricing_basis,
         )
@@ -416,6 +443,7 @@ def build_xlsx(
             "Non alloué",
             "Non alloué (%)",
             "Écart inexpliqué",
+            "Crédits",
         ],
         bold=True,
     )
@@ -431,9 +459,10 @@ def build_xlsx(
                 round(gap["unallocated_eur"], 2),
                 gap["unallocated_pct"],
                 round(gap["gap_eur"], 2),
+                round(gap.get("credits_eur", 0.0), 2),
             ],
         )
-    _widths(reconciled, (12, 12, 18, 10, 12, 12, 14, 16))
+    _widths(reconciled, (12, 12, 18, 10, 12, 12, 14, 16, 10))
 
     ledger = book.create_sheet("Économies")
     _append(
@@ -604,6 +633,8 @@ def build_statement_pdf(
     by_resource: dict[str, float] = defaultdict(float)
     by_app: dict[str, float] = defaultdict(float)
     for line in lines:
+        if line.project == CREDITS:
+            continue
         by_resource[resource_of(line.service_name, line.service_category)] += (
             line.x_cost_eur or 0.0
         )

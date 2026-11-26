@@ -402,6 +402,7 @@ export interface AppCostRow {
   month_to_date_eur: number;
   trend_pct: number | null;
   platform_eur?: number;
+  estimated?: boolean;
 }
 
 export interface PlatformReport {
@@ -447,6 +448,7 @@ export interface FinopsOverview {
   apps: AppCostRow[];
   timeline: CostSeriesPoint[];
   by_cloud: Record<FinopsCloud, number>;
+  credits_by_cloud?: Partial<Record<FinopsCloud, number>>;
   savings_ytd: FinopsSavingsYtd;
   /** Real costs only: the forecast behind summary.projected_month_eur. */
   forecast?: CostForecast | null;

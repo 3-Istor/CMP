@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.core.database import Base
-from app.models.finops import CostLineItem
+from app.models.finops import CostLineItem, MonthClose
 from app.services.finops import ingest, reconciliation
 from app.services.finops.ingest import aws_focus, focus, fx, gcp_focus, split
 from app.services.finops.ingest.focus import CLUSTER
@@ -114,12 +114,12 @@ def _export(files_by_period, stale=None) -> FakeS3:
     objects = {}
     for period, rows in files_by_period.items():
         data_key = (
-            f"cur/cnp/data/BILLING_PERIOD={period}/cnp-00001.snappy.parquet"
+            f"cur/cnp/data/billing_period={period}/cnp-00001.snappy.parquet"
         )
         objects[data_key] = (_parquet(rows), datetime(2026, 10, 28))
-        manifest = {"dataFiles": [data_key]}
+        manifest = {"dataFiles": [f"s3://cnp-billing/{data_key}"]}
         objects[
-            f"cur/cnp/metadata/BILLING_PERIOD={period}/cnp-Manifest.json"
+            f"cur/cnp/metadata/billing_period={period}/cnp-Manifest.json"
         ] = (
             json.dumps(manifest).encode(),
             datetime(2026, 10, 28),
@@ -305,12 +305,19 @@ def test_aws_oldest_day_is_the_start_of_the_oldest_open_period():
     )
 
 
+def test_object_key_strips_bucket_uri():
+    assert aws_focus.object_key("b", "s3://b/x/y.parquet") == "x/y.parquet"
+    assert aws_focus.object_key("b", "x/y.parquet") == "x/y.parquet"
+
+
 def test_aws_reads_only_the_files_of_the_newest_manifest(aws_settings):
-    old_key = "cur/cnp/data/BILLING_PERIOD=2026-10/old.parquet"
+    old_key = "cur/cnp/data/billing_period=2026-10/old.parquet"
     stale = {
         old_key: (_parquet([_row(BilledCost=999.0)]), datetime(2026, 10, 1)),
-        "cur/cnp/metadata/BILLING_PERIOD=2026-10/old-Manifest.json": (
-            json.dumps({"dataFiles": [old_key]}).encode(),
+        "cur/cnp/metadata/billing_period=2026-10/old-Manifest.json": (
+            json.dumps(
+                {"dataFiles": [f"s3://cnp-billing/{old_key}"]}
+            ).encode(),
             datetime(2026, 10, 1),
         ),
     }
@@ -334,7 +341,7 @@ def test_aws_ignores_days_of_final_periods_outside_the_replay_window(
     )
 
     assert {line.charge_period_start.month for line in lines} == {10}
-    assert not any("BILLING_PERIOD=2026-08/cnp-00001" in k for k in s3.read)
+    assert not any("billing_period=2026-08/cnp-00001" in k for k in s3.read)
 
 
 def test_aws_rereads_open_periods_beyond_the_replay_window(aws_settings):
@@ -444,7 +451,7 @@ def test_gcp_maps_labels_to_project_app_env(gcp_settings):
 
     assert (bucket.project, bucket.app, bucket.env) == ("qcm", "api", "dev")
     assert (bucket.cloud, bucket.provider_name) == ("gcp", "Google Cloud")
-    assert bucket.x_cost_eur == 1.5
+    assert bucket.x_cost_eur == 2.0
 
 
 def test_gcp_marks_gke_node_lines_for_the_split(gcp_settings):
@@ -853,6 +860,20 @@ def test_reconcile_ignores_the_other_cloud(factory):
     assert result["invoice_total_eur"] == 7.0
 
 
+def test_reconcile_puts_credits_apart(factory):
+    credit = _tagged("aws", -2.0, focus.CREDITS, rid="credit")
+    credit.charge_category = "Credit"
+    with factory() as db:
+        upsert(db, [_tagged("aws", 5.0, "qcm"), credit])
+
+        result = reconciliation.reconcile(db, "aws", "2026-10")
+
+    assert result["invoice_total_eur"] == 5.0
+    assert result["allocated_eur"] == 5.0
+    assert result["credits_eur"] == 2.0
+    assert result["gap_eur"] == 0.0
+
+
 def test_reconcile_rejects_an_unknown_provider(factory):
     with factory() as db, pytest.raises(ValueError):
         reconciliation.reconcile(db, "azure", "2026-10")
@@ -916,6 +937,7 @@ def test_ingest_once_writes_aws_invoice_and_splits_the_nodes(
         ServiceCategory="Compute",
         ResourceId="i-0abc",
         BillingCurrency="EUR",
+        BilledCost=10.0,
         EffectiveCost=10.0,
         Tags=json.dumps({"eks:cluster-name": "cnp-eks"}),
     )
@@ -945,3 +967,210 @@ def test_ingest_once_keeps_going_when_aws_billing_fails(wired, monkeypatch):
 
     assert written["aws_focus"] == 0
     assert written["saas"] > 0
+
+
+def _focus_lines(*rows, rate_for=usd_at_1_25):
+    agg = focus.DayAggregator("aws", lambda day: True)
+    for row in rows:
+        agg.add(row)
+    return agg.lines(
+        source="aws-focus",
+        provider_name="AWS",
+        cluster_tag="eks_cluster_name",
+        rate_for=rate_for,
+        today=TODAY,
+    )
+
+
+def test_usage_line_costs_its_billed_amount():
+    line = _focus_lines(_row(BilledCost=5.0, EffectiveCost=0.0))[0]
+
+    assert line.x_cost_eur == pytest.approx(4.0)
+
+
+def test_credit_row_goes_to_credits_project():
+    line = _focus_lines(
+        _row(ChargeCategory="Credit", BilledCost=-5.0, EffectiveCost=-5.0)
+    )[0]
+
+    assert line.project == focus.CREDITS == "__credits__"
+    assert line.app is None
+    assert line.x_allocation_method == "unallocated"
+    assert line.x_cost_eur == pytest.approx(-4.0)
+
+
+def test_credit_on_cluster_node_is_not_a_node():
+    line = _focus_lines(
+        _row(
+            ChargeCategory="Credit",
+            ServiceCategory="Compute",
+            BilledCost=-5.0,
+            Tags=json.dumps({"eks:cluster-name": "cnp-eks"}),
+        )
+    )[0]
+
+    assert line.project == focus.CREDITS
+
+
+def test_credit_without_rate_uses_fallback():
+    line = _focus_lines(
+        _row(ChargeCategory="Credit", BilledCost=-5.0),
+        rate_for=lambda cur, day: None,
+    )[0]
+
+    assert line.x_is_estimate is True
+
+
+def test_gcp_query_filters_billed_projects(gcp_settings, monkeypatch):
+    monkeypatch.setattr(settings, "FINOPS_GCP_PROJECT", "project-94dabc15")
+    monkeypatch.setattr(settings, "FINOPS_GCP_BILLED_PROJECTS", "")
+    captured = []
+
+    _gcp_lines(captured)
+
+    body = json.loads(captured[0].content)
+    assert "@projects" in body["query"]
+    param = next(p for p in body["queryParameters"] if p["name"] == "projects")
+    assert param["parameterType"] == {
+        "type": "ARRAY",
+        "arrayType": {"type": "STRING"},
+    }
+    assert param["parameterValue"]["arrayValues"] == [
+        {"value": "project-94dabc15"}
+    ]
+
+
+def test_gcp_billed_projects_setting_is_a_comma_list(monkeypatch):
+    monkeypatch.setattr(settings, "FINOPS_GCP_BILLED_PROJECTS", "a, b")
+
+    assert gcp_focus.billed_projects() == ["a", "b"]
+
+
+def test_gcp_detailed_sql_emits_credit_rows(gcp_settings):
+    base = json.loads(
+        (FIXTURES / "bigquery_billing_response.json").read_text()
+    )
+
+    def row(category, cost):
+        return {
+            "f": [
+                {"v": "2026-10-27"},
+                {"v": "Cloud Storage"},
+                {"v": "Storage"},
+                {"v": category},
+                {"v": "//storage/buckets/qcm-data"},
+                {"v": "qcm-data"},
+                {"v": cost},
+                {"v": cost},
+                {"v": cost},
+                {"v": "EUR"},
+                {"v": "10"},
+                {"v": "gibibyte month"},
+                {"v": "[]"},
+            ]
+        }
+
+    body = {**base, "rows": [row("Usage", "2.0"), row("Credit", "-2.0")]}
+    captured = []
+
+    def handler(request):
+        captured.append(request)
+        return httpx.Response(200, json=body)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    lines = gcp_focus.fetch_lines(TODAY, WINDOW, SINCE, usd_at_1_25, client)
+
+    query = json.loads(captured[0].content)["query"]
+    assert "UNNEST(credits)" in query
+    assert (
+        "'Other' AS ServiceCategory"
+        not in query.split("UNNEST(credits)")[0].split("UNION ALL")[1]
+    )
+    assert "WHEN 'Compute Engine'" in query.split("UNION ALL")[1]
+    assert sorted((ln.project or "", ln.x_cost_eur) for ln in lines) == [
+        ("", 2.0),
+        (focus.CREDITS, -2.0),
+    ]
+
+
+def test_ingest_drops_stale_lines_of_a_produced_day_only(wired, monkeypatch):
+    old = datetime(2026, 10, 1)
+    other_day = date(2026, 10, 26)
+    fresh = _tagged("gcp", 3.0, "qcm", rid="fresh")
+    with wired() as db:
+        upsert(
+            db,
+            [
+                _tagged("gcp", 9.0, "qcm", rid="stale"),
+                _tagged(
+                    "gcp", 8.0, "qcm", rid="stale-other-day", day=other_day
+                ),
+                _tagged("aws", 7.0, "qcm", rid="stale"),
+            ],
+        )
+        for row in db.scalars(select(CostLineItem)):
+            row.x_ingested_at = old
+        db.commit()
+    monkeypatch.setattr(gcp_focus, "enabled", lambda: True)
+    monkeypatch.setattr(gcp_focus, "fetch_lines", lambda *a: [fresh])
+
+    ingest.ingest_once(TODAY)
+
+    with wired() as db:
+        kept = {
+            (r.x_source, r.resource_id)
+            for r in db.scalars(select(CostLineItem))
+        }
+    assert ("gcp_focus", "stale") not in kept
+    assert ("gcp_focus", "fresh") in kept
+    assert ("gcp_focus", "stale-other-day") in kept
+    assert ("aws_focus", "stale") in kept
+
+
+def test_ingest_cleanup_never_touches_a_closed_month(wired, monkeypatch):
+    with wired() as db:
+        upsert(db, [_tagged("gcp", 9.0, "qcm", rid="old")])
+        db.add(MonthClose(billing_period="2026-10", closed_by="finance"))
+        for row in db.scalars(select(CostLineItem)):
+            row.x_ingested_at = datetime(2026, 10, 1)
+        db.commit()
+    monkeypatch.setattr(gcp_focus, "enabled", lambda: True)
+    monkeypatch.setattr(
+        gcp_focus,
+        "fetch_lines",
+        lambda *a: [_tagged("gcp", 3.0, "qcm", rid="new")],
+    )
+
+    ingest.ingest_once(TODAY)
+
+    with wired() as db:
+        ids = {r.resource_id for r in db.scalars(select(CostLineItem))}
+    assert "old" in ids
+
+
+def test_ingest_cleanup_keeps_closed_month_adjustments(wired, monkeypatch):
+    first_open = date(2026, 10, 1)
+    with wired() as db:
+        upsert(
+            db,
+            [
+                _tagged(
+                    "gcp", 1.0, "qcm", rid="x#adj-2026-09-30", day=first_open
+                )
+            ],
+        )
+        for row in db.scalars(select(CostLineItem)):
+            row.x_ingested_at = datetime(2026, 10, 1)
+        db.commit()
+    monkeypatch.setattr(gcp_focus, "enabled", lambda: True)
+    monkeypatch.setattr(
+        gcp_focus,
+        "fetch_lines",
+        lambda *a: [_tagged("gcp", 3.0, "qcm", rid="new", day=first_open)],
+    )
+
+    ingest.ingest_once(TODAY)
+
+    with wired() as db:
+        ids = {r.resource_id for r in db.scalars(select(CostLineItem))}
+    assert "x#adj-2026-09-30" in ids

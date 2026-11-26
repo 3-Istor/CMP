@@ -41,7 +41,8 @@ def build_report(db: Session, period: str) -> dict:
         "projects": [
             p
             for p in finance.totals_by_project(lines)
-            if not finance.is_unallocated(p[0]) and p[0] != "(non alloué)"
+            if not finance.is_unallocated(p[0])
+            and p[0] not in ("(non alloué)", "(crédits)")
         ][:5],
         "avoided": avoided,
         "realized": realized,
