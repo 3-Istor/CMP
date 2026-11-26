@@ -48,7 +48,16 @@ export function AppCostTable({
     {
       key: "name",
       header: t("common.application"),
-      cell: (app) => <span className="font-medium">{app.name}</span>,
+      cell: (app) => (
+        <span className="font-medium">
+          {app.name}
+          {app.estimated && (
+            <span className="ml-2 inline-flex items-center rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-normal text-amber-800 dark:text-amber-400">
+              {t("dataFreshness.estimated")}
+            </span>
+          )}
+        </span>
+      ),
       sortable: true,
     },
     {

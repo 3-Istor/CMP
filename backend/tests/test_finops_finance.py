@@ -432,6 +432,71 @@ def test_statement_pdf_is_available_to_finance_for_any_project(api, seeded):
     assert response.status_code == 200
 
 
+def test_credits_are_their_own_row_never_a_project():
+    lines = [
+        CostLineItem(project="qcm", x_cost_eur=5.0),
+        CostLineItem(project="__credits__", x_cost_eur=-2.0),
+    ]
+
+    assert finance.totals_by_project(lines) == [
+        ("qcm", 5.0),
+        ("(crédits)", -2.0),
+    ]
+
+
+def test_month_lines_count_split_cloud_nodes_once(factory):
+    split_day, unsplit_day = datetime(2026, 9, 10), datetime(2026, 9, 11)
+    aws = {"provider_name": "AWS", "cloud": "aws", "app": None}
+    with factory() as db:
+        upsert(
+            db,
+            [
+                _line(
+                    "__cluster__",
+                    10.0,
+                    split_day,
+                    "i-1",
+                    x_source="aws_focus",
+                    **aws,
+                ),
+                _line(
+                    "__cluster__",
+                    4.0,
+                    unsplit_day,
+                    "i-1",
+                    x_source="aws_focus",
+                    **aws,
+                ),
+                _line(
+                    "qcm",
+                    10.0,
+                    split_day,
+                    "aws-split/qcm-api",
+                    x_source="aws_split",
+                    **aws,
+                ),
+            ],
+        )
+        lines = finance.month_lines(db, "2026-09")
+
+    assert finance.provider_sums(lines) == [("AWS", 14.0)]
+    assert finance.totals_by_project(lines) == [
+        ("qcm", 10.0),
+        ("(non alloué)", 4.0),
+    ]
+    assert finance.unallocated_pct(lines) == round(4 / 14 * 100, 1)
+
+
+def test_credits_do_not_inflate_the_unallocated_share():
+    lines = [
+        CostLineItem(project="qcm", x_cost_eur=8.0),
+        CostLineItem(project=None, x_cost_eur=2.0),
+        CostLineItem(project="__credits__", x_cost_eur=-5.0),
+    ]
+
+    assert finance.unallocated_pct(lines) == 20.0
+
+
 # ── month close ───────────────────────────────────────────────────────────────
 
 
@@ -757,3 +822,16 @@ def test_csv_export_accepts_a_billing_month(api, seeded, monkeypatch):
 
     assert response.text.count("\n") == 4
     assert "finops-all-2026-09.csv" in response.headers["content-disposition"]
+
+
+def test_budget_reads_spend_without_computing_recommendations(
+    api, monkeypatch
+):
+    provider = type(router.get_cost_provider())
+    monkeypatch.setattr(
+        provider,
+        "recommendations",
+        lambda *_: pytest.fail("recommendations computed for a budget"),
+    )
+
+    assert api(ADMIN).get("/api/finops/budgets/qcm").status_code == 200
