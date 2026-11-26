@@ -18,7 +18,8 @@ import type { SummaryRange } from "@/lib/api";
 import { useAppSummary, useInView } from "@/lib/appSummary";
 import { hasScorecard } from "@/lib/scorecard";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function AppOverviewPage() {
   const { appId, projectName, deployment: current } = useAppContext();
@@ -30,6 +31,14 @@ export default function AppOverviewPage() {
   const canViewObservability = can("app.viewObservability");
   const allowed = isKubernetes && canViewObservability;
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
+  const canViewTopology = can("topology.view");
+
+  // FinOps reads only the Costs tab of an app.
+  const router = useRouter();
+  const costsOnly = !canViewObservability && can("finops.view");
+  useEffect(() => {
+    if (costsOnly) router.replace(`${base}/costs`);
+  }, [costsOnly, router, base]);
 
   const env = useAppEnv();
   const staging = env === "staging";
@@ -74,7 +83,7 @@ export default function AppOverviewPage() {
             onRange={setRange}
             className="lg:col-span-2"
           />
-          <ClientsPanel summary={summary} loading={loading} />
+          {canViewTopology && <ClientsPanel summary={summary} loading={loading} />}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
@@ -106,7 +115,9 @@ export default function AppOverviewPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         {canViewLogs && <TopErrorsPanel summary={summary} loading={loading} base={base} staging={staging} />}
-        <AlertsPanel summary={summary} loading={loading} alertsHref={alertsHref} staging={staging} />
+        {can("alerts.view") && (
+          <AlertsPanel summary={summary} loading={loading} alertsHref={alertsHref} staging={staging} />
+        )}
         {datastore ? (
           <DeploymentsPanel
             deploys={summary?.deploys ?? []}
@@ -116,7 +127,7 @@ export default function AppOverviewPage() {
             onRollback={rollback.ask}
           />
         ) : (
-          <TalksToPanel summary={summary} loading={loading} />
+          canViewTopology && <TalksToPanel summary={summary} loading={loading} />
         )}
       </div>
 
@@ -128,11 +139,11 @@ export default function AppOverviewPage() {
         repoUrl={current.github_repo_url}
         canViewObservability={canViewObservability}
         canViewFinops={can("finops.view")}
-        hasScore={hasScorecard(current)}
+        hasScore={hasScorecard(current) && can("security.view")}
       />
 
       <div ref={belowRef} className="space-y-6">
-        {belowSeen && current.template_id.startsWith("import-") && (
+        {belowSeen && current.template_id.startsWith("import-") && can("import.view") && (
           <ManagedServicesCard
             projectName={projectName}
             app={current.name}
