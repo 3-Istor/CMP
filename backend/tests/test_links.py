@@ -182,7 +182,7 @@ class TestProjectLinks:
             "https://offhours-shop.3istor.com/",
         )
 
-    def test_vault_points_at_the_project_folder_of_the_kv_mount(
+    def test_vault_points_at_the_kv_mount_of_the_project(
         self, session_factory, keycloak
     ):
         client = _client(session_factory, "admin")
@@ -190,7 +190,7 @@ class TestProjectLinks:
         link = _by_id(client.get("/api/projects/shop/links").json())["vault"]
 
         assert link["url"] == (
-            "https://vault.3istor.com/ui/vault/secrets/kvv2/kv/list/projects/shop/"
+            "https://vault.3istor.com/ui/vault/secrets-engines/project-shop/kv/list"
         )
 
     def test_grafana_org_is_flagged_as_requiring_org_membership(
@@ -409,7 +409,7 @@ class TestAppLinks:
 
         assert "not readable" in caplog.text
 
-    def test_vault_points_at_the_secret_of_the_app(
+    def test_vault_points_at_the_folder_of_the_app(
         self, session_factory, keycloak, kube
     ):
         client = _client(session_factory, "admin")
@@ -417,8 +417,8 @@ class TestAppLinks:
         link = _by_id(client.get("/api/deployments/1/links").json())["vault"]
 
         assert link["url"] == (
-            "https://vault.3istor.com/ui/vault/secrets/kvv2/kv/"
-            "projects%2Fshop%2Fweb/details"
+            "https://vault.3istor.com/ui/vault/secrets-engines/project-shop/"
+            "kv/list/web/"
         )
 
     def test_github_repo_drops_the_git_suffix(
