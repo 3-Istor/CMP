@@ -45,7 +45,7 @@ def test_targets_include_staging():
     prod, staging = cb.targets_for("shop", "api", ["prod", "staging"])
 
     assert (prod.vault_path, staging.vault_path) == (
-        "api/backup",
+        "api/prod/backup",
         "api/staging/backup",
     )
     assert prod.secret_namespace == staging.secret_namespace == "shop-backups"
@@ -185,8 +185,8 @@ def test_sync_writes_key_then_enables_backup_before(world):
 
     written = world.sync()
 
-    assert written == ["api/backup"]
-    assert world.vault == {("project-shop", "api/backup"): KEY}
+    assert written == ["api/prod/backup"]
+    assert world.vault == {("project-shop", "api/prod/backup"): KEY}
     assert not world.commits  # VSO gets one cycle before backups are on
     assert world.sync() == []
     [(path, content, message)] = world.commits
@@ -205,7 +205,7 @@ def test_sync_copies_staging_key_without_second_commit(world):
 
     written = world.sync()
 
-    assert written == ["api/backup", "api/staging/backup"]
+    assert written == ["api/prod/backup", "api/staging/backup"]
     world.sync()
     assert len(world.commits) == 1
 
@@ -220,7 +220,7 @@ def test_sync_skips_when_secret_missing(world):
 def test_sync_is_idempotent(world):
     world.add()
     world.secret()
-    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.vault[("project-shop", "api/prod/backup")] = dict(KEY)
     world.values = "migrations:\n  backupBefore: true\n"
 
     assert world.sync() == []
@@ -249,8 +249,8 @@ def test_sync_keys_copies_onprem_project_key(world):
     world.add(cloud=TargetCloud.ONPREM)
     world.secret()
 
-    assert world.sync() == ["api/backup"]
-    assert world.vault == {("project-shop", "api/backup"): KEY}
+    assert world.sync() == ["api/prod/backup"]
+    assert world.vault == {("project-shop", "api/prod/backup"): KEY}
 
 
 def test_backup_patch_on_cloud_app_uses_vault():
@@ -267,7 +267,7 @@ def test_backup_patch_on_cloud_app_uses_vault():
 def test_sync_reads_the_repo_once_per_deployment(world):
     world.add()
     world.secret()
-    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.vault[("project-shop", "api/prod/backup")] = dict(KEY)
     world.values = "migrations:\n  backupBefore: true\n"
 
     world.sync()
@@ -281,7 +281,7 @@ def test_sync_skips_staging_that_is_not_ready(world):
     world.secret()
     world.secret("shop-api-backend-stg-db-backup")
 
-    assert world.sync() == ["api/backup"]
+    assert world.sync() == ["api/prod/backup"]
 
 
 def test_sync_continues_after_a_failing_deployment(world, monkeypatch):
@@ -298,13 +298,13 @@ def test_sync_continues_after_a_failing_deployment(world, monkeypatch):
 
     monkeypatch.setattr(cb.vault_client, "write_kv", write_kv)
 
-    assert world.sync() == ["api/backup"]
+    assert world.sync() == ["api/prod/backup"]
 
 
 def test_sync_does_not_flip_while_archiving_is_not_true(world):
     world.add()
     world.secret()
-    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.vault[("project-shop", "api/prod/backup")] = dict(KEY)
 
     for state in (None, "False"):
         world.archiving = state
@@ -319,7 +319,7 @@ def test_sync_does_not_flip_while_archiving_is_not_true(world):
 def test_sync_does_not_settle_while_the_cloud_is_down(world):
     world.add()
     world.secret()
-    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.vault[("project-shop", "api/prod/backup")] = dict(KEY)
     world.cluster_down = True
 
     world.sync()
@@ -333,7 +333,7 @@ def test_sync_does_not_settle_while_the_cloud_is_down(world):
 def test_sync_flips_for_a_restored_cluster(world):
     world.add()
     world.secret()
-    world.vault[("project-shop", "api/backup")] = dict(KEY)
+    world.vault[("project-shop", "api/prod/backup")] = dict(KEY)
     world.cluster_name = "shop-api-backend-db-r1"
 
     world.sync()

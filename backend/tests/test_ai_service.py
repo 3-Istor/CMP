@@ -533,7 +533,7 @@ def test_enabling_an_app_writes_client_secret_rights_and_values(world, db):
         world.secrets[("alpha", "shop")],
     ) == (
         "app-alpha-shop",
-        "project-alpha/shop/ai-oidc",
+        "project-alpha/shop/prod/ai-oidc",
         [{"name": "shop", "enabled": True, "dailyTokenBudget": 50_000}],
         "app-alpha-shop",
     )

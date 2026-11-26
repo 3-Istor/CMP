@@ -46,7 +46,7 @@ FULLSTACK_FILES = {
 
 def vault_answering(status: int, body):
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/project-demo/data/shop"
+        assert request.url.path == "/v1/project-demo/data/shop/prod/secrets"
         if isinstance(body, Exception):
             raise body
         if isinstance(body, str):
@@ -148,37 +148,18 @@ def test_expected_names_merges_components_and_drops_invalid_names():
     [
         (
             {"enabled": True, "vaultPath": "project-x/app"},
-            ("project-x", "app"),
+            ("project-x", "app/prod/secrets"),
         ),
         (
-            {"enabled": True, "vaultPath": "kvv2/projects/x/app"},
-            ("kvv2", "projects/x/app"),
+            {"enabled": True, "vaultPath": "kvv2/arcl-cmp/credentials"},
+            ("project-x", "app/prod/secrets"),
         ),
+        ({"enabled": True}, ("project-x", "app/prod/secrets")),
         ({"enabled": False, "vaultPath": "project-x/app"}, None),
-        ({"enabled": True, "vaultPath": "project-x"}, None),
-        ({"enabled": True}, None),
     ],
 )
-def test_vault_location_follows_the_chart_vault_path(secrets, expected):
-    assert sp.vault_location([{"secrets": secrets}], "x") == expected
-
-
-@pytest.mark.parametrize(
-    "vault_path",
-    [
-        "project-other/app",
-        "kvv2/projects/other/app",
-        "kvv2/projects/x/../other/app",
-        "kvv2/platform/credentials",
-        "kvv2/projects/x",
-        "kvv2/arcl-cmp/credentials",
-    ],
-)
-def test_a_vault_path_outside_the_apps_project_is_refused(vault_path):
-    with pytest.raises(sp.ForeignVaultPathError):
-        sp.vault_location(
-            [{"secrets": {"enabled": True, "vaultPath": vault_path}}], "x"
-        )
+def test_vault_location_is_the_path_the_chart_derives(secrets, expected):
+    assert sp.vault_location([{"secrets": secrets}], "x", "app") == expected
 
 
 def test_presence_reports_missing_and_extra(client_factory, vault):
@@ -198,7 +179,7 @@ def test_presence_reports_missing_and_extra(client_factory, vault):
             {"name": "STRIPE_KEY", "set": False},
         ],
         "extra": ["LEGACY"],
-        "vault_path": "project-demo/shop",
+        "vault_path": "project-demo/shop/prod/secrets",
     }
 
 
@@ -317,7 +298,7 @@ def test_read_key_names_errors_never_contain_the_response_body(
 
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(vault_client.VaultError) as raised:
-            asyncio.run(vault_client.read_key_names("project-demo", "shop"))
+            asyncio.run(vault_client.read_key_names("project-demo", "shop/prod/secrets"))
 
     assert PLANTED_VALUE not in str(raised.value)
     assert PLANTED_VALUE not in repr(raised.value.__context__)
@@ -327,7 +308,7 @@ def test_read_key_names_errors_never_contain_the_response_body(
 def test_read_key_names_returns_only_sorted_names(vault):
     vault(vault_answering(200, kv_body({"B": PLANTED_VALUE, "A": "1"})))
 
-    names = asyncio.run(vault_client.read_key_names("project-demo", "shop"))
+    names = asyncio.run(vault_client.read_key_names("project-demo", "shop/prod/secrets"))
 
     assert names == ["A", "B"]
 

@@ -75,7 +75,7 @@ def targets_for(
             )
             + "-backup",
             vault_path=(
-                f"{app}/backup" if env == "prod" else f"{app}/staging/backup"
+                f"{app}/{env}/backup"
             ),
         )
         for env in environments

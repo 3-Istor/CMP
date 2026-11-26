@@ -256,7 +256,7 @@ def test_secrets_of_an_import_are_checked_from_its_spec_without_github(
         )
 
     assert response.json()["expected"] == [{"name": "API_KEY", "set": False}]
-    assert read.await_args.args == ("project-demo", "web/imports")
+    assert read.await_args.args == ("project-demo", "web/prod/secrets")
 
 
 # ── Checklist ────────────────────────────────────────────────────────────────

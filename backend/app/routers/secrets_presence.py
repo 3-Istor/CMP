@@ -84,15 +84,9 @@ async def get_secret_presence(
         values_files = await _repo_values(deployment)
 
     expected = secret_presence.expected_names(values_files)
-    try:
-        location = secret_presence.vault_location(
-            values_files, deployment.project_id or ""
-        )
-    except secret_presence.ForeignVaultPathError:
-        raise HTTPException(
-            status_code=422,
-            detail="secrets.vaultPath does not belong to this project.",
-        ) from None
+    location = secret_presence.vault_location(
+        values_files, deployment.project_id or "", deployment.name
+    )
     if location is None:
         return secret_presence.compute(expected, [])
 

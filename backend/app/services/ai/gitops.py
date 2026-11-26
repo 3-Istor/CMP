@@ -51,8 +51,8 @@ def secret_mount(project: str) -> str:
 
 
 def secret_path(app: str) -> str:
-    """Under the app's own Vault path: the chart refuses any other."""
-    return f"{app}/{SECRET_NAME}"
+    """The path the chart derives for prod."""
+    return f"{app}/prod/{SECRET_NAME}"
 
 
 def secret_ref(project: str, app: str) -> str:
