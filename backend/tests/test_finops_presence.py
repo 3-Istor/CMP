@@ -3,7 +3,7 @@ from datetime import date, datetime
 import pytest
 from sqlalchemy import select
 
-from app.models.deployment import Deployment
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import CostLineItem
 from app.models.project import Project, TargetCloud
 from app.models.project_move import ProjectMove
@@ -164,3 +164,44 @@ def test_split_day_idle_takes_cluster_hours_no_project_covers(
     by_project = {r.project: r.x_cost_eur for r in rows}
     assert by_project["todo-move"] == pytest.approx(3.0)
     assert by_project[IDLE] == pytest.approx(3.0)
+
+
+def test_split_day_presence_ignores_deleted_apps(factory):  # noqa: F811
+    with factory() as db:
+        upsert(db, [_node("aws", 6.0, day=DAY)])
+        db.add(
+            Project(
+                project_name="todo-move",
+                owner_username="hugo",
+                target_cloud=TargetCloud.AWS,
+                created_at=datetime(2026, 11, 20),
+            )
+        )
+        db.add_all(
+            [
+                Deployment(
+                    name="api",
+                    template_id="static",
+                    project_id="todo-move",
+                    k8s_namespace="todo-move-api",
+                ),
+                Deployment(
+                    name="old",
+                    template_id="static",
+                    project_id="todo-move",
+                    k8s_namespace="todo-move-old",
+                    status=DeploymentStatus.DELETED,
+                ),
+            ]
+        )
+        db.commit()
+
+        split.split_day(db, "aws", DAY)
+        rows = db.scalars(
+            select(CostLineItem).where(CostLineItem.x_source == "aws_split")
+        ).all()
+
+    assert {r.resource_name for r in rows} == {
+        "todo-move-api",
+        "todo-move-system",
+    }

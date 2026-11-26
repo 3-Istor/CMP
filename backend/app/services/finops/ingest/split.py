@@ -23,7 +23,7 @@ from datetime import date, datetime, time
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.deployment import Deployment
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import CostLineItem, MonthClose
 from app.models.project import Project
 from app.models.project_move import ProjectMove
@@ -139,6 +139,8 @@ def _presence_shares(
             Deployment.project_id.in_(present),
             Deployment.k8s_namespace.is_not(None),
             Deployment.k8s_namespace != "",
+            # Deleted rows keep their namespace.
+            Deployment.status != DeploymentStatus.DELETED,
         )
     ):
         namespaces[project][namespace] = owner_of(
