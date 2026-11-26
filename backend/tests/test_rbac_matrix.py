@@ -1,5 +1,7 @@
 """Read access per identity, as the documented access matrix states it."""
 
+from datetime import date, timedelta
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,7 +14,9 @@ from app.models import imports as _import_models  # noqa: F401  (tables)
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.routers import alerting, app_observability, app_overview
-from app.routers import deployments, imports, projects, security
+from app.models.security import SecurityException
+from app.routers import deployments, finops, imports, projects, security
+from app.services.security.model import Tier
 from app.services import app_overview as overview
 from app.services import keycloak_service
 from app.services.imports import service as import_service
@@ -269,6 +273,7 @@ def client(world):
     app.include_router(app_observability.router, prefix="/api")
     app.include_router(app_observability.projects_router, prefix="/api")
     app.include_router(security.router, prefix="/api")
+    app.include_router(finops.router, prefix="/api")
 
     def get_session():
         db = world.Session()
@@ -375,3 +380,91 @@ def test_summary_hides_log_lines_and_callers(client, world, identity, shown):
         200,
         shown,
     )
+
+
+def _exception(world, critical, monkeypatch):
+    with world.Session() as db:
+        db.add(
+            SecurityException(
+                project="shop",
+                app="web",
+                fingerprint="f1",
+                rule="CVE-1",
+                kind="vulnerability",
+                status="not_affected",
+                statement="never called",
+                expires_on=date.today() + timedelta(days=30),
+                author="dev",
+            )
+        )
+        db.commit()
+    tier = Tier.CORE if critical else Tier.IMPORTANT
+    monkeypatch.setattr(security, "_exception_tier", lambda db, row: tier)
+    monkeypatch.setattr(security, "_sync_exceptions_file", _stub(None))
+
+
+#         infra auditor finops owner admin member guest none
+BELOW = (OK, NO, NO, OK, OK, NO, NO, NO)
+# Revoking: the auditor may only act on a critical exception.
+REVOKE_CRITICAL = (OK, OK, NO, OK, OK, NO, NO, NO)
+# Approving a critical is the auditor's or a platform admin's alone.
+APPROVE_CRITICAL = (OK, OK, NO, NO, NO, NO, NO, NO)
+
+
+@pytest.mark.parametrize(
+    ("critical", "rows"),
+    [(False, BELOW), (True, APPROVE_CRITICAL)],
+    ids=["below-critical", "critical"],
+)
+@pytest.mark.parametrize(
+    ("identity", "who"), list(zip(IDENTITIES, IDS)), ids=IDS
+)
+def test_approve_exception(
+    client, world, session_local, monkeypatch, critical, rows, identity, who
+):
+    _exception(world, critical, monkeypatch)
+    world.be(*identity)
+
+    response = client.post("/api/security/exceptions/1/approve")
+
+    assert response.status_code == rows[IDS.index(who)], response.text
+
+
+@pytest.mark.parametrize("critical", [False, True], ids=["below", "critical"])
+@pytest.mark.parametrize(
+    ("identity", "who"), list(zip(IDENTITIES, IDS)), ids=IDS
+)
+def test_revoke_exception(
+    client, world, session_local, monkeypatch, critical, identity, who
+):
+    _exception(world, critical, monkeypatch)
+    world.be(*identity)
+
+    response = client.delete("/api/security/exceptions/1")
+
+    expected = REVOKE_CRITICAL if critical else BELOW
+    assert response.status_code == expected[IDS.index(who)], response.text
+
+
+@pytest.mark.parametrize(
+    ("identity", "who"), list(zip(IDENTITIES, IDS)), ids=IDS
+)
+def test_put_budget(client, world, monkeypatch, identity, who):
+    monkeypatch.setattr(finops, "_load_deployments", lambda *a, **k: [])
+    provider = type(
+        "P",
+        (),
+        {
+            "specs": lambda self, d: [],
+            "summary": lambda self, s: {"month_to_date_eur": 0.0},
+        },
+    )()
+    monkeypatch.setattr(finops, "get_cost_provider", lambda: provider)
+    world.be(*identity)
+
+    response = client.put(
+        "/api/finops/budgets/shop", json={"monthly_amount_eur": 100}
+    )
+
+    expected = (OK, NO, NO, OK, NO, NO, NO, NO)
+    assert response.status_code == expected[IDS.index(who)], response.text
