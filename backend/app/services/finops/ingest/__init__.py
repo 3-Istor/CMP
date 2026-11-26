@@ -211,6 +211,8 @@ def _ingest_cloud_billing(
                         {line.charge_period_start for line in lines}
                     ),
                     CostLineItem.x_ingested_at < started,
+                    # Closed-month adjustments keep a stale x_ingested_at.
+                    CostLineItem.resource_id.not_like("%#adj-%"),
                     CostLineItem.billing_period.not_in(
                         select(MonthClose.billing_period)
                     ),

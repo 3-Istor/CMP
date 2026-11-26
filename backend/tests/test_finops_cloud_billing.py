@@ -1146,3 +1146,31 @@ def test_ingest_cleanup_never_touches_a_closed_month(wired, monkeypatch):
     with wired() as db:
         ids = {r.resource_id for r in db.scalars(select(CostLineItem))}
     assert "old" in ids
+
+
+def test_ingest_cleanup_keeps_closed_month_adjustments(wired, monkeypatch):
+    first_open = date(2026, 10, 1)
+    with wired() as db:
+        upsert(
+            db,
+            [
+                _tagged(
+                    "gcp", 1.0, "qcm", rid="x#adj-2026-09-30", day=first_open
+                )
+            ],
+        )
+        for row in db.scalars(select(CostLineItem)):
+            row.x_ingested_at = datetime(2026, 10, 1)
+        db.commit()
+    monkeypatch.setattr(gcp_focus, "enabled", lambda: True)
+    monkeypatch.setattr(
+        gcp_focus,
+        "fetch_lines",
+        lambda *a: [_tagged("gcp", 3.0, "qcm", rid="new", day=first_open)],
+    )
+
+    ingest.ingest_once(TODAY)
+
+    with wired() as db:
+        ids = {r.resource_id for r in db.scalars(select(CostLineItem))}
+    assert "x#adj-2026-09-30" in ids
