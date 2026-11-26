@@ -10,24 +10,33 @@ under ``__idle__``) whose amounts add up exactly to the node cost.
 No double counting: node lines are never modified in their amounts. The rule
 for every total is that ``__cluster__`` lines of a (cloud, day) that has split
 lines are ignored (see :func:`split_days`). Without OpenCost data for the day
-no split line exists, so the node lines stay counted as unallocated.
+the split falls back to which projects were on the cloud (see ``presence``);
+with neither, the node lines stay counted as unallocated.
 """
 
 import logging
+import math
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import date, datetime, time
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
+from app.models.deployment import Deployment, DeploymentStatus
 from app.models.finops import CostLineItem, MonthClose
+from app.models.project import Project
+from app.models.project_move import ProjectMove
+from app.services.finops.ingest import presence
 from app.services.finops.ingest.focus import CLUSTER
+from app.services.finops.ingest.projects import owner_of
 from app.services.finops.ingest.store import CostLine, upsert
 
 logger = logging.getLogger(__name__)
 
 SPLIT_TAG = "x_split_into"
+EKS_SERVICE = "Amazon Elastic Container Service for Kubernetes"
+GKE_CLUSTER = "cnp-gke"
 
 
 def invoice_source(cloud: str) -> str:
@@ -75,6 +84,77 @@ def _shares(
     return dict(costs)
 
 
+def _cluster_hours(db: Session, cloud: str, start: datetime) -> int | None:
+    """Hours the cluster ran that day, from its control-plane fee line."""
+    rows = db.execute(
+        select(
+            CostLineItem.consumed_quantity, CostLineItem.consumed_unit
+        ).where(
+            CostLineItem.x_source == invoice_source(cloud),
+            CostLineItem.charge_period_start == start,
+            or_(
+                CostLineItem.service_name == EKS_SERVICE,
+                CostLineItem.resource_name == GKE_CLUSTER,
+            ),
+        )
+    )
+    hours = [
+        q for q, unit in rows if q and unit and unit.lower().startswith("h")
+    ]
+    return min(math.ceil(max(hours)), 24) if hours else None
+
+
+def _presence_shares(
+    db: Session, cloud: str, start: datetime, total: float
+) -> dict[tuple[str, str | None, str], float]:
+    projects = [
+        (name, target.value, created)
+        for name, target, created in db.execute(
+            select(
+                Project.project_name, Project.target_cloud, Project.created_at
+            )
+        )
+    ]
+    moves = [
+        tuple(row)
+        for row in db.execute(
+            select(
+                ProjectMove.project,
+                ProjectMove.source,
+                ProjectMove.target,
+                ProjectMove.status,
+                ProjectMove.created_at,
+                ProjectMove.finished_at,
+            )
+        )
+    ]
+    present = presence.hours_present(
+        presence.stays(projects, moves), cloud, start.date()
+    )
+    if not present:
+        return {}
+    namespaces = {p: {f"{p}-system": None} for p in present}
+    for project, namespace in db.execute(
+        select(Deployment.project_id, Deployment.k8s_namespace).where(
+            Deployment.project_id.in_(present),
+            Deployment.k8s_namespace.is_not(None),
+            Deployment.k8s_namespace != "",
+            # Deleted rows keep their namespace.
+            Deployment.status != DeploymentStatus.DELETED,
+        )
+    ):
+        namespaces[project][namespace] = owner_of(
+            namespace, {namespace: project}
+        ).app
+    apps = {
+        p: [(app, ns) for ns, app in by_ns.items()]
+        for p, by_ns in namespaces.items()
+    }
+    return presence.shares(
+        total, _cluster_hours(db, cloud, start), present, apps
+    )
+
+
 def split_day(db: Session, cloud: str, day: date) -> int:
     """Split one day; returns the number of split lines written."""
     start = datetime.combine(day, time.min)
@@ -92,6 +172,10 @@ def split_day(db: Session, cloud: str, day: date) -> int:
     ).all()
     total = sum(n.x_cost_eur for n in nodes)
     costs = _shares(db, cloud, start)
+    method = "opencost"
+    if nodes and total > 0 and not costs:
+        costs = _presence_shares(db, cloud, start, total)
+        method = "presence"
     usage = sum(costs.values())
 
     db.execute(
@@ -111,7 +195,7 @@ def split_day(db: Session, cloud: str, day: date) -> int:
         return 0
 
     final = all(n.x_is_final for n in nodes)
-    estimate = any(n.x_is_estimate for n in nodes)
+    estimate = method == "presence" or any(n.x_is_estimate for n in nodes)
     lines: list[CostLine] = []
     allocated = 0.0
     ordered = sorted(costs.items(), key=lambda item: item[0][2])
@@ -138,7 +222,7 @@ def split_day(db: Session, cloud: str, day: date) -> int:
                 project=project,
                 app=app,
                 cloud=cloud,
-                x_allocation_method="opencost",
+                x_allocation_method=method,
                 x_pricing_basis="invoice",
                 x_is_final=final,
                 x_is_estimate=estimate,

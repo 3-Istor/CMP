@@ -15,6 +15,7 @@ from app.services.finops.ingest.ai_gateway import FALLBACK_USD_PER_EUR
 from app.services.finops.ingest.store import CostLine
 
 CLUSTER = "__cluster__"
+CREDITS = "__credits__"  # credit lines: kept out of per-project queries
 
 _PROJECT_KEYS = ("cnp_project", "project")
 _APP_KEYS = ("cnp_app",)
@@ -244,7 +245,9 @@ def _to_line(
     env = _first(tags, _ENV_KEYS)
     method = "direct" if project else "unallocated"
     extra = {k: v for k, v in tags.items() if k != cluster_tag}
-    if cluster and bucket.service_category == "Compute":
+    if bucket.charge_category == "Credit":
+        project, app, env, method = CREDITS, None, None, "unallocated"
+    elif cluster and bucket.service_category == "Compute":
         # Cluster node: shared by every namespace, split later with OpenCost.
         project, app, env, method = CLUSTER, None, None, "unallocated"
         extra = {"k8s_cluster": cluster}
@@ -262,7 +265,7 @@ def _to_line(
         charge_period_end=start + timedelta(days=1),
         resource_id=bucket.resource_id,
         resource_name=bucket.resource_name,
-        x_cost_eur=bucket.effective / rate,
+        x_cost_eur=bucket.billed / rate,
         billed_cost=bucket.billed,
         list_cost=bucket.listed,
         effective_cost=bucket.effective,

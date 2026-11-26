@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.finops import CostLineItem
-from app.services.finops.ingest.focus import CLUSTER
+from app.services.finops.ingest.focus import CLUSTER, CREDITS
 from app.services.finops.ingest.projects import IDLE, PLATFORM
 from app.services.finops.ingest.split import (
     invoice_source,
@@ -33,6 +33,7 @@ def reconcile(db: Session, provider: str, billing_period: str) -> dict:
     the lines that count once: invoice lines, except ``__cluster__`` nodes of
     split days, plus the split lines that replace them. The gap is what the
     parts fail to explain; it is 0 unless lines are missing or inconsistent.
+    Credits are reported apart, as a positive amount, outside the invoice.
     """
     _check(provider)
     replaced = split_days(db, provider, billing_period)
@@ -50,8 +51,11 @@ def reconcile(db: Session, provider: str, billing_period: str) -> dict:
         )
     ).all()
 
-    invoice = allocated = idle = platform = unallocated = 0.0
+    invoice = allocated = idle = platform = unallocated = credit = 0.0
     for source, project, start, cost in rows:
+        if project == CREDITS:
+            credit -= cost
+            continue
         if source == invoice_source(provider):
             invoice += cost
             if project == CLUSTER and start in replaced:
@@ -76,6 +80,7 @@ def reconcile(db: Session, provider: str, billing_period: str) -> dict:
             round(100 * unallocated / invoice, 2) if invoice else 0.0
         ),
         "gap_eur": round(gap, _DECIMALS),
+        "credits_eur": round(credit, _DECIMALS),
     }
 
 

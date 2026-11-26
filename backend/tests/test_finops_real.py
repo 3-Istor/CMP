@@ -663,3 +663,136 @@ def test_rightsizing_text_is_english_with_a_key_the_ui_translates(monkeypatch):
 
 def test_month_to_date_matches_the_summary_figure(seeded):
     assert RealCostProvider(seeded).month_to_date([_app()], REF) == 7.75
+
+
+# ── public clouds in the overview ────────────────────────────────────────────
+
+
+def _aws_month(db):
+    """Day 2 on AWS: 3.0 untagged, a 4.0 node split onto shop-api, -7.0 credit."""
+    invoice = {"x_source": "aws_focus", "cloud": "aws", "app": None}
+    _add(db, 2, 3.0, resource_name="vpc", project=None, **invoice)
+    _add(db, 2, 4.0, resource_name="i-1", project="__cluster__", **invoice)
+    _add(
+        db,
+        2,
+        -7.0,
+        resource_name="credit",
+        project="__credits__",
+        charge_category="Credit",
+        **invoice,
+    )
+    _add(
+        db,
+        2,
+        4.0,
+        x_source="aws_split",
+        cloud="aws",
+        resource_name="shop-api",
+        project="shop",
+        app="api",
+        x_is_estimate=True,
+    )
+
+
+def test_by_cloud_whole_platform_counts_full_invoice(seeded):
+    with seeded() as db:
+        _aws_month(db)
+        db.commit()
+    provider = RealCostProvider(seeded)
+
+    split = provider.by_cloud([_app()], REF, whole_platform=True)
+
+    assert split == {"onprem": 7.75, "aws": 7.0, "gcp": 0.0}
+    assert provider.credits_by_cloud(REF) == {"aws": 7.0, "gcp": 0.0}
+
+
+def test_by_cloud_project_view_unchanged(seeded):
+    with seeded() as db:
+        _aws_month(db)
+        db.commit()
+
+    split = RealCostProvider(seeded).by_cloud([_app()], REF)
+
+    assert split == {"onprem": 7.75, "aws": 0.0, "gcp": 0.0}
+
+
+def test_specs_all_lists_cloud_split_namespaces(seeded):
+    with seeded() as db:
+        for namespace, project in (
+            ("cnp108-aws-app-html-css-aws", "cnp108"),
+            ("__idle__", "__idle__"),
+        ):
+            _add(
+                db,
+                2,
+                1.0,
+                x_source="aws_split",
+                cloud="aws",
+                resource_name=namespace,
+                project=project,
+            )
+        db.commit()
+
+    specs = RealCostProvider(seeded).specs_all([], REF)
+
+    names = {s.namespace for s in specs}
+    assert "cnp108-aws-app-html-css-aws" in names
+    assert "__idle__" not in names
+
+
+def test_app_row_flags_estimated_cost(seeded):
+    with seeded() as db:
+        _aws_month(db)
+        db.commit()
+
+    rows = RealCostProvider(seeded).app_rows(
+        [_app(), _app(2, "shop-api", "shop")], REF
+    )
+
+    estimated = {r["name"]: r["estimated"] for r in rows}
+    assert estimated == {"qcm-api": False, "shop-api": True}
+
+
+@pytest.fixture
+def overview(seeded, monkeypatch):
+    monkeypatch.setattr(
+        provider_module,
+        "date",
+        SimpleNamespace(today=lambda: REF, fromisoformat=date.fromisoformat),
+    )
+    monkeypatch.setattr(
+        router, "get_cost_provider", lambda: RealCostProvider(seeded)
+    )
+    monkeypatch.setattr(
+        router, "period_to_range", lambda p: (date(2026, 11, 1), REF)
+    )
+    monkeypatch.setattr(router, "is_cnp_admin", lambda token: True)
+    with seeded() as db:
+        _aws_month(db)
+        db.commit()
+
+    def call(project=None, cloud=None):
+        with seeded() as db:
+            return router.get_overview(
+                {}, db, project, "30d", "daily", cloud, None
+            )
+
+    return call
+
+
+def test_overview_of_the_whole_platform_shows_credits_and_cloud_apps(
+    overview,
+):
+    body = overview(cloud="aws")
+
+    assert body.by_cloud["aws"] == 7.0
+    assert body.credits_by_cloud == {"aws": 7.0, "gcp": 0.0}
+    assert [(a.name, a.estimated) for a in body.apps] == [("shop-api", True)]
+
+
+def test_overview_of_a_project_has_no_credits(overview):
+    body = overview(project="qcm")
+
+    assert body.credits_by_cloud == {}
+    assert body.by_cloud["aws"] == 0.0

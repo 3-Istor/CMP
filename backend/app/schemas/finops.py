@@ -65,6 +65,8 @@ class AppCostRow(BaseModel):
     month_to_date_eur: float
     trend_pct: float | None = None
     platform_eur: float = 0.0
+    # Part of the month rests on an estimate (provisional rate, presence split).
+    estimated: bool = False
 
 
 class SavingsTotals(BaseModel):
@@ -161,6 +163,8 @@ class OverviewResponse(BaseModel):
     by_cloud: dict[str, float] = Field(
         default_factory=lambda: {"onprem": 0.0, "aws": 0.0, "gcp": 0.0}
     )
+    # Whole-platform view only, positive; by_cloud is before credits.
+    credits_by_cloud: dict[str, float] = {}
     savings_ytd: SavingsYtd = Field(default_factory=SavingsYtd)
     # Real costs only: the month-end forecast behind projected_month_eur.
     forecast: "CostForecast | None" = None

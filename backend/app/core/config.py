@@ -297,6 +297,9 @@ class Settings(BaseSettings):
     FINOPS_GCP_BILLING_TABLE: str = ""
     # Project the query jobs run (and are billed) in.
     FINOPS_GCP_PROJECT: str = ""
+    # Comma-separated projects read from the billing export (the billing
+    # account also pays unrelated projects); empty means FINOPS_GCP_PROJECT.
+    FINOPS_GCP_BILLED_PROJECTS: str = ""
     # Service account key; falls back to GOOGLE_APPLICATION_CREDENTIALS.
     FINOPS_GCP_CREDENTIALS_FILE: str = ""
     # Workload Identity Federation from Keycloak, preferred over the key file:
