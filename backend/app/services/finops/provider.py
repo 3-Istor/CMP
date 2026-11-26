@@ -48,6 +48,11 @@ class CostProvider(ABC):
     ) -> dict: ...
 
     @abstractmethod
+    def month_to_date(
+        self, apps: list[AppSpec], ref: date | None = None
+    ) -> float: ...
+
+    @abstractmethod
     def app_rows(
         self, apps: list[AppSpec], ref: date | None = None
     ) -> list[dict]: ...
@@ -67,7 +72,7 @@ class CostProvider(ABC):
         self, apps: list[AppSpec], ref: date | None = None
     ) -> dict[str, float]:
         """Month-to-date cost per cloud; everything is on-prem by default."""
-        total = self.summary(apps, ref)["month_to_date_eur"]
+        total = self.month_to_date(apps, ref)
         return {"onprem": total, "aws": 0.0, "gcp": 0.0}
 
 
@@ -83,6 +88,9 @@ class SimulatedCostProvider(CostProvider):
 
     def breakdown(self, apps, ref=None):
         return engine.breakdown(apps, ref)
+
+    def month_to_date(self, apps, ref=None):
+        return engine.month_to_date_cost(apps, ref or date.today())
 
     def summary(self, apps, ref=None):
         ref = ref or date.today()
@@ -385,6 +393,11 @@ class RealCostProvider(CostProvider):
                 ).values()
             )
         return {c: round(v, 2) for c, v in totals.items()}
+
+    def month_to_date(self, apps, ref=None):
+        ref = ref or date.today()
+        days = self._days(apps, ref.replace(day=1), ref)
+        return round(sum(sum(slot.values()) for slot in days.values()), 2)
 
     def summary(self, apps, ref=None):
         ref = ref or date.today()

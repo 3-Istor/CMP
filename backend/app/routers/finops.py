@@ -1144,7 +1144,7 @@ def get_budget(
     _require_project_role(db, token, project_name)
     deployments = _load_deployments(db, token, project_name)
     provider = get_cost_provider()
-    spent = provider.summary(provider.specs(deployments))["month_to_date_eur"]
+    spent = provider.month_to_date(provider.specs(deployments))
     budget = (
         db.query(ProjectBudget)
         .filter(ProjectBudget.project_name == project_name)
@@ -1203,7 +1203,7 @@ def put_budget(
 
     deployments = _load_deployments(db, token, project_name)
     provider = get_cost_provider()
-    spent = provider.summary(provider.specs(deployments))["month_to_date_eur"]
+    spent = provider.month_to_date(provider.specs(deployments))
     return _budget_read(budget, spent)
 
 

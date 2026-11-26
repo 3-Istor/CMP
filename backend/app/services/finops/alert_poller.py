@@ -82,9 +82,7 @@ async def check_budgets() -> None:
         )
         for budget in budgets:
             deployments = _project_deployments(db, budget.project_name)
-            spent = provider.summary(provider.specs(deployments))[
-                "month_to_date_eur"
-            ]
+            spent = provider.month_to_date(provider.specs(deployments))
             consumed_pct = spent / budget.monthly_amount_eur * 100
             level = _level_for(
                 consumed_pct, budget.threshold_warn, budget.threshold_critical
