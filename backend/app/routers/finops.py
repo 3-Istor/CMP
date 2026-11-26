@@ -20,6 +20,7 @@ Access control (spec matrix):
 """
 
 import csv
+import dataclasses
 import io
 import logging
 import re
@@ -81,6 +82,7 @@ from app.services.authz import (
     is_cnp_admin,
     is_finops,
 )
+from app.services.environments import layout
 from app.services.finops import (
     anomalies,
     engine,
@@ -917,10 +919,24 @@ def get_apps(
     token: Annotated[dict, Depends(get_current_user)],
     db: Session = Depends(get_db),
     project: str | None = None,
+    env: Annotated[layout.Environment, Query()] = "prod",
 ):
     deployments = _load_deployments(db, token, project)
     provider = get_cost_provider()
     apps = _cost_specs(provider, deployments, token, project)
+    if env == "staging":
+        # Simulated numbers would be invented; project-wide lines stay in prod.
+        if settings.FINOPS_PROVIDER != "real":
+            return []
+        apps = [
+            dataclasses.replace(
+                a,
+                namespace=a.namespace + layout.SUFFIX["staging"],
+                project_id=None,
+            )
+            for a in apps
+            if a.namespace
+        ]
     return [AppCostRow(**r) for r in provider.app_rows(apps)]
 
 

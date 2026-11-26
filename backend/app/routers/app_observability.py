@@ -447,13 +447,14 @@ def get_dora(
     deployment_id: int,
     token: CurrentUser,
     days: Annotated[int, Query()] = 30,
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> Dora:
-    """Deployment frequency and change failure rate of prod."""
+    """Deployment frequency and change failure rate of an environment."""
     if days not in delivery.DORA_DAYS:
         raise HTTPException(status_code=422, detail="days: 7, 30 or 90.")
-    deployment, _ = _member_app(db, token, deployment_id)
-    return Dora(**delivery.dora(db, deployment.id, days, _now()))
+    deployment, _ = _member_app(db, token, deployment_id, env)
+    return Dora(**delivery.dora(db, deployment.id, days, _now(), env))
 
 
 @router.get(

@@ -36,14 +36,17 @@ def version_of(image: str | None) -> str | None:
     return digest.split(":", 1)[-1][:12] or None
 
 
-def _prod_events(
-    db: Session, deployment_id: int, since: datetime
+def _events(
+    db: Session,
+    deployment_id: int,
+    since: datetime,
+    environment: str = "prod",
 ) -> list[ReleaseEvent]:
     return (
         db.query(ReleaseEvent)
         .filter(
             ReleaseEvent.deployment_id == deployment_id,
-            ReleaseEvent.environment == "prod",
+            ReleaseEvent.environment == environment,
             ReleaseEvent.started_at >= since,
         )
         .order_by(ReleaseEvent.started_at)
@@ -63,15 +66,21 @@ def markers(
             "outcome": e.outcome,
             "component": e.component,
         }
-        for e in _prod_events(db, deployment_id, since)
+        for e in _events(db, deployment_id, since)
         if e.outcome != "superseded"
     ]
 
 
 def dora(
-    db: Session, deployment_id: int, days: int, now: datetime
+    db: Session,
+    deployment_id: int,
+    days: int,
+    now: datetime,
+    environment: str = "prod",
 ) -> dict[str, Any]:
-    events = _prod_events(db, deployment_id, now - timedelta(days=days))
+    events = _events(
+        db, deployment_id, now - timedelta(days=days), environment
+    )
     deploys = sum(1 for e in events if e.outcome in SUCCEEDED)
     failed = sum(1 for e in events if e.outcome in FAILED)
     attempts = deploys + failed

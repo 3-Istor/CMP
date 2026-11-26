@@ -25,7 +25,7 @@ from app.models.release import ReleaseEvent
 from app.routers import app_observability as router
 from app.services import authz, keycloak_service
 from app.services.keycloak_service import get_current_user
-from app.services.observability import app_costs, silences, stores
+from app.services.observability import app_costs, delivery, silences, stores
 
 SHOP, RIVAL = 1, 2
 SHOP_ACCOUNT, RIVAL_ACCOUNT = 11, 12
@@ -525,6 +525,15 @@ def test_dora_counts_prod_deploys_and_failed_changes(make, factory):
     body = _get(client, SHOP, "/dora", days=30).json()
 
     assert (body["deployments"], body["failed_changes"]) == (3, 1)
+
+
+def test_dora_of_staging_counts_staging_rollouts_only(make, factory):
+    _event(factory, "promoted", 2)
+    _event(factory, "promoted", 2, environment="staging")
+    _event(factory, "promoted", 3, environment="staging")
+    with factory() as db:
+        assert delivery.dora(db, SHOP, 30, NOW, "staging")["deployments"] == 2
+        assert delivery.dora(db, SHOP, 30, NOW)["deployments"] == 1
 
 
 def test_change_failure_rate_is_failures_over_attempts(make, factory):
