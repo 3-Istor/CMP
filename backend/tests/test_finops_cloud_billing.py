@@ -114,12 +114,12 @@ def _export(files_by_period, stale=None) -> FakeS3:
     objects = {}
     for period, rows in files_by_period.items():
         data_key = (
-            f"cur/cnp/data/BILLING_PERIOD={period}/cnp-00001.snappy.parquet"
+            f"cur/cnp/data/billing_period={period}/cnp-00001.snappy.parquet"
         )
         objects[data_key] = (_parquet(rows), datetime(2026, 10, 28))
-        manifest = {"dataFiles": [data_key]}
+        manifest = {"dataFiles": [f"s3://cnp-billing/{data_key}"]}
         objects[
-            f"cur/cnp/metadata/BILLING_PERIOD={period}/cnp-Manifest.json"
+            f"cur/cnp/metadata/billing_period={period}/cnp-Manifest.json"
         ] = (
             json.dumps(manifest).encode(),
             datetime(2026, 10, 28),
@@ -305,12 +305,17 @@ def test_aws_oldest_day_is_the_start_of_the_oldest_open_period():
     )
 
 
+def test_object_key_strips_bucket_uri():
+    assert aws_focus.object_key("b", "s3://b/x/y.parquet") == "x/y.parquet"
+    assert aws_focus.object_key("b", "x/y.parquet") == "x/y.parquet"
+
+
 def test_aws_reads_only_the_files_of_the_newest_manifest(aws_settings):
-    old_key = "cur/cnp/data/BILLING_PERIOD=2026-10/old.parquet"
+    old_key = "cur/cnp/data/billing_period=2026-10/old.parquet"
     stale = {
         old_key: (_parquet([_row(BilledCost=999.0)]), datetime(2026, 10, 1)),
-        "cur/cnp/metadata/BILLING_PERIOD=2026-10/old-Manifest.json": (
-            json.dumps({"dataFiles": [old_key]}).encode(),
+        "cur/cnp/metadata/billing_period=2026-10/old-Manifest.json": (
+            json.dumps({"dataFiles": [f"s3://cnp-billing/{old_key}"]}).encode(),
             datetime(2026, 10, 1),
         ),
     }
@@ -334,7 +339,7 @@ def test_aws_ignores_days_of_final_periods_outside_the_replay_window(
     )
 
     assert {line.charge_period_start.month for line in lines} == {10}
-    assert not any("BILLING_PERIOD=2026-08/cnp-00001" in k for k in s3.read)
+    assert not any("billing_period=2026-08/cnp-00001" in k for k in s3.read)
 
 
 def test_aws_rereads_open_periods_beyond_the_replay_window(aws_settings):
