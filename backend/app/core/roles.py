@@ -81,3 +81,66 @@ def rank(role: "ProjectRole | str | None") -> int:
 def at_least(role: "ProjectRole | str | None", minimum: ProjectRole) -> bool:
     """Return True if *role* is *minimum* or stronger."""
     return rank(role) >= rank(minimum)
+
+
+# Weakest project role per capability. Mirrored by MIN_ROLE in
+# frontend/src/lib/permissions.ts (test_capabilities guards the drift).
+_R = ProjectRole
+MIN_ROLE: dict[str, ProjectRole] = {
+    "project.delete": _R.ADMIN,
+    "project.protect": _R.ADMIN,
+    "project.export": _R.OWNER,
+    "project.move": _R.ADMIN,
+    "app.view": _R.GUEST,
+    "app.list": _R.GUEST,
+    "app.deploy": _R.ADMIN,
+    "app.operate": _R.MEMBER,
+    "app.pause": _R.ADMIN,
+    "app.delete": _R.ADMIN,
+    "app.editIcon": _R.MEMBER,
+    "app.viewLogs": _R.MEMBER,
+    "app.viewTraces": _R.MEMBER,
+    "app.viewConfig": _R.MEMBER,
+    "app.editConfig": _R.ADMIN,
+    "app.viewSecretsLink": _R.ADMIN,
+    "app.viewObservability": _R.GUEST,
+    "release.view": _R.GUEST,
+    "release.operate": _R.MEMBER,
+    "release.configure": _R.ADMIN,
+    "members.view": _R.MEMBER,
+    "members.manage": _R.ADMIN,
+    "finops.view": _R.GUEST,
+    "finops.act": _R.ADMIN,
+    "finops.editBudget": _R.OWNER,
+    "agents.configure": _R.ADMIN,
+    "ai.configure": _R.ADMIN,
+    "ai.view": _R.MEMBER,
+    "agent.manage": _R.ADMIN,
+    "topology.view": _R.MEMBER,
+    "topology.link": _R.ADMIN,
+    "import.view": _R.MEMBER,
+    "import.manage": _R.ADMIN,
+    "security.view": _R.MEMBER,
+    "security.manage": _R.ADMIN,
+    "alerts.view": _R.MEMBER,
+}
+del _R
+
+# Platform-group grants on projects where the caller holds no role. The
+# auditor never gets logs, traces, secrets links or any write.
+AUDITOR_CAPS: frozenset[str] = frozenset(
+    {
+        "app.view",
+        "app.list",
+        "app.viewObservability",
+        "app.viewConfig",
+        "release.view",
+        "members.view",
+        "finops.view",
+        "topology.view",
+        "security.view",
+        "alerts.view",
+        "import.view",
+    }
+)
+FINOPS_CAPS: frozenset[str] = frozenset({"app.list", "app.view", "finops.view"})

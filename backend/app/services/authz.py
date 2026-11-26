@@ -38,7 +38,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.core.roles import ProjectRole, at_least, rank
+from app.core.roles import (
+    AUDITOR_CAPS,
+    FINOPS_CAPS,
+    MIN_ROLE,
+    ProjectRole,
+    at_least,
+    rank,
+)
 from app.models.project import Project
 from app.services import keycloak_service
 from app.services.keycloak_service import (
@@ -56,8 +63,10 @@ class ProjectContext:
     project_name: str
     user_id: str
     username: str
-    role: ProjectRole
+    role: ProjectRole | None
     token: dict
+    # True when a platform group (auditor, finops) granted access, not a role.
+    platform: bool = False
 
     def at_least(self, minimum: ProjectRole) -> bool:
         """Return True if this caller holds *minimum* or better."""
@@ -102,6 +111,23 @@ def _resolve_role(
     return user_id, username, group_role
 
 
+def _resolve_role_or_503(
+    db: Session, token: dict, project_name: str
+) -> tuple[str, str, ProjectRole | None]:
+    try:
+        return _resolve_role(db, token, project_name)
+    except HTTPException:
+        raise
+    except requests.RequestException as exc:
+        logger.error(
+            "Could not verify access to project '%s': %s", project_name, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to verify project access. Please try again.",
+        ) from exc
+
+
 def assert_project_role(
     db: Session,
     token: dict,
@@ -118,18 +144,7 @@ def assert_project_role(
         HTTPException: 403 if the caller lacks the role, 503 if Keycloak
             could not be reached.
     """
-    try:
-        user_id, username, role = _resolve_role(db, token, project_name)
-    except HTTPException:
-        raise
-    except requests.RequestException as exc:
-        logger.error(
-            "Could not verify access to project '%s': %s", project_name, exc
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Failed to verify project access. Please try again.",
-        ) from exc
+    user_id, username, role = _resolve_role_or_503(db, token, project_name)
 
     if role is None:
         raise HTTPException(
@@ -275,11 +290,59 @@ def reads_platform_security(token: dict) -> bool:
 def platform_project_role(token: dict) -> ProjectRole | None:
     """
     The role a platform identity holds on a project it is not a member of:
-    admin for a platform admin, guest (read) for the auditor. FinOps has
-    none: it reads costs through the FinOps routes only.
+    admin for a platform admin. Auditor and FinOps hold no role: they get
+    capabilities through :func:`assert_capability`.
     """
     if is_cnp_admin(token):
         return ProjectRole.ADMIN
-    if is_auditor(token):
-        return ProjectRole.GUEST
     return None
+
+
+def assert_capability(
+    db: Session, token: dict, project_name: str, cap: str
+) -> ProjectContext:
+    """
+    Raise 403 unless the caller holds *cap* on *project_name*: through a
+    project role first, then through a platform-group grant.
+    """
+    user_id, username, role = _resolve_role_or_503(db, token, project_name)
+    platform = False
+    if not at_least(role, MIN_ROLE[cap]):
+        groups = _groups(token)
+        platform = (AUDITOR_GROUP in groups and cap in AUDITOR_CAPS) or (
+            FINOPS_GROUP in groups and cap in FINOPS_CAPS
+        )
+        if not platform:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: '{cap}' on project '{project_name}'.",
+            )
+    return ProjectContext(
+        project_name=project_name,
+        user_id=user_id,
+        username=username,
+        role=role,
+        token=token,
+        platform=platform,
+    )
+
+
+_CAP_DEPS: dict[str, type] = {}
+
+
+def RequireCap(cap: str) -> type:  # noqa: N802
+    """
+    ``Annotated`` dependency enforcing *cap* on ``{project_name}``. One object
+    per cap so FastAPI resolves it once per request.
+    """
+    if cap not in _CAP_DEPS:
+
+        def _dep(
+            project_name: str,
+            token_payload: Annotated[dict, Depends(get_current_user)],
+            db: Annotated[Session, Depends(get_db)],
+        ) -> ProjectContext:
+            return assert_capability(db, token_payload, project_name, cap)
+
+        _CAP_DEPS[cap] = Annotated[ProjectContext, Depends(_dep)]
+    return _CAP_DEPS[cap]
