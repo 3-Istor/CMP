@@ -24,7 +24,7 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.core.swr_cache import SwrCache
 from app.models.deployment import Deployment, ProviderType
-from app.routers.deployments import _get_app_or_404
+from app.routers.deployments import _authorize_app, _get_app_or_404
 from app.routers.observability import SloRead, slo_read
 from app.services import alerts_grafana
 from app.services import app_overview as overview
@@ -690,24 +690,28 @@ async def get_summary(
     Above the fold of an app page in one call. Each part that cannot be
     read is left empty rather than failing the whole summary.
     """
-    # Top errors are log lines: only for callers who read logs.
-    logs = True
-    try:
-        _, scope = await run_in_threadpool(
-            _member_app, db, token, deployment_id, env, cap="app.viewLogs"
-        )
-    except HTTPException as exc:
-        if exc.status_code != 403:
-            raise
-        logs = False
-        _, scope = await run_in_threadpool(
-            _member_app,
-            db,
-            token,
-            deployment_id,
-            env,
-            cap="app.viewObservability",
-        )
+    deployment, scope = await run_in_threadpool(
+        _member_app,
+        db,
+        token,
+        deployment_id,
+        env,
+        cap="app.viewObservability",
+    )
+    # Top errors are log lines, clients and denied flows are topology.
+    hidden: dict = {}
+    for cap, blank in (
+        ("app.viewLogs", {"top_errors": []}),
+        ("topology.view", {"clients": [], "denied_flows_24h": 0}),
+    ):
+        try:
+            await run_in_threadpool(
+                _authorize_app, db, token, deployment, ProjectRole.MEMBER, cap
+            )
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                raise
+            hidden.update(blank)
 
     async def load() -> AppSummary:
         data = await run_in_threadpool(
@@ -716,7 +720,7 @@ async def get_summary(
         return AppSummary(**await summary.app_summary(data, range_, _now()))
 
     found = await _summaries.get((deployment_id, range_, env), load)
-    return found if logs else found.model_copy(update={"top_errors": []})
+    return found.model_copy(update=hidden) if hidden else found
 
 
 class LastDeploy(BaseModel):
