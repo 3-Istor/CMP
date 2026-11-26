@@ -4879,18 +4879,6 @@
     "descriptionNoRole": "{count, plural, one {# app} other {# apps}} · {cloud}",
     "logs": "Logs",
     "grafana": "Grafana",
-    "band": {
-      "requests": "Requêtes/s",
-      "requestsSub": "24 h · par app",
-      "errors": "Erreurs 5xx",
-      "errorsSub": "24 h · par app, % des requêtes",
-      "errorLogs": "Logs d'erreur/min",
-      "errorLogsSub": "24 h",
-      "allApps": "toutes les apps",
-      "peak": "{app} · {value} à {time}",
-      "empty": "Pas encore de données",
-      "emptyReason": "Apparaît dès que les apps reçoivent du trafic."
-    },
     "apps": {
       "title": "Apps",
       "sort": "Tri : à surveiller d'abord",

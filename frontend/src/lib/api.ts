@@ -1875,12 +1875,6 @@ export type AppHealthRow = {
 /** Apps sorted down, degraded, unknown, healthy, then by name. */
 export type ProjectAppsHealth = {
   apps: AppHealthRow[];
-  series: {
-    t: number[];
-    rps_by_app: Record<string, Series>;
-    err_pct_by_app: Record<string, Series>;
-    error_logs_per_min: Series;
-  };
 };
 
 export const getProjectAppsHealth = (

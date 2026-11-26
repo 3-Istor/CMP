@@ -23,7 +23,6 @@ const {
   kindLabel,
   matchesKind,
   toPoints,
-  peakOf,
   compactDuration,
   rollbackTarget,
 } = load("src/lib/appHealth.ts");
@@ -85,16 +84,6 @@ test("chart points read a missing or short series as gaps", () => {
     { t: 1, rps: 0.5, err: null },
     { t: 2, rps: null, err: null },
   ]);
-});
-
-test("the peak names the app and the moment of the highest value", () => {
-  const peak = peakOf([10, 20, 30], { front: [0, 1, 0.5], timeline: [null, 0.2, 3.1] });
-
-  assert.deepEqual(peak, { key: "timeline", value: 3.1, t: 30 });
-});
-
-test("no peak when every value is zero or missing", () => {
-  assert.equal(peakOf([10, 20], { front: [0, null] }), null);
 });
 
 test("durations keep two units at most", () => {

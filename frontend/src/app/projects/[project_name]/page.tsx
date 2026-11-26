@@ -7,7 +7,6 @@ import { CatalogGrid } from "@/components/catalog/CatalogGrid";
 import { DeployModal } from "@/components/catalog/DeployModal";
 import { ImportsList } from "@/components/imports/ImportsList";
 import { AppsList } from "@/components/projects/AppsList";
-import { ProjectHealthBand } from "@/components/projects/ProjectHealthBand";
 import { STATUS_TEXT, StatusDot } from "@/components/app-overview/shared";
 import { GettingStarted } from "@/components/projects/GettingStarted";
 import { useProjectContext } from "@/components/projects/ProjectContext";
@@ -245,7 +244,6 @@ export default function ProjectPage() {
           {role === "owner" || role === "admin" ? (
             <ProjectAccessReviewCard project={projectName} />
           ) : null}
-          <ProjectHealthBand data={health.data} loading={healthLoading} />
 
           {/* Inline catalog (shown when user clicks "Deploy App") */}
           {showCatalog && canDeploy && (
