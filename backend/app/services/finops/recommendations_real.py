@@ -146,6 +146,14 @@ def _fetch(
             f"(container_memory_working_set_bytes{{{pods}}})[{WINDOW}:1h]) / 24",
             cluster,
         ),
+        # Days since the first sample in WINDOW, gaps ignored; history_days
+        # counts hours with data, which missed scrapes keep below 14.
+        "age_days": _instant(
+            "(time() - min_over_time(timestamp(sum by (namespace) "
+            f"(container_memory_working_set_bytes{{{pods}}}))[{WINDOW}:1h]))"
+            " / 86400",
+            cluster,
+        ),
         "network_bytes": _instant(
             "sum by (namespace) (increase("
             f"container_network_receive_bytes_total{{{ns}}}"
@@ -387,8 +395,10 @@ def _advice(
     if saving <= 0:
         return []
     patch = None
-    # A shorter window would size the memory limit from a partial peak.
-    if single_deployment and history >= FULL_HISTORY_DAYS:
+    # A shorter window would size the memory limit from a partial peak. The
+    # first point sits on the 1h subquery grid, hence the one-hour slack.
+    age = data["age_days"].get(namespace, 0.0)
+    if single_deployment and age >= FULL_HISTORY_DAYS - 1 / 24:
         patch = {
             "resources": _resources(
                 namespace, data, pod_cpu, pod_ram, new_cpu, new_ram
