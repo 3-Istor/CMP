@@ -215,7 +215,7 @@ export default function AppSettingsPage() {
   const sloShown = Boolean(caps.data?.alerts);
   const visibleSections = SECTIONS.filter(
     (id) =>
-      (id !== "secrets" || isRunning) &&
+      (id !== "secrets" || (isRunning && can("secrets.view"))) &&
       (id !== "delivery" || can("release.view")) &&
       (id !== "slo" || sloShown) &&
       (id !== "security" || can("security.view")) &&
@@ -323,7 +323,7 @@ export default function AppSettingsPage() {
             )}
           </SettingsSection>
 
-          {isRunning && (
+          {isRunning && can("secrets.view") && (
             <SettingsSection
               id="secrets"
               title={ts("sections.secrets.title")}

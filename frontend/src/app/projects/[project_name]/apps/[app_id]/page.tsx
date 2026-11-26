@@ -11,6 +11,7 @@ import { DatastoreStatusBand, WebStatusBand } from "@/components/app-overview/St
 import { WeeklyView } from "@/components/app-overview/WeeklyView";
 import { ManagedServicesCard } from "@/components/imports/Recommendations";
 import { useAppContext, useAppEnv } from "@/components/projects/AppContext";
+import { AppSection } from "@/components/projects/AppFrame";
 import { useProjectContext } from "@/components/projects/ProjectContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SummaryRange } from "@/lib/api";
@@ -47,8 +48,6 @@ export default function AppOverviewPage() {
   if (!isKubernetes) {
     return can("app.viewConfig") ? <TerraformOutputs outputs={current.terraform_outputs} /> : null;
   }
-  if (!allowed) return null;
-
   // Until the summary answers, guess the layout from the template so the skeleton keeps its shape.
   const kind =
     summary?.kind ??
@@ -59,7 +58,7 @@ export default function AppOverviewPage() {
   const alertsHref = `/projects/${encodeURIComponent(projectName)}/alerts`;
 
   return (
-    <>
+    <AppSection allowed={allowed}>
       {datastore ? (
         <DatastoreStatusBand summary={summary} loading={loading} />
       ) : (
@@ -144,7 +143,7 @@ export default function AppOverviewPage() {
       </div>
 
       {rollback.dialog}
-    </>
+    </AppSection>
   );
 }
 

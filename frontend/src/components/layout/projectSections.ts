@@ -65,7 +65,7 @@ export const PROJECT_SECTIONS: Record<ProjectSectionKey, ProjectSectionEntry> = 
     key: "activity",
     segment: "activity",
     icon: History,
-    capability: "app.viewLogs",
+    capability: "activity.view",
   },
   alerts: {
     key: "alerts",
