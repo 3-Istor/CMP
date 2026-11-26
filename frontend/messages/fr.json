@@ -28,9 +28,9 @@
       "access": "Accès élevés",
       "accessReviews": "Revues d'accès",
       "issueReports": "Retours des assistants",
-      "placement": "Placement",
-      "emergency": "Urgence",
-      "agents": "Agents"
+      "agents": "Agents",
+      "clusters": "Clusters",
+      "clustersAlert": "Un cluster est indisponible"
     },
     "home": {
       "fallbackName": "Développeur",
@@ -2755,10 +2755,11 @@
     "wait": "Veuillez patienter pendant la redirection vers la page de connexion."
   },
   "clusters": {
-    "notConnected": {
-      "title": "Cluster {cloud} non connecté",
-      "body": "Les données de ce projet reviennent quand le cluster est rallumé."
-    }
+    "title": "Clusters",
+    "overview": "Vue d'ensemble",
+    "emergency": "Urgence",
+    "loadFailed": "Impossible de charger les clusters",
+    "clustersDown": "{count, plural, one {# cluster indisponible} other {# clusters indisponibles}}"
   },
   "favorites": {
     "title": "Favoris",
@@ -4124,8 +4125,6 @@
     "reopen": "Rouvrir"
   },
   "emergency": {
-    "title": "Urgence",
-    "loadFailed": "Impossible de charger la vue d'urgence",
     "clustersDown": "Clusters hors service",
     "projectsAffected": "Projets touchés",
     "movesActive": "Bascules en cours",
@@ -4135,7 +4134,6 @@
     "actNowEmpty": "Aucun projet touché",
     "movesTitle": "Bascules",
     "movesEmpty": "Aucune bascule récente",
-    "clustersTitle": "Clusters",
     "allUp": "Tous les clusters sont up",
     "healthy": "Clusters sains",
     "priority": "Prioritaire",

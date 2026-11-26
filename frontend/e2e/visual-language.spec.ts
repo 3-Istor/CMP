@@ -66,8 +66,8 @@ for (const scheme of ["light", "dark"] as const) {
         placementCluster("onprem", "up", [{ name: "epitweet", apps: 3, moving_to: null, moving_from: null }, { name: "todo-move", apps: 2, moving_to: "aws", moving_from: null }], 58),
         placementCluster("aws", "degraded", [{ name: "iot", apps: 3, moving_to: null, moving_from: null }], 72),
         placementCluster("gcp", "up", [], 40),
-      ] } } });
-      await page.goto("/placement");
+      ] } }, "/emergency": { json: { clusters: [], projects: [], moves: [] } } });
+      await page.goto("/clusters");
       await page.getByText("epitweet").waitFor();
       await page.waitForTimeout(1200);
       await shot(page, "placement");
@@ -79,7 +79,7 @@ for (const scheme of ["light", "dark"] as const) {
         "/projects/blog/moves/data-loss": { json: [] },
         "/projects/blog/moves/last-wal": { json: [{ database: "blog-db", last_wal_at: "2026-11-23T13:58:00Z", reason: null }] },
         "/projects/iot/moves/data-loss": { json: [] } });
-      await page.goto("/emergency");
+      await page.goto("/clusters");
       await page.getByRole("heading", { name: "Act now" }).waitFor();
       await page.waitForTimeout(1200);
       await shot(page, "emergency");

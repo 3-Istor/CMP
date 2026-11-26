@@ -15,7 +15,6 @@ import {
   Map as MapIcon,
   MessageSquareWarning,
   Plug,
-  Siren,
   Shield,
   UserCheck,
   Wallet,
@@ -37,8 +36,7 @@ export type PageKey =
   | "access"
   | "accessReviews"
   | "issueReports"
-  | "placement"
-  | "emergency";
+  | "clusters";
 
 export interface PageEntry {
   key: PageKey;
@@ -137,17 +135,10 @@ export const PLATFORM_PAGES: PageEntry[] = [
     platformRoles: ["infra"],
   },
   {
-    key: "placement",
-    href: "/placement",
+    key: "clusters",
+    href: "/clusters",
     icon: MapIcon,
-    isActive: (pathname) => pathname.startsWith("/placement"),
-    platformRoles: ["infra"],
-  },
-  {
-    key: "emergency",
-    href: "/emergency",
-    icon: Siren,
-    isActive: (pathname) => pathname.startsWith("/emergency"),
+    isActive: (pathname) => pathname.startsWith("/clusters"),
     platformRoles: ["infra"],
   },
 ];

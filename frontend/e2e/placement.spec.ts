@@ -51,27 +51,3 @@ test("a project admin who is not platform admin has no placement", async ({ page
   await page.goto("/projects/demo");
   await expect(page.getByRole("heading", { name: "Placement" })).toHaveCount(0);
 });
-
-test("platform map lists projects per cluster", async ({ page }) => {
-  if (process.env.PLACEMENT_DARK) await page.emulateMedia({ colorScheme: "dark" });
-  const cluster = (cloud: string, projects: object[], pct: number | null) => ({
-    cloud, state: "up", console_url: "https://c.example", nodes: 2, memory_requested_pct: pct, projects,
-  });
-  await installMockApi(page, {
-    ...VARIANTS.aws,
-    "/account/me": { json: { ...me, cnp_admin: true } },
-    "/placement": {
-      json: {
-        clusters: [
-          cluster("onprem", [{ name: "iot", apps: 2, moving_to: null, moving_from: null }], null),
-          cluster("aws", [{ name: "todo-move", apps: 1, moving_to: "onprem", moving_from: null }], 71.9),
-          cluster("gcp", [], 40.2),
-        ],
-      },
-    },
-  });
-  await page.goto("/placement");
-  await expect(page.getByRole("link", { name: /iot/ })).toBeVisible();
-  await expect(page.getByText("72 %")).toBeVisible();
-  if (process.env.PLACEMENT_SHOT) await page.screenshot({ path: process.env.PLACEMENT_SHOT.replace(".png", "-map.png") });
-});

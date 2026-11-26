@@ -28,9 +28,9 @@
       "access": "Elevated access",
       "accessReviews": "Access reviews",
       "issueReports": "Assistant reports",
-      "placement": "Placement",
-      "emergency": "Emergency",
-      "agents": "Agents"
+      "agents": "Agents",
+      "clusters": "Clusters",
+      "clustersAlert": "A cluster is not up"
     },
     "home": {
       "fallbackName": "Developer",
@@ -2755,10 +2755,11 @@
     "wait": "Please wait while we redirect you to the sign-in page."
   },
   "clusters": {
-    "notConnected": {
-      "title": "Cluster {cloud} not connected",
-      "body": "Project data returns when the cluster is powered back on."
-    }
+    "title": "Clusters",
+    "overview": "Overview",
+    "emergency": "Emergency",
+    "loadFailed": "Could not load the clusters",
+    "clustersDown": "{count, plural, one {# cluster not up} other {# clusters not up}}"
   },
   "favorites": {
     "title": "Favorites",
@@ -4124,8 +4125,6 @@
     "reopen": "Reopen"
   },
   "emergency": {
-    "title": "Emergency",
-    "loadFailed": "Could not load the emergency view",
     "clustersDown": "Clusters not up",
     "projectsAffected": "Projects affected",
     "movesActive": "Moves running",
@@ -4135,7 +4134,6 @@
     "actNowEmpty": "No project is affected",
     "movesTitle": "Moves",
     "movesEmpty": "No recent move",
-    "clustersTitle": "Clusters",
     "allUp": "All clusters are up",
     "healthy": "Healthy clusters",
     "priority": "Priority",
