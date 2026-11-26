@@ -1608,6 +1608,18 @@ export const decideAccess = (
     },
   );
 
+export const getPlatformRoles = () =>
+  request<import("@/types").PlatformRole[]>("/platform-roles");
+
+const platformMemberPath = (group: string, username: string) =>
+  `/platform-roles/${encodeURIComponent(group)}/members/${encodeURIComponent(username)}`;
+
+export const addPlatformRoleMember = (group: string, username: string) =>
+  request<void>(platformMemberPath(group, username), { method: "PUT" });
+
+export const removePlatformRoleMember = (group: string, username: string) =>
+  request<void>(platformMemberPath(group, username), { method: "DELETE" });
+
 // Topology (CNP-242)
 const projectPath = (project: string) =>
   `/projects/${encodeURIComponent(project)}`;

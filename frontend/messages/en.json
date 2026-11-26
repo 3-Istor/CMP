@@ -1171,7 +1171,9 @@
         "account_flag": "{user} reported inactive",
         "account_disable": "{user} disabled for inactivity",
         "account_enable": "{user} kept active"
-      }
+      },
+      "platformRoleAdd": "added {user} to {group}",
+      "platformRoleRemove": "removed {user} from {group}"
     },
     "audit": {
       "summaryError": "Summary unavailable",
@@ -3272,6 +3274,17 @@
       "deny": "Request denied.",
       "cancel": "Request cancelled.",
       "end": "Access ended."
+    },
+    "platformRoles": {
+      "title": "Platform roles",
+      "description": "infra is granted in Terraform.",
+      "terraform": "Managed in Terraform",
+      "empty": "No members",
+      "username": "Username",
+      "add": "Add",
+      "remove": "Remove {user}",
+      "added": "{user} added to {group}",
+      "removed": "{user} removed from {group}"
     }
   },
   "accessReviews": {

@@ -1171,7 +1171,9 @@
         "account_flag": "{user} signalé inactif",
         "account_disable": "{user} désactivé pour inactivité",
         "account_enable": "{user} maintenu actif"
-      }
+      },
+      "platformRoleAdd": "a ajouté {user} à {group}",
+      "platformRoleRemove": "a retiré {user} de {group}"
     },
     "audit": {
       "summaryError": "Synthèse indisponible",
@@ -3272,6 +3274,17 @@
       "deny": "Demande refusée.",
       "cancel": "Demande annulée.",
       "end": "Accès terminé."
+    },
+    "platformRoles": {
+      "title": "Rôles plateforme",
+      "description": "infra est attribué dans Terraform.",
+      "terraform": "Géré dans Terraform",
+      "empty": "Aucun membre",
+      "username": "Nom d'utilisateur",
+      "add": "Ajouter",
+      "remove": "Retirer {user}",
+      "added": "{user} ajouté à {group}",
+      "removed": "{user} retiré de {group}"
     }
   },
   "accessReviews": {

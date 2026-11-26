@@ -231,6 +231,10 @@ export function describe(e: ActivityEvent, t: Translate): string {
       return d.error
         ? `${t("events.loginFailed")} ${t("events.detail", { detail: str(d.error) })}`
         : t("events.loginFailed");
+    case "platform_role.add":
+      return t("events.platformRoleAdd", { user: e.target, group: str(d.group) });
+    case "platform_role.remove":
+      return t("events.platformRoleRemove", { user: e.target, group: str(d.group) });
     case "vault.read":
       return t("events.vaultRead", { target: e.target });
     case "vault.list":
@@ -280,7 +284,7 @@ export function objectHref(e: ActivityEvent): string | null {
       ? `/access-reviews?campaign=${encodeURIComponent(String(id))}`
       : "/access-reviews";
   }
-  if (a.startsWith("access.")) return "/access";
+  if (a.startsWith("access.") || a.startsWith("platform_role.")) return "/access";
   if (a === "app.delete" || a === "project.delete") return null;
   if (a === "finops.budget.update") return `/finops/budgets${query}`;
   const project = e.project && `/projects/${encodeURIComponent(e.project)}`;

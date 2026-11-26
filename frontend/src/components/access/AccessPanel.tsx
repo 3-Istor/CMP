@@ -31,6 +31,7 @@ import { ApiError, decideAccess, getAccessOverview, requestAccess } from "@/lib/
 import { useFormat } from "@/lib/useFormat";
 import type { AccessOverview, AccessRequest, AccessStatus } from "@/types";
 import { pollWhileVisible } from "@/lib/visiblePolling";
+import { PlatformRolesCard } from "./PlatformRolesCard";
 
 const POLL_MS = 15_000;
 const DURATIONS = [15, 30, 60, 120, 240];
@@ -182,6 +183,8 @@ export function AccessPanel() {
           />
         </CardContent>
       </Card>
+
+      <PlatformRolesCard />
 
       <History rows={data.history} />
     </div>

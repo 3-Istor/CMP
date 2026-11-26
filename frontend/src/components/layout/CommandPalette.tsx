@@ -63,7 +63,7 @@ function PaletteBody({ close }: { close: () => void }) {
   const router = useRouter();
   const isAdmin = usePlatformAdmin();
   const platformRoles = usePlatformRoles();
-  const { projects: allProjects, apps: allApps } = useVisibleWork(0);
+  const { projects: allProjects, apps: allApps, hasMemberProject } = useVisibleWork(0);
   const tFav = useTranslations("favorites");
   const favorites = useFavorites();
 
@@ -164,7 +164,7 @@ function PaletteBody({ close }: { close: () => void }) {
 
         <CommandGroup heading={t("pages")}>
           {ALL_PAGES.filter((page) =>
-            isPageVisible(page, platformRoles),
+            isPageVisible(page, platformRoles, { hasMemberProject }),
           ).map(({ key, href, icon: Icon }) => (
             <CommandItem
               key={key}

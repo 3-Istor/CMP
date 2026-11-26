@@ -1334,6 +1334,13 @@ export interface AccessRequest {
   ended_by: string | null;
 }
 
+/** A platform group; `managed` false means Terraform owns it (infra). */
+export interface PlatformRole {
+  group: string;
+  managed: boolean;
+  members: string[];
+}
+
 export interface AccessOverview {
   me: string;
   catalog: {
