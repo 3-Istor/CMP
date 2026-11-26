@@ -1005,3 +1005,69 @@ def test_credit_without_rate_uses_fallback():
     )[0]
 
     assert line.x_is_estimate is True
+
+
+def test_gcp_query_filters_billed_projects(gcp_settings, monkeypatch):
+    monkeypatch.setattr(settings, "FINOPS_GCP_PROJECT", "project-94dabc15")
+    monkeypatch.setattr(settings, "FINOPS_GCP_BILLED_PROJECTS", "")
+    captured = []
+
+    _gcp_lines(captured)
+
+    body = json.loads(captured[0].content)
+    assert "@projects" in body["query"]
+    param = next(p for p in body["queryParameters"] if p["name"] == "projects")
+    assert param["parameterType"] == {
+        "type": "ARRAY",
+        "arrayType": {"type": "STRING"},
+    }
+    assert param["parameterValue"]["arrayValues"] == [
+        {"value": "project-94dabc15"}
+    ]
+
+
+def test_gcp_billed_projects_setting_is_a_comma_list(monkeypatch):
+    monkeypatch.setattr(settings, "FINOPS_GCP_BILLED_PROJECTS", "a, b")
+
+    assert gcp_focus.billed_projects() == ["a", "b"]
+
+
+def test_gcp_detailed_sql_emits_credit_rows(gcp_settings):
+    base = json.loads(
+        (FIXTURES / "bigquery_billing_response.json").read_text()
+    )
+
+    def row(category, cost):
+        return {
+            "f": [
+                {"v": "2026-10-27"},
+                {"v": "Cloud Storage"},
+                {"v": "Storage"},
+                {"v": category},
+                {"v": "//storage/buckets/qcm-data"},
+                {"v": "qcm-data"},
+                {"v": cost},
+                {"v": cost},
+                {"v": cost},
+                {"v": "EUR"},
+                {"v": "10"},
+                {"v": "gibibyte month"},
+                {"v": "[]"},
+            ]
+        }
+
+    body = {**base, "rows": [row("Usage", "2.0"), row("Credit", "-2.0")]}
+    captured = []
+
+    def handler(request):
+        captured.append(request)
+        return httpx.Response(200, json=body)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    lines = gcp_focus.fetch_lines(TODAY, WINDOW, SINCE, usd_at_1_25, client)
+
+    assert "UNNEST(credits)" in json.loads(captured[0].content)["query"]
+    assert sorted((ln.project or "", ln.x_cost_eur) for ln in lines) == [
+        ("", 2.0),
+        (focus.CREDITS, -2.0),
+    ]

@@ -62,6 +62,7 @@ SELECT
   TO_JSON_STRING(Tags) AS TagsJson
 FROM `{table}`
 WHERE DATE(ChargePeriodStart) BETWEEN @start AND @end
+  AND SubAccountId IN UNNEST(@projects)
 GROUP BY Day, ServiceName, ServiceCategory, ChargeCategory, ResourceId,
   BillingCurrency, ConsumedUnit, TagsJson
 """
@@ -86,8 +87,7 @@ SELECT
   IFNULL(resource.global_name, IFNULL(resource.name, '')) AS ResourceId,
   IFNULL(ANY_VALUE(resource.name), '') AS ResourceName,
   SUM(cost) AS BilledCost,
-  SUM(cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0))
-    AS EffectiveCost,
+  SUM(cost) AS EffectiveCost,
   SUM(cost) AS ListCost,
   currency AS BillingCurrency,
   SUM(usage.amount_in_pricing_units) AS ConsumedQuantity,
@@ -95,6 +95,28 @@ SELECT
   TO_JSON_STRING(ARRAY_CONCAT(labels, system_labels)) AS TagsJson
 FROM `{table}`
 WHERE DATE(usage_start_time) BETWEEN @start AND @end
+  AND project.id IN UNNEST(@projects)
+GROUP BY Day, ServiceName, ServiceCategory, ChargeCategory, ResourceId,
+  BillingCurrency, ConsumedUnit, TagsJson
+UNION ALL
+-- Credits live in an array on each usage row: one negative row per group.
+SELECT
+  FORMAT_DATE('%F', DATE(usage_start_time)) AS Day,
+  service.description AS ServiceName,
+  'Other' AS ServiceCategory,
+  'Credit' AS ChargeCategory,
+  IFNULL(resource.global_name, IFNULL(resource.name, '')) AS ResourceId,
+  IFNULL(ANY_VALUE(resource.name), '') AS ResourceName,
+  SUM(c.amount) AS BilledCost,
+  SUM(c.amount) AS EffectiveCost,
+  SUM(c.amount) AS ListCost,
+  currency AS BillingCurrency,
+  0.0 AS ConsumedQuantity,
+  usage.pricing_unit AS ConsumedUnit,
+  TO_JSON_STRING(ARRAY_CONCAT(labels, system_labels)) AS TagsJson
+FROM `{table}`, UNNEST(credits) c
+WHERE DATE(usage_start_time) BETWEEN @start AND @end
+  AND project.id IN UNNEST(@projects)
 GROUP BY Day, ServiceName, ServiceCategory, ChargeCategory, ResourceId,
   BillingCurrency, ConsumedUnit, TagsJson
 """
@@ -109,6 +131,15 @@ def enabled() -> bool:
             settings.FINOPS_GCP_FOCUS_VIEW or settings.FINOPS_GCP_BILLING_TABLE
         )
     )
+
+
+def billed_projects() -> list[str]:
+    listed = [
+        p.strip()
+        for p in settings.FINOPS_GCP_BILLED_PROJECTS.split(",")
+        if p.strip()
+    ]
+    return listed or [settings.FINOPS_GCP_PROJECT]
 
 
 def _credentials() -> dict:
@@ -180,6 +211,20 @@ def run_query(
                     "parameterValue": {"value": value.isoformat()},
                 }
                 for name, value in (("start", start), ("end", end))
+            ]
+            + [
+                {
+                    "name": "projects",
+                    "parameterType": {
+                        "type": "ARRAY",
+                        "arrayType": {"type": "STRING"},
+                    },
+                    "parameterValue": {
+                        "arrayValues": [
+                            {"value": p} for p in billed_projects()
+                        ]
+                    },
+                }
             ],
             "timeoutMs": 60000,
             "maxResults": 10000,
