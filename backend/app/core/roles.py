@@ -103,6 +103,7 @@ MIN_ROLE: dict[str, ProjectRole] = {
     "app.viewConfig": _R.MEMBER,
     "app.editConfig": _R.ADMIN,
     "app.viewSecretsLink": _R.ADMIN,
+    "secrets.view": _R.MEMBER,
     "app.viewObservability": _R.GUEST,
     "release.view": _R.GUEST,
     "release.operate": _R.MEMBER,
@@ -123,6 +124,7 @@ MIN_ROLE: dict[str, ProjectRole] = {
     "security.view": _R.MEMBER,
     "security.manage": _R.ADMIN,
     "alerts.view": _R.MEMBER,
+    "activity.view": _R.MEMBER,
 }
 del _R
 
@@ -141,6 +143,7 @@ AUDITOR_CAPS: frozenset[str] = frozenset(
         "security.view",
         "alerts.view",
         "import.view",
+        "activity.view",
     }
 )
 FINOPS_CAPS: frozenset[str] = frozenset({"app.list", "app.view", "finops.view"})

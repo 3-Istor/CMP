@@ -536,6 +536,7 @@ async def get_release_settings(
         token,
         ProjectRole.MEMBER,
         True,
+        "app.viewConfig",
     )
     can_edit = await run_in_threadpool(
         _holds, db, token, deployment, ProjectRole.ADMIN

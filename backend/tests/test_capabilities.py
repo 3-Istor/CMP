@@ -36,6 +36,8 @@ def _check(groups, project_role, cap, owner=False):
         (["security-auditor"], None, "app.viewConfig", True),
         (["security-auditor"], None, "app.viewLogs", False),
         (["security-auditor"], None, "app.operate", False),
+        (["security-auditor"], None, "activity.view", True),
+        (["security-auditor"], None, "secrets.view", False),
         (["finops"], None, "finops.view", True),
         (["finops"], None, "release.view", False),
         (["infra"], None, "app.deploy", True),
@@ -66,7 +68,12 @@ def test_project_roles_alone(project_role, owner, cap, allowed):
 
 
 def test_platform_cap_sets_stay_within_the_table():
-    for cap in ("app.viewLogs", "app.viewTraces", "app.viewSecretsLink"):
+    for cap in (
+        "app.viewLogs",
+        "app.viewTraces",
+        "app.viewSecretsLink",
+        "secrets.view",
+    ):
         assert cap not in roles.AUDITOR_CAPS
     assert roles.AUDITOR_CAPS <= roles.MIN_ROLE.keys()
     assert roles.FINOPS_CAPS <= roles.MIN_ROLE.keys()

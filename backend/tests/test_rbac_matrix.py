@@ -15,7 +15,7 @@ from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.routers import alerting, app_observability, app_overview
 from app.models.security import SecurityException
-from app.routers import deployments, finops, imports, projects, security
+from app.routers import deployments, finops, imports, projects, releases, security
 from app.services.security.model import Tier
 from app.services import app_overview as overview
 from app.services import keycloak_service
@@ -71,6 +71,7 @@ ROWS = {  # under /api
     f"{APP}/observability/alerts": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{APP}/observability/costs": (OK, OK, OK, OK, OK, OK, OK, NO),
     f"{APP}/security-data": (OK, OK, NO, OK, OK, OK, NO, NO),
+    f"{APP}/release/settings": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{PRJ}/imports": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{PRJ}/imports/recommendations": (OK, OK, NO, OK, OK, OK, NO, NO),
     "/security/summary?project=shop": (OK, OK, NO, OK, OK, OK, NO, NO),
@@ -262,6 +263,8 @@ def world(monkeypatch):
         deployments, "get_file_content", _stub(("replicas: 1\n", "sha"))
     )
     monkeypatch.setattr(deployments, "_load_values_file", _stub(({}, "sha")))
+    monkeypatch.setattr(releases, "_get_github_token_for_deployment", _stub("gh"))
+    monkeypatch.setattr(releases, "_load_values_file", _stub(({}, "sha")))
     monkeypatch.setattr(import_service, "ensure_enabled", lambda: None)
     monkeypatch.setattr(import_service, "expire_stale", lambda **k: None)
     return world
@@ -270,7 +273,9 @@ def world(monkeypatch):
 @pytest.fixture
 def client(world):
     app = FastAPI()
-    for module in (projects, deployments, app_overview, imports, alerting):
+    for module in (
+        projects, deployments, app_overview, imports, alerting, releases
+    ):
         app.include_router(module.router, prefix="/api")
     app.include_router(app_observability.router, prefix="/api")
     app.include_router(app_observability.projects_router, prefix="/api")

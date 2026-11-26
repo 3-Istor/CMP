@@ -38,6 +38,7 @@ export type Capability =
   | "app.viewConfig"
   | "app.editConfig"
   | "app.viewSecretsLink"
+  | "secrets.view"
   | "app.viewObservability"
   | "release.view"
   | "release.operate"
@@ -57,7 +58,8 @@ export type Capability =
   | "import.manage"
   | "security.view"
   | "security.manage"
-  | "alerts.view";
+  | "alerts.view"
+  | "activity.view";
 
 /**
  * The weakest role that holds each capability.
@@ -83,6 +85,7 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "app.viewConfig": "member",
   "app.editConfig": "admin",
   "app.viewSecretsLink": "admin",
+  "secrets.view": "member",
   "app.viewObservability": "guest",
   "release.view": "guest",
   "release.operate": "member",
@@ -105,6 +108,7 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "security.view": "member",
   "security.manage": "admin",
   "alerts.view": "member",
+  "activity.view": "member",
 };
 
 /**
@@ -124,6 +128,7 @@ const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   "security.view",
   "alerts.view",
   "import.view",
+  "activity.view",
 ]);
 const FINOPS_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   "app.list",
