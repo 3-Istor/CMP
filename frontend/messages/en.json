@@ -3969,6 +3969,19 @@
       "noTracesTitle": "No traces from {app}",
       "noTracesReason": "This app does not send OpenTelemetry spans. nginx needs the otel module, and other services need the OTel SDK. The platform already sets the endpoint for you.",
       "howToTrace": "How to add tracing"
+    },
+    "openStep": "Open the {step} step",
+    "continueTo": "Continue to {step}",
+    "summary": {
+      "repo": "Repository",
+      "branch": "Branch",
+      "commit": "Analyzed commit",
+      "mode": "Mode",
+      "modes": {
+        "in_place": "In place",
+        "copy": "Copy in the platform"
+      },
+      "otherRepo": "Analyze another repository"
     }
   },
   "obs": {
