@@ -232,6 +232,7 @@ def _vm(monkeypatch, series, cluster="onprem", usd_per_eur=None):
 def _usage(
     cpu_p95=0.4,
     history=14,
+    age=None,
     network=5e9,
     replicas=4,
     cpu_request=4.0,
@@ -258,6 +259,7 @@ def _usage(
         return (needle, {} if value is None else {ns: value * unit})
 
     return [
+        ("timestamp(", {ns: history if age is None else age}),
         series(f'requests{{{sel},resource="cpu"', a["cpu_request"]),
         series(f'requests{{{sel},resource="memory"', a["ram_request"], gib),
         series(f'limits{{{sel},resource="cpu"', a["cpu_limit"]),
@@ -359,13 +361,24 @@ def test_hibernation_is_not_applicable(monkeypatch):
     assert rec.patch is None
 
 
-def test_rightsizing_has_no_patch_before_a_full_history(monkeypatch):
-    _vm(monkeypatch, _usage(replicas=1, history=2, app=_PER_POD))
+def test_rightsizing_has_no_patch_before_14_days_of_data(monkeypatch):
+    _vm(monkeypatch, _usage(replicas=1, history=12, age=12, app=_PER_POD))
 
     rec = recs.recommendations_for_apps([_app()], REF)[0]
 
     assert rec.id == "1:rightsizing"
     assert rec.patch is None
+
+
+def test_rightsizing_patch_once_data_spans_14_days_despite_gaps(monkeypatch):
+    # Measured in prod: the first point of a [14d:1h] subquery is 13.96 days
+    # old, and a few missed scrapes leave the hourly count below 14.
+    _vm(monkeypatch, _usage(replicas=1, history=12.5, age=13.96, app=_PER_POD))
+
+    rec = recs.recommendations_for_apps([_app()], REF)[0]
+
+    assert rec.id == "1:rightsizing"
+    assert rec.patch is not None
 
 
 def test_rightsizing_has_no_patch_when_the_namespace_runs_several_deployments(

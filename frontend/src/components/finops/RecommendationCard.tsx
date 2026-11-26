@@ -208,19 +208,21 @@ export function RecommendationCard({
         {!done && canAct && (
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={sleeps ? "outline" : "default"}
-                disabled={busy !== null || !rec.can_apply}
-                onClick={() => run("apply", () => applyRecommendation(rec.id))}
-              >
-                {busy === "apply" ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Check className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {t("recommendation.apply")}
-              </Button>
+              {/* Hibernation goes through Sleep now: a 0 replica patch keeps one pod. */}
+              {!sleeps && (
+                <Button
+                  size="sm"
+                  disabled={busy !== null || !rec.can_apply}
+                  onClick={() => run("apply", () => applyRecommendation(rec.id))}
+                >
+                  {busy === "apply" ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {t("recommendation.apply")}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
@@ -248,7 +250,7 @@ export function RecommendationCard({
                 {t("recommendation.ignore")}
               </Button>
             </div>
-            {!rec.can_apply && (
+            {!rec.can_apply && !sleeps && (
               <p className="text-xs text-muted-foreground">
                 {t("recommendation.cannotAutoApply")}
               </p>
