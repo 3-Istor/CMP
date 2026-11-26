@@ -1162,7 +1162,7 @@ def put_budget(
 ):
     """Create/update a project budget, **Project Owner only**."""
     username = _username(token)
-    if not _is_owner(db, project_name, username):
+    if not (_is_owner(db, project_name, username) or is_cnp_admin(token)):
         raise HTTPException(
             status_code=403,
             detail=(

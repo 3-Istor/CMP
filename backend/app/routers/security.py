@@ -901,10 +901,11 @@ async def approve_exception(
             status_code=403,
             detail="Un autre admin du projet que l'auteur doit valider.",
         )
-    reviewer = is_cnp_admin(token) or is_auditor(token)
     # A core finding is a fixable critical. An unknown tier is treated as
     # critical.
     critical = _exception_tier(db, row) in (Tier.CORE, None)
+    # A non-infra auditor acts on criticals only.
+    reviewer = is_cnp_admin(token) or (is_auditor(token) and critical)
     if not reviewer:
         await _require_admin(token, row.project)
         # Only the auditor or a platform admin may accept a critical.
@@ -934,7 +935,8 @@ async def revoke_exception(
 ) -> ExceptionRead:
     """Reactivate the alert."""
     row = _exception_or_404(db, exception_id)
-    if is_cnp_admin(token) or is_auditor(token):
+    critical = _exception_tier(db, row) in (Tier.CORE, None)
+    if is_cnp_admin(token) or (is_auditor(token) and critical):
         pass
     elif row.author == _username(token):
         await _require_member(token, row.project, "developer", write=True)
