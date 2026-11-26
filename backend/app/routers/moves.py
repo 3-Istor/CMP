@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.database import get_db
 from app.models.project import Project, TargetCloud
 from app.models.project_move import ProjectMove
-from app.services.authz import RequireAdmin, RequireGuest
+from app.services.authz import RequireAdmin, RequireCap
 from app.services.moves import footprint, steps, wal
 from app.services.moves.loop import project_lock
 from app.services.step_up import assert_step_up
@@ -122,7 +122,7 @@ def _footprint(db: Session, project: str) -> tuple[list[dict], str]:
 
 @router.get("/moves/footprint")
 async def move_footprint(
-    ctx: RequireGuest, db: Session = Depends(get_db)
+    ctx: RequireCap("app.list"), db: Session = Depends(get_db)
 ) -> list[dict]:
     """
     Last requests measured per app of the project, on every cloud, and
@@ -155,14 +155,14 @@ async def move_last_wal(
 
 @router.get("/moves/current", response_model=MoveRead | None)
 def current_move(
-    ctx: RequireGuest, db: Session = Depends(get_db)
+    ctx: RequireCap("app.list"), db: Session = Depends(get_db)
 ) -> ProjectMove | None:
     return steps.active_move(db, ctx.project_name)
 
 
 @router.get("/moves", response_model=list[MoveRead])
 def list_moves(
-    ctx: RequireGuest, db: Session = Depends(get_db)
+    ctx: RequireCap("app.list"), db: Session = Depends(get_db)
 ) -> list[ProjectMove]:
     return (
         db.query(ProjectMove)

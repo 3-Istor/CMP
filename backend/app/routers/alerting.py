@@ -13,12 +13,12 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.models.alerting import AlertSetting
 from app.models.deployment import Deployment
 from app.services import alerts_grafana as grafana
 from app.services.activity_sources import PROJECT_NAME, namespace_projects
 from app.services.alerts_catalog import BY_ID, CATALOG, AlertTemplate
-from app.core.roles import ProjectRole
 from app.services.authz import (
     assert_capability,
     is_cnp_admin,

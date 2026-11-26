@@ -18,7 +18,7 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.models.environment import AppEnvironment
 from app.services import alerts_grafana as grafana
 from app.services import links
-from app.services.authz import RequireGuest, assert_project_role, is_cnp_admin
+from app.services.authz import RequireCap, assert_capability, is_cnp_admin
 from app.services.keycloak_service import get_current_user
 
 projects = APIRouter(prefix="/projects", tags=["Links"])
@@ -29,9 +29,12 @@ CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 @projects.get("/{project_name}/links", response_model=list[links.Link])
 async def get_project_links(
-    ctx: RequireGuest, db: Session = Depends(get_db)
+    ctx: RequireCap("app.list"), db: Session = Depends(get_db)
 ) -> list[links.Link]:
-    """Access control: any role on the project, the list shrinks with the role."""
+    """
+    Access control: ``app.list``, the list shrinks with the role. A platform
+    grant (auditor, finops) sees what a guest sees.
+    """
     try:
         org = await grafana.org_id(ctx.project_name)
     except Exception:  # pylint: disable=broad-exception-caught
@@ -56,7 +59,7 @@ async def get_project_links(
         is not None
     )
     return links.project_links(
-        ctx.project_name, ctx.role, apps, org, has_staging
+        ctx.project_name, ctx.role or ProjectRole.GUEST, apps, org, has_staging
     )
 
 
@@ -64,7 +67,7 @@ async def get_project_links(
 async def get_app_links(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> list[links.Link]:
-    """Access control: any role on the app's project."""
+    """Access control: ``app.view``; a platform grant sees a guest's links."""
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         raise HTTPException(status_code=404, detail="Deployment not found")
@@ -76,9 +79,12 @@ async def get_app_links(
             detail="This application is not attached to a project.",
         )
     else:
-        role = assert_project_role(
-            db, token, deployment.project_id, ProjectRole.GUEST
-        ).role
+        role = (
+            assert_capability(
+                db, token, deployment.project_id, "app.view"
+            ).role
+            or ProjectRole.GUEST
+        )
     org = None
     # The Grafana link is for members: guests and project-less apps skip the lookup.
     if deployment.project_id and at_least(role, ProjectRole.MEMBER):

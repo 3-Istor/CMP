@@ -1,6 +1,6 @@
 """
-Scorecard of an app. Members and up, like the security and cost reads it
-summarises.
+Scorecard of an app. ``security.view`` (members and the auditor): it
+summarises the security findings, which guests do not get.
 """
 
 from typing import Annotated
@@ -33,7 +33,12 @@ async def get_scorecard(
     db: Session = Depends(get_db),
 ) -> scorecard.Scorecard:
     deployment = await run_in_threadpool(
-        _get_app_or_404, db, token, deployment_id, ProjectRole.MEMBER
+        _get_app_or_404,
+        db,
+        token,
+        deployment_id,
+        ProjectRole.MEMBER,
+        cap="security.view",
     )
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(

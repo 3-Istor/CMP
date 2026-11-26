@@ -1,8 +1,8 @@
 """
 SLO targets of an app and silences of a project's alerts (CNP-185, V3).
 
-Members see the SLO and mute their project's alerts; admins set the
-targets. Every silence is bound to the caller's project server side.
+Guests and up read the SLO, members mute their project's alerts, admins
+set the targets. The reads follow the capabilities (auditor included). Every silence is bound to the caller's project server side.
 """
 
 import re
@@ -17,12 +17,18 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.models.agent import ProjectAgentSettings
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.observability import SloSetting
 from app.services.activity_sources import PROJECT_NAME
 from app.services.agents.policy import DEFAULT_LEVEL
-from app.services.authz import is_cnp_admin, require_project_member
+from app.services.authz import (
+    ProjectContext,
+    assert_capability,
+    is_cnp_admin,
+    require_project_member,
+)
 from app.services.keycloak_service import get_current_user
 from app.services.observability import reconcile, silences, slo
 
@@ -45,6 +51,14 @@ async def _role(token: dict, project: str) -> str:
     if is_cnp_admin(token):
         return "admin"
     return await run_in_threadpool(require_project_member, token, project)
+
+
+async def _read(
+    db: Session, token: dict, project: str, cap: str
+) -> ProjectContext:
+    if not PROJECT_NAME.match(project):
+        raise HTTPException(status_code=400, detail="Invalid project name.")
+    return await run_in_threadpool(assert_capability, db, token, project, cap)
 
 
 def _author(token: dict) -> str:
@@ -113,8 +127,9 @@ async def get_slo(
     db: Session = Depends(get_db),
 ) -> SloRead:
     _enabled()
-    role = await _role(token, project)
+    ctx = await _read(db, token, project, "app.viewObservability")
     _deployment(db, project, app)
+    role = "admin" if ctx.at_least(ProjectRole.ADMIN) else "reader"
     return slo_read(db, project, app, role)
 
 
@@ -183,9 +198,11 @@ def _silence_read(raw: dict) -> SilenceRead:
 
 
 @router.get("/silences", response_model=list[SilenceRead])
-async def list_silences(token: CurrentUser, project: str) -> list[SilenceRead]:
+async def list_silences(
+    token: CurrentUser, project: str, db: Session = Depends(get_db)
+) -> list[SilenceRead]:
     _enabled()
-    await _role(token, project)
+    await _read(db, token, project, "alerts.view")
     try:
         found = await silences.list_for(project)
     except silences.AlertmanagerError as exc:

@@ -19,7 +19,7 @@ from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.routers.deployments import _get_app_or_404
 from app.services import monitoring_service
 from app.services.app_health import get_kubernetes_app_health
-from app.services.authz import assert_project_role, is_cnp_admin
+from app.services.authz import assert_capability, is_cnp_admin
 from app.services.clusters.state import cluster_states
 from app.services.keycloak_service import get_current_user
 from app.services.monitoring_service import (
@@ -70,10 +70,10 @@ async def get_global_infrastructure_health(
 
 
 async def _can_read(db, token, project: str) -> bool:
-    """GUEST on the project; a 403 hides it, any other error propagates."""
+    """``app.view`` on the project; a 403 hides it, any other error propagates."""
     try:
         await run_in_threadpool(
-            assert_project_role, db, token, project, ProjectRole.GUEST
+            assert_capability, db, token, project, "app.view"
         )
     except HTTPException as exc:
         if exc.status_code == 403:
@@ -92,7 +92,7 @@ async def get_deployments_health(
     Health of several Kubernetes apps in one call, keyed by deployment id.
 
     Ids that are unknown, deleted, not Kubernetes, not visible to the caller
-    (GUEST on the project, as the single endpoint) or whose read fails are
+    (``app.view`` on the project, as the single endpoint) or whose read fails are
     omitted.
     """
     rows = (
@@ -160,7 +160,12 @@ async def get_deployment_health(
     bypassing Terraform state which may be stale for auto-scaling resources.
     """
     deployment = await run_in_threadpool(
-        _get_app_or_404, db, token_payload, deployment_id, ProjectRole.GUEST
+        _get_app_or_404,
+        db,
+        token_payload,
+        deployment_id,
+        ProjectRole.GUEST,
+        cap="app.view",
     )
 
     try:

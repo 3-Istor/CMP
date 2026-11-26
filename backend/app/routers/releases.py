@@ -117,7 +117,9 @@ def get_release(
     source: Source,
     db: Session = Depends(get_db),
 ):
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.GUEST, cap="release.view"
+    )
     return _compute(db, deployment, source)[0]
 
 
@@ -131,7 +133,9 @@ def list_releases(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     db: Session = Depends(get_db),
 ):
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.GUEST, cap="release.view"
+    )
     events = history.list_events(
         db, deployment_id, limit, environment, component, version
     )
@@ -251,7 +255,12 @@ async def stream_release(
     db: Session = Depends(get_db),
 ):
     await run_in_threadpool(
-        _get_app_or_404, db, token, deployment_id, ProjectRole.GUEST
+        _get_app_or_404,
+        db,
+        token,
+        deployment_id,
+        ProjectRole.GUEST,
+        cap="release.view",
     )
     return StreamingResponse(
         view_stream(deployment_id, source, request.is_disconnected),
@@ -758,7 +767,12 @@ async def stream_traffic(
     db: Session = Depends(get_db),
 ):
     await run_in_threadpool(
-        _get_app_or_404, db, token, deployment_id, ProjectRole.GUEST
+        _get_app_or_404,
+        db,
+        token,
+        deployment_id,
+        ProjectRole.GUEST,
+        cap="release.view",
     )
     return StreamingResponse(
         traffic_stream(deployment_id, request.is_disconnected),

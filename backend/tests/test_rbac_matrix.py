@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -13,11 +13,25 @@ from app.core.database import Base, get_db
 from app.models import imports as _import_models  # noqa: F401  (tables)
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
-from app.routers import alerting, app_observability, app_overview
 from app.models.security import SecurityException
-from app.routers import deployments, environments, finops, imports, projects
-from app.routers import releases, security
-from app.services.security.model import Tier
+from app.routers import (
+    alerting,
+    app_icons,
+    app_observability,
+    app_overview,
+    deployments,
+    environments,
+    finops,
+    imports,
+    infra,
+    links,
+    moves,
+    observability,
+    projects,
+    releases,
+    scorecard,
+    security,
+)
 from app.services import app_overview as overview
 from app.services import keycloak_service
 from app.services.environments import runs
@@ -32,6 +46,7 @@ from app.services.observability import (
     stores,
     summary,
 )
+from app.services.security.model import Tier
 
 IDS = "infra auditor finops owner admin member guest none".split()
 # (groups, project role, owner of "shop") per identity, in IDS order.
@@ -78,6 +93,34 @@ ROWS = {  # under /api
     f"{PRJ}/imports": (OK, OK, NO, OK, OK, OK, NO, NO),
     f"{PRJ}/imports/recommendations": (OK, OK, NO, OK, OK, OK, NO, NO),
     "/security/summary?project=shop": (OK, OK, NO, OK, OK, OK, NO, NO),
+    # Stubs answer 404 past the guard: NF means allowed.
+    f"{APP}/release": (NF, NF, NO, NF, NF, NF, NF, NO),
+    f"{APP}/releases": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/promotion-policy": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/environments/staging/offhours": (NF, NF, NO, NF, NF, NF, NF, NO),
+    f"{APP}/environments/prod/runs": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/runs/1": (NF, NF, NO, NF, NF, NF, NF, NO),
+    f"{APP}/promotions": (OK, OK, NO, OK, OK, OK, OK, NO),
+    f"{APP}/promotions/1": (NF, NF, NO, NF, NF, NF, NF, NO),
+    f"/infra{APP}/health": (OK, OK, OK, OK, OK, OK, OK, NO),
+    f"{PRJ}/links": (OK, OK, OK, OK, OK, OK, OK, NO),
+    f"{APP}/links": (NF, NF, NF, NF, NF, NF, NF, NO),
+    f"{PRJ}/moves/footprint": (NF, NF, NF, NF, NF, NF, NF, NO),
+    f"{PRJ}/moves/current": (OK, OK, OK, OK, OK, OK, OK, NO),
+    f"{PRJ}/moves": (OK, OK, OK, OK, OK, OK, OK, NO),
+    f"{APP}/icon": (NF, NF, NF, NF, NF, NF, NF, NO),
+    f"{APP}/scorecard": (NF, NF, NO, NF, NF, NF, NO, NO),
+    "/observability/slo?project=shop&app=web": (
+        OK,
+        OK,
+        NO,
+        OK,
+        OK,
+        OK,
+        OK,
+        NO,
+    ),
+    "/observability/silences?project=shop": (OK, OK, NO, OK, OK, OK, NO, NO),
 }
 
 
@@ -266,8 +309,33 @@ def world(monkeypatch):
         deployments, "get_file_content", _stub(("replicas: 1\n", "sha"))
     )
     monkeypatch.setattr(deployments, "_load_values_file", _stub(({}, "sha")))
-    monkeypatch.setattr(releases, "_get_github_token_for_deployment", _stub("gh"))
+    monkeypatch.setattr(
+        releases, "_get_github_token_for_deployment", _stub("gh")
+    )
     monkeypatch.setattr(releases, "_load_values_file", _stub(({}, "sha")))
+
+    def not_found(*a, **k):
+        raise HTTPException(status_code=404)
+
+    monkeypatch.setattr(releases, "_compute", not_found)
+    monkeypatch.setattr(environments.activation, "get_offhours", not_found)
+    monkeypatch.setattr(links.links, "app_links", not_found)
+    monkeypatch.setattr(moves.footprint, "rows", not_found)
+    monkeypatch.setattr(scorecard.scorecard, "scorecard_for", not_found)
+    monkeypatch.setattr(
+        infra,
+        "get_kubernetes_app_health",
+        _stub(
+            infra.monitoring_service.AppHealthResponse(
+                deployment_name="web",
+                status="healthy",
+                aws_frontend=None,
+                openstack_backend=None,
+            )
+        ),
+    )
+    monkeypatch.setattr(observability.settings, "OBS_V3_ENABLED", True)
+    monkeypatch.setattr(observability.silences, "list_for", _stub([]))
     monkeypatch.setattr(import_service, "ensure_enabled", lambda: None)
     monkeypatch.setattr(import_service, "expire_stale", lambda **k: None)
     return world
@@ -277,14 +345,27 @@ def world(monkeypatch):
 def client(world):
     app = FastAPI()
     for module in (
-        projects, deployments, app_overview, imports, alerting, releases,
+        projects,
+        deployments,
+        app_overview,
+        imports,
+        alerting,
+        releases,
         environments,
+        infra,
+        moves,
+        app_icons,
+        scorecard,
+        observability,
     ):
         app.include_router(module.router, prefix="/api")
     app.include_router(app_observability.router, prefix="/api")
     app.include_router(app_observability.projects_router, prefix="/api")
     app.include_router(security.router, prefix="/api")
     app.include_router(finops.router, prefix="/api")
+    app.include_router(links.projects, prefix="/api")
+    app.include_router(links.deployments, prefix="/api")
+    app.dependency_overrides[releases.get_release_source] = lambda: None
 
     def get_session():
         db = world.Session()
@@ -500,3 +581,20 @@ def test_put_budget(client, world, monkeypatch, identity, who):
 
     expected = (OK, NO, NO, OK, NO, NO, NO, NO)
     assert response.status_code == expected[IDS.index(who)], response.text
+
+
+@pytest.mark.parametrize(
+    ("identity", "expected"),
+    [
+        ((["security-auditor"], None, False), ["1"]),
+        ((["finops"], None, False), ["1"]),
+        (([], None, False), []),
+    ],
+    ids=["auditor", "finops", "none"],
+)
+def test_batch_health_follows_app_view(client, world, identity, expected):
+    world.be(*identity)
+
+    body = client.get("/api/infra/deployments/health?ids=1").json()
+
+    assert list(body) == expected

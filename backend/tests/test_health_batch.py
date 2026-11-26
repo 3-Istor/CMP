@@ -79,7 +79,7 @@ def setup(monkeypatch):
     def _setup(admin=False, check=None, read=_health):
         check = check or mock.Mock()
         monkeypatch.setattr(infra, "is_cnp_admin", lambda _t: admin)
-        monkeypatch.setattr(infra, "assert_project_role", check)
+        monkeypatch.setattr(infra, "assert_capability", check)
         monkeypatch.setattr(app_health, "_read_app_health", read)
         return check
 
