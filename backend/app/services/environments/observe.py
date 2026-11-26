@@ -142,14 +142,20 @@ def observe(
     """
     namespace = layout.namespace(project, app, environment)
     state = EnvironmentState(namespace=namespace)
+    # One namespace-wide list, split by component instance label.
+    pods = kube_list(f"/api/v1/namespaces/{namespace}/pods", cloud=cloud)
     for component in layout.components(app_type):
         release = layout.application(project, app, component, environment)
-        pods = kube_list(
-            f"/api/v1/namespaces/{namespace}/pods",
-            {"labelSelector": f"app.kubernetes.io/instance={release}"},
-            cloud=cloud,
+        state.components[component] = component_state(
+            [
+                p
+                for p in pods
+                if (p.get("metadata", {}).get("labels") or {}).get(
+                    "app.kubernetes.io/instance"
+                )
+                == release
+            ]
         )
-        state.components[component] = component_state(pods)
     return state
 
 

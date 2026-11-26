@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.database import get_db
 from app.services import placement
 from app.services.authz import is_cnp_admin
-from app.services.clusters.state import project_cloud
+from app.services.clusters.state import cluster_states, project_cloud
 from app.services.keycloak_service import get_current_user
 
 router = APIRouter(tags=["placement"])
@@ -30,6 +30,7 @@ async def project_placement(
     db: Session = Depends(get_db),
 ) -> dict:
     current = project_cloud(db, project_name)
+    await cluster_states()  # starts a background refresh when stale
     return await run_in_threadpool(
         placement.project_placement, project_name, current
     )

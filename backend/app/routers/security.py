@@ -21,7 +21,11 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
-from app.models.security import SecurityException, SecurityScan
+from app.models.security import (
+    SecurityException,
+    SecurityFinding,
+    SecurityScan,
+)
 from app.routers.finops import _user_project_names
 from app.services import app_repo, notifications
 from app.services.audit import note
@@ -463,6 +467,10 @@ async def get_overview(
 
 
 def _overview(db: Session, names: list[str] | None) -> list[ProjectOverview]:
+    """
+    What ``_summary`` returns for score, grade, actions and core, for every
+    project in four bulk queries: the sidebar asks on nearly every page.
+    """
     if names is None:
         names = list(
             {
@@ -473,16 +481,80 @@ def _overview(db: Session, names: list[str] | None) -> list[ProjectOverview]:
                 )
             }
         )
+    today = utcnow().date()
+    findings: dict[str, list[SecurityFinding]] = {n: [] for n in names}
+    for row in db.query(SecurityFinding).filter(
+        SecurityFinding.project.in_(names),
+        SecurityFinding.resolved_at.is_(None),
+    ):
+        findings[row.project].append(row)
+    exceptions: dict[str, dict[str, SecurityException]] = {
+        n: {} for n in names
+    }
+    for row in (
+        db.query(SecurityException)
+        .filter(
+            SecurityException.project.in_(names),
+            SecurityException.revoked_at.is_(None),
+            SecurityException.expires_on >= today,
+        )
+        .order_by(SecurityException.created_at)
+    ):
+        exceptions[row.project][row.fingerprint] = row
+    deployed: dict[str, set[str]] = {n: set() for n in names}
+    for project, name in db.query(
+        Deployment.project_id, Deployment.name
+    ).filter(
+        Deployment.project_id.in_(names),
+        Deployment.template_id.in_(SCANNED_TEMPLATES),
+        Deployment.status != DeploymentStatus.DELETED,
+    ):
+        deployed[project].add(name)
+    scanned: dict[str, set[str]] = {n: set() for n in names}
+    for project, app in db.query(
+        SecurityScan.project, SecurityScan.app
+    ).filter(
+        SecurityScan.project.in_(names),
+        SecurityScan.source.in_(store.APP_SCANNERS),
+        SecurityScan.last_run_at.isnot(None),
+    ):
+        scanned[project].add(app)
+
     result = []
     for project in sorted(names):
-        s = _summary(db, project, None, "developer")
+        everything = store.merged_findings(
+            db,
+            project,
+            today,
+            preloaded=(findings[project], exceptions[project]),
+        )
+        items = store.for_audience(everything, platform=False)
+        scored = [m.scored() for m in items]
+        app_names = deployed[project] | {m.app for m in items if m.app}
+        app_scores = []
+        for name in sorted(app_names & scanned[project]):
+            value = scoring.score([m.scored() for m in items if m.app == name])
+            if value is not None:
+                app_scores.append(value)
+        value = (
+            scoring.project_score(
+                app_scores, [m.scored() for m in items if m.app is None]
+            )
+            if app_scores
+            else None
+        )
+        open_ = scoring.actionable(scored)
         result.append(
             ProjectOverview(
                 project=project,
-                score=s.score,
-                grade=s.grade,
-                actions=s.actions,
-                core=s.core,
+                score=value,
+                grade=(
+                    None
+                    if value is None
+                    else scoring.grade(value, scoring.has_core(scored))
+                ),
+                actions=len(open_),
+                core=sum(1 for f in open_ if f.tier is Tier.CORE),
             )
         )
     return result

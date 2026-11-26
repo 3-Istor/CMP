@@ -1,7 +1,6 @@
 """
 The health of every app of a project in one read, for the project page:
-a state per app, its few numbers and a sparkline, and the stacked series by
-app. The cost does not grow with the number of apps: one Argo CD list, one
+a state per app, its few numbers and a sparkline. The cost does not grow with the number of apps: one Argo CD list, one
 schedules list, one Alertmanager read and two metrics queries (instant and
 range), each grouped by namespace and pinned to the project's namespaces.
 """
@@ -180,18 +179,12 @@ def instant_queries(project: str, pattern: str, window: str) -> dict[str, str]:
     }
 
 
-def range_queries(project: str, pattern: str, step: int) -> dict[str, str]:
+def range_queries(project: str, pattern: str) -> dict[str, str]:
     pods = f'namespace=~"{pattern}", container!="", container!="POD"'
-    requests = f"sum by (namespace) ({_slo(project, 'requests')})"
     return {
-        "rps": requests,
-        "err_pct": f"100 * sum by (namespace) ({_slo(project, 'errors')})"
-        f" / {requests}",
+        "rps": f"sum by (namespace) ({_slo(project, 'requests')})",
         "cpu": "sum by (namespace) (rate(container_cpu_usage_seconds_total"
         f"{{{pods}}}[{signals.RATE}]))",
-        # Recorded once a minute from VictoriaLogs: already per minute.
-        "error_logs": "sum(avg_over_time(cnp_log_error_lines:count1m"
-        f'{{project="{project}"}}[{step}s]))',
     }
 
 
@@ -280,7 +273,7 @@ async def apps_health(  # pylint: disable=too-many-locals
     grid = Grid.of(range_name, now, POINTS)
     start, end = grid.bounds()
     if not data.apps:
-        return {"apps": [], "series": _empty_series(grid)}
+        return {"apps": []}
     by_namespace = data.namespaces()
     scope = stores.ProjectScope(
         project=data.project,
@@ -315,7 +308,7 @@ async def apps_health(  # pylint: disable=too-many-locals
         "series": (
             stores.series(
                 scope,
-                stores.tagged(range_queries(data.project, pattern, grid.step)),
+                stores.tagged(range_queries(data.project, pattern)),
                 start,
                 end,
                 grid.step,
@@ -342,12 +335,6 @@ async def apps_health(  # pylint: disable=too-many-locals
     }
 
     apps = []
-    series: dict[str, Any] = {
-        "t": grid.millis(),
-        "rps_by_app": {},
-        "err_pct_by_app": {},
-        "error_logs_per_min": ranged.get(("error_logs", ""), []),
-    }
     for row in data.apps:
         ns = layout.namespace(data.project, row.name, "prod")
 
@@ -371,12 +358,7 @@ async def apps_health(  # pylint: disable=too-many-locals
         status, status_reason = status_of(
             state, reason, error_pct, alerts.get(row.name, 0)
         )
-        rps_series = ranged.get(("rps", ns))
-        if rps_series is not None:
-            series["rps_by_app"][row.name] = rps_series
-        if ("err_pct", ns) in ranged:
-            series["err_pct_by_app"][row.name] = ranged[("err_pct", ns)]
-        spark_source = rps_series if kind == "web" else ranged.get(("cpu", ns))
+        spark_source = ranged.get(("rps" if kind == "web" else "cpu", ns))
         apps.append(
             {
                 "id": row.id,
@@ -394,13 +376,4 @@ async def apps_health(  # pylint: disable=too-many-locals
                 "last_deploy": row.last_deploy,
             }
         )
-    return {"apps": sort_apps(apps), "series": series}
-
-
-def _empty_series(grid: Grid) -> dict[str, Any]:
-    return {
-        "t": grid.millis(),
-        "rps_by_app": {},
-        "err_pct_by_app": {},
-        "error_logs_per_min": [],
-    }
+    return {"apps": sort_apps(apps)}

@@ -54,23 +54,6 @@ export function toPoints(
   });
 }
 
-/** The highest point across several series, to name the app behind a spike. */
-export function peakOf(
-  t: number[],
-  byKey: Record<string, Series>,
-): { key: string; value: number; t: number } | null {
-  let best: { key: string; value: number; t: number } | null = null;
-  for (const [key, values] of Object.entries(byKey)) {
-    for (let i = 0; i < values.length && i < t.length; i++) {
-      const value = values[i];
-      if (value != null && value > 0 && (best === null || value > best.value)) {
-        best = { key, value, t: t[i] };
-      }
-    }
-  }
-  return best;
-}
-
 export interface DurationUnits {
   s: string;
   m: string;

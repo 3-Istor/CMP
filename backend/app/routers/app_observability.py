@@ -744,16 +744,8 @@ class AppHealthRow(BaseModel):
     last_deploy: LastDeploy | None = None
 
 
-class AppsHealthSeries(BaseModel):
-    t: list[int]
-    rps_by_app: dict[str, list[float | None]]
-    err_pct_by_app: dict[str, list[float | None]]
-    error_logs_per_min: list[float | None]
-
-
 class AppsHealth(BaseModel):
     apps: list[AppHealthRow]
-    series: AppsHealthSeries
 
 
 @projects_router.get(

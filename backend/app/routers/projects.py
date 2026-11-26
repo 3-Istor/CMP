@@ -454,9 +454,10 @@ async def create_project(
         ) from exc
 
     if payload.target_cloud == "public":
-        states = {
-            c: await run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS
-        }
+        found = await asyncio.gather(
+            *(run_in_threadpool(fresh_state, c) for c in PUBLIC_CLOUDS)
+        )
+        states = dict(zip(PUBLIC_CLOUDS, found))
         last = (
             db.query(Project.target_cloud)
             .filter(Project.target_cloud.in_(PUBLIC_CLOUDS))

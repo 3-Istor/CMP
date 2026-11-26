@@ -5,6 +5,7 @@ Every selector is built here from the app's own project and namespace, read
 from the database row; nothing the browser sends reaches a label matcher.
 """
 
+import asyncio
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -156,15 +157,36 @@ async def app_metrics(
         f'namespace="{scope.namespace}", container="cnp-generic-app"'
     )
     async with _client() as client:
-        total = await _series(
-            client,
-            f"sum(rate(envoy_cluster_upstream_rq_total{{{route}}}"
-            f"[{RATE_RANGE}]))",
-            start,
-            now,
-            step,
-            cloud,
+        total, cpu, requested = await asyncio.gather(
+            _series(
+                client,
+                f"sum(rate(envoy_cluster_upstream_rq_total{{{route}}}"
+                f"[{RATE_RANGE}]))",
+                start,
+                now,
+                step,
+                cloud,
+            ),
+            _series(
+                client,
+                "1000 * sum(rate(container_cpu_usage_seconds_total{"
+                f"{cpu_selector}}}[{RATE_RANGE}]))",
+                start,
+                now,
+                step,
+                cloud,
+            ),
+            _query(
+                client,
+                "/api/v1/query",
+                {
+                    "query": "1000 * sum(kube_pod_container_resource_requests{"
+                    f'{cpu_selector}, resource="cpu"}})'
+                },
+                cloud,
+            ),
         )
+        # Only asked when there is traffic.
         errors = (
             await _series(
                 client,
@@ -178,24 +200,6 @@ async def app_metrics(
             )
             if total
             else None
-        )
-        cpu = await _series(
-            client,
-            "1000 * sum(rate(container_cpu_usage_seconds_total{"
-            f"{cpu_selector}}}[{RATE_RANGE}]))",
-            start,
-            now,
-            step,
-            cloud,
-        )
-        requested = await _query(
-            client,
-            "/api/v1/query",
-            {
-                "query": "1000 * sum(kube_pod_container_resource_requests{"
-                f'{cpu_selector}, resource="cpu"}})'
-            },
-            cloud,
         )
     return {
         "window": window,

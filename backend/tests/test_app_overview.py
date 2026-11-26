@@ -1,4 +1,6 @@
+import asyncio
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 from urllib.parse import parse_qsl
@@ -610,3 +612,35 @@ class TestEvents:
             response = client.get("/api/deployments/7/events")
 
         assert response.status_code == 502
+
+
+def test_metrics_queries_run_concurrently():
+    scope = overview.Scope(
+        project="shop",
+        app="web",
+        namespace="ns",
+        cloud=overview.TargetCloud.ONPREM,
+        components=[],
+    )
+    calls = []
+
+    async def slow_series(client, query, *_):
+        calls.append(query)
+        await asyncio.sleep(0.2)
+        return [(NOW, 1.0)]
+
+    async def slow_query(*_):
+        await asyncio.sleep(0.2)
+        return [{"value": [0, "250"]}]
+
+    with (
+        mock.patch.object(overview, "_series", slow_series),
+        mock.patch.object(overview, "_query", slow_query),
+    ):
+        start = time.monotonic()
+        body = asyncio.run(overview.app_metrics(scope, "1h", NOW))
+
+    # total, cpu and requested together (0.2 s), then errors (0.2 s).
+    assert time.monotonic() - start < 0.55
+    assert len(calls) == 3
+    assert body["cpu_request_millicores"] == 250.0

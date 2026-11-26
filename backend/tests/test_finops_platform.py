@@ -369,8 +369,22 @@ def test_summary_equals_the_overview_summary(api, monkeypatch, provider, who):
     client = api(who)
 
     summary = client.get("/api/finops/summary").json()
+    overview = client.get("/api/finops/overview").json()["summary"]
 
-    assert summary == client.get("/api/finops/overview").json()["summary"]
+    # Home shows the projection only: savings are left to the FinOps pages.
+    assert summary.pop("potential_savings_eur") is None
+    overview.pop("potential_savings_eur")
+    assert summary == overview
+
+
+def test_summary_does_not_compute_recommendations(api, monkeypatch):
+    monkeypatch.setattr(
+        provider_module.RealCostProvider,
+        "recommendations",
+        lambda *_: pytest.fail("recommendations computed for Home"),
+    )
+
+    assert api(ADMIN).get("/api/finops/summary").status_code == 200
 
 
 def test_resource_filter_accepts_platform(api):

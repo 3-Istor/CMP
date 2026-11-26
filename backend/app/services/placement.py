@@ -1,5 +1,6 @@
 """Where a project's pods run, per cluster, read live (platform admins only)."""
 
+import asyncio
 import re
 
 from sqlalchemy import func
@@ -10,7 +11,11 @@ from app.core.config import settings
 from app.models.deployment import Deployment, DeploymentStatus
 from app.models.project import TargetCloud
 from app.services import project_registry
-from app.services.clusters.state import PUBLIC_CLOUDS, fresh_state
+from app.services.clusters.state import (
+    PUBLIC_CLOUDS,
+    cached_state,
+    cluster_states,
+)
 from app.services.kube_client import (
     ClusterNotConnectedError,
     KubeUnavailableError,
@@ -119,7 +124,9 @@ def console_url(cloud: TargetCloud, project: str | None = None) -> str:
 
 def _state(cloud: TargetCloud) -> str:
     # The CMP runs on-prem: no Argo Application tracks that cluster.
-    return "up" if cloud == TargetCloud.ONPREM else fresh_state(cloud)
+    # Refreshed in the background (cluster_states): a live probe waits up to
+    # PROBE_TIMEOUT per powered-off cloud, on pages polled every few seconds.
+    return "up" if cloud == TargetCloud.ONPREM else cached_state(cloud)
 
 
 def _cluster_pods(cloud: TargetCloud, project: str) -> tuple[list, list]:
@@ -217,9 +224,12 @@ def _backups(project: str) -> list[dict]:
     ]
 
 
-def _memory_requested_pct(cloud: TargetCloud) -> float | None:
+def _memory_requested_pct(
+    cloud: TargetCloud, nodes: list[dict] | None = None
+) -> float | None:
     try:
-        nodes = kube_list("/api/v1/nodes", cloud=cloud)
+        if nodes is None:
+            nodes = kube_list("/api/v1/nodes", cloud=cloud)
         pods = kube_list("/api/v1/pods", cloud=cloud)
         allocatable = sum(
             quantity_bytes(n["status"]["allocatable"]["memory"]) for n in nodes
@@ -259,8 +269,21 @@ def visible_app_counts(db: Session) -> dict[str, int]:
     )
 
 
+def _cluster_figures(cloud: TargetCloud) -> tuple[str, int, float | None]:
+    """State, node count and requested memory % of one cluster."""
+    state = _state(cloud)
+    if state != "up":
+        return state, 0, None
+    try:
+        nodes = _nodes(cloud)
+    except (ClusterNotConnectedError, KubeUnavailableError):
+        return "unreachable", 0, None
+    return state, len(nodes), _memory_requested_pct(cloud, nodes)
+
+
 async def platform_placement(app_counts: dict[str, int]) -> dict:
-    records = await project_registry.list_records()
+    await cluster_states()  # starts a background refresh when stale
+    records = await project_registry.list_records_cached()
     columns = {c: [] for c in CLOUDS}
     for record in records:
         spec, move = record.get("spec") or {}, (
@@ -291,16 +314,11 @@ async def platform_placement(app_counts: dict[str, int]) -> dict:
                 columns[TargetCloud(cloud)].append(
                     {"name": name, "apps": apps, **moving}
                 )
+    figures = await asyncio.gather(
+        *(run_in_threadpool(_cluster_figures, c) for c in CLOUDS)
+    )
     clusters = []
-    for cloud in CLOUDS:
-        state = await run_in_threadpool(_state, cloud)
-        nodes, pct = 0, None
-        if state == "up":
-            try:
-                nodes = len(await run_in_threadpool(_nodes, cloud))
-                pct = await run_in_threadpool(_memory_requested_pct, cloud)
-            except (ClusterNotConnectedError, KubeUnavailableError):
-                state = "unreachable"
+    for cloud, (state, nodes, pct) in zip(CLOUDS, figures):
         clusters.append(
             {
                 "cloud": cloud.value,

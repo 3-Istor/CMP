@@ -391,7 +391,7 @@ def get_summary(
     provider = get_cost_provider()
     apps = _cost_specs(provider, deployments, token, None)
 
-    summary_dict = provider.summary(apps)
+    summary_dict = provider.summary(apps, savings=False)
     summary_dict["breakdown"] = Breakdown(**summary_dict["breakdown"])
     summary = CostSummary(**summary_dict)
     if settings.FINOPS_PROVIDER == "real":
