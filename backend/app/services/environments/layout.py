@@ -1,7 +1,8 @@
 """Names and files of an app's environments. Must match K3s and cnp-project-base."""
 
-from typing import Any
+from typing import Any, Literal
 
+Environment = Literal["prod", "staging"]
 ENVIRONMENTS = ("prod", "staging")
 SUFFIX = {"prod": "", "staging": "-stg"}
 HOSTNAME_DOMAIN = "3istor.com"

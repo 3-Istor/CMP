@@ -35,6 +35,7 @@ from app.services.authz import (
     is_cnp_admin,
     is_finops,
 )
+from app.services.environments import layout, runs
 from app.services.grafana_service import GRAFANA_BASE_URL
 from app.services.keycloak_service import get_current_user
 from app.services.observability import (
@@ -69,13 +70,15 @@ _grafana_orgs = SwrCache("grafana org", ttl=300)
 # ── Access ───────────────────────────────────────────────────────────────────
 
 
-def _scope(deployment: Deployment) -> stores.Scope:
+def _scope(
+    deployment: Deployment, env: layout.Environment = "prod"
+) -> stores.Scope:
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
             status_code=400, detail="Only Kubernetes apps have this data."
         )
     try:
-        found = overview.scope_of(deployment)
+        found = overview.scope_of(deployment, env)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return stores.Scope(
@@ -83,14 +86,20 @@ def _scope(deployment: Deployment) -> stores.Scope:
         app=found.app,
         namespace=found.namespace,
         cloud=found.cloud.value,
+        environment=env,
     )
 
 
 def _member_app(
-    db: Session, token: dict, deployment_id: int
+    db: Session,
+    token: dict,
+    deployment_id: int,
+    env: layout.Environment = "prod",
 ) -> tuple[Deployment, stores.Scope]:
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
-    return deployment, _scope(deployment)
+    if env == "staging" and not runs.staging_ready(db, deployment.id):
+        raise HTTPException(status_code=404, detail="This app has no staging.")
+    return deployment, _scope(deployment, env)
 
 
 @contextmanager
@@ -438,13 +447,14 @@ def get_dora(
     deployment_id: int,
     token: CurrentUser,
     days: Annotated[int, Query()] = 30,
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> Dora:
-    """Deployment frequency and change failure rate of prod."""
+    """Deployment frequency and change failure rate of an environment."""
     if days not in delivery.DORA_DAYS:
         raise HTTPException(status_code=422, detail="days: 7, 30 or 90.")
-    deployment, _ = _member_app(db, token, deployment_id)
-    return Dora(**delivery.dora(db, deployment.id, days, _now()))
+    deployment, _ = _member_app(db, token, deployment_id, env)
+    return Dora(**delivery.dora(db, deployment.id, days, _now(), env))
 
 
 @router.get(
@@ -456,10 +466,11 @@ async def get_top_errors(
     token: CurrentUser,
     range_: Annotated[str, Query(alias="range", pattern=LOG_RANGE)] = "1h",
     limit: Annotated[int, Query(ge=1, le=20)] = 5,
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> list[ErrorPattern]:
     """The most frequent error lines, numbers folded into one pattern."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, env)
     with _reading():
         rows = await app_logs.top_errors(scope, range_, limit)
     return [ErrorPattern(**r) for r in rows]
@@ -478,10 +489,11 @@ async def search_logs(  # pylint: disable=too-many-arguments
     q: Annotated[str | None, Query(max_length=app_logs.MAX_PHRASE)] = None,
     trace_id: Annotated[str | None, Query(pattern=TRACE_ID)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> list[LogLine]:
-    """Newest first, prod only."""
-    _, scope = _member_app(db, token, deployment_id)
+    """Newest first."""
+    _, scope = _member_app(db, token, deployment_id, env)
     try:
         if q:
             app_logs.phrase(q)
@@ -665,13 +677,16 @@ async def get_summary(
     deployment_id: int,
     token: CurrentUser,
     range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "24h",
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> AppSummary:
     """
     Above the fold of an app page in one call. Each part that cannot be
     read is left empty rather than failing the whole summary.
     """
-    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
+    _, scope = await run_in_threadpool(
+        _member_app, db, token, deployment_id, env
+    )
 
     async def load() -> AppSummary:
         data = await run_in_threadpool(
@@ -679,7 +694,7 @@ async def get_summary(
         )
         return AppSummary(**await summary.app_summary(data, range_, _now()))
 
-    return await _summaries.get((deployment_id, range_), load)
+    return await _summaries.get((deployment_id, range_, env), load)
 
 
 class LastDeploy(BaseModel):

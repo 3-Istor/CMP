@@ -52,9 +52,12 @@ class Scope:
     namespace: str
     cloud: TargetCloud
     components: list[str]
+    environment: layout.Environment = "prod"
 
 
-def scope_of(deployment: Deployment) -> Scope:
+def scope_of(
+    deployment: Deployment, environment: layout.Environment = "prod"
+) -> Scope:
     project = deployment.project_id or ""
     app = deployment.name
     if not _NAME.match(project) or not _NAME.match(app):
@@ -62,9 +65,10 @@ def scope_of(deployment: Deployment) -> Scope:
     return Scope(
         project=project,
         app=app,
-        namespace=layout.namespace(project, app, "prod"),
+        namespace=layout.namespace(project, app, environment),
         cloud=TargetCloud(gitops.target_cloud(deployment)),
         components=layout.components(gitops.app_type(deployment)),
+        environment=environment,
     )
 
 

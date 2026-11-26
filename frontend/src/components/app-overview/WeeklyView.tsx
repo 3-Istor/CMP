@@ -3,7 +3,7 @@
 import { StatTile } from "@/components/data/StatTile";
 import { useObsCapabilities, useObsFormat } from "@/components/observability/shared";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { getFinopsApps, getObsDora, getObsSlo } from "@/lib/api";
+import { getFinopsApps, getObsDora, getObsSlo, type AppEnv } from "@/lib/api";
 import { useInView } from "@/lib/appSummary";
 import { loadScorecard } from "@/lib/scorecard";
 import { useCardData } from "@/lib/useCardData";
@@ -16,6 +16,7 @@ export function WeeklyView({
   appId,
   projectName,
   base,
+  env,
   repoUrl,
   canViewObservability,
   canViewFinops,
@@ -24,31 +25,35 @@ export function WeeklyView({
   appId: number;
   projectName: string;
   base: string;
+  env: AppEnv;
   repoUrl: string | null;
   canViewObservability: boolean;
   canViewFinops: boolean;
   hasScore: boolean;
 }) {
   const t = useTranslations("appOverview.weekly");
+  const tOv = useTranslations("appOverview");
+  // No SLO is computed for staging yet.
+  const staging = env === "staging";
   const { number, percent, euro } = useObsFormat();
   const [ref, seen] = useInView<HTMLDivElement>();
   const [scoreOpen, setScoreOpen] = useState(false);
   const caps = useObsCapabilities(appId, seen && canViewObservability).data;
   const slo = useCardData(`weekly-slo-${appId}`, () => getObsSlo(appId, "7d"), {
-    enabled: seen && Boolean(caps?.slo),
+    enabled: seen && Boolean(caps?.slo) && !staging,
   });
-  const dora = useCardData(`weekly-dora-${appId}`, () => getObsDora(appId, 30), {
+  const dora = useCardData(`weekly-dora-${appId}-${env}`, () => getObsDora(appId, 30, env), {
     enabled: seen && Boolean(caps?.metrics),
   });
   const score = useCardData(`scorecard-${appId}`, () => loadScorecard(appId), {
     enabled: seen && hasScore,
   });
-  const costs = useCardData(`weekly-cost-${projectName}`, () => getFinopsApps(projectName), {
+  const costs = useCardData(`weekly-cost-${projectName}-${env}`, () => getFinopsApps(projectName, env), {
     enabled: seen && canViewFinops,
   });
 
   const capsLoading = canViewObservability && !caps;
-  const availability = slo.data?.objectives.find((o) => o.kind === "availability");
+  const availability = staging ? undefined : slo.data?.objectives.find((o) => o.kind === "availability");
   const budget = availability?.budget_remaining;
   const reliabilityHint = !caps?.slo
     ? t("unavailable")
@@ -81,15 +86,15 @@ export function WeeklyView({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label={t("reliability")}
-          href={`${base}/settings`}
-          loading={!seen || capsLoading || slo.loading}
-          value={availability ? percent(availability.target / 100, 2) : caps?.slo ? t("reliabilityNoTarget") : null}
+          href={`${base}/settings${staging ? "?env=staging" : ""}`}
+          loading={!seen || (!staging && (capsLoading || slo.loading))}
+          value={availability ? percent(availability.target / 100, 2) : caps?.slo && !staging ? t("reliabilityNoTarget") : null}
           tone={budget != null && budget <= 0 ? "bad" : budget != null && budget < 0.25 ? "warn" : undefined}
-          hint={reliabilityHint}
+          hint={staging ? tOv("notMeasuredStaging") : reliabilityHint}
         />
         <StatTile
           label={t("delivery")}
-          href={`${base}/delivery`}
+          href={`${base}/delivery${staging ? "?env=staging" : ""}`}
           loading={!seen || capsLoading || dora.loading}
           value={d ? number(d.deployments, 0) : null}
           unit={d ? t("deploys", { count: d.deployments }) : undefined}
@@ -112,7 +117,7 @@ export function WeeklyView({
         </button>
         <StatTile
           label={t("cost")}
-          href={canViewFinops ? `${base}/costs` : undefined}
+          href={canViewFinops ? `${base}/costs${staging ? "?env=staging" : ""}` : undefined}
           loading={!seen || (canViewFinops && costs.loading)}
           value={costRow ? euro(costRow.month_to_date_eur) : null}
           hint={

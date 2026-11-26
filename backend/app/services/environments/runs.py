@@ -80,6 +80,10 @@ def staging_urls(db: Session, deployment_ids: list[int]) -> dict[int, str]:
     }
 
 
+def staging_ready(db: Session, deployment_id: int) -> bool:
+    return deployment_id in staging_urls(db, [deployment_id])
+
+
 def active_run(
     db: Session, deployment_id: int, environment: str, suite: str
 ) -> VerificationRun | None:

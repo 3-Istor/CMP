@@ -1,6 +1,6 @@
 "use client";
 
-import { getAppEvents } from "@/lib/api";
+import { getAppEvents, type AppEnv } from "@/lib/api";
 import { useCardData } from "@/lib/useCardData";
 import { cn } from "@/lib/utils";
 import { useLocale, useTranslations } from "next-intl";
@@ -10,13 +10,15 @@ import { OverviewCard } from "./OverviewCard";
 export function EventsCard({
   appId,
   allowed,
+  env = "prod",
 }: {
   appId: number;
   allowed: boolean;
+  env?: AppEnv;
 }) {
   const t = useTranslations("appPage.events");
   const locale = useLocale();
-  const events = useCardData(`events-${appId}`, () => getAppEvents(appId, 10), {
+  const events = useCardData(`events-${appId}-${env}`, () => getAppEvents(appId, 10, env), {
     intervalMs: 30_000,
     enabled: allowed,
   });

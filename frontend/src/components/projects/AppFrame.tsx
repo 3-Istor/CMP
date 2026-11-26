@@ -8,7 +8,8 @@ import { projectHref } from "@/components/layout/projectSections";
 import { AppIconDialog } from "@/components/app-icon/AppIconDialog";
 import { FavoriteToggle } from "@/components/favorites/FavoriteToggle";
 
-import { useAppContext } from "@/components/projects/AppContext";
+import { useAppContext, useAppEnv } from "@/components/projects/AppContext";
+import { AppEnvSwitch } from "@/components/projects/AppEnvSwitch";
 import {
   NotAllowed,
   useProjectContext,
@@ -296,6 +297,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
   const activeSegment = pathname.split("/")[5] ?? "";
+  // Tabs keep ?env=staging; only App and Logs read it.
+  const envQuery = useAppEnv() === "staging" ? "?env=staging" : "";
 
   const tabs: TabEntry[] = [
     { key: "app", segment: "", icon: FileCode, visible: true },
@@ -646,7 +649,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 return (
                   <Link
                     key={tab.key}
-                    href={tab.segment ? `${base}/${tab.segment}` : base}
+                    href={`${tab.segment ? `${base}/${tab.segment}` : base}${envQuery}`}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors",
@@ -660,6 +663,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                   </Link>
                 );
               })}
+            {current.staging_url &&
+              (activeSegment === "" || activeSegment === "logs") && <AppEnvSwitch />}
           </nav>
         </div>
       </header>

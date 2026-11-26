@@ -19,13 +19,20 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
+from app.models.environment import AppEnvironment
 from app.models.observability import TraceTenant
 from app.models.project import Project, TargetCloud
 from app.models.release import ReleaseEvent
 from app.routers import app_observability as router
 from app.services import authz, keycloak_service
 from app.services.keycloak_service import get_current_user
-from app.services.observability import app_costs, silences, stores
+from app.services.observability import (
+    app_costs,
+    delivery,
+    silences,
+    stores,
+    summary,
+)
 
 SHOP, RIVAL = 1, 2
 SHOP_ACCOUNT, RIVAL_ACCOUNT = 11, 12
@@ -527,6 +534,15 @@ def test_dora_counts_prod_deploys_and_failed_changes(make, factory):
     assert (body["deployments"], body["failed_changes"]) == (3, 1)
 
 
+def test_dora_of_staging_counts_staging_rollouts_only(make, factory):
+    _event(factory, "promoted", 2)
+    _event(factory, "promoted", 2, environment="staging")
+    _event(factory, "promoted", 3, environment="staging")
+    with factory() as db:
+        assert delivery.dora(db, SHOP, 30, NOW, "staging")["deployments"] == 2
+        assert delivery.dora(db, SHOP, 30, NOW)["deployments"] == 1
+
+
 def test_change_failure_rate_is_failures_over_attempts(make, factory):
     for outcome in ("promoted", "failed", "aborted_manual", "deployed"):
         _event(factory, outcome, 1)
@@ -633,6 +649,76 @@ def test_a_summary_range_is_bounded(make):
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("who", ["guest", "outsider"])
+def test_non_members_cannot_probe_for_a_staging(make, who):
+    client = make(who)
+
+    response = client.get(f"/api/deployments/{SHOP}/summary?env=staging")
+
+    assert response.status_code == 403
+
+
+def test_a_member_of_an_app_without_staging_gets_404(make):
+    client = make("member")
+
+    response = client.get(f"/api/deployments/{SHOP}/summary?env=staging")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "This app has no staging."
+
+
+def test_the_summary_cache_is_keyed_by_environment(make, factory):
+    with factory() as db:
+        db.add(
+            AppEnvironment(
+                deployment_id=SHOP,
+                name="staging",
+                state="ready",
+                hostname="shop-staging.test",
+                updated_at=NOW,
+            )
+        )
+        db.commit()
+    seen = []
+
+    def read_input(_deployment_id, scope):
+        seen.append(scope.environment)
+
+    async def app_summary(*_args):
+        return {
+            "kind": "web",
+            "status": "up",
+            "tiles": {
+                "restarts": 0,
+                "replicas_ready": 1,
+                "replicas_desired": 1,
+            },
+            "series": {
+                "t": [],
+                "log_info": [],
+                "log_warn": [],
+                "log_error": [],
+            },
+            "deploys": [],
+            "clients": [],
+            "denied_flows_24h": 0,
+            "top_errors": [],
+            "alerts_firing": 0,
+        }
+
+    router._summaries.clear()
+    client = make("member")
+    with mock.patch.object(
+        summary, "read_input", read_input
+    ), mock.patch.object(summary, "app_summary", app_summary):
+        prod = client.get(f"/api/deployments/{SHOP}/summary")
+        staging = client.get(f"/api/deployments/{SHOP}/summary?env=staging")
+    router._summaries.clear()
+
+    assert (prod.status_code, staging.status_code) == (200, 200)
+    assert seen == ["prod", "staging"]
 
 
 def test_capabilities_ask_grafana_once_per_project(make):

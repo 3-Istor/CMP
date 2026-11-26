@@ -51,6 +51,32 @@ def test_resource_kinds_are_read_from_the_prod_applications_only():
     assert kinds == {"StatefulSet"}
 
 
+def test_resource_kinds_are_read_from_the_staging_applications():
+    applications = {
+        "shop-web-app": {"status": {"resources": [{"kind": "StatefulSet"}]}},
+        "shop-web-app-stg": {"status": {"resources": [{"kind": "Rollout"}]}},
+    }
+
+    kinds = summary.resource_kinds(
+        applications, "shop", "web", ["app"], "staging"
+    )
+
+    assert kinds == {"Rollout"}
+
+
+def test_a_staging_summary_counts_no_prod_alert(monkeypatch):
+    async def firing(*_args, **_kwargs):
+        return [{"status": {"state": "active"}}]
+
+    monkeypatch.setattr(stores, "capabilities", lambda: {"alerts": True})
+    monkeypatch.setattr(stores, "firing_alerts", firing)
+    staging = stores.Scope("shop", "web", "shop-web-stg", "onprem", "staging")
+    prod = stores.Scope("shop", "web", "shop-web", "onprem")
+
+    assert asyncio.run(summary._alerts(staging)) == 0
+    assert asyncio.run(summary._alerts(prod)) == 1
+
+
 # ── State ────────────────────────────────────────────────────────────────────
 
 
@@ -426,7 +452,7 @@ def test_a_summary_survives_a_store_that_does_not_answer(monkeypatch):
             SimpleNamespace(state="healthy", reason=None, ready=2, desired=2)
         ],
     )
-    monkeypatch.setattr(summary, "_read_health", lambda i, now: health)
+    monkeypatch.setattr(summary, "_read_health", lambda i, now, env: health)
     data = summary.AppInput(
         deployment_id=1,
         scope=stores.Scope("shop", "web", "shop-web", "onprem"),

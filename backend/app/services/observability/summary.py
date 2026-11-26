@@ -86,14 +86,18 @@ def status_of(
 
 
 def resource_kinds(
-    applications: dict[str, dict], project: str, app: str, components: list
+    applications: dict[str, dict],
+    project: str,
+    app: str,
+    components: list,
+    environment: layout.Environment = "prod",
 ) -> set[str] | None:
-    """Kinds Argo CD manages for the app in prod; None when it shows none."""
+    """Kinds Argo CD manages for the app in one env; None when it shows none."""
     kinds: set[str] = set()
     seen = False
     for component in components:
         item = applications.get(
-            layout.application(project, app, component, "prod")
+            layout.application(project, app, component, environment)
         )
         if item is None:
             continue
@@ -380,7 +384,7 @@ def read_input(deployment_id: int, scope: stores.Scope) -> AppInput:
             db.query(ReleaseEvent)
             .filter(
                 ReleaseEvent.deployment_id == deployment_id,
-                ReleaseEvent.environment == "prod",
+                ReleaseEvent.environment == scope.environment,
             )
             .order_by(ReleaseEvent.started_at.desc())
             .limit(DEPLOY_EVENTS)
@@ -396,11 +400,13 @@ def read_input(deployment_id: int, scope: stores.Scope) -> AppInput:
         )
 
 
-def _read_health(deployment_id: int, now: datetime) -> Any:
+def _read_health(
+    deployment_id: int, now: datetime, environment: layout.Environment
+) -> Any:
     with database.SessionLocal() as db:
         deployment = db.get(Deployment, deployment_id)
         # pylint: disable-next=protected-access
-        return app_health._read_app_health(deployment, now)
+        return app_health._read_app_health(deployment, now, environment)
 
 
 def _last_backup(namespace: str, cloud: str) -> datetime | None:
@@ -418,7 +424,8 @@ def _last_backup(namespace: str, cloud: str) -> datetime | None:
 
 
 async def _alerts(scope: stores.Scope) -> int:
-    if not stores.capabilities()["alerts"]:
+    # Alert rules are prod-only: a staging app has no alert to count.
+    if scope.environment != "prod" or not stores.capabilities()["alerts"]:
         return 0
     found = await stores.firing_alerts(scope.project, scope.app)
     return sum(
@@ -463,7 +470,9 @@ async def app_summary(  # pylint: disable=too-many-locals
         return value
 
     parts = {
-        "health": asyncio.to_thread(_read_health, data.deployment_id, now),
+        "health": asyncio.to_thread(
+            _read_health, data.deployment_id, now, scope.environment
+        ),
         "argo": asyncio.to_thread(topology.argo_by_name, scope.project),
         "instant": (
             stores.instant(
@@ -489,7 +498,10 @@ async def app_summary(  # pylint: disable=too-many-locals
         "top_errors": _top_errors(scope, range_name),
         "alerts": _alerts(scope),
         "flows": topology.observed_flows(
-            scope.project, data.project_apps, scope.cloud
+            scope.project,
+            data.project_apps,
+            scope.cloud,
+            environment=scope.environment,
         ),
         "denied": topology.denied_flows(
             scope.namespace, scope.cloud, DENIED_WINDOW
@@ -515,7 +527,13 @@ async def app_summary(  # pylint: disable=too-many-locals
 
     kind = kind_of(
         data.template_id,
-        resource_kinds(argo, scope.project, scope.app, data.components),
+        resource_kinds(
+            argo,
+            scope.project,
+            scope.app,
+            data.components,
+            scope.environment,
+        ),
     )
     series: dict[str, Any] = {"t": grid.millis()}
     for name in ("rps", "err_rps", "p95_ms", "cpu_cores", "mem_bytes"):

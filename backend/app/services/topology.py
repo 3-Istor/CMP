@@ -209,6 +209,7 @@ async def observed_flows(
     apps: list[str],
     cloud: str,
     declared: set[tuple[str, str]] | None = None,
+    environment: layout.Environment = "prod",
 ) -> tuple[bool, dict[tuple[str, str], dict[str, float]]]:
     """
     ``(available, {(from, to): {rps, count, forwarded, dropped}})``.
@@ -218,11 +219,11 @@ async def observed_flows(
     the project's namespaces only. Not available when the metric is missing
     from VictoriaMetrics or VictoriaMetrics cannot be read.
 
-    Prod namespaces only: the map shows the prod links, and staging traffic
-    must not mark one of them observed.
+    One environment's namespaces: prod by default, as the map shows the prod
+    links and staging traffic must not mark one of them observed.
     """
     namespace_app = {
-        layout.namespace(project, app, "prod"): app for app in apps
+        layout.namespace(project, app, environment): app for app in apps
     }
     if not namespace_app:
         return False, {}

@@ -1,6 +1,6 @@
 "use client";
 
-import { getObsTopErrors } from "@/lib/api";
+import { getObsTopErrors, type AppEnv } from "@/lib/api";
 import { useCardData } from "@/lib/useCardData";
 import type { ErrorPattern } from "@/types/observability";
 import { Waypoints } from "lucide-react";
@@ -14,16 +14,18 @@ export function TopErrors({
   range,
   onPick,
   actions,
+  env = "prod",
 }: {
   appId: number;
   base: string;
   range: string;
   onPick?: (row: ErrorPattern) => void;
   actions?: React.ReactNode;
+  env?: AppEnv;
 }) {
   const t = useTranslations("obs.topErrors");
   const { time } = useObsFormat();
-  const card = useCardData(`obs-top-${appId}-${range}`, () => getObsTopErrors(appId, range, 5));
+  const card = useCardData(`obs-top-${appId}-${range}-${env}`, () => getObsTopErrors(appId, range, 5, env));
   return (
     <Section
       title={t("title")}

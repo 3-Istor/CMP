@@ -397,9 +397,9 @@ export const getAppsHealth = (ids: number[], maxAgeMs = 0) =>
     maxAgeMs,
   );
 
-export const getAppEvents = (deploymentId: number, limit = 10) =>
+export const getAppEvents = (deploymentId: number, limit = 10, env: AppEnv = "prod") =>
   request<import("@/types").AppEvent[]>(
-    `/deployments/${deploymentId}/events?limit=${limit}`,
+    `/deployments/${deploymentId}/events${obsQuery({ limit, env: envParam(env) })}`,
   );
 
 // Account & Profile
@@ -795,9 +795,9 @@ export const getFinopsBreakdown = (opts: { project?: string; app?: number } = {}
     `/finops/breakdown${finopsQuery(opts)}`,
   );
 
-export const getFinopsApps = (project?: string) =>
+export const getFinopsApps = (project?: string, env: AppEnv = "prod") =>
   request<import("@/types").AppCostRow[]>(
-    `/finops/apps${finopsQuery({ project })}`,
+    `/finops/apps${finopsQuery({ project, env: envParam(env) })}`,
   );
 
 export const getRecommendations = (project?: string, app?: number) =>
@@ -1755,6 +1755,11 @@ export const deleteImport = (project: string, sourceId: string) =>
 const obs = (deploymentId: number, path = "") =>
   `/deployments/${deploymentId}/observability${path}`;
 
+export type AppEnv = "prod" | "staging";
+
+/** Prod is the backend default: only staging goes on the wire. */
+const envParam = (env?: AppEnv) => (env === "staging" ? env : undefined);
+
 function obsQuery(params: Record<string, string | number | boolean | null | undefined>) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -1843,9 +1848,10 @@ export const getAppSummary = (
   deploymentId: number,
   range: SummaryRange = "24h",
   maxAgeMs = 0,
+  env: AppEnv = "prod",
 ) =>
   cachedGet<AppSummary>(
-    `/deployments/${deploymentId}/summary${obsQuery({ range })}`,
+    `/deployments/${deploymentId}/summary${obsQuery({ range, env: envParam(env) })}`,
     maxAgeMs,
   );
 
@@ -1887,22 +1893,22 @@ export const getProjectAppsHealth = (
     maxAgeMs,
   );
 
-export const getObsDora = (deploymentId: number, days = 30) =>
+export const getObsDora = (deploymentId: number, days = 30, env: AppEnv = "prod") =>
   request<import("@/types/observability").Dora>(
-    obs(deploymentId, `/dora${obsQuery({ days })}`),
+    obs(deploymentId, `/dora${obsQuery({ days, env: envParam(env) })}`),
   );
 
-export const getObsTopErrors = (deploymentId: number, range: string, limit = 5) =>
+export const getObsTopErrors = (deploymentId: number, range: string, limit = 5, env: AppEnv = "prod") =>
   request<import("@/types/observability").ErrorPattern[]>(
-    obs(deploymentId, `/logs/top-errors${obsQuery({ range, limit })}`),
+    obs(deploymentId, `/logs/top-errors${obsQuery({ range, limit, env: envParam(env) })}`),
   );
 
 export const searchObsLogs = (
   deploymentId: number,
-  params: { range: string; level?: string; q?: string; trace_id?: string; limit?: number },
+  params: { range: string; level?: string; q?: string; trace_id?: string; limit?: number; env?: AppEnv },
 ) =>
   request<import("@/types/observability").ObsLogLine[]>(
-    obs(deploymentId, `/logs${obsQuery(params)}`),
+    obs(deploymentId, `/logs${obsQuery({ ...params, env: envParam(params.env) })}`),
   );
 
 export const listObsTraces = (

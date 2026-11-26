@@ -20,6 +20,7 @@ from app.models.deployment import Deployment, ProviderType
 from app.routers.deployments import _get_app_or_404
 from app.services import activity_sources as sources
 from app.services import app_overview as overview
+from app.services.environments import layout, runs
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
 
@@ -67,15 +68,20 @@ class AppEvent(BaseModel):
 
 
 def _kubernetes_app(
-    db: Session, token: dict, deployment_id: int
+    db: Session,
+    token: dict,
+    deployment_id: int,
+    env: layout.Environment = "prod",
 ) -> tuple[Deployment, overview.Scope]:
     deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    if env == "staging" and not runs.staging_ready(db, deployment.id):
+        raise HTTPException(status_code=404, detail="This app has no staging.")
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
             status_code=400, detail="Only Kubernetes apps have this data."
         )
     try:
-        return deployment, overview.scope_of(deployment)
+        return deployment, overview.scope_of(deployment, env)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -157,10 +163,11 @@ async def get_app_events(
     deployment_id: int,
     token: CurrentUser,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    env: Annotated[layout.Environment, Query()] = "prod",
     db: Session = Depends(get_db),
 ) -> list[AppEvent]:
     """Newest Kubernetes events of the app's pods, ReplicaSets and rollouts."""
-    _, scope = _kubernetes_app(db, token, deployment_id)
+    _, scope = _kubernetes_app(db, token, deployment_id, env)
     try:
         events = await run_in_threadpool(overview.app_events, scope, limit)
     except KubeUnavailableError as exc:

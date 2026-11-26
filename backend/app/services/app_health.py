@@ -226,14 +226,18 @@ def _argocd_applications(
 
 
 def _observe(
-    project: str, app: str, components: list[str], cloud: TargetCloud
+    project: str,
+    app: str,
+    components: list[str],
+    cloud: TargetCloud,
+    environment: layout.Environment = "prod",
 ) -> tuple[dict[str, _Observed], list[dict[str, Any]]]:
-    namespace = layout.namespace(project, app, "prod")
+    namespace = layout.namespace(project, app, environment)
     observed = {}
     for component in components:
         selector = {
             "labelSelector": "app.kubernetes.io/instance="
-            + layout.application(project, app, component, "prod")
+            + layout.application(project, app, component, environment)
         }
         observed[component] = _Observed(
             pods=kube_list(
@@ -255,7 +259,9 @@ def _observe(
 
 
 def _read_app_health(
-    deployment: Deployment, now: datetime
+    deployment: Deployment,
+    now: datetime,
+    environment: layout.Environment = "prod",
 ) -> monitoring_service.AppHealthResponse:
     project = deployment.project_id or ""
     app = deployment.name
@@ -263,7 +269,9 @@ def _read_app_health(
     cloud_name = gitops.target_cloud(deployment)
     cloud = TargetCloud(cloud_name)
     try:
-        observed, schedules = _observe(project, app, components, cloud)
+        observed, schedules = _observe(
+            project, app, components, cloud, environment
+        )
     except (ClusterNotConnectedError, KubeUnavailableError) as exc:
         logger.warning("Cluster of %s/%s not reachable: %s", project, app, exc)
         return monitoring_service.AppHealthResponse(
@@ -282,7 +290,7 @@ def _read_app_health(
     sleeping = _sleeping_targets(schedules)
     applications = _argocd_applications(project, app)
     restarts = _restarts_by_pod(
-        layout.namespace(project, app, "prod"), cloud_name
+        layout.namespace(project, app, environment), cloud_name
     )
     results = []
     for component in components:
@@ -302,7 +310,8 @@ def _read_app_health(
             data.stateful_sets,
         )
         sync, health = applications.get(
-            layout.application(project, app, component, "prod"), (None, None)
+            layout.application(project, app, component, environment),
+            (None, None),
         )
         results.append(
             monitoring_service.ComponentHealth(
