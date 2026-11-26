@@ -416,10 +416,10 @@ def test_apps_health_pins_every_query_to_the_projects_namespaces(
     assert any('namespace=~"(shop-db|shop-web)"' in f for f in filters)
 
 
-def test_apps_health_gives_web_apps_an_rps_series(fake_project):
+def test_apps_health_gives_web_apps_an_rps_sparkline(fake_project):
     found = asyncio.run(apps_health.apps_health(_project("web"), "24h", NOW))
 
-    assert set(found["series"]["rps_by_app"]) == {"web"}
+    assert any(v is not None for v in found["apps"][0]["spark"])
 
 
 # ── Summary with one store down ──────────────────────────────────────────────
