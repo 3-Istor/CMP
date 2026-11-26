@@ -119,6 +119,7 @@ def client(world):
     for annotation, minimum in (
         (authz.RequireAdmin, ProjectRole.ADMIN),
         (authz.RequireMember, ProjectRole.MEMBER),
+        (authz.RequireCap("import.view"), ProjectRole.MEMBER),
     ):
         app.dependency_overrides[annotation.__metadata__[0].dependency] = (
             _role_override(world, minimum)

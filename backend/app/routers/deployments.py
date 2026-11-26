@@ -29,9 +29,11 @@ from app.services import app_config_policy, app_inputs, app_repo
 from app.services import app_security_data as security_data
 from app.services import audit, chart_values, terraform_orchestrator
 from app.services.authz import (
+    assert_capability,
     assert_project_role,
     is_auditor,
     is_cnp_admin,
+    is_finops,
     reads_platform_security,
 )
 from app.services.catalog_service import get_template_by_id
@@ -50,7 +52,6 @@ from app.services.keycloak_service import (
     fetch_user_projects_from_keycloak,
     fetch_user_projects_live,
     get_current_user,
-    get_project_role,
     get_user_id_from_token,
 )
 from app.services.kube_client import (
@@ -124,6 +125,7 @@ def _authorize_app(
     token: dict,
     deployment: Deployment,
     minimum: ProjectRole,
+    cap: str | None = None,
 ) -> None:
     """
     Raise unless the caller holds *minimum* on the application's project.
@@ -132,7 +134,8 @@ def _authorize_app(
     is refused rather than left open: "only the projects you are assigned to"
     has no sensible answer for an app that belongs to no project. Legacy rows
     in that state need a project_id backfilled before they are reachable
-    again. Platform admins pass regardless.
+    again. Platform admins pass regardless. With *cap*, the capability decides
+    instead of *minimum* (platform-group grants included).
     """
     if is_cnp_admin(token):
         return
@@ -144,17 +147,24 @@ def _authorize_app(
                 "cannot be determined."
             ),
         )
-    assert_project_role(db, token, deployment.project_id, minimum)
+    if cap:
+        assert_capability(db, token, deployment.project_id, cap)
+    else:
+        assert_project_role(db, token, deployment.project_id, minimum)
 
 
 def _get_app_or_404(
-    db: Session, token: dict, deployment_id: int, minimum: ProjectRole
+    db: Session,
+    token: dict,
+    deployment_id: int,
+    minimum: ProjectRole,
+    cap: str | None = None,
 ) -> Deployment:
     """Fetch a deployment the caller is allowed to touch, or raise."""
     deployment = db.get(Deployment, deployment_id)
     if not deployment:
         raise HTTPException(status_code=404, detail="Deployment not found")
-    _authorize_app(db, token, deployment, minimum)
+    _authorize_app(db, token, deployment, minimum, cap)
     return deployment
 
 
@@ -177,33 +187,18 @@ def list_deployments(
     Return the caller's non-deleted deployments.
 
     Scoped to the projects the caller belongs to, including as a guest, who
-    is allowed to see which applications exist. Platform admins and the
-    auditor see them all.
+    is allowed to see which applications exist. Platform admins, the auditor
+    and FinOps see them all; outputs hold no secret (sensitive Terraform
+    outputs are never stored).
     """
     query = db.query(Deployment).filter(
         Deployment.status != DeploymentStatus.DELETED
     )
-    if not reads_platform_security(token):
+    if not (reads_platform_security(token) or is_finops(token)):
         query = query.filter(
             Deployment.project_id.in_(_user_project_names(db, token))
         )
-        return with_staging(db, query.all())
-    rows = with_staging(db, query.all())
-    if is_cnp_admin(token):
-        return rows
-    # The auditor lists every app but reads outputs and URLs only where it is
-    # a member.
-    own = set(_user_project_names(db, token))
-    return [
-        (
-            row
-            if row.project_id in own
-            else row.model_copy(
-                update={"terraform_outputs": None, "staging_url": None}
-            )
-        )
-        for row in rows
-    ]
+    return with_staging(db, query.all())
 
 
 @router.post("/", response_model=DeploymentRead, status_code=202)
@@ -337,7 +332,9 @@ def get_deployment(
     db: Session = Depends(get_db),
 ):
     """Access control: any role on the application's project."""
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.GUEST, cap="app.view"
+    )
     return with_staging(db, [deployment])[0]
 
 
@@ -488,6 +485,7 @@ def _get_kubernetes_deployment_or_404(
     token: dict,
     minimum: ProjectRole,
     allow_import: bool = False,
+    cap: str | None = None,
 ) -> Deployment:
     """
     Fetch a Kubernetes deployment the caller may touch, raising
@@ -500,7 +498,7 @@ def _get_kubernetes_deployment_or_404(
     promotions) follow the template layout and refuse every import before
     any side effect.
     """
-    deployment = _get_app_or_404(db, token, deployment_id, minimum)
+    deployment = _get_app_or_404(db, token, deployment_id, minimum, cap)
 
     if deployment.provider_type != ProviderType.KUBERNETES:
         raise HTTPException(
@@ -663,7 +661,7 @@ async def get_deployment_config(
     This allows the frontend to pre-populate the Day-2 configuration form
     without the user needing to know the repository URL.
 
-    Access control: member or above, members read the configuration, only
+    Access control: app.viewConfig (member or above, and the auditor); only
     admins may change it (see PATCH below).
 
     Raises:
@@ -674,7 +672,12 @@ async def get_deployment_config(
         502, GitHub API error.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token, ProjectRole.MEMBER, allow_import=True
+        deployment_id,
+        db,
+        token,
+        ProjectRole.MEMBER,
+        allow_import=True,
+        cap="app.viewConfig",
     )
     app_type = _app_type_of(deployment)
     file_path = _config_file_for(deployment, component)
@@ -975,12 +978,16 @@ async def get_security_data(
     repository. Until then the answer is read-only, never a 409.
     """
     deployment = _get_kubernetes_deployment_or_404(
-        deployment_id, db, token_payload, ProjectRole.MEMBER, allow_import=True
+        deployment_id,
+        db,
+        token_payload,
+        ProjectRole.MEMBER,
+        allow_import=True,
+        cap="app.viewConfig",
     )
-    can_edit = is_cnp_admin(token_payload) or (
-        get_project_role(token_payload.get("sub", ""), deployment.project_id)
-        == "admin"
-    )
+    can_edit = assert_capability(
+        db, token_payload, deployment.project_id or "", "app.viewConfig"
+    ).at_least(ProjectRole.ADMIN)
     imported = app_repo.is_imported(deployment.template_id)
     cluster_exposure = (
         await run_in_threadpool(_cluster_exposure, db, deployment)

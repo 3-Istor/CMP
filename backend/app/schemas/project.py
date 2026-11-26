@@ -16,11 +16,12 @@ class ProjectRead(BaseModel):
     name: str = Field(
         ..., description="Unique project identifier (lowercase, kebab-case)"
     )
-    role: ProjectRole = Field(
-        ...,
+    role: ProjectRole | None = Field(
+        None,
         description=(
             "User role in this project: 'owner', 'admin', 'member' or "
-            "'guest'."
+            "'guest'; null for the auditor and FinOps, who read through "
+            "their platform group."
         ),
     )
     target_cloud: TargetCloud = Field(

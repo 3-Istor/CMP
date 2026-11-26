@@ -194,7 +194,8 @@ def test_someone_in_no_project_gets_403(make, fake, path):
     assert (response.status_code, fake.sent) == (403, [])
 
 
-@pytest.mark.parametrize("path", READS)
+# The guest reads the SLO status (access matrix), not the rest.
+@pytest.mark.parametrize("path", [p for p in READS if p != "/slo"])
 def test_a_guest_does_not_read_signals_logs_or_traces(make, fake, path):
     client = make("guest")
 

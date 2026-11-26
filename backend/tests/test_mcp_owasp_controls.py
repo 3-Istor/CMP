@@ -508,7 +508,10 @@ def cmp():
             deployments_router, "assert_project_role", _member_of_demo_only
         ),
         mock.patch.object(
-            app_observability, "assert_project_role", _member_of_demo_only
+            deployments_router, "assert_capability", _member_of_demo_only
+        ),
+        mock.patch.object(
+            app_observability, "assert_capability", _member_of_demo_only
         ),
         mock.patch.object(obs_stores, "SessionLocal", factory),
         mock.patch.object(

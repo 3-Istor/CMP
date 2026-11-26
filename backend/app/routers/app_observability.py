@@ -31,9 +31,8 @@ from app.services import app_overview as overview
 from app.services import links
 from app.services.authz import (
     RequireMember,
-    assert_project_role,
+    assert_capability,
     is_cnp_admin,
-    is_finops,
 )
 from app.services.environments import layout, runs
 from app.services.grafana_service import GRAFANA_BASE_URL
@@ -95,8 +94,11 @@ def _member_app(
     token: dict,
     deployment_id: int,
     env: layout.Environment = "prod",
+    cap: str | None = None,
 ) -> tuple[Deployment, stores.Scope]:
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.MEMBER, cap=cap
+    )
     if env == "staging" and not runs.staging_ready(db, deployment.id):
         raise HTTPException(status_code=404, detail="This app has no staging.")
     return deployment, _scope(deployment, env)
@@ -376,8 +378,8 @@ def _slo_targets(
         raise HTTPException(status_code=404, detail="Deployment not found")
     role = "admin"
     if not is_cnp_admin(token):
-        found = assert_project_role(
-            db, token, deployment.project_id or "", ProjectRole.MEMBER
+        found = assert_capability(
+            db, token, deployment.project_id or "", "app.viewObservability"
         ).role
         if found not in (ProjectRole.ADMIN, ProjectRole.OWNER):
             role = "member"
@@ -525,7 +527,7 @@ async def list_traces(  # pylint: disable=too-many-arguments
     db: Session = Depends(get_db),
 ) -> list[TraceSummary]:
     """Recent traces of the app, newest first."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, cap="app.viewTraces")
     with _reading():
         account = await run_in_threadpool(stores.trace_account, scope.project)
         rows = await app_traces.list_traces(
@@ -545,7 +547,7 @@ async def get_trace(
     db: Session = Depends(get_db),
 ) -> TraceDetail:
     """One trace, read in the app's project tenant only."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, cap="app.viewTraces")
     with _reading():
         account = await run_in_threadpool(stores.trace_account, scope.project)
         found = await app_traces.trace_detail(account, trace_id.lower())
@@ -559,7 +561,7 @@ async def get_alerts(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> AppAlerts:
     """Alerts of the app in Alertmanager, and the silences covering it."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, cap="alerts.view")
     with _reading():
         data = await app_alerts.app_alerts(scope.project, scope.app)
     return AppAlerts(
@@ -587,13 +589,9 @@ async def get_costs(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> AppCosts:
     """Cost per 1,000 requests and requests against real usage."""
-    if is_finops(token):
-        deployment = db.get(Deployment, deployment_id)
-        if deployment is None:
-            raise HTTPException(status_code=404, detail="Deployment not found")
-        scope = _scope(deployment)
-    else:
-        deployment, scope = _member_app(db, token, deployment_id)
+    deployment, scope = _member_app(
+        db, token, deployment_id, cap="finops.view"
+    )
     with _reading():
         data = await app_costs.app_costs(deployment, scope, _now())
     return AppCosts(**data)
