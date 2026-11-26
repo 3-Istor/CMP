@@ -1,5 +1,6 @@
 """Read access per identity, as the documented access matrix states it."""
 
+import asyncio
 from datetime import date, timedelta
 
 import pytest
@@ -9,11 +10,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import mcp_server
 from app.core.database import Base, get_db
+from app.core.roles import ProjectRole
 from app.models import imports as _import_models  # noqa: F401  (tables)
 from app.models.deployment import Deployment, DeploymentStatus, ProviderType
 from app.models.project import Project, TargetCloud
 from app.models.security import SecurityException
+from app.routers import (
+    agents,
+)
+from app.routers import ai as ai_router
 from app.routers import (
     alerting,
     app_icons,
@@ -34,6 +41,7 @@ from app.routers import (
 )
 from app.services import app_overview as overview
 from app.services import keycloak_service
+from app.services.agents import internal_api
 from app.services.environments import runs
 from app.services.imports import service as import_service
 from app.services.observability import (
@@ -121,6 +129,8 @@ ROWS = {  # under /api
         NO,
     ),
     "/observability/silences?project=shop": (OK, OK, NO, OK, OK, OK, NO, NO),
+    f"{PRJ}/ai/tools": (NF, NF, NO, NF, NF, NF, NO, NO),
+    f"{PRJ}/agent-settings": (NF, NF, NF, NF, NF, NF, NF, NO),
 }
 
 
@@ -318,6 +328,8 @@ def world(monkeypatch):
         raise HTTPException(status_code=404)
 
     monkeypatch.setattr(releases, "_compute", not_found)
+    monkeypatch.setattr(ai_router.service, "record_of", not_found)
+    monkeypatch.setattr(agents, "_settings_view", not_found)
     monkeypatch.setattr(environments.activation, "get_offhours", not_found)
     monkeypatch.setattr(links.links, "app_links", not_found)
     monkeypatch.setattr(moves.footprint, "rows", not_found)
@@ -364,6 +376,8 @@ def client(world):
     app.include_router(security.router, prefix="/api")
     app.include_router(finops.router, prefix="/api")
     app.include_router(links.projects, prefix="/api")
+    app.include_router(ai_router.projects, prefix="/api")
+    app.include_router(agents.projects_router, prefix="/api")
     app.include_router(links.deployments, prefix="/api")
     app.dependency_overrides[releases.get_release_source] = lambda: None
 
@@ -598,3 +612,29 @@ def test_batch_health_follows_app_view(client, world, identity, expected):
     body = client.get("/api/infra/deployments/health?ids=1").json()
 
     assert list(body) == expected
+
+
+@pytest.mark.parametrize(
+    ("cap", "expected"),
+    [("ai.view", OK), ("app.viewLogs", NO), (None, NO)],
+    ids=["ai.view", "logs", "role-only"],
+)
+def test_assistant_for_the_auditor_reads_through_capabilities(
+    world, monkeypatch, cap, expected
+):
+    monkeypatch.setattr(mcp_server, "SessionLocal", world.Session)
+    world.be(["security-auditor"], None, False)
+    caller = mcp_server.Caller.__new__(mcp_server.Caller)
+    caller.claims = {
+        "sub": "uid-alice",
+        "preferred_username": "alice",
+        "groups": world.groups,
+    }
+
+    try:
+        asyncio.run(caller.require_role("shop", ProjectRole.MEMBER, cap=cap))
+        status = OK
+    except internal_api.ApiError as exc:
+        status = exc.status_code
+
+    assert status == expected

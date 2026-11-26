@@ -50,6 +50,7 @@ from app.services.ai.usage import (
 from app.services.authz import (
     ProjectContext,
     RequireAdmin,
+    RequireCap,
     RequireMember,
     assert_project_role,
     is_cnp_admin,
@@ -229,7 +230,7 @@ Timing = Annotated[float, Depends(_timing_start)]
 async def get_project_ai(
     started: Timing,
     response: Response,
-    ctx: RequireMember,
+    ctx: RequireCap("ai.view"),
     db: Session = Depends(get_db),
 ) -> dict:
     server_timing.lap("auth", started)
@@ -289,7 +290,9 @@ def _resets_at() -> str:
 
 
 @projects.get("/ai/usage")
-async def project_usage(ctx: RequireMember, period: Period = "1d") -> dict:
+async def project_usage(
+    ctx: RequireCap("ai.view"), period: Period = "1d"
+) -> dict:
     try:
         items = await ai_usage.usage(ctx.project_name, period)
         record = await project_registry.read_record_cached(ctx.project_name)
@@ -312,7 +315,7 @@ async def project_usage(ctx: RequireMember, period: Period = "1d") -> dict:
 
 
 @projects.get("/ai/tools")
-async def project_tools(ctx: RequireMember) -> dict:
+async def project_tools(ctx: RequireCap("ai.view")) -> dict:
     try:
         record = await service.record_of(ctx.project_name)
         return {"items": await catalog.tools(record)}
@@ -329,7 +332,7 @@ async def project_tools(ctx: RequireMember) -> dict:
 async def list_agents(
     started: Timing,
     response: Response,
-    ctx: RequireMember,
+    ctx: RequireCap("ai.view"),
     db: Session = Depends(get_db),
 ) -> dict:
     server_timing.lap("auth", started)
@@ -363,7 +366,7 @@ async def create_agent(
 @projects.get("/agents/{agent}")
 async def get_agent(
     agent: Annotated[str, Path(pattern=AGENT)],
-    ctx: RequireMember,
+    ctx: RequireCap("ai.view"),
     db: Session = Depends(get_db),
 ) -> dict:
     try:
@@ -432,7 +435,7 @@ async def resume_agent(
 @projects.get("/agents/{agent}/usage")
 async def agent_usage(
     agent: Annotated[str, Path(pattern=AGENT)],
-    ctx: RequireMember,
+    ctx: RequireCap("ai.view"),
     period: Period = "1d",
 ) -> dict:
     azp = client_id(ctx.project_name, agent)

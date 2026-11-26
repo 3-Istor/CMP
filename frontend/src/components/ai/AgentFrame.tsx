@@ -160,8 +160,9 @@ export function AgentFrame({ agentName, children }: { agentName: string; childre
   const base = agentHref(projectName, agentName);
   const tabs = [
     { href: base, label: t("tabs.overview"), icon: LayoutDashboard, exact: true },
-    { href: `${base}/test`, label: t("tabs.test"), icon: FlaskConical },
-    { href: `${base}/traces`, label: t("tabs.traces"), icon: Activity },
+    // Testing and traces are member reads: the auditor holds ai.view, not these.
+    ...(can("app.operate") ? [{ href: `${base}/test`, label: t("tabs.test"), icon: FlaskConical }] : []),
+    ...(can("app.viewTraces") ? [{ href: `${base}/traces`, label: t("tabs.traces"), icon: Activity }] : []),
     { href: `${base}/capabilities`, label: t("tabs.capabilities"), icon: Network },
     { href: `${base}/access`, label: t("tabs.access"), icon: KeyRound },
     { href: `${base}/journal`, label: t("tabs.journal"), icon: ScrollText },

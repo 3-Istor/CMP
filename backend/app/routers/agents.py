@@ -26,7 +26,11 @@ from app.models.deployment import Deployment, DeploymentStatus
 from app.services.agents import policy, store
 from app.services.ai import service as ai_service
 from app.services.audit import note
-from app.services.authz import assert_project_role, is_cnp_admin
+from app.services.authz import (
+    assert_capability,
+    assert_project_role,
+    is_cnp_admin,
+)
 from app.services.keycloak_service import get_current_user
 from app.services.step_up import assert_step_up
 
@@ -477,7 +481,7 @@ def _settings_view(db: Session, project: str) -> AgentSettingsRead:
 def get_agent_settings(
     project_name: str, token: CurrentUser, db: Session = Depends(get_db)
 ) -> AgentSettingsRead:
-    assert_project_role(db, token, project_name, ProjectRole.GUEST)
+    assert_capability(db, token, project_name, "app.view")
     return _settings_view(db, project_name)
 
 

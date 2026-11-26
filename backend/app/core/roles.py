@@ -136,6 +136,7 @@ AUDITOR_CAPS: frozenset[str] = frozenset(
         "app.list",
         "app.viewObservability",
         "app.viewConfig",
+        "ai.view",
         "release.view",
         "members.view",
         "finops.view",
@@ -146,4 +147,6 @@ AUDITOR_CAPS: frozenset[str] = frozenset(
         "activity.view",
     }
 )
-FINOPS_CAPS: frozenset[str] = frozenset({"app.list", "app.view", "finops.view"})
+FINOPS_CAPS: frozenset[str] = frozenset(
+    {"app.list", "app.view", "finops.view"}
+)

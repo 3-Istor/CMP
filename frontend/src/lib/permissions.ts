@@ -121,6 +121,7 @@ const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
   "app.list",
   "app.viewObservability",
   "app.viewConfig",
+  "ai.view",
   "release.view",
   "members.view",
   "finops.view",
