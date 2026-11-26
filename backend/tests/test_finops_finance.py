@@ -822,3 +822,16 @@ def test_csv_export_accepts_a_billing_month(api, seeded, monkeypatch):
 
     assert response.text.count("\n") == 4
     assert "finops-all-2026-09.csv" in response.headers["content-disposition"]
+
+
+def test_budget_reads_spend_without_computing_recommendations(
+    api, monkeypatch
+):
+    provider = type(router.get_cost_provider())
+    monkeypatch.setattr(
+        provider,
+        "recommendations",
+        lambda *_: pytest.fail("recommendations computed for a budget"),
+    )
+
+    assert api(ADMIN).get("/api/finops/budgets/qcm").status_code == 200

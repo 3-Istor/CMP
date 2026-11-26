@@ -661,6 +661,10 @@ def test_rightsizing_text_is_english_with_a_key_the_ui_translates(monkeypatch):
     )
 
 
+def test_month_to_date_matches_the_summary_figure(seeded):
+    assert RealCostProvider(seeded).month_to_date([_app()], REF) == 7.75
+
+
 # ── public clouds in the overview ────────────────────────────────────────────
 
 

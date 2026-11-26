@@ -15,6 +15,7 @@ import logging
 import math
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
 
@@ -80,79 +81,68 @@ def _fetch(
     # The namespace also runs databases, tunnels and migration jobs: only the
     # app container is rightsized, per pod.
     app = f'{ns},container="{CONTAINER}"'
-    data = {
-        "cpu_request": _instant(
-            f'sum by (namespace) ({requests}{{{ns},resource="cpu"}})',
-            cluster,
+    queries = {
+        "cpu_request": (
+            f'sum by (namespace) ({requests}{{{ns},resource="cpu"}})'
         ),
-        "ram_request": _instant(
-            f'sum by (namespace) ({requests}{{{ns},resource="memory"}})',
-            cluster,
+        "ram_request": (
+            f'sum by (namespace) ({requests}{{{ns},resource="memory"}})'
         ),
-        "app_cpu_request": _instant(
-            f'avg by (namespace) ({requests}{{{app},resource="cpu"}})',
-            cluster,
+        "app_cpu_request": (
+            f'avg by (namespace) ({requests}{{{app},resource="cpu"}})'
         ),
-        "app_ram_request": _instant(
-            f'avg by (namespace) ({requests}{{{app},resource="memory"}})',
-            cluster,
+        "app_ram_request": (
+            f'avg by (namespace) ({requests}{{{app},resource="memory"}})'
         ),
-        "app_cpu_limit": _instant(
-            f'avg by (namespace) ({limits}{{{app},resource="cpu"}})',
-            cluster,
+        "app_cpu_limit": (
+            f'avg by (namespace) ({limits}{{{app},resource="cpu"}})'
         ),
-        "app_ram_limit": _instant(
-            f'avg by (namespace) ({limits}{{{app},resource="memory"}})',
-            cluster,
+        "app_ram_limit": (
+            f'avg by (namespace) ({limits}{{{app},resource="memory"}})'
         ),
-        "app_cpu_p95": _instant(
+        "app_cpu_p95": (
             "quantile_over_time(0.95, max by (namespace) "
             f"(rate(container_cpu_usage_seconds_total{{{app}}}[5m]))"
-            f"[{WINDOW}:30m])",
-            cluster,
+            f"[{WINDOW}:30m])"
         ),
-        "app_ram_p99": _instant(
+        "app_ram_p99": (
             "quantile_over_time(0.99, max by (namespace) "
             f"(container_memory_working_set_bytes{{{app}}})"
-            f"[{WINDOW}:30m])",
-            cluster,
+            f"[{WINDOW}:30m])"
         ),
-        "app_ram_peak": _instant(
+        "app_ram_peak": (
             "max by (namespace) (max_over_time("
-            f"container_memory_working_set_bytes{{{app}}}[{WINDOW}]))",
-            cluster,
+            f"container_memory_working_set_bytes{{{app}}}[{WINDOW}]))"
         ),
-        "replicas": _instant(
-            f"sum by (namespace) (kube_deployment_spec_replicas{{{ns}}})",
-            cluster,
+        "replicas": (
+            f"sum by (namespace) (kube_deployment_spec_replicas{{{ns}}})"
         ),
-        "deployments": _instant(
-            f"count by (namespace) (kube_deployment_spec_replicas{{{ns}}})",
-            cluster,
+        "deployments": (
+            f"count by (namespace) (kube_deployment_spec_replicas{{{ns}}})"
         ),
-        "cpu_p95": _instant(
+        "cpu_p95": (
             "quantile_over_time(0.95, sum by (namespace) "
             f"(rate(container_cpu_usage_seconds_total{{{pods}}}[5m]))"
-            f"[{WINDOW}:30m])",
-            cluster,
+            f"[{WINDOW}:30m])"
         ),
-        "ram_p99": _instant(
+        "ram_p99": (
             "quantile_over_time(0.99, sum by (namespace) "
-            f"(container_memory_working_set_bytes{{{pods}}})[{WINDOW}:30m])",
-            cluster,
+            f"(container_memory_working_set_bytes{{{pods}}})[{WINDOW}:30m])"
         ),
-        "history_days": _instant(
+        "history_days": (
             "count_over_time(sum by (namespace) "
-            f"(container_memory_working_set_bytes{{{pods}}})[{WINDOW}:1h]) / 24",
-            cluster,
+            f"(container_memory_working_set_bytes{{{pods}}})[{WINDOW}:1h]) / 24"
         ),
-        "network_bytes": _instant(
+        "network_bytes": (
             "sum by (namespace) (increase("
             f"container_network_receive_bytes_total{{{ns}}}"
-            f"[{INACTIVITY_WINDOW}]))",
-            cluster,
+            f"[{INACTIVITY_WINDOW}]))"
         ),
     }
+    # Sequential, these ~15 queries took seconds per page load.
+    with ThreadPoolExecutor(max_workers=len(queries)) as pool:
+        results = pool.map(lambda q: _instant(q, cluster), queries.values())
+        data = dict(zip(queries, results))
     _cache[(namespaces, cluster)] = (time.monotonic(), data)
     return data
 
