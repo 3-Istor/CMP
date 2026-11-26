@@ -44,7 +44,8 @@ class Link(BaseModel):
 
 
 def vault_project_url(project: str) -> str:
-    return f"{VAULT_URL}/ui/vault/secrets/kvv2/kv/list/projects/{project}/"
+    # Each project has its own KV mount, project-<p>; kvv2 is the platform's.
+    return f"{VAULT_URL}/ui/vault/secrets-engines/project-{project}/kv/list"
 
 
 def keycloak_console_url(realm: str) -> str:
@@ -52,8 +53,7 @@ def keycloak_console_url(realm: str) -> str:
 
 
 def vault_app_url(project: str, app: str) -> str:
-    path = quote(f"projects/{project}/{app}", safe="")
-    return f"{VAULT_URL}/ui/vault/secrets/kvv2/kv/{path}/details"
+    return f"{vault_project_url(project)}/{quote(app)}/"
 
 
 def argocd_application_url(name: str) -> str:
