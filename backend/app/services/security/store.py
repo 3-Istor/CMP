@@ -213,20 +213,31 @@ def merged_findings(
     today: date,
     app: str | None = None,
     include_resolved: bool = False,
+    preloaded: (
+        tuple[list[SecurityFinding], dict[str, SecurityException]] | None
+    ) = None,
 ) -> list[Merged]:
-    query = db.query(SecurityFinding).filter(
-        SecurityFinding.project == project
-    )
-    if app is not None:
-        query = query.filter(SecurityFinding.app == app)
-    if not include_resolved:
-        query = query.filter(SecurityFinding.resolved_at.is_(None))
+    """
+    *preloaded* holds the project's open findings and active exceptions,
+    read in bulk by the caller (see ``security._overview``).
+    """
+    if preloaded is not None:
+        rows, exceptions = preloaded
+    else:
+        query = db.query(SecurityFinding).filter(
+            SecurityFinding.project == project
+        )
+        if app is not None:
+            query = query.filter(SecurityFinding.app == app)
+        if not include_resolved:
+            query = query.filter(SecurityFinding.resolved_at.is_(None))
+        rows = query.all()
+        exceptions = active_exceptions(db, project, today)
 
     groups: dict[str, list[SecurityFinding]] = defaultdict(list)
-    for row in query:
+    for row in rows:
         groups[row.fingerprint].append(row)
 
-    exceptions = active_exceptions(db, project, today)
     merged = []
     for rows in groups.values():
         lead = max(rows, key=lambda r: TIER_RANK[Tier(r.tier)])
