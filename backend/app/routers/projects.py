@@ -51,10 +51,11 @@ from app.services import (
 )
 from app.services.authz import (
     RequireAdmin,
-    RequireGuest,
-    RequireMember,
+    RequireCap,
     assert_project_role,
+    is_auditor,
     is_cnp_admin,
+    is_finops,
     platform_project_role,
     reads_platform_security,
 )
@@ -163,7 +164,10 @@ def search_keycloak_users(
     if len(q.strip()) < 2:
         return []
 
-    if not _administers_any_project(db, token_payload):
+    # infra also searches to grant platform roles.
+    if not is_cnp_admin(token_payload) and not _administers_any_project(
+        db, token_payload
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
@@ -250,12 +254,16 @@ def list_projects(
         by_name.setdefault(row.project_name, {"name": row.project_name})
 
     # Platform identities see every project, with the role they hold on it.
+    # Auditor and FinOps hold none: their capabilities decide (role null).
     platform_role = platform_project_role(token_payload)
-    if platform_role is not None:
+    reads_all = is_auditor(token_payload) or is_finops(token_payload)
+    if platform_role is not None or reads_all:
         for (name,) in db.query(Project.project_name).all():
             entry = by_name.setdefault(name, {"name": name})
             current = entry.get("role")
-            if current is None or rank(platform_role) > rank(current):
+            if platform_role is not None and (
+                current is None or rank(platform_role) > rank(current)
+            ):
                 entry["role"] = platform_role.value
 
     rows = {
@@ -293,7 +301,7 @@ def list_projects(
     return [
         ProjectRead(**entry)
         for _, entry in sorted(by_name.items())
-        if entry.get("role")
+        if entry.get("role") or reads_all
     ]
 
 
@@ -591,20 +599,21 @@ async def create_project(
 
 @router.get("/{project_name}/apps", response_model=list[DeploymentRead])
 def list_project_apps(
-    ctx: RequireGuest,
+    ctx: RequireCap("app.list"),
     db: Session = Depends(get_db),
 ) -> list[DeploymentRead]:
     """
     Return all applications (deployments) belonging to a project.
 
     Access control: any role on the project, guests included, seeing the
-    application list is the whole of what a guest is for.
+    application list is the whole of what a guest is for; auditor and FinOps
+    too.
     """
     logger.debug(
         "Listing apps of '%s' for '%s' (%s)",
         ctx.project_name,
         ctx.username,
-        ctx.role.value,
+        ctx.role.value if ctx.role else "platform",
     )
 
     return with_staging(
@@ -625,14 +634,14 @@ def list_project_apps(
 
 @router.get("/{project_name}/members")
 def get_project_members(
-    ctx: RequireMember,
+    ctx: RequireCap("members.view"),
     db: Session = Depends(get_db),
 ) -> dict:
     """
     List every member of a project, across all role groups.
 
-    Access control: member or above. Guests are excluded on purpose, who
-    else works on the project is not theirs to see.
+    Access control: member or above, and the auditor. Guests are excluded on
+    purpose, who else works on the project is not theirs to see.
 
     ``guests_supported`` is False for projects bootstrapped before the guests
     group existed; the UI uses it to hide the Guest option rather than offer
@@ -869,7 +878,9 @@ async def remove_project_member(
 
 
 @router.get("/{project_name}/deletion-protection")
-async def get_deletion_protection(ctx: RequireGuest) -> dict[str, bool]:
+async def get_deletion_protection(
+    ctx: RequireCap("app.viewConfig"),
+) -> dict[str, bool]:
     """Whether the project refuses deletions, of itself and of its apps."""
     try:
         return {"enabled": await is_deletion_protected(ctx.project_name)}
@@ -944,7 +955,9 @@ async def update_deletion_protection(
 
 
 @router.get("/{project_name}/customer-access")
-async def read_customer_access(ctx: RequireGuest) -> dict[str, str]:
+async def read_customer_access(
+    ctx: RequireCap("app.viewConfig"),
+) -> dict[str, str]:
     """How customers get an account: ``closed``, ``companies`` or ``open``."""
     try:
         return {"mode": await get_customer_access(ctx.project_name)}

@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.services import audit, managed_equivalent
 from app.services.agents import policy
-from app.services.authz import RequireAdmin, RequireMember
+from app.services.authz import RequireAdmin, RequireCap, RequireMember
 from app.services.github_service import GitHubAppError
 from app.services.imports import (
     access,
@@ -172,7 +172,7 @@ async def create_import(
 
 
 @router.get("/{project_name}/imports")
-def list_imports(ctx: RequireMember, db: DbSession):
+def list_imports(ctx: RequireCap("import.view"), db: DbSession):
     _enabled()
     service.expire_stale(project=ctx.project_name)
     sources = (
@@ -185,7 +185,9 @@ def list_imports(ctx: RequireMember, db: DbSession):
 
 
 @router.get("/{project_name}/imports/runs/{run_id}")
-async def get_import_run(run_id: str, ctx: RequireMember, db: DbSession):
+async def get_import_run(
+    run_id: str, ctx: RequireCap("import.view"), db: DbSession
+):
     _enabled()
     try:
         run = service.get_run(db, ctx.project_name, run_id)
@@ -237,7 +239,7 @@ async def estimate_import_run(
 
 @router.get("/{project_name}/imports/recommendations")
 def list_recommendations(
-    ctx: RequireMember,
+    ctx: RequireCap("import.view"),
     db: DbSession,
     app: Annotated[str | None, Query(max_length=63)] = None,
 ):

@@ -13,9 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.roles import ProjectRole
 from app.services import audit, topology
-from app.services.authz import RequireAdmin, RequireGuest, is_auditor
+from app.services.authz import RequireAdmin, RequireCap
 from app.services.imports import app_links
 from app.services.imports.service import ImportRefused
 from app.services.project_registry import RegistryError
@@ -36,9 +35,9 @@ class LinkRequest(BaseModel):
 
 
 @router.get("/{project_name}/topology")
-async def get_topology(ctx: RequireGuest, db: DbSession, fresh: bool = False):
-    if ctx.role is ProjectRole.GUEST and not is_auditor(ctx.token):
-        raise HTTPException(403, "Guests do not see the project topology")
+async def get_topology(
+    ctx: RequireCap("topology.view"), db: DbSession, fresh: bool = False
+):
     try:
         return await topology.cached_build(db, ctx.project_name, fresh)
     except RegistryError as exc:

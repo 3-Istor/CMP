@@ -31,7 +31,12 @@ export interface ProjectSectionEntry {
 }
 
 export const PROJECT_SECTIONS: Record<ProjectSectionKey, ProjectSectionEntry> = {
-  overview: { key: "overview", segment: "", icon: LayoutDashboard },
+  overview: {
+    key: "overview",
+    segment: "",
+    icon: LayoutDashboard,
+    capability: "app.viewObservability",
+  },
   topology: {
     key: "topology",
     segment: "topology",
@@ -54,26 +59,26 @@ export const PROJECT_SECTIONS: Record<ProjectSectionKey, ProjectSectionEntry> = 
     key: "security",
     segment: "security",
     icon: Shield,
-    capability: "app.viewObservability",
+    capability: "security.view",
   },
   activity: {
     key: "activity",
     segment: "activity",
     icon: History,
-    capability: "app.viewObservability",
+    capability: "activity.view",
   },
   alerts: {
     key: "alerts",
     segment: "alerts",
     icon: BellRing,
-    capability: "app.viewObservability",
+    capability: "alerts.view",
   },
-  ai: { key: "ai", segment: "ai", icon: Sparkles },
+  ai: { key: "ai", segment: "ai", icon: Sparkles, capability: "ai.view" },
   settings: {
     key: "settings",
     segment: "settings",
     icon: Settings,
-    capability: "app.viewObservability",
+    capability: "app.viewConfig",
   },
 };
 

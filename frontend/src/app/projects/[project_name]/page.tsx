@@ -67,9 +67,9 @@ export default function ProjectPage() {
   const health = useCardData(
     `apps-health-${projectName}`,
     () => getProjectAppsHealth(projectName, "24h", 25_000),
-    { enabled: role !== null, intervalMs: 30_000 },
+    { enabled: can("app.viewObservability"), intervalMs: 30_000 },
   );
-  const healthLoading = role === null || (health.loading && !health.data);
+  const healthLoading = !can("app.viewObservability") || (health.loading && !health.data);
   const attention = health.data ? attentionCount(health.data.apps) : 0;
   const liveApps = apps.filter((a) => a.status !== "deleted");
 
@@ -79,6 +79,11 @@ export default function ProjectPage() {
   const canDeploy = can("app.deploy");
   const canViewObservability = can("app.viewObservability");
   const canImport = can("import.manage");
+  // FinOps reads only the Costs tab of a project.
+  const costsOnly = !canViewObservability && can("finops.view");
+  useEffect(() => {
+    if (costsOnly) router.replace(`/projects/${encodeURIComponent(projectName)}/costs`);
+  }, [costsOnly, router, projectName]);
 
   const [links, setLinks] = useState<ProjectLink[]>([]);
   useEffect(() => {
@@ -231,7 +236,7 @@ export default function ProjectPage() {
       />
       <PageBody>
         <MoveBanner />
-        {canViewObservability && (
+        {can("security.view") && (
           <SecurityAlert
             project={projectName}
             onOpen={() =>
@@ -241,9 +246,7 @@ export default function ProjectPage() {
         )}
 
         <div className="space-y-6">
-          {role === "owner" || role === "admin" ? (
-            <ProjectAccessReviewCard project={projectName} />
-          ) : null}
+          {can("members.manage") && <ProjectAccessReviewCard project={projectName} />}
 
           {/* Inline catalog (shown when user clicks "Deploy App") */}
           {showCatalog && canDeploy && (

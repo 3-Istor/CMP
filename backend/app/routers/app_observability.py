@@ -24,16 +24,15 @@ from app.core.database import get_db
 from app.core.roles import ProjectRole
 from app.core.swr_cache import SwrCache
 from app.models.deployment import Deployment, ProviderType
-from app.routers.deployments import _get_app_or_404
+from app.routers.deployments import _authorize_app, _get_app_or_404
 from app.routers.observability import SloRead, slo_read
 from app.services import alerts_grafana
 from app.services import app_overview as overview
 from app.services import links
 from app.services.authz import (
-    RequireMember,
-    assert_project_role,
+    RequireCap,
+    assert_capability,
     is_cnp_admin,
-    is_finops,
 )
 from app.services.environments import layout, runs
 from app.services.grafana_service import GRAFANA_BASE_URL
@@ -95,8 +94,11 @@ def _member_app(
     token: dict,
     deployment_id: int,
     env: layout.Environment = "prod",
+    cap: str | None = None,
 ) -> tuple[Deployment, stores.Scope]:
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.MEMBER)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.MEMBER, cap=cap
+    )
     if env == "staging" and not runs.staging_ready(db, deployment.id):
         raise HTTPException(status_code=404, detail="This app has no staging.")
     return deployment, _scope(deployment, env)
@@ -314,7 +316,9 @@ async def get_capabilities(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> Capabilities:
     """Which tabs have a store behind them."""
-    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
+    _, scope = await run_in_threadpool(
+        _member_app, db, token, deployment_id, cap="app.viewObservability"
+    )
     caps = stores.capabilities()
     # Fluent Bit ships only the on-prem cluster's logs to VictoriaLogs.
     caps["logs"] = caps["logs"] and scope.cloud == "onprem"
@@ -350,7 +354,9 @@ async def get_signals(
     db: Session = Depends(get_db),
 ) -> GoldenSignals:
     """Requests, 5xx share, p50 and p95, overall and per route."""
-    _, scope = await run_in_threadpool(_member_app, db, token, deployment_id)
+    _, scope = await run_in_threadpool(
+        _member_app, db, token, deployment_id, cap="app.viewObservability"
+    )
     with _reading():
         data = await _signals.get(
             (deployment_id, range_),
@@ -376,8 +382,8 @@ def _slo_targets(
         raise HTTPException(status_code=404, detail="Deployment not found")
     role = "admin"
     if not is_cnp_admin(token):
-        found = assert_project_role(
-            db, token, deployment.project_id or "", ProjectRole.MEMBER
+        found = assert_capability(
+            db, token, deployment.project_id or "", "app.viewObservability"
         ).role
         if found not in (ProjectRole.ADMIN, ProjectRole.OWNER):
             role = "member"
@@ -435,7 +441,9 @@ def get_deploys(
     db: Session = Depends(get_db),
 ) -> list[DeployMarker]:
     """Prod rollouts in the range, for the markers on the graphs."""
-    deployment, _ = _member_app(db, token, deployment_id)
+    deployment, _ = _member_app(
+        db, token, deployment_id, cap="app.viewObservability"
+    )
     since = _now() - timedelta(seconds=signals.RANGES[range_])
     return [
         DeployMarker(**m) for m in delivery.markers(db, deployment.id, since)
@@ -453,7 +461,9 @@ def get_dora(
     """Deployment frequency and change failure rate of an environment."""
     if days not in delivery.DORA_DAYS:
         raise HTTPException(status_code=422, detail="days: 7, 30 or 90.")
-    deployment, _ = _member_app(db, token, deployment_id, env)
+    deployment, _ = _member_app(
+        db, token, deployment_id, env, cap="app.viewObservability"
+    )
     return Dora(**delivery.dora(db, deployment.id, days, _now(), env))
 
 
@@ -525,7 +535,7 @@ async def list_traces(  # pylint: disable=too-many-arguments
     db: Session = Depends(get_db),
 ) -> list[TraceSummary]:
     """Recent traces of the app, newest first."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, cap="app.viewTraces")
     with _reading():
         account = await run_in_threadpool(stores.trace_account, scope.project)
         rows = await app_traces.list_traces(
@@ -545,7 +555,7 @@ async def get_trace(
     db: Session = Depends(get_db),
 ) -> TraceDetail:
     """One trace, read in the app's project tenant only."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, cap="app.viewTraces")
     with _reading():
         account = await run_in_threadpool(stores.trace_account, scope.project)
         found = await app_traces.trace_detail(account, trace_id.lower())
@@ -559,7 +569,7 @@ async def get_alerts(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> AppAlerts:
     """Alerts of the app in Alertmanager, and the silences covering it."""
-    _, scope = _member_app(db, token, deployment_id)
+    _, scope = _member_app(db, token, deployment_id, cap="alerts.view")
     with _reading():
         data = await app_alerts.app_alerts(scope.project, scope.app)
     return AppAlerts(
@@ -587,13 +597,9 @@ async def get_costs(
     deployment_id: int, token: CurrentUser, db: Session = Depends(get_db)
 ) -> AppCosts:
     """Cost per 1,000 requests and requests against real usage."""
-    if is_finops(token):
-        deployment = db.get(Deployment, deployment_id)
-        if deployment is None:
-            raise HTTPException(status_code=404, detail="Deployment not found")
-        scope = _scope(deployment)
-    else:
-        deployment, scope = _member_app(db, token, deployment_id)
+    deployment, scope = _member_app(
+        db, token, deployment_id, cap="finops.view"
+    )
     with _reading():
         data = await app_costs.app_costs(deployment, scope, _now())
     return AppCosts(**data)
@@ -684,9 +690,28 @@ async def get_summary(
     Above the fold of an app page in one call. Each part that cannot be
     read is left empty rather than failing the whole summary.
     """
-    _, scope = await run_in_threadpool(
-        _member_app, db, token, deployment_id, env
+    deployment, scope = await run_in_threadpool(
+        _member_app,
+        db,
+        token,
+        deployment_id,
+        env,
+        cap="app.viewObservability",
     )
+    # Top errors are log lines, clients and denied flows are topology.
+    hidden: dict = {}
+    for cap, blank in (
+        ("app.viewLogs", {"top_errors": []}),
+        ("topology.view", {"clients": [], "denied_flows_24h": 0}),
+    ):
+        try:
+            await run_in_threadpool(
+                _authorize_app, db, token, deployment, ProjectRole.MEMBER, cap
+            )
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                raise
+            hidden.update(blank)
 
     async def load() -> AppSummary:
         data = await run_in_threadpool(
@@ -694,7 +719,8 @@ async def get_summary(
         )
         return AppSummary(**await summary.app_summary(data, range_, _now()))
 
-    return await _summaries.get((deployment_id, range_, env), load)
+    found = await _summaries.get((deployment_id, range_, env), load)
+    return found.model_copy(update=hidden) if hidden else found
 
 
 class LastDeploy(BaseModel):
@@ -728,7 +754,7 @@ class AppsHealth(BaseModel):
     response_model_exclude_none=True,
 )
 async def get_apps_health(
-    ctx: RequireMember,
+    ctx: RequireCap("app.viewObservability"),
     range_: Annotated[str, Query(alias="range", pattern=SIGNAL_RANGE)] = "24h",
 ) -> AppsHealth:
     """Every app of the project, those that need attention first."""

@@ -128,7 +128,7 @@ export function MobileSidebar({ onSearch }: { onSearch: () => void }) {
 function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
   const pathname = usePathname();
   const t = useTranslations("shell.sidebar");
-  const { projects, apps, loading } = useVisibleWork();
+  const { projects, apps, hasMemberProject, loading } = useVisibleWork();
   const security = useSecurityOverview();
   const hasCoreAlert = security.some((s) => s.core > 0);
   const projectName = projectFromPath(pathname);
@@ -260,7 +260,7 @@ function SidebarBody({ collapsed, onSearch, onToggle, onNavigate }: BodyProps) {
           </Group>
           <Group title={t("groupPlatform")} collapsed={collapsed}>
             {PLATFORM_PAGES.filter((page) =>
-              isPageVisible(page, platformRoles),
+              isPageVisible(page, platformRoles, { hasMemberProject }),
             ).map(renderLink)}
           </Group>
         </nav>

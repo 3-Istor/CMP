@@ -21,7 +21,7 @@ function Section() {
   return (
     <ProjectSection
       title={t("alerts")}
-      capability="app.viewObservability"
+      capability="alerts.view"
       actions={<AppFilter />}
     >
       {app && caps.data?.alerts && (

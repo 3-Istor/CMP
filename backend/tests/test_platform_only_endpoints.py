@@ -80,7 +80,7 @@ class TestPlatformIdentitiesOnProjects:
         ("groups", "expected"),
         [
             (["infra"], "admin"),
-            (["security-auditor"], "guest"),
+            (["security-auditor"], None),
             (["finops"], None),
             (["member"], None),
         ],

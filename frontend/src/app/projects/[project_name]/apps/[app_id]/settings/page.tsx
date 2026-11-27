@@ -27,7 +27,6 @@ import {
   deleteImport,
   getDeletionProtection,
   getImports,
-  getSecurityRole,
 } from "@/lib/api";
 import { useRelease } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -197,7 +196,7 @@ export default function AppSettingsPage() {
       .catch(() => setImportFailed(true));
   }, [imported, canImport, projectName, appId, importAttempt]);
   const isRunning = deployment.status === "running";
-  const [securityAdmin, setSecurityAdmin] = useState(false);
+  const securityAdmin = can("security.manage");
   const [active, setActive] = useState<string>("general");
   const { view: release } = useRelease(appId);
   const releaseInProgress = Boolean(
@@ -206,14 +205,6 @@ export default function AppSettingsPage() {
       release.canaryHash !== release.stableHash &&
       (release.phase === "Progressing" || release.phase === "Paused"),
   );
-
-  useEffect(() => {
-    getSecurityRole(projectName).then(
-      (r) => setSecurityAdmin(r.cnp_admin || r.role === "admin"),
-      () => setSecurityAdmin(false),
-    );
-  }, [projectName]);
-
 
   const allowed =
     deployment.provider_type === "kubernetes" && can("app.viewConfig");
@@ -224,10 +215,10 @@ export default function AppSettingsPage() {
   const sloShown = Boolean(caps.data?.alerts);
   const visibleSections = SECTIONS.filter(
     (id) =>
-      (id !== "secrets" || isRunning) &&
+      (id !== "secrets" || (isRunning && can("secrets.view"))) &&
       (id !== "delivery" || can("release.view")) &&
       (id !== "slo" || sloShown) &&
-      (id !== "security" || can("app.viewObservability")) &&
+      (id !== "security" || can("security.view")) &&
       (id !== "danger" || canDelete),
   );
   const sectionsKey = visibleSections.join();
@@ -332,7 +323,7 @@ export default function AppSettingsPage() {
             )}
           </SettingsSection>
 
-          {isRunning && (
+          {isRunning && can("secrets.view") && (
             <SettingsSection
               id="secrets"
               title={ts("sections.secrets.title")}
@@ -371,7 +362,7 @@ export default function AppSettingsPage() {
               <SloTargetsCard project={projectName} app={deployment.name} />
             </SettingsSection>
           )}
-          {can("app.viewObservability") && (
+          {can("security.view") && (
             <SettingsSection
               id="security"
               title={ts("sections.security.title")}

@@ -1,12 +1,13 @@
 """
-Membership of the elevated Keycloak groups, and nothing else.
+Membership of the elevated Keycloak groups and of the platform groups the
+portal grants (finops, security-auditor), and nothing else.
 
 The identity is the ``cmp-provisioner`` client when it is configured
 (KEYCLOAK_PROVISIONER_CLIENT_ID/SECRET), which is meant to hold
 manage-membership on the elevated groups only. Until then it falls back to
 the realm service account the CMP already uses for project groups, which
 holds manage-users on the whole realm. Either way, this module refuses any
-group outside the catalogue.
+group outside the catalogue and PLATFORM_MANAGED.
 """
 
 import time
@@ -16,6 +17,9 @@ import requests
 from app.core.config import settings
 from app.services import keycloak_admin, keycloak_service
 from app.services.access import catalog
+
+# infra stays in the K3s Terraform: never granted from the portal.
+PLATFORM_MANAGED = frozenset({"finops", "security-auditor"})
 
 _token_cache: tuple[str, float] | None = None
 
@@ -51,8 +55,8 @@ def _realm_url() -> str:
 
 
 def _require_managed(group: str) -> None:
-    if group not in catalog.managed_groups():
-        raise GroupError(f"'{group}' is not an elevated group.")
+    if group not in catalog.managed_groups() | PLATFORM_MANAGED:
+        raise GroupError(f"'{group}' is not a group the CMP manages.")
 
 
 def _group_id(group: str, token: str) -> str:

@@ -17,7 +17,8 @@ import { toast } from "sonner";
 import { useFindingText } from "./findingText";
 import { errorMessage } from "./labels";
 
-export function PendingApprovals({ username }: { username: string }) {
+/** Shown to platform admins and auditors; an auditor acts on criticals only. */
+export function PendingApprovals({ username, cnpAdmin }: { username: string; cnpAdmin: boolean }) {
   const t = useTranslations("security");
   const text = useFindingText();
   const [items, setItems] = useState<SecurityException[] | null>(null);
@@ -77,7 +78,7 @@ export function PendingApprovals({ username }: { username: string }) {
     {
       key: "actions",
       header: <span className="sr-only">{t("approvals.actions")}</span>,
-      cell: (e) => (
+      cell: (e) => (cnpAdmin || e.critical) && (
         <div className="flex flex-wrap justify-end gap-2">
           {e.author !== username && (
             <Button

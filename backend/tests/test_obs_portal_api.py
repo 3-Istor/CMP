@@ -196,8 +196,11 @@ def test_someone_in_no_project_gets_403(make, fake, path):
     assert (response.status_code, fake.sent) == (403, [])
 
 
-@pytest.mark.parametrize("path", READS)
-def test_a_guest_does_not_read_signals_logs_or_traces(make, fake, path):
+# The guest reads the overview and SLO (access matrix): no logs, traces, alerts.
+@pytest.mark.parametrize(
+    "path", [p for p in READS if p.startswith(("/logs", "/traces", "/alerts"))]
+)
+def test_a_guest_does_not_read_logs_traces_or_alerts(make, fake, path):
     client = make("guest")
 
     response = _get(client, SHOP, path)
@@ -624,8 +627,8 @@ def test_costs_without_traffic_have_no_cost_per_request(make, fake):
 # ── Summaries (CMP UX rework) ────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("who", ["guest", "outsider"])
-def test_only_members_read_an_apps_summary(make, who):
+@pytest.mark.parametrize("who", ["outsider"])
+def test_an_outsider_reads_no_apps_summary(make, who):
     client = make(who)
 
     response = client.get(f"/api/deployments/{SHOP}/summary")
@@ -633,8 +636,8 @@ def test_only_members_read_an_apps_summary(make, who):
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize("who", ["guest", "outsider"])
-def test_only_members_read_the_projects_apps_health(make, who):
+@pytest.mark.parametrize("who", ["outsider"])
+def test_an_outsider_reads_no_apps_health(make, who):
     client = make(who)
     client.app.include_router(router.projects_router, prefix="/api")
 
@@ -653,7 +656,7 @@ def test_a_summary_range_is_bounded(make):
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("who", ["guest", "outsider"])
+@pytest.mark.parametrize("who", ["outsider"])
 def test_non_members_cannot_probe_for_a_staging(make, who):
     client = make(who)
 

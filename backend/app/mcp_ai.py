@@ -57,7 +57,7 @@ async def get_project_ai(project: str) -> dict:
     and agents with AI access and the state of the model backend. Read the
     guide cnp-ai (get_guide) before creating an agent."""
     caller = Caller()
-    await caller.require_role(project, ProjectRole.MEMBER)
+    await caller.require_role(project, ProjectRole.MEMBER, cap="ai.view")
     return await caller.api("GET", f"/api/projects/{project}/ai")
 
 
@@ -210,7 +210,7 @@ async def get_ai_usage(
     """Tokens, cost at the public price, errors and refusals (budget,
     policy, rate limit, guardrail), per app or agent of a project."""
     caller = Caller()
-    await caller.require_role(project, ProjectRole.MEMBER)
+    await caller.require_role(project, ProjectRole.MEMBER, cap="ai.view")
     path = (
         f"/api/projects/{project}/agents/{agent}/usage"
         if agent
@@ -239,7 +239,7 @@ async def list_agents(project: str) -> dict:
     """The hosted agents of a project, declared in the CMP or in YAML: one
     list, with status, tools, risk and today's usage."""
     caller = Caller()
-    await caller.require_role(project, ProjectRole.MEMBER)
+    await caller.require_role(project, ProjectRole.MEMBER, cap="ai.view")
     return await caller.api("GET", f"/api/projects/{project}/agents")
 
 
@@ -249,7 +249,7 @@ async def get_agent(project: str, agent: str) -> dict:
     """One agent: its declaration (the values file), rights, capability map
     (what it reads, does, sends out, runs) and its pull request."""
     caller = Caller()
-    await caller.require_role(project, ProjectRole.MEMBER)
+    await caller.require_role(project, ProjectRole.MEMBER, cap="ai.view")
     return await caller.api("GET", f"/api/projects/{project}/agents/{agent}")
 
 

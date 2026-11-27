@@ -12,10 +12,11 @@ authority behind it is checked again on every decision, so someone demoted
 since then no longer decides. A platform item is decided by an infra member
 other than the person concerned. Nobody decides on their own access.
 
-Project decisions apply at once through the CMP membership code. Platform
-groups are declared in the K3s Terraform, so removing someone there turns
-into a task naming the line to change. The deadline only escalates: nothing
-is ever removed without a decision.
+Project decisions, and removals from finops or security-auditor, apply at
+once through the CMP membership code. infra is declared in the K3s
+Terraform, so removing someone there turns into a task naming the line to
+change. The deadline only escalates: nothing is ever removed without a
+decision.
 """
 
 import json
@@ -31,6 +32,7 @@ from app.core.roles import ASSIGNABLE, ProjectRole
 from app.models.access_review import AccessReviewCampaign, AccessReviewItem
 from app.models.project import Project, ProjectStatus
 from app.services import keycloak_service
+from app.services.access import groups
 from app.services.access_review import accounts, directory
 from app.services.access_review.notices import Inbox, Notice
 from app.services.audit import record_system_event
@@ -442,12 +444,16 @@ def decide(  # pylint: disable=too-many-arguments
         db.commit()
         return item, []
 
-    if item.scope == PLATFORM:
+    if item.scope == PLATFORM and item.subject not in groups.PLATFORM_MANAGED:
         return item, _terraform_task(db, item)
 
     try:
-        item.outcome_detail = _apply_project(item, decision)
-    except (ValueError, requests.RequestException) as exc:
+        if item.scope == PLATFORM:
+            groups.remove_member(item.username, item.subject)
+            item.outcome_detail = f"Removed from {item.subject}."
+        else:
+            item.outcome_detail = _apply_project(item, decision)
+    except (ValueError, requests.RequestException, groups.GroupError) as exc:
         logger.error("Review item %s not applied: %s", item.id, exc)
         # Undecided again, so the reviewer can retry; the failure stays in
         # the journal through the audit middleware.

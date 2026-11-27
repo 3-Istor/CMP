@@ -26,15 +26,19 @@ export type Capability =
   | "project.protect"
   | "project.export"
   | "project.move"
+  | "app.view"
+  | "app.list"
   | "app.deploy"
   | "app.operate"
   | "app.pause"
   | "app.delete"
   | "app.editIcon"
   | "app.viewLogs"
+  | "app.viewTraces"
   | "app.viewConfig"
   | "app.editConfig"
   | "app.viewSecretsLink"
+  | "secrets.view"
   | "app.viewObservability"
   | "release.view"
   | "release.operate"
@@ -46,11 +50,16 @@ export type Capability =
   | "finops.editBudget"
   | "agents.configure"
   | "ai.configure"
+  | "ai.view"
   | "agent.manage"
   | "topology.view"
   | "topology.link"
+  | "import.view"
   | "import.manage"
-  | "security.manage";
+  | "security.view"
+  | "security.manage"
+  | "alerts.view"
+  | "activity.view";
 
 /**
  * The weakest role that holds each capability.
@@ -64,16 +73,20 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "project.protect": "admin",
   "project.export": "owner",
   "project.move": "admin",
+  "app.view": "guest",
+  "app.list": "guest",
   "app.deploy": "admin",
   "app.operate": "member",
   "app.pause": "admin",
   "app.delete": "admin",
   "app.editIcon": "member",
   "app.viewLogs": "member",
+  "app.viewTraces": "member",
   "app.viewConfig": "member",
   "app.editConfig": "admin",
   "app.viewSecretsLink": "admin",
-  "app.viewObservability": "member",
+  "secrets.view": "member",
+  "app.viewObservability": "guest",
   "release.view": "guest",
   "release.operate": "member",
   "release.configure": "admin",
@@ -85,22 +98,50 @@ const MIN_ROLE: Record<Capability, ProjectRole> = {
   "agents.configure": "admin",
   // Mirrors the ai.configure, agent.create/update/suspend/delete stake actions.
   "ai.configure": "admin",
+  "ai.view": "member",
   "agent.manage": "admin",
   // Mirrors backend routers/topology.py and routers/imports.py.
   "topology.view": "member",
   "topology.link": "admin",
+  "import.view": "member",
   "import.manage": "admin",
+  "security.view": "member",
   "security.manage": "admin",
+  "alerts.view": "member",
+  "activity.view": "member",
 };
 
 /**
- * What the security-auditor platform group reads on every project, whatever
- * its project role. Mirrors backend routers/topology.py.
+ * Platform-group grants on every project, whatever the project role.
+ * Mirror AUDITOR_CAPS / FINOPS_CAPS in backend/app/core/roles.py
+ * (test_capabilities guards the drift).
  */
-const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(["topology.view"]);
+const AUDITOR_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+  "app.view",
+  "app.list",
+  "app.viewObservability",
+  "app.viewConfig",
+  "ai.view",
+  "release.view",
+  "members.view",
+  "finops.view",
+  "topology.view",
+  "security.view",
+  "alerts.view",
+  "import.view",
+  "activity.view",
+]);
+const FINOPS_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>([
+  "app.list",
+  "app.view",
+  "finops.view",
+]);
 
 export function canAsPlatform(platformRoles: readonly string[], capability: Capability): boolean {
-  return platformRoles.includes("security-auditor") && AUDITOR_CAPABILITIES.has(capability);
+  return (
+    (platformRoles.includes("security-auditor") && AUDITOR_CAPABILITIES.has(capability)) ||
+    (platformRoles.includes("finops") && FINOPS_CAPABILITIES.has(capability))
+  );
 }
 
 /**

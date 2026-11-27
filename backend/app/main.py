@@ -40,6 +40,7 @@ from app.routers import (
     observability,
     orphans,
     placement,
+    platform_roles,
     power,
     project_export,
     projects,
@@ -436,6 +437,7 @@ app.add_middleware(
 app.include_router(template_assets.router)
 app.include_router(access.router, prefix="/api")
 app.include_router(access_reviews.router, prefix="/api")
+app.include_router(platform_roles.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(agents.projects_router, prefix="/api")

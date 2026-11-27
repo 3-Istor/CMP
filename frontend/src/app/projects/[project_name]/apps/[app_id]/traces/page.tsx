@@ -18,7 +18,7 @@ export default function AppTracesPage() {
   const { deployment, appId } = useAppContext();
   const { can, projectName } = useProjectContext();
   const allowed =
-    deployment.provider_type === "kubernetes" && can("app.viewObservability");
+    deployment.provider_type === "kubernetes" && can("app.viewTraces");
   const caps = useObsCapabilities(appId, allowed);
   const base = `/projects/${encodeURIComponent(projectName)}/apps/${appId}`;
   const t = useTranslations("imports.finish");

@@ -40,7 +40,7 @@ from app.services.agents import repo as repo_ops
 from app.services.agents import skills, store
 from app.services.agents.provider import CmpAuthProvider
 from app.services.agents.redact import mask
-from app.services.authz import assert_project_role
+from app.services.authz import assert_capability, assert_project_role
 from app.services.clusters.state import cluster_states, ensure_cluster_up
 from app.services.github_service import (
     FileNotInRepoError,
@@ -191,10 +191,18 @@ class Caller:
     async def api(self, method: str, path: str, **kwargs) -> Any:
         return await internal_api.call(self.token, method, path, **kwargs)
 
-    async def require_role(self, project: str, minimum: ProjectRole) -> None:
+    async def require_role(
+        self, project: str, minimum: ProjectRole, cap: str | None = None
+    ) -> None:
+        """With *cap*, the capability decides instead of *minimum*, platform
+        grants included, as on the matching route."""
+
         def check() -> None:
             with SessionLocal() as db:
-                assert_project_role(db, self.claims, project, minimum)
+                if cap:
+                    assert_capability(db, self.claims, project, cap)
+                else:
+                    assert_project_role(db, self.claims, project, minimum)
 
         try:
             await to_thread.run_sync(check)
@@ -653,7 +661,7 @@ async def get_project_policy(project: str) -> dict:
     """What an assistant may do on its own in a project, from its stake
     level, so you can tell the user what will need their confirmation."""
     caller = Caller()
-    await caller.require_role(project, ProjectRole.GUEST)
+    await caller.require_role(project, ProjectRole.GUEST, cap="app.view")
     stake = await to_thread.run_sync(policy.project_stake, project)
     level = stake.effective_level
     return {

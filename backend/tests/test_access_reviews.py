@@ -19,6 +19,7 @@ from app.models.audit import AuditEvent
 from app.models.project import Project
 from app.routers import access_reviews
 from app.services import audit, grafana_service, keycloak_service
+from app.services.access import groups
 from app.services.access_review import accounts, campaigns, directory
 from app.services.agents import store as agent_store
 from app.services.keycloak_service import get_current_user
@@ -74,9 +75,7 @@ class FakeKeycloak:
         return self.retention
 
     def login_events(self, since):
-        return {
-            f"id-{u}": t for u, t in self.logins.items() if t >= since
-        }
+        return {f"id-{u}": t for u, t in self.logins.items() if t >= since}
 
     def realm_users(self):
         return [dict(u) for u in self.users.values()]
@@ -86,6 +85,9 @@ class FakeKeycloak:
 
     def group_members(self, group):
         return sorted(self.groups.get(group, set()))
+
+    def remove_from_group(self, username, group):
+        self.groups[group].discard(username)
 
     def set_enabled(self, user_id, enabled):
         self.disabled_calls.append((user_id, enabled))
@@ -138,6 +140,7 @@ def keycloak():
         ),
         mock.patch.object(directory, "group_members", fake.group_members),
         mock.patch.object(directory, "set_enabled", fake.set_enabled),
+        mock.patch.object(groups, "remove_member", fake.remove_from_group),
         mock.patch.object(
             keycloak_service,
             "list_project_members",
@@ -432,9 +435,7 @@ class TestOwnerOnlyDecisions:
 
         assert response.status_code == 403
 
-    def test_refuses_a_second_decision_on_the_same_item(
-        self, client, factory
-    ):
+    def test_refuses_a_second_decision_on_the_same_item(self, client, factory):
         start(client)
         item = item_of(factory, "dan", "shop")
         decide(client, item.id, "olga", decision="keep")
@@ -503,19 +504,44 @@ class TestFourEyesOnPlatformGroups:
 
         assert response.status_code == 403
 
-    def test_turns_a_removal_into_a_terraform_task_without_touching_keycloak(
+    def test_turns_an_infra_removal_into_a_terraform_task(
+        self, client, factory, keycloak
+    ):
+        start(client)
+        item = item_of(factory, "alice", "infra")
+
+        response = decide(client, item.id, "bob")
+
+        assert response.json()["outcome"] == "terraform_task"
+        assert "local.platform_admins" in response.json()["outcome_detail"]
+        assert "alice" in keycloak.groups["infra"]
+
+    @pytest.mark.parametrize("group", ["security-auditor", "finops"])
+    def test_applies_a_portal_group_removal_at_once(
+        self, client, factory, keycloak, group
+    ):
+        keycloak.groups[group] = {"sam"}
+        start(client)
+        item = item_of(factory, "sam", group)
+
+        response = decide(client, item.id, "alice")
+
+        assert response.json()["outcome"] == "applied"
+        assert "sam" not in keycloak.groups[group]
+
+    def test_leaves_a_portal_group_item_undecided_when_keycloak_fails(
         self, client, factory, keycloak
     ):
         start(client)
         item = item_of(factory, "sam", "security-auditor")
 
-        response = decide(client, item.id, "alice")
+        with mock.patch.object(
+            groups, "remove_member", side_effect=groups.GroupError("down")
+        ):
+            response = decide(client, item.id, "alice")
 
-        assert response.json()["outcome"] == "terraform_task"
-        assert 'platform_group_members["security-auditor"]' in (
-            response.json()["outcome_detail"]
-        )
-        assert "sam" in keycloak.groups["security-auditor"]
+        assert response.status_code == 502
+        assert item_of(factory, "sam", "security-auditor").decision is None
 
     def test_refuses_a_role_change_on_a_platform_group(self, client, factory):
         start(client)
@@ -689,9 +715,7 @@ class TestInactiveAccounts:
     def test_reports_an_account_without_login_for_sixty_days(
         self, factory, tracked
     ):
-        tracked.logins = {
-            u: NOW - DAY for u in tracked.users if u != "dan"
-        }
+        tracked.logins = {u: NOW - DAY for u in tracked.users if u != "dan"}
 
         notices = inactivity(factory, NOW)
 

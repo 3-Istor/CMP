@@ -169,7 +169,8 @@ def _series(points):
 
 
 class TestAccess:
-    @pytest.mark.parametrize("path", ["metrics", "logs", "events"])
+    # The guest reads metrics (access matrix), not logs nor events.
+    @pytest.mark.parametrize("path", ["logs", "events"])
     def test_guest_cannot_read_app_overview_data(
         self, session_factory, keycloak, path
     ):

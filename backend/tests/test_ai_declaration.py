@@ -285,10 +285,19 @@ GATED = re.compile(r"^(app|agent|ai)\.[a-z_]+$")
 
 
 def _actions_used_in_code() -> set[str]:
-    """Literal ``app.*``, ``agent.*`` and ``ai.*`` actions of the tools."""
+    """Literal ``app.*``, ``agent.*`` and ``ai.*`` actions of the tools.
+    ``cap=`` arguments are capabilities, not actions."""
     found = set()
     for path in pathlib.Path("app").glob("mcp_*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
+        tree = ast.parse(path.read_text())
+        caps = {
+            id(k.value)
+            for k in ast.walk(tree)
+            if isinstance(k, ast.keyword) and k.arg == "cap"
+        }
+        for node in ast.walk(tree):
+            if id(node) in caps:
+                continue
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 if GATED.match(node.value):
                     found.add(node.value)

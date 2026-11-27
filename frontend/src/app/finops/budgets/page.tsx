@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getBudget, getFinopsAlerts } from "@/lib/api";
 import { useProjects } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
+import { usePlatformAdmin } from "@/lib/usePlatformAdmin";
 import type { Budget, CostAlert } from "@/types";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -45,10 +46,10 @@ function BudgetsInner() {
     }
   }, [projects, project]);
 
-  const canEdit = can(
-    projects.find((p) => p.name === project)?.role,
-    "finops.editBudget",
-  );
+  const isInfra = usePlatformAdmin();
+  // Backend accepts the owner or infra (put_budget).
+  const canEdit =
+    isInfra || can(projects.find((p) => p.name === project)?.role, "finops.editBudget");
 
   const refresh = useCallback(async () => {
     if (!project) return;

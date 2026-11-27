@@ -13,12 +13,17 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
+from app.core.roles import ProjectRole
 from app.models.alerting import AlertSetting
 from app.models.deployment import Deployment
 from app.services import alerts_grafana as grafana
 from app.services.activity_sources import PROJECT_NAME, namespace_projects
 from app.services.alerts_catalog import BY_ID, CATALOG, AlertTemplate
-from app.services.authz import is_cnp_admin, require_project_member
+from app.services.authz import (
+    assert_capability,
+    is_cnp_admin,
+    require_project_member,
+)
 from app.services.grafana_service import GRAFANA_BASE_URL
 from app.services.keycloak_service import get_current_user
 from app.services.kube_client import KubeUnavailableError
@@ -63,11 +68,17 @@ class AlertUpdate(BaseModel):
     params: dict[str, int] = {}
 
 
-async def _role(token: dict, project: str) -> str:
+async def _role(token: dict, project: str, db: Session | None = None) -> str:
+    """Return "admin" or "member"; with *db*, a read (alerts.view)."""
     if not PROJECT_NAME.match(project):
         raise HTTPException(status_code=400, detail="Invalid project name.")
     if is_cnp_admin(token):
         return "admin"
+    if db is not None:
+        ctx = await run_in_threadpool(
+            assert_capability, db, token, project, "alerts.view"
+        )
+        return "admin" if ctx.at_least(ProjectRole.ADMIN) else "member"
     return await run_in_threadpool(require_project_member, token, project)
 
 
@@ -132,7 +143,7 @@ async def list_alerts(
     app: str | None = None,
     db: Session = Depends(get_db),
 ) -> AlertCatalogRead:
-    role = await _role(token, project)
+    role = await _role(token, project, db)
     _check_app(db, project, app)
     stored = _settings(db, project, app)
     try:

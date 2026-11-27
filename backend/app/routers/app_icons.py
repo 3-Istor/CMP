@@ -68,7 +68,9 @@ async def get_icon(
     db: Session = Depends(get_db),
 ):
     """Access control: any role on the application's project."""
-    deployment = _get_app_or_404(db, token, deployment_id, ProjectRole.GUEST)
+    deployment = _get_app_or_404(
+        db, token, deployment_id, ProjectRole.GUEST, cap="app.view"
+    )
     if deployment.icon_kind != "upload" or not deployment.icon_key:
         raise HTTPException(status_code=404, detail="No custom icon.")
 

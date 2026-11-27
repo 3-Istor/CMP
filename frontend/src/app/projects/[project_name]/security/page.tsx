@@ -11,7 +11,7 @@ export default function ProjectSecurityPage() {
   const t = useTranslations("projectNav");
   const { projectName } = useProjectContext();
   return (
-    <ProjectSection title={t("security")} capability="app.viewObservability">
+    <ProjectSection title={t("security")} capability="security.view">
       <SecurityDashboard
         project={projectName}
         fullPageLink

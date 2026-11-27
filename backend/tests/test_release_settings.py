@@ -230,8 +230,8 @@ def _api(
         ),
         mock.patch(
             "app.routers.deployments._authorize_app",
-            side_effect=lambda db, token, deployment, minimum: _check(
-                role, minimum
+            side_effect=lambda db, token, deployment, minimum, cap=None: (
+                _check(role, minimum)
             ),
         ),
     ]

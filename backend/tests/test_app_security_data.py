@@ -212,9 +212,6 @@ def make_client(session_factory, repo: FakeRepo, role: str | None):
             mock.AsyncMock(return_value="tok"),
         ),
         mock.patch.object(
-            deployments_router, "get_project_role", lambda user, project: role
-        ),
-        mock.patch.object(
             keycloak_service, "get_project_role", lambda user, project: role
         ),
         mock.patch.object(

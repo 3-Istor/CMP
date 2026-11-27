@@ -4,6 +4,7 @@ import {
   useDeploymentsList,
   useProjects,
 } from "@/lib/hooks";
+import { can } from "@/lib/permissions";
 import {
   BellRing,
   Bot,
@@ -45,10 +46,24 @@ export interface PageEntry {
   isActive: (pathname: string) => boolean;
   /** Shown only to members of one of these platform groups. */
   platformRoles?: string[];
+  /** Hidden from finops and guest-only users: needs a member+ project or infra. */
+  needsMemberProject?: true;
+  /** security-auditor sees it without a project role. */
+  auditorSees?: true;
 }
 
-export function isPageVisible(page: PageEntry, roles: string[]): boolean {
-  return !page.platformRoles || page.platformRoles.some((r) => roles.includes(r));
+export function isPageVisible(
+  page: PageEntry,
+  roles: string[],
+  ctx: { hasMemberProject: boolean },
+): boolean {
+  if (page.platformRoles) return page.platformRoles.some((r) => roles.includes(r));
+  return (
+    !page.needsMemberProject ||
+    ctx.hasMemberProject ||
+    roles.includes("infra") ||
+    (!!page.auditorSees && roles.includes("security-auditor"))
+  );
 }
 
 export const HOME_PAGE: PageEntry = {
@@ -87,30 +102,38 @@ export const PLATFORM_PAGES: PageEntry[] = [
     href: "/security",
     icon: Shield,
     isActive: (pathname) => pathname.startsWith("/security"),
+    needsMemberProject: true,
+    auditorSees: true,
   },
   {
     key: "activity",
     href: "/activity",
     icon: History,
     isActive: (pathname) => pathname.startsWith("/activity"),
+    needsMemberProject: true,
+    auditorSees: true,
   },
   {
     key: "alerts",
     href: "/alerts",
     icon: BellRing,
     isActive: (pathname) => pathname.startsWith("/alerts"),
+    needsMemberProject: true,
+    auditorSees: true,
   },
   {
     key: "agents",
     href: "/agents",
     icon: Bot,
     isActive: (pathname) => pathname === "/agents" || pathname.includes("/ai/agents/"),
+    needsMemberProject: true,
   },
   {
     key: "assistants",
     href: "/connect-ai",
     icon: Plug,
     isActive: (pathname) => pathname.startsWith("/connect-ai"),
+    needsMemberProject: true,
   },
   {
     key: "access",
@@ -189,5 +212,7 @@ export function useVisibleWork(projectsIntervalMs = 15000) {
       projects.some((p) => p.name === d.project_id),
   );
 
-  return { projects, apps, loading: loadingProjects || loadingApps };
+  const hasMemberProject = projects.some((p) => can(p.role, "activity.view"));
+
+  return { projects, apps, hasMemberProject, loading: loadingProjects || loadingApps };
 }
