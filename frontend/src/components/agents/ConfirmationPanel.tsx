@@ -78,7 +78,7 @@ export function ConfirmationPanel({
             <dt className="text-muted-foreground">{t("confirmation.action")}</dt>
             <dd className="font-mono text-xs leading-5">{item.tool}</dd>
             <dt className="text-muted-foreground">{t("confirmation.expires")}</dt>
-            <dd>{new Date(item.expires_at).toLocaleTimeString(locale)}</dd>
+            <dd>{new Date(item.expires_at).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</dd>
           </dl>
 
           {item.status === "pending" && item.review_link ? (

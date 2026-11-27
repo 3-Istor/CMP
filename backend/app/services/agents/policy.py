@@ -28,6 +28,9 @@ CONFIRMATION_TTL = timedelta(minutes=30)
 # page in the CMP, with a passkey: approving it in /connect/confirm, or
 # calling the tool again, never runs it.
 PORTAL_TOOLS = frozenset({"import_repo"})
+# A draft runs nothing until a person applies it with a passkey, and it is
+# bound to one analysis run: it can wait for the person, a demo included.
+DRAFT_TTL = timedelta(days=7)
 MAX_AUTONOMOUS = timedelta(hours=8)
 
 
@@ -215,7 +218,8 @@ def request_confirmation(
             arguments=arguments,
             summary=summary,
             status="pending",
-            expires_at=datetime.now(timezone.utc) + CONFIRMATION_TTL,
+            expires_at=datetime.now(timezone.utc)
+            + (DRAFT_TTL if tool in PORTAL_TOOLS else CONFIRMATION_TTL),
         )
         db.add(row)
         db.commit()
