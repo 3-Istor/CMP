@@ -1070,3 +1070,24 @@ def test_an_assistant_hands_passkey_actions_to_the_user_in_the_cmp(
         f"{mcp_server.PUBLIC_URL}/projects/demo/apps/1",
         [],
     )
+
+
+@pytest.mark.parametrize(
+    ("tool", "lasts"),
+    [
+        ("import_repo", timedelta(days=7)),
+        ("release_action", timedelta(minutes=30)),
+    ],
+)
+def test_an_import_draft_waits_a_week_and_other_confirmations_half_an_hour(
+    platform, tool, lasts
+):
+    before = datetime.now(timezone.utc)
+
+    view = policy.request_confirmation(
+        1, "alice", "demo", None, tool, {}, "summary"
+    )
+
+    assert (
+        before + lasts <= view.expires_at <= datetime.now(timezone.utc) + lasts
+    )
